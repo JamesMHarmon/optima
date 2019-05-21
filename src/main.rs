@@ -1,13 +1,9 @@
 fn main() {
-    let piece_board: u128 = 0b__000000010__000000000__;
-    let vertical_wall_placement_board: u128 = 0b__000000000__000100010__000000000__001000001__000000000__;
-    let horizontal_wall_placement_board: u128 = 0b__000000000__000010100__000000000_000100001__000000000__000000000__;
-
     let game_state = GameState {
-        p1_piece_board: piece_board,
-        p2_piece_board: piece_board,
-        vertical_wall_placement_board: vertical_wall_placement_board,
-        horizontal_wall_placement_board: horizontal_wall_placement_board,
+        p1_piece_board: 0b__000000000__000000000__000000000__000000000__000000000__000010000__000000000__000000000__000000000__,
+        p2_piece_board: 0b__000000010__000000000__,
+        vertical_wall_placement_board: 0b__000000000__000100010__000000000__001000001__000000000__,
+        horizontal_wall_placement_board: 0b__000000000__000010100__000000000_000100001__000000000__000101010__,
     };
 
     println!("{}", "Vertical Walls:");
@@ -21,6 +17,9 @@ fn main() {
 
     println!("{}", "get_candidate_horizontal_wall_placement:");
     print_wall_board(game_state.get_candidate_horizontal_wall_placement());
+
+    println!("{}", "has_path");
+    println!("{}", game_state.p1_has_path());
 }
 
 fn print_piece_board(piece_board: u128) {
@@ -53,7 +52,9 @@ const BOTTOM_ROW_MASK: u128 =   0b__000000000__000000000__000000000__000000000__
 const LEFT_COLUMN_MASK: u128 =  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
 const RIGHT_COLUMN_MASK: u128 = 0b__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;
 
+const VALID_PIECE_POSITION_MASK: u128 = 0b__111111111__111111111__111111111__111111111__111111111__111111111__111111111__111111111__111111111;
 const CANDIDATE_HORIZONTAL_WALL_PLACEMENT_MASK: u128 = 0b__000000000__011111111__011111111__011111111__011111111__011111111__011111111__011111111__011111111;
+const P1_OBJECTIVE_MASK: u128 = 0b__111111111__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 
 
 struct GameState {
@@ -122,9 +123,46 @@ impl GameState {
         self.horizontal_wall_placement_board << 1 | self.horizontal_wall_placement_board
     }
 
-    fn get_candidate_horizontal_wall_placement(&self) -> u128  {
+    fn get_candidate_horizontal_wall_placement(&self) -> u128 {
         !(self.horizontal_wall_placement_board | self.horizontal_wall_placement_board >> 1 | self.horizontal_wall_placement_board << 1)
         & !self.vertical_wall_placement_board
         & CANDIDATE_HORIZONTAL_WALL_PLACEMENT_MASK
+    }
+
+    // @TODO: Add possible moves for jumping over the opponent's piece
+
+    fn p1_has_path(&self) -> bool {
+        let horizontal_wall_placement = self.get_horizontal_wall_placement();
+        let vertical_wall_placement = self.get_vertical_wall_placement();
+        let up_mask = !(horizontal_wall_placement << 9) & VALID_PIECE_POSITION_MASK;
+        let right_mask = !vertical_wall_placement & VALID_PIECE_POSITION_MASK & !LEFT_COLUMN_MASK;
+        let down_mask = !horizontal_wall_placement & VALID_PIECE_POSITION_MASK;
+        let left_mask = !(vertical_wall_placement << 1) & VALID_PIECE_POSITION_MASK & !RIGHT_COLUMN_MASK;
+
+        let mut movements = self.p1_piece_board;
+
+        loop {
+            println!("{}", "movements:");
+            print_piece_board(movements);
+
+            // MOVE UP & DOWN & LEFT & RIGHT
+            let up_movements = (movements << 9) & up_mask;
+            let right_movements = (movements >> 1) & right_mask;
+            let down_movements = (movements >> 9) & down_mask;
+            let left_movements = (movements << 1) & left_mask;
+            let updated_movements = up_movements | right_movements | down_movements | left_movements | movements;
+
+            // Check if the objective is reachable
+            if P1_OBJECTIVE_MASK & updated_movements != 0 {
+                return true;
+            }
+
+            // Check if any progress was made, if there is no progress from the last iteration then we are stuck.
+            if updated_movements == movements {
+                return false;
+            }
+
+            movements = updated_movements;
+        }
     }
 }
