@@ -1,10 +1,10 @@
 fn main() {
     let game_state = GameState {
         p1_turn_to_move: true,
-        p1_remaining_walls: 10,
-        p2_remaining_walls: 10,
-        p1_pawn_board:                     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000010__000000000__000000000__,
-        p2_pawn_board:                     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000010__000000000__,
+        p1_num_walls_placed: 0,
+        p2_num_walls_placed: 0,
+        p1_pawn_board:                     0b__000000000__000010000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
+        p2_pawn_board:                     0b__000000000__001000000__000000000__000000000__000000000__000000000__000000000__000010000__000000000__,
         vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000010010__000000000__001000001__000000000__,
         horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000010100__000000000__000100001__000000000__000101010__,
     };
@@ -73,8 +73,8 @@ pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_pawn_board: u128,
     pub p2_pawn_board: u128,
-    pub p1_remaining_walls: usize,
-    pub p2_remaining_walls: usize,
+    pub p1_num_walls_placed: usize,
+    pub p2_num_walls_placed: usize,
     pub vertical_wall_placement_board: u128,
     pub horizontal_wall_placement_board: u128
 }
@@ -96,8 +96,8 @@ impl GameState {
             p1_turn_to_move: true,
             p1_pawn_board: P1_STARTING_POS_MASK,
             p2_pawn_board: P2_STARTING_POS_MASK,
-            p1_remaining_walls: 10,
-            p2_remaining_walls: 10,
+            p1_num_walls_placed: 0,
+            p2_num_walls_placed: 0,
             vertical_wall_placement_board: 0,
             horizontal_wall_placement_board: 0
         }
@@ -119,8 +119,8 @@ impl GameState {
 
         GameState {
             p1_turn_to_move: !p1_turn_to_move,
-            p1_remaining_walls: self.p1_remaining_walls - if p1_turn_to_move { 1 } else { 0 },
-            p2_remaining_walls: self.p2_remaining_walls - if !p1_turn_to_move { 1 } else { 0 },
+            p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
+            p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
             horizontal_wall_placement_board: self.horizontal_wall_placement_board | horizontal_wall_placement,
             ..*self
         }
@@ -131,8 +131,8 @@ impl GameState {
 
         GameState {
             p1_turn_to_move: !p1_turn_to_move,
-            p1_remaining_walls: self.p1_remaining_walls - if p1_turn_to_move { 1 } else { 0 },
-            p2_remaining_walls: self.p2_remaining_walls - if !p1_turn_to_move { 1 } else { 0 },
+            p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
+            p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
             vertical_wall_placement_board: self.vertical_wall_placement_board | vertical_wall_placement,
             ..*self
         }
@@ -220,7 +220,7 @@ impl GameState {
     }
 
     fn get_valid_horizontal_wall_placement(&self) -> u128 {
-        if self.active_player_has_walls() {
+        if self.active_player_has_wall_to_place() {
             self.get_valid_horizontal_wall_positions()
         } else {
             0
@@ -228,18 +228,18 @@ impl GameState {
     }
 
     fn get_valid_vertical_wall_placement(&self) -> u128 {
-        if self.active_player_has_walls() {
+        if self.active_player_has_wall_to_place() {
             self.get_valid_vertical_wall_positions()
         } else {
             0
         }
     }
 
-    fn active_player_has_walls(&self) -> bool {
+    fn active_player_has_wall_to_place(&self) -> bool {
         if self.p1_turn_to_move {
-            self.p1_remaining_walls > 0
+            self.p1_num_walls_placed < 10
         } else {
-            self.p2_remaining_walls > 0
+            self.p2_num_walls_placed < 10
         }
     }
 
