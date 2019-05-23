@@ -7,44 +7,44 @@ fn main() {
         p2_remaining_walls: 10,
         p1_pawn_board:                     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000010000__,
         p2_pawn_board:                     0b__000000000__000000000__001000000__000000000__000000000__000000000__000000000__000000000__000000000__,
-        // vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000010010__000000000__001000001__000000000__,
-        // horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000010100__000000000__000100001__000000000__000101010__,
-        vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
-        horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
+        vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000010010__000000000__001000001__000000000__,
+        horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000010100__000000000__000100001__000000000__000101010__,
+        // vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
+        // horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
     };
 
     let mut valid_moves: ValidMoves = game_state.get_valid_moves();
 
     let now = Instant::now();
-    for _ in 1..100_000_000 {
+    for _ in 1..1_000_000 {
         valid_moves = game_state.get_valid_moves()
     }
 
     let elapsed = now.elapsed().as_millis();
 
-    // println!("{}", "Vertical Walls:");
-    // print_board(game_state.get_vertical_wall_blocks());
+    println!("{}", "Vertical Walls:");
+    print_board(game_state.get_vertical_wall_blocks());
 
-    // println!("{}", "Horizontal Walls:");
-    // print_board(game_state.get_horizontal_wall_blocks());
+    println!("{}", "Horizontal Walls:");
+    print_board(game_state.get_horizontal_wall_blocks());
 
-    // println!("{}", "Starting Pos:");
-    // print_board(game_state.p1_pawn_board);
+    println!("{}", "Starting Pos:");
+    print_board(game_state.p1_pawn_board);
 
-    // println!("{}", "get_candidate_horizontal_wall_placement:");
-    // print_board(game_state.get_candidate_horizontal_wall_placement());
+    println!("{}", "get_candidate_horizontal_wall_placement:");
+    print_board(game_state.get_candidate_horizontal_wall_placement());
 
-    // println!("{}", "has_path");
-    // println!("{}", game_state.players_have_path());
+    println!("{}", "has_path");
+    println!("{}", game_state.players_have_path());
 
-    // println!("{}", "get_horizontal_connecting_candidates");
-    // print_board(game_state.get_horizontal_connecting_candidates());
+    println!("{}", "get_horizontal_connecting_candidates");
+    print_board(game_state.get_horizontal_connecting_candidates());
 
-    // println!("{}", "get_invalid_horizontal_wall_candidates");
-    // print_board(game_state.get_invalid_horizontal_wall_candidates());
+    println!("{}", "get_invalid_horizontal_wall_candidates");
+    print_board(game_state.get_invalid_horizontal_wall_candidates());
 
-    // println!("{}", "get_valid_horizontal_wall_positions");
-    // print_board(game_state.get_valid_horizontal_wall_positions());
+    println!("{}", "get_valid_horizontal_wall_positions");
+    print_board(game_state.get_valid_horizontal_wall_positions());
 
     println!("Valid Moves: {}", valid_moves.can_move_up);
 
@@ -68,7 +68,6 @@ fn print_board(board: u128) {
     println!("{}", "");
 }
 
-
 const TOP_ROW_MASK: u128 =                                      0b__111111111__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 const BOTTOM_ROW_MASK: u128 =                                   0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__111111111;
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
@@ -78,20 +77,39 @@ const VALID_PIECE_POSITION_MASK: u128 =                         0b__111111111__1
 const CANDIDATE_WALL_PLACEMENT_MASK: u128 =                     0b__000000000__011111111__011111111__011111111__011111111__011111111__011111111__011111111__011111111;
 const P1_OBJECTIVE_MASK: u128 =                                 0b__111111111__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 const P2_OBJECTIVE_MASK: u128 =                                 0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__111111111;
+const P1_STARTING_POS_MASK: u128 =                              0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000010000;
+const P2_STARTING_POS_MASK: u128 =                              0b__000010000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 
 const HORIZONTAL_WALL_LEFT_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__010000000__010000000__010000000__010000000__010000000__010000000__010000000__010000000;
 const HORIZONTAL_WALL_RIGHT_EDGE_TOUCHING_BOARD_MASK: u128 =    0b__000000000__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;
 const VERTICAL_WALL_TOP_EDGE_TOUCHING_BOARD_MASK: u128 =        0b__000000000__011111111__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__011111111;
 
-struct GameState {
-    p1_turn_to_move: bool,
-    p1_pawn_board: u128,
-    p2_pawn_board: u128,
-    p1_remaining_walls: usize,
-    p2_remaining_walls: usize,
-    vertical_wall_placement_board: u128,
-    horizontal_wall_placement_board: u128
+pub struct GameState {
+    pub p1_turn_to_move: bool,
+    pub p1_pawn_board: u128,
+    pub p2_pawn_board: u128,
+    pub p1_remaining_walls: usize,
+    pub p2_remaining_walls: usize,
+    pub vertical_wall_placement_board: u128,
+    pub horizontal_wall_placement_board: u128
+}
+
+pub struct ValidMoves {
+    pub vertical_wall_placement: u128,
+    pub horizontal_wall_placement: u128,
+    pub can_move_up: bool,
+    pub can_move_right: bool,
+    pub can_move_down: bool,
+    pub can_move_left: bool,
+    pub can_jump_up: bool,
+    pub can_jump_upper_right: bool,
+    pub can_jump_right: bool,
+    pub can_jump_lower_right: bool,
+    pub can_jump_down: bool,
+    pub can_jump_lower_left: bool,
+    pub can_jump_left: bool,
+    pub can_jump_upper_left: bool,
 }
 
 struct PathingResult {
@@ -99,64 +117,69 @@ struct PathingResult {
     path: u128
 }
 
-struct ValidMoves {
-    vertical_wall_placement: u128,
-    horizontal_wall_placement: u128,
-    can_move_up: bool,
-    can_move_right: bool,
-    can_move_down: bool,
-    can_move_left: bool,
-    // can_jump_up: bool,
-    // can_jump_right: bool,
-    // can_jump_down: bool,
-    // can_jump_left: bool
-}
-
 impl GameState {
-    fn move_up(&self) -> GameState {
+    pub fn new() -> GameState {
         GameState {
+            p1_turn_to_move: true,
+            p1_pawn_board: P1_STARTING_POS_MASK,
+            p2_pawn_board: P2_STARTING_POS_MASK,
+            p1_remaining_walls: 10,
+            p2_remaining_walls: 10,
+            vertical_wall_placement_board: 0,
+            horizontal_wall_placement_board: 0
+        }
+    }
+
+    pub fn move_up(&self) -> GameState {
+        GameState {
+            p1_turn_to_move: !self.p1_turn_to_move,
             p1_pawn_board: self.p1_pawn_board << 9,
             ..*self
         }
     }
 
-    fn move_right(&self) -> GameState {
+    pub fn move_right(&self) -> GameState {
         GameState {
+            p1_turn_to_move: !self.p1_turn_to_move,
             p1_pawn_board: self.p1_pawn_board >> 1,
             ..*self
         }
     }
 
-    fn move_down(&self) -> GameState {
+    pub fn move_down(&self) -> GameState {
         GameState {
+            p1_turn_to_move: !self.p1_turn_to_move,
             p1_pawn_board: self.p1_pawn_board >> 9,
             ..*self
         }
     }
 
-    fn move_left(&self) -> GameState {
+    pub fn move_left(&self) -> GameState {
         GameState {
+            p1_turn_to_move: !self.p1_turn_to_move,
             p1_pawn_board: self.p1_pawn_board << 1,
             ..*self
         }
     }
 
-    pub fn get_vertical_wall_blocks(&self) -> u128 {
-        self.vertical_wall_placement_board << 9 | self.vertical_wall_placement_board
-    }
-
-    pub fn get_horizontal_wall_blocks(&self) -> u128 {
-        self.horizontal_wall_placement_board << 1 | self.horizontal_wall_placement_board
-    }
-
     pub fn get_valid_moves(&self) -> ValidMoves {
+        let valid_jumps = self.can_jump();
+
         ValidMoves {
             horizontal_wall_placement: self.get_valid_horizontal_wall_placement(),
             vertical_wall_placement: self.get_valid_vertical_wall_placement(),
             can_move_up: self.can_move_up(),
             can_move_right: self.can_move_right(),
             can_move_down: self.can_move_down(),
-            can_move_left: self.can_move_left()
+            can_move_left: self.can_move_left(),
+            can_jump_up: valid_jumps.0,
+            can_jump_upper_right: valid_jumps.1,
+            can_jump_right: valid_jumps.2,
+            can_jump_lower_right: valid_jumps.3,
+            can_jump_down: valid_jumps.4,
+            can_jump_lower_left: valid_jumps.5,
+            can_jump_left: valid_jumps.6,
+            can_jump_upper_left: valid_jumps.7,
         }
     }
 
@@ -186,6 +209,44 @@ impl GameState {
         (active_player_board & vertical_wall_blocks) | (active_player_board & LEFT_COLUMN_MASK) == 0
     }
 
+    fn can_jump(&self) -> (bool, bool, bool, bool, bool, bool, bool, bool) {
+        let active_player = self.get_active_player_board();
+        let opponent = self.get_opposing_player_board();
+
+        let opponent_is_up = active_player << 9 & opponent != 0 && self.can_move_up();
+        let opponent_is_right = active_player >> 1 & opponent != 0 && self.can_move_right();
+        let opponent_is_down = active_player >> 9 & opponent != 0 && self.can_move_down();
+        let opponent_is_left = active_player << 1 & opponent != 0 && self.can_move_left();
+
+        let can_jump_up_up = opponent_is_up && self.move_up().can_move_up();
+        let can_jump_straight_right = opponent_is_right && self.move_right().can_move_right();
+        let can_jump_straight_down = opponent_is_down && self.move_down().can_move_down();
+        let can_jump_straight_left = opponent_is_left && self.move_left().can_move_left();
+
+        let can_jump_up_right = opponent_is_up && !can_jump_up_up && self.move_up().can_move_right();
+        let can_jump_up_left = opponent_is_up && !can_jump_up_up && self.move_up().can_move_left();
+
+        let can_jump_right_up = opponent_is_right && !can_jump_straight_right && self.move_right().can_move_up();
+        let can_jump_right_down = opponent_is_right && !can_jump_straight_right && self.move_right().can_move_down();
+
+        let can_jump_down_right = opponent_is_down && !can_jump_straight_down && self.move_down().can_move_right();
+        let can_jump_down_left = opponent_is_down && !can_jump_straight_down && self.move_down().can_move_left();
+
+        let can_jump_left_up = opponent_is_left && !can_jump_straight_left && self.move_left().can_move_up();
+        let can_jump_left_down = opponent_is_left && !can_jump_straight_left && self.move_left().can_move_down();
+
+        (
+            can_jump_up_up,
+            can_jump_up_right || can_jump_right_up,
+            can_jump_straight_right,
+            can_jump_right_down || can_jump_down_right,
+            can_jump_straight_down,
+            can_jump_down_left || can_jump_left_down,
+            can_jump_straight_left,
+            can_jump_left_up || can_jump_up_left
+        )
+    }
+
     fn get_active_player_board(&self) -> u128 {
         if self.p1_turn_to_move {
             self.p1_pawn_board
@@ -200,6 +261,14 @@ impl GameState {
         } else {
             self.p1_pawn_board
         }
+    }
+
+    fn get_vertical_wall_blocks(&self) -> u128 {
+        self.vertical_wall_placement_board << 9 | self.vertical_wall_placement_board
+    }
+
+    fn get_horizontal_wall_blocks(&self) -> u128 {
+        self.horizontal_wall_placement_board << 1 | self.horizontal_wall_placement_board
     }
 
     fn get_valid_horizontal_wall_placement(&self) -> u128 {
@@ -340,11 +409,6 @@ impl GameState {
 
         self.recursive_get_invalid_vertical_candidate(&potential_invalid_placements[..half_of_length])
         | self.recursive_get_invalid_vertical_candidate(&potential_invalid_placements[half_of_length..])
-    }
-
-    // @TODO: Add possible moves for jumping over the opponent's piece
-    fn get_jump_moves() {
-
     }
 
     fn players_have_path(&self) -> bool {
