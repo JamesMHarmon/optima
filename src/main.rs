@@ -9,14 +9,20 @@ fn main() {
         horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000010100__000000000__000100001__000000000__000101010__,
     };
 
+    let game_state = GameState::new();
+    let game_state = game_state.move_pawn(game_state.p1_pawn_board << 9);
+    let game_state = game_state.place_horizontal_wall(0b000010000_000000000);
+    let game_state = game_state.move_pawn(game_state.p1_pawn_board << 1);
+
+
     println!("{}", "Vertical Walls:");
     print_board(game_state.get_vertical_wall_blocks());
 
     println!("Horizontal Walls:");
     print_board(game_state.get_horizontal_wall_blocks());
 
-    println!("Starting Pos:");
-    print_board(game_state.p1_pawn_board);
+    println!("Pawn Positions:");
+    print_board(game_state.p1_pawn_board | game_state.p2_pawn_board);
 
     println!("get_candidate_horizontal_wall_placement:");
     print_board(game_state.get_candidate_horizontal_wall_placement());
