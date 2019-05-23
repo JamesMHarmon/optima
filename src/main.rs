@@ -9,8 +9,6 @@ fn main() {
         p2_pawn_board:                     0b__000000000__000000000__001000000__000000000__000000000__000000000__000000000__000000000__000000000__,
         vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000010010__000000000__001000001__000000000__,
         horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000010100__000000000__000100001__000000000__000101010__,
-        // vertical_wall_placement_board:     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
-        // horizontal_wall_placement_board:   0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__,
     };
 
     let mut valid_moves: ValidMoves = game_state.get_valid_moves();
@@ -320,95 +318,49 @@ impl GameState {
     }
 
     fn get_invalid_horizontal_wall_candidates(&self) -> u128 {
-        let mut potential_invalid_placements: Vec<u128> = Vec::new();
+        let mut invalid_placements: u128 = 0;
         let mut horizontal_connecting_candidates = self.get_horizontal_connecting_candidates();
 
         while horizontal_connecting_candidates != 0 {
             let with_removed_candidate = horizontal_connecting_candidates & (horizontal_connecting_candidates - 1);
             let removed_candidate = with_removed_candidate ^ horizontal_connecting_candidates;
-            potential_invalid_placements.push(removed_candidate);
+
+            let state_with_candidate = GameState {
+                horizontal_wall_placement_board: self.horizontal_wall_placement_board | removed_candidate,
+                ..*self
+            };
+
+            if !state_with_candidate.players_have_path() {
+                invalid_placements |= removed_candidate;
+            }
+
             horizontal_connecting_candidates = with_removed_candidate;
         }
 
-        self.recursive_get_invalid_horizontal_candidate(&potential_invalid_placements[..])
+        invalid_placements
     }
 
     fn get_invalid_vertical_wall_candidates(&self) -> u128 {
-        let mut potential_invalid_placements: Vec<u128> = Vec::new();
+        let mut invalid_placements: u128 = 0;
         let mut vertical_connecting_candidates = self.get_vertical_connecting_candidates();
 
         while vertical_connecting_candidates != 0 {
             let with_removed_candidate = vertical_connecting_candidates & (vertical_connecting_candidates - 1);
             let removed_candidate = with_removed_candidate ^ vertical_connecting_candidates;
-            potential_invalid_placements.push(removed_candidate);
+
+            let state_with_candidate = GameState {
+                vertical_wall_placement_board: self.vertical_wall_placement_board | removed_candidate,
+                ..*self
+            };
+
+            if !state_with_candidate.players_have_path() {
+                invalid_placements |= removed_candidate;
+            }
+
             vertical_connecting_candidates = with_removed_candidate;
         }
 
-        self.recursive_get_invalid_vertical_candidate(&potential_invalid_placements[..])
-    }
-
-    fn recursive_get_invalid_horizontal_candidate(&self, potential_invalid_placements: &[u128]) -> u128 {
-        let number_of_potential_placements = potential_invalid_placements.len();
-        if number_of_potential_placements == 0 {
-            return 0;
-        }
-
-        let mut potential_invalid_placements_mask: u128 = 0;
-        for potential_invalid_placement in potential_invalid_placements {
-            potential_invalid_placements_mask |= potential_invalid_placement;
-        }
-
-        let game_state_with_walls = GameState {
-            horizontal_wall_placement_board: self.horizontal_wall_placement_board | potential_invalid_placements_mask,
-            ..*self
-        };
-
-        if game_state_with_walls.players_have_path() {
-            return 0;
-        }
-
-        let number_of_potential_placements = potential_invalid_placements.len();
-
-        if number_of_potential_placements == 1 {
-            return potential_invalid_placements[0];
-        }
-
-        let half_of_length = number_of_potential_placements / 2;
-
-        self.recursive_get_invalid_horizontal_candidate(&potential_invalid_placements[..half_of_length])
-        | self.recursive_get_invalid_horizontal_candidate(&potential_invalid_placements[half_of_length..])
-    }
-
-    fn recursive_get_invalid_vertical_candidate(&self, potential_invalid_placements: &[u128]) -> u128 {
-        let number_of_potential_placements = potential_invalid_placements.len();
-        if number_of_potential_placements == 0 {
-            return 0;
-        }
-
-        let mut potential_invalid_placements_mask: u128 = 0;
-        for potential_invalid_placement in potential_invalid_placements {
-            potential_invalid_placements_mask |= potential_invalid_placement;
-        }
-
-        let game_state_with_walls = GameState {
-            vertical_wall_placement_board: self.vertical_wall_placement_board | potential_invalid_placements_mask,
-            ..*self
-        };
-
-        if game_state_with_walls.players_have_path() {
-            return 0;
-        }
-
-        let number_of_potential_placements = potential_invalid_placements.len();
-
-        if number_of_potential_placements == 1 {
-            return potential_invalid_placements[0];
-        }
-
-        let half_of_length = number_of_potential_placements / 2;
-
-        self.recursive_get_invalid_vertical_candidate(&potential_invalid_placements[..half_of_length])
-        | self.recursive_get_invalid_vertical_candidate(&potential_invalid_placements[half_of_length..])
+        invalid_placements
     }
 
     fn players_have_path(&self) -> bool {
