@@ -9,6 +9,6 @@ publish = false
 name="quoridor_cpython"
 crate-type = ["cdylib"]
 
-[dependencies.cpython]
-version = "0.2"
+[dependencies.pyo3]
+version = "0.7.0-alpha.1"
 features = ["extension-module"]

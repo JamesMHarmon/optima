@@ -3,15 +3,16 @@ mod engine;
 // https://github.com/dgrunwald/rust-cpython
 #[macro_use] extern crate cpython;
 
-use cpython::{PyResult, Python};
+use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
 
-// add bindings to the generated python module
-// N.B: names: "librust2py" must be the name of the `.so` or `.pyd` file
-py_module_initializer!(librust2py, initlibrust2py, PyInit_librust2py, |py, m| {
-    m.add(py, "__doc__", "This module is implemented in Rust.")?;
-    m.add(py, "new_game", py_fn!(py, new_game()))?;
+
+#[pymodule]
+fn quoridor_cpython(py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_wrapped(wrap_pyfunction!(new_game))?;
+
     Ok(())
-});
+}
 
 type GameStateTuple = (
     bool,         // p1_turn_to_move
@@ -27,7 +28,8 @@ type GameStateTuple = (
 // declared in a separate module.
 // Note that the py_fn!() macro automatically converts the arguments from
 // Python objects to Rust values; and the Rust return value back into a Python object.
-fn new_game(_: Python) -> PyResult<GameStateTuple> {
+#[pyfunction]
+fn new_game() -> PyResult<GameStateTuple> {
     let game_state = engine::GameState::new();
     let game_state_tuple = map_game_state_to_tuple(game_state);
 
