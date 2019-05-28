@@ -1,16 +1,18 @@
 mod engine;
 
 // https://github.com/dgrunwald/rust-cpython
-#[macro_use] extern crate cpython;
+// #[macro_use] extern crate cpython;
 
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
+use pyo3::types::{PyTuple,PyList,PyAny};
+use pyo3::{FromPy, FromPyObject};
 
 
 #[pymodule]
 fn quoridor_cpython(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(new_game))?;
-
+    m.add_wrapped(wrap_pyfunction!(move_pawn))?;
     Ok(())
 }
 
@@ -31,13 +33,34 @@ type GameStateTuple = (
 #[pyfunction]
 fn new_game() -> PyResult<GameStateTuple> {
     let game_state = engine::GameState::new();
-    let game_state_tuple = map_game_state_to_tuple(game_state);
+    let game_state_tuple = map_game_state_to_tuple(&game_state);
 
     Ok(game_state_tuple)
 }
 
+#[pyfunction]
+fn move_pawn(game_state_tuple: &PyTuple, pawn_board: &PyList) -> PyResult<GameStateTuple> {
+    let game_state = map_tuple_to_game_state(game_state_tuple);
+    let game_state = game_state.move_pawn(map_vec_to_board(pawn_board));
+    let game_state_tuple = map_game_state_to_tuple(&game_state);
 
-fn map_game_state_to_tuple(game_state: engine::GameState) -> GameStateTuple {
+    Ok(game_state_tuple)
+}
+
+fn map_tuple_to_game_state(game_state_tuple: &PyTuple) -> engine::GameState {
+    let test: f32 = FromPyObject::extract(game_state_tuple.get_item(0)).unwrap();
+    engine::GameState {
+        p1_turn_to_move: (FromPyObject::extract(game_state_tuple.get_item(0)).unwrap()),
+        p1_pawn_board: map_vec_to_board(FromPyObject::extract(FromPyObject::extract(game_state_tuple.get_item(1)).unwrap() as &PyList)),
+        p2_pawn_board: map_vec_to_board(FromPyObject::extract(game_state_tuple.get_item(2)).unwrap()),
+        p1_num_walls_placed: FromPyObject::extract(game_state_tuple.get_item(3)).unwrap(),
+        p2_num_walls_placed: FromPyObject::extract(game_state_tuple.get_item(4)).unwrap(),
+        vertical_wall_placement_board: map_vec_to_board(FromPyObject::extract(game_state_tuple.get_item(5)).unwrap()),
+        horizontal_wall_placement_board: map_vec_to_board(FromPyObject::extract(game_state_tuple.get_item(6)).unwrap()),
+    }
+}
+
+fn map_game_state_to_tuple(game_state: &engine::GameState) -> GameStateTuple {
     (
         game_state.p1_turn_to_move,
         map_board_to_vec(game_state.p1_pawn_board).to_vec(),
@@ -47,6 +70,15 @@ fn map_game_state_to_tuple(game_state: engine::GameState) -> GameStateTuple {
         map_board_to_vec(game_state.vertical_wall_placement_board).to_vec(),
         map_board_to_vec(game_state.horizontal_wall_placement_board).to_vec(),
     )
+}
+
+fn map_vec_to_board(board: &Vec<f32>) -> u128 {
+    let mut bit_board: u128 = 0;
+    for (i, bits) in board.iter().enumerate() {
+        let mask: u128 = 1;
+        bit_board |= mask << i;
+    }
+    bit_board
 }
 
 fn map_board_to_vec(mut board: u128) -> [f32; 81] {
