@@ -1,4 +1,5 @@
 mod engine;
+mod mcts;
 
 // https://github.com/dgrunwald/rust-cpython
 #[macro_use] extern crate cpython;
