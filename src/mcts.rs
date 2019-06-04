@@ -28,8 +28,8 @@ type GameActions<A> = Vec<A>;
 pub struct MCTSOptions<'a, S, R: Rng> {
     dirichlet_alpha: f64,
     dirichlet_epsilon: f64,
-    cpuct: &'a Fn(&S) -> f64,
-    temperature: &'a Fn(&S) -> f64,
+    cpuct: &'a dyn Fn(&S) -> f64,
+    temperature: &'a dyn Fn(&S) -> f64,
     rng: R
 }
 
@@ -73,10 +73,12 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
     }
 
     pub fn get_next_action(&mut self, number_of_nodes_to_search: usize) -> Result<A, &'static str> {
+        let game_engine = self.game_engine;
+        let cpuct = self.options.cpuct;
         let root_node = self.get_or_create_root_node();
 
         for _ in 0..number_of_nodes_to_search {
-            MCTS::<S, A, E, R>::recurse_path_and_expand(root_node);
+            MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct);
         }
 
         let current_root = self.root.take().ok_or("No root node found!")?;
@@ -105,17 +107,22 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
         }
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>) -> StateAnalysisValue {
-        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(node);
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64) -> StateAnalysisValue {
+        // let game_state = &node.game_state;
+        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(node, cpuct);
 
         let result = match &selected_child_node.node {
             None => {
-                let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(&node.game_state, &selected_child_node.action);
+                let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
+                    &node.game_state,
+                    &selected_child_node.action,
+                    game_engine
+                );
                 selected_child_node.node = Some(expanded_node);
                 state_analysis
             },
             // @TODO: Simplify this so that Some(_) is a reference as mut.
-            Some(_) => MCTS::<S, A, E, R>::recurse_path_and_expand(&mut selected_child_node.node.as_mut().unwrap())
+            Some(_) => MCTS::<S, A, E, R>::recurse_path_and_expand(&mut selected_child_node.node.as_mut().unwrap(), game_engine, cpuct)
         };
 
         node.visits += 1;
@@ -123,57 +130,55 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
         result
     }
 
-    fn select_path_using_PUCT(node: &mut MCTSNode<S, A>) -> &mut MCTSChildNode<S, A> {
-        panic!()
+    fn select_path_using_PUCT(node: &'a mut MCTSNode<S, A>, cpuct: &dyn Fn(&S) -> f64) -> &'a mut MCTSChildNode<S, A> {
         // // @TODO: Add temperature
-        // for puct in  MCTS::<S, A, E, R>::get_PUCT_for_nodes(node) {
+        for puct in  MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct) {
 
-        // }
+        }
 
-        // // @TODO: Update this to get either max or by dirichlet noise?
-        // & MCTS::<S, A, E, R>::get_PUCT_for_nodes(node)[0].node
+        // @TODO: Update this to get either max or by dirichlet noise?
+        panic!()
+        // &mut MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct)[0].node
     }
 
     //@TODO: See if we can return an iterator here.
-    fn get_PUCT_for_nodes(&self, node: &'a MCTSNode<S, A>) -> Vec<NodePUCT<'a, S, A>> {
-        panic!()
-        // let node_children = node.children;
-        // let game_state = node.game_state;
+    fn get_PUCT_for_nodes(node: &'a MCTSNode<S, A>, cpuct: &dyn Fn(&S) -> f64) -> Vec<NodePUCT<'a, S, A>> {
+        let node_children = &node.children;
+        let game_state = &node.game_state;
 
-        // // @TODO: See if this is equivalent to (node.visits - 1).
-        // let Nsb: usize = node_children.iter()
-        //     .filter_map(|n| { n.node })
-        //     .map(|n| { n.visits })
-        //     .sum();
+        // @TODO: See if this is equivalent to (node.visits - 1).
+        let Nsb: usize = node_children.iter()
+            .filter_map(|n| { n.node.as_ref() })
+            .map(|n| { n.visits })
+            .sum();
 
-        // node_children.iter().map(|child| {
-        //     let child_node = child.node;
-        //     let Psa = child.policy_score;
-        //     let Nsa = child_node.map_or(0, |n| { n.visits });
-        //     // Should the child's game state be passed here instead?
-        //     let cpuct = (self.options.cpuct)(&game_state);
-        //     let Usa = cpuct * Psa * (Nsb as f64).sqrt() / (1 + Nsa) as f64;
+        node_children.iter().map(|child| {
+            let child_node = &child.node;
+            let Psa = child.policy_score;
+            let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
+            // Should the child's game state be passed here instead?
+            let cpuct = cpuct(&game_state);
+            let Usa = cpuct * Psa * (Nsb as f64).sqrt() / (1 + Nsa) as f64;
 
-        //     let Qsa = child_node.map_or(0.0, |n| { n.W / n.visits as f64 });
+            let Qsa = child_node.as_ref().map_or(0.0, |n| { n.W / n.visits as f64 });
 
-        //     let PUCT = Qsa + Usa;
+            let PUCT = Qsa + Usa;
 
-        //     NodePUCT {
-        //         node: &child,
-        //         score: PUCT
-        //     }
-        // }).collect()
+            NodePUCT {
+                node: &child,
+                score: PUCT
+            }
+        }).collect()
     }
 
-    fn expand_leaf(game_state: &S, action: &A) -> (MCTSNode<S, A>, StateAnalysisValue) {
-        panic!()
-        // let updated_game_state = self.game_engine.take_action(game_state, action);
-        // let analysis_result = self.game_engine.get_state_analysis(&updated_game_state);
+    fn expand_leaf(game_state: &S, action: &A, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+        let new_game_state = game_engine.take_action(game_state, action);
+        let analysis_result = game_engine.get_state_analysis(&new_game_state);
 
-        // (
-        //     MCTSNode::new(updated_game_state, analysis_result.value_score, &analysis_result.policy_scores),
-        //     StateAnalysisValue { value: analysis_result.value_score }
-        // )
+        (
+            MCTSNode::new(new_game_state, analysis_result.value_score, analysis_result.policy_scores),
+            StateAnalysisValue { value: analysis_result.value_score }
+        )
     }
 
     fn get_or_create_root_node(&mut self) -> &mut MCTSNode<S, A> {
@@ -187,27 +192,25 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
     }
 
     fn create_root_node(&self, game_state: S) -> MCTSNode<S, A> {
-        panic!()
-        // let analysis_result = self.game_engine.get_state_analysis(&game_state);
+        let analysis_result = self.game_engine.get_state_analysis(&game_state);
 
-        // MCTSNode::new(game_state, analysis_result.value_score, &analysis_result.policy_scores)
+        MCTSNode::new(game_state, analysis_result.value_score, analysis_result.policy_scores)
     }
 }
 
 impl<S, A> MCTSNode<S, A> {
-    pub fn new(game_state: S, value_score: f64, policy_scores: &Vec<ActionWithPolicy<A>>) -> Self {
-        panic!()
-        // MCTSNode {
-        //     visits: 1,
-        //     W: value_score,
-        //     game_state: game_state,
-        //     children: policy_scores.iter().map(|action_with_policy| {
-        //         MCTSChildNode {
-        //             action: action_with_policy.action,
-        //             policy_score: action_with_policy.policy_score,
-        //             node: None
-        //         }
-        //     }).collect()
-        // }
+    pub fn new(game_state: S, value_score: f64, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+        MCTSNode {
+            visits: 1,
+            W: value_score,
+            game_state: game_state,
+            children: policy_scores.into_iter().map(|action_with_policy| {
+                MCTSChildNode {
+                    action: action_with_policy.action,
+                    policy_score: action_with_policy.policy_score,
+                    node: None
+                }
+            }).collect()
+        }
     }
 }
