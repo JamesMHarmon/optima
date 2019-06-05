@@ -32,6 +32,13 @@ pub struct ValidMoves {
 }
 
 #[derive(Debug)]
+pub enum Action {
+    MovePawn(u128),
+    PlaceHorizontalWall(u128),
+    PlaceVerticalWall(u128)
+}
+
+#[derive(Debug)]
 struct PathingResult {
     has_path: bool,
     path: u128

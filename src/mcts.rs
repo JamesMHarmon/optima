@@ -1,29 +1,38 @@
 use rand::{ Rng };
-use rand::seq::SliceRandom;
 
 pub trait GameEngine<S, A> {
     fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysis<A>;
     fn take_action(&self, game_state: &S, action: &A) -> S;
-    fn temp(&self) -> S;
 }
 
-struct ActionWithPolicy<A> {
+pub struct ActionWithPolicy<A> {
     action: A,
     policy_score: f64,
 }
 
+impl<A> ActionWithPolicy<A> {
+    pub fn new(action: A, policy_score: f64) -> Self {
+        ActionWithPolicy {
+            action,
+            policy_score
+        }
+    }
+}
+
 // If this is a terminal state, i.e. W/L/D. Return empty vector and value of -1, 0, or 1.
-struct GameStateAnalysis<A> {
+pub struct GameStateAnalysis<A> {
     policy_scores: Vec<ActionWithPolicy<A>>,
     value_score: f64
 }
 
-struct GameActionsAndState<S, A> {
-    actions: GameActions<A>,
-    state: S
+impl<A> GameStateAnalysis<A> {
+    pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, value_score: f64) -> Self {
+        GameStateAnalysis {
+            policy_scores,
+            value_score
+        }
+    }
 }
-
-type GameActions<A> = Vec<A>;
 
 pub struct MCTSOptions<'a, S, R: Rng> {
     dirichlet_alpha: f64,
@@ -33,13 +42,33 @@ pub struct MCTSOptions<'a, S, R: Rng> {
     rng: R
 }
 
+impl<'a, S, R: Rng> MCTSOptions<'a, S, R> {
+    pub fn new(
+        dirichlet_alpha: f64,
+        dirichlet_epsilon: f64,
+        cpuct: &'a dyn Fn(&S) -> f64,
+        temperature: &'a dyn Fn(&S) -> f64,
+        rng: R
+    ) -> Self {
+        MCTSOptions {
+            dirichlet_alpha,
+            dirichlet_epsilon,
+            cpuct,
+            temperature,
+            rng,
+        }
+    }
+}
+
 pub struct MCTS<'a, S, A, E: GameEngine<S, A>, R: Rng> {
     options: MCTSOptions<'a, S, R>,
     game_engine: &'a E,
-    starting_game_state: S,
+    starting_game_state: Option<S>,
     root: Option<MCTSNode<S, A>>,
 }
 
+
+#[allow(non_snake_case)]
 struct MCTSNode<S, A> {
     visits: usize,
     W: f64,
@@ -54,7 +83,7 @@ struct MCTSChildNode<S, A> {
 }
 
 struct NodePUCT<'a, S, A> {
-    node: &'a MCTSChildNode<S, A>,
+    node: &'a mut MCTSChildNode<S, A>,
     score: f64
 }
 
@@ -62,12 +91,12 @@ struct StateAnalysisValue {
     value: f64
 }
 
-impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
+impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     pub fn new(game_state: S, game_engine: &'a E, options: MCTSOptions<'a, S, R>) -> Self {
         MCTS {
             options,
             game_engine,
-            starting_game_state: game_state,
+            starting_game_state: Some(game_state),
             root: None
         }
     }
@@ -101,6 +130,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
             0 => Err("No candidate moves available"),
             1 => Ok(max_nodes.remove(0)),
             _ => {
+                println!("Random!");
                 let random_idx = self.options.rng.gen_range(0, max_nodes.len());
                 Ok(max_nodes.remove(random_idx))
             }
@@ -108,21 +138,20 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
     }
 
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64) -> StateAnalysisValue {
-        // let game_state = &node.game_state;
-        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(node, cpuct);
+        let game_state = &node.game_state;
+        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, game_state, cpuct);
 
-        let result = match &selected_child_node.node {
+        let result = match &mut selected_child_node.node {
             None => {
                 let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
-                    &node.game_state,
+                    game_state,
                     &selected_child_node.action,
                     game_engine
                 );
                 selected_child_node.node = Some(expanded_node);
                 state_analysis
             },
-            // @TODO: Simplify this so that Some(_) is a reference as mut.
-            Some(_) => MCTS::<S, A, E, R>::recurse_path_and_expand(&mut selected_child_node.node.as_mut().unwrap(), game_engine, cpuct)
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct)
         };
 
         node.visits += 1;
@@ -130,29 +159,27 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
         result
     }
 
-    fn select_path_using_PUCT(node: &'a mut MCTSNode<S, A>, cpuct: &dyn Fn(&S) -> f64) -> &'a mut MCTSChildNode<S, A> {
-        // // @TODO: Add temperature
-        for puct in  MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct) {
-
-        }
+    #[allow(non_snake_case)]
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, game_state: &S, cpuct: &dyn Fn(&S) -> f64) -> &'a mut MCTSChildNode<S, A> {
+        // @TODO: Add temperature
+        // for puct in  MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct) {
+        //     return puct.node
+        // }
 
         // @TODO: Update this to get either max or by dirichlet noise?
-        panic!()
-        // &mut MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct)[0].node
+        MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, game_state, cpuct).remove(0).node
     }
 
     //@TODO: See if we can return an iterator here.
-    fn get_PUCT_for_nodes(node: &'a MCTSNode<S, A>, cpuct: &dyn Fn(&S) -> f64) -> Vec<NodePUCT<'a, S, A>> {
-        let node_children = &node.children;
-        let game_state = &node.game_state;
-
+    #[allow(non_snake_case)]
+    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, game_state: &S, cpuct: &dyn Fn(&S) -> f64) -> Vec<NodePUCT<'a, S, A>> {
         // @TODO: See if this is equivalent to (node.visits - 1).
-        let Nsb: usize = node_children.iter()
+        let Nsb: usize = nodes.iter()
             .filter_map(|n| { n.node.as_ref() })
             .map(|n| { n.visits })
             .sum();
 
-        node_children.iter().map(|child| {
+        nodes.iter_mut().map(|child| {
             let child_node = &child.node;
             let Psa = child.policy_score;
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
@@ -165,7 +192,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
             let PUCT = Qsa + Usa;
 
             NodePUCT {
-                node: &child,
+                node: child,
                 score: PUCT
             }
         }).collect()
@@ -182,17 +209,19 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> {
     }
 
     fn get_or_create_root_node(&mut self) -> &mut MCTSNode<S, A> {
+        let starting_game_state = self.starting_game_state.take();
         let game_engine = self.game_engine;
-        self.root.get_or_insert_with(|| MCTSNode {
-            visits: 0,
-            W: 0.0,
-            game_state: game_engine.temp(),
-            children: Vec::new()
+
+        self.root.get_or_insert_with(|| {
+            MCTS::<S, A, E, R>::create_root_node(
+                starting_game_state.expect("Tried to use the same starting game state twice"),
+                game_engine
+            )
         })
     }
 
-    fn create_root_node(&self, game_state: S) -> MCTSNode<S, A> {
-        let analysis_result = self.game_engine.get_state_analysis(&game_state);
+    fn create_root_node(game_state: S, game_engine: &E) -> MCTSNode<S, A> {
+        let analysis_result = game_engine.get_state_analysis(&game_state);
 
         MCTSNode::new(game_state, analysis_result.value_score, analysis_result.policy_scores)
     }
