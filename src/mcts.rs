@@ -69,13 +69,15 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }
     }
 
-    pub fn get_next_action(&mut self, number_of_nodes_to_search: usize) -> Result<A, &'static str> {
+    pub fn get_next_action(&mut self, number_of_nodes_to_search: usize) -> Result<(A, usize), &'static str> {
         let game_engine = self.game_engine;
         let cpuct = self.options.cpuct;
         let root_node = self.get_or_create_root_node();
+        let mut max_depth: usize = 0;
 
         for _ in 0..number_of_nodes_to_search {
-            MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct);
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, 0);
+            max_depth = md;
         }
 
         let current_root = self.root.take().ok_or("No root node found!")?;
@@ -83,13 +85,18 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
 
         // Update the tree now that this is the next root node.
         self.root = most_visited_node.node;
-        Ok(most_visited_node.action)
+        Ok((most_visited_node.action, max_depth))
     }
 
     fn take_most_visited_node(&mut self, current_root: MCTSNode<S, A>) -> Result<MCTSChildNode<S, A>, &'static str> {
         let candidate_nodes = current_root.children;
         let visited_nodes: Vec<MCTSChildNode<S, A>> = candidate_nodes.into_iter().filter(|n| { n.node.is_some() }).collect();
         let max_visits = visited_nodes.iter().map(|n| { n.node.as_ref().unwrap().visits }).max().expect("No visited_nodes to choose from");
+        
+        for node in visited_nodes.iter() {
+            println!("Visits: {:?}, W: {:?}", node.node.as_ref().unwrap().visits, node.policy_score);
+        }
+        
         let mut max_nodes: Vec<MCTSChildNode<S, A>> = visited_nodes.into_iter().filter(|n| {
             n.node.as_ref().map_or(false, |n| { n.visits >= max_visits })
         }).collect();
@@ -105,11 +112,11 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64) -> StateAnalysisValue {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64, depth: usize) -> (StateAnalysisValue, usize) {
         let game_state = &node.game_state;
         let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, game_state, cpuct);
 
-        let result = match &mut selected_child_node.node {
+        let (result, depth) = match &mut selected_child_node.node {
             None => {
                 let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
                     game_state,
@@ -117,14 +124,14 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                     game_engine
                 );
                 selected_child_node.node = Some(expanded_node);
-                state_analysis
+                (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct)
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, depth + 1)
         };
 
         node.visits += 1;
         node.W += result.value;
-        result
+        (result, depth)
     }
 
     #[allow(non_snake_case)]
@@ -135,7 +142,21 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         // }
 
         // @TODO: Update this to get either max or by dirichlet noise?
-        MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, game_state, cpuct).remove(0).node
+        // @TODO: Update to randomize if multiple values are max.
+        // @TODO: Combine method with take most visited node?
+        let mut pucts = MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, game_state, cpuct);
+        let initial = pucts.remove(pucts.len() - 1);
+        let mut max_puct_score = initial.score;
+        let mut best_node = initial.node;
+
+        for puct in pucts {
+            if puct.score > max_puct_score {
+                max_puct_score = puct.score;
+                best_node = puct.node;
+            }
+        }
+
+        best_node
     }
 
     //@TODO: See if we can return an iterator here.

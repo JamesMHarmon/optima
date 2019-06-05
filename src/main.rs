@@ -15,9 +15,21 @@ impl GameEngine<GameState, Action> for QuoridorEngine {
         GameStateAnalysis::new(
             vec!(ActionWithPolicy::new(
                 Action::MovePawn(1),
-                0.0
+                0.1
+            ), ActionWithPolicy::new(
+                Action::MovePawn(2),
+                0.2
+            ), ActionWithPolicy::new(
+                Action::MovePawn(3),
+                0.32
+            ), ActionWithPolicy::new(
+                Action::MovePawn(4),
+                0.1
+            ), ActionWithPolicy::new(
+                Action::MovePawn(5),
+                0.3
             )),
-            0.0
+            0.5
         )
     }
 
@@ -36,19 +48,19 @@ fn main() {
         MCTSOptions::new(
             0.0,
             0.0,
-            &|_| { 0.0 },
+            &|_| { 4.0 },
             &|_| { 0.0 },
             thread_rng(),
         )
     );
 
     let now = Instant::now();
-    let res = mcts.get_next_action(80000);
+    let res = mcts.get_next_action(800);
     let time = now.elapsed().as_millis();
     println!("TIME: {}",time);
 
     println!("{:?}", res);
-    println!("{:?}", mcts.get_next_action(800));
-    println!("{:?}", mcts.get_next_action(800));
-    println!("{:?}", mcts.get_next_action(800));
+    // println!("{:?}", mcts.get_next_action(1));
+    // println!("{:?}", mcts.get_next_action(800));
+    // println!("{:?}", mcts.get_next_action(800));
 }
