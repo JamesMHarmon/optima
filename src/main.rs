@@ -1,16 +1,19 @@
+extern crate quoridor;
+
 use rand::{thread_rng};
 use std::time::{Instant};
-use engine::*;
-
-mod engine;
-mod mcts;
+use quoridor::engine::{GameEngine};
+use quoridor::analysis::{ActionWithPolicy,GameStateAnalysis};
+use quoridor::mcts::{MCTS,MCTSOptions};
+use quoridor::quoridor::engine::{GameState};
+use quoridor::quoridor::action::{Action};
 
 struct QuoridorEngine {}
 
-impl mcts::GameEngine<GameState, Action> for QuoridorEngine {
-    fn get_state_analysis(&self, _: &GameState) -> mcts::GameStateAnalysis<Action> {
-        mcts::GameStateAnalysis::new(
-            vec!(mcts::ActionWithPolicy::new(
+impl GameEngine<GameState, Action> for QuoridorEngine {
+    fn get_state_analysis(&self, _: &GameState) -> GameStateAnalysis<Action> {
+        GameStateAnalysis::new(
+            vec!(ActionWithPolicy::new(
                 Action::MovePawn(1),
                 0.0
             )),
@@ -19,18 +22,18 @@ impl mcts::GameEngine<GameState, Action> for QuoridorEngine {
     }
 
     fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
-        game_state.move_pawn(1)
+        game_state.take_action(Action::MovePawn(1))
     }
 }
 
 
 fn main() {
     let game_engine = QuoridorEngine {};
-    let game_state = engine::GameState::new();
-    let mut mcts = mcts::MCTS::new(
+    let game_state = GameState::new();
+    let mut mcts = MCTS::new(
         game_state,
         &game_engine,
-        mcts::MCTSOptions::new(
+        MCTSOptions::new(
             0.0,
             0.0,
             &|_| { 0.0 },

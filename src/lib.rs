@@ -1,5 +1,7 @@
-mod engine;
-mod mcts;
+pub mod engine;
+pub mod mcts;
+pub mod analysis;
+pub mod quoridor;
 
 // https://github.com/dgrunwald/rust-cpython
 // #[macro_use] extern crate cpython;
@@ -8,47 +10,6 @@ mod mcts;
 // use pyo3::wrap_pyfunction;
 // use pyo3::types::{PyTuple,PyList,PyAny};
 // use pyo3::{FromPy, FromPyObject};
-use rand::{thread_rng};
-use engine::*;
-
-struct QuoridorEngine {}
-
-impl mcts::GameEngine<GameState, Action> for QuoridorEngine {
-    fn get_state_analysis(&self, _: &GameState) -> mcts::GameStateAnalysis<Action> {
-        mcts::GameStateAnalysis::new(
-            vec!(mcts::ActionWithPolicy::new(
-                Action::MovePawn(1),
-                0.0
-            )),
-            0.0
-        )
-    }
-
-    fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
-        game_state.move_pawn(1)
-    }
-}
-
-pub fn temp() {
-    let game_engine = QuoridorEngine {};
-    let game_state = engine::GameState::new();
-    let mut mcts = mcts::MCTS::new(
-        game_state,
-        &game_engine,
-        mcts::MCTSOptions::new(
-            0.0,
-            0.0,
-            &|_| { 0.0 },
-            &|_| { 0.0 },
-            thread_rng(),
-        )
-    );
-
-    print!("{:?}", mcts.get_next_action(800));
-    print!("{:?}", mcts.get_next_action(800));
-    print!("{:?}", mcts.get_next_action(800));
-    print!("{:?}", mcts.get_next_action(800));
-}
 
 // #[pymodule]
 // fn quoridor_cpython(py: Python, m: &PyModule) -> PyResult<()> {

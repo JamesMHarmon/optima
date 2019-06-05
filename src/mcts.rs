@@ -1,38 +1,6 @@
 use rand::{ Rng };
-
-pub trait GameEngine<S, A> {
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysis<A>;
-    fn take_action(&self, game_state: &S, action: &A) -> S;
-}
-
-pub struct ActionWithPolicy<A> {
-    action: A,
-    policy_score: f64,
-}
-
-impl<A> ActionWithPolicy<A> {
-    pub fn new(action: A, policy_score: f64) -> Self {
-        ActionWithPolicy {
-            action,
-            policy_score
-        }
-    }
-}
-
-// If this is a terminal state, i.e. W/L/D. Return empty vector and value of -1, 0, or 1.
-pub struct GameStateAnalysis<A> {
-    policy_scores: Vec<ActionWithPolicy<A>>,
-    value_score: f64
-}
-
-impl<A> GameStateAnalysis<A> {
-    pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, value_score: f64) -> Self {
-        GameStateAnalysis {
-            policy_scores,
-            value_score
-        }
-    }
-}
+use super::engine::{GameEngine};
+use super::analysis::{ActionWithPolicy};
 
 pub struct MCTSOptions<'a, S, R: Rng> {
     dirichlet_alpha: f64,
@@ -138,6 +106,10 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     }
 
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64) -> StateAnalysisValue {
+        // while let node_to_search = node {
+            
+        // }
+
         let game_state = &node.game_state;
         let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, game_state, cpuct);
 
