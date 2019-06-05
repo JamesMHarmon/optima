@@ -106,10 +106,6 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     }
 
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64) -> StateAnalysisValue {
-        // while let node_to_search = node {
-            
-        // }
-
         let game_state = &node.game_state;
         let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, game_state, cpuct);
 
