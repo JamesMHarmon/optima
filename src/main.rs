@@ -4,7 +4,7 @@ use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
 use quoridor::engine::{GameEngine};
 use quoridor::analysis::{ActionWithPolicy,GameStateAnalysis};
-use quoridor::mcts::{MCTS,MCTSOptions};
+use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use quoridor::quoridor::engine::{GameState};
 use quoridor::quoridor::action::{Action};
 
@@ -27,7 +27,7 @@ impl GameEngine<GameState, Action> for QuoridorEngine {
                 0.1
             ), ActionWithPolicy::new(
                 Action::MovePawn(5),
-                0.3
+                0.30
             )),
             0.5
         )
@@ -48,8 +48,10 @@ fn main() {
         game_state,
         &game_engine,
         MCTSOptions::new(
-            0.0,
-            0.0,
+            Some(DirichletOptions {
+                alpha: 0.03,
+                epsilon: 0.25
+            }),
             &|_,_| { 4.0 },
             &|_| { 1.0 },
             seedable_rng,
@@ -57,7 +59,7 @@ fn main() {
     );
 
     let now = Instant::now();
-    let res = mcts.get_next_action(800);
+    let res = mcts.get_next_action(800).unwrap();
     let time = now.elapsed().as_millis();
     println!("TIME: {}",time);
 

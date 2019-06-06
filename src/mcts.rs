@@ -1,6 +1,6 @@
 use rand::{ Rng };
 use rand::prelude::Distribution;
-use rand::distributions::WeightedIndex;
+use rand::distributions::{Dirichlet,WeightedIndex};
 
 use super::engine::{GameEngine};
 use super::analysis::{ActionWithPolicy};
@@ -8,9 +8,13 @@ use super::analysis::{ActionWithPolicy};
 type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
 type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
 
+pub struct DirichletOptions {
+    pub alpha: f64,
+    pub epsilon: f64
+}
+
 pub struct MCTSOptions<'a, S, A, R: Rng> {
-    dirichlet_alpha: f64,
-    dirichlet_epsilon: f64,
+    dirichlet: Option<DirichletOptions>,
     cpuct: Cpuct<'a, S, A>,
     temperature: Temp<'a, S>,
     rng: R
@@ -18,15 +22,13 @@ pub struct MCTSOptions<'a, S, A, R: Rng> {
 
 impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
     pub fn new(
-        dirichlet_alpha: f64,
-        dirichlet_epsilon: f64,
+        dirichlet: Option<DirichletOptions>,
         cpuct: Cpuct<'a, S, A>,
         temperature: Temp<'a, S>,
         rng: R
     ) -> Self {
         MCTSOptions {
-            dirichlet_alpha,
-            dirichlet_epsilon,
+            dirichlet,
             cpuct,
             temperature,
             rng,
@@ -78,6 +80,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
 
     pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
         let game_engine = self.game_engine;
+        let dirichlet = &self.options.dirichlet;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
         let rng = &mut self.options.rng;
@@ -87,7 +90,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let mut max_depth: usize = 0;
 
         for _ in 0..number_of_playouts {
-            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, rng, 0)?;
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, dirichlet, rng, 0)?;
             max_depth = md;
         }
 
@@ -107,6 +110,10 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
             })
             .collect();
 
+        for visited_node in visited_nodes.iter() {
+            println!("{}, {}", visited_node.1.visits, visited_node.1.W);
+        }
+
         let max_visits = visited_nodes.iter().map(|n| { n.1.visits }).max().ok_or("No visited_nodes to choose from")?;
 
         let mut max_nodes: Vec<(A, MCTSNode<S, A>)> = visited_nodes.into_iter().filter(|n| n.1.visits >= max_visits).collect();
@@ -120,9 +127,20 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, dirichlet: &Option<DirichletOptions>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         let game_state = &node.game_state;
         let Nsb = node.visits - 1;
+
+        dirichlet.as_ref().map(|dirichlet| {
+            let zero_vec = Dirichlet::new_with_param(dirichlet.alpha, node.children.len()).sample(rng);
+
+            // p = (1-e) * p + e * noise[i]
+
+            for (i, v) in zero_vec.iter().enumerate() {
+                println!("I: {}, V: {}", i, v);
+            }
+        });
+
         let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, rng)?;
 
         let (result, depth) = match &mut selected_child_node.node {
@@ -135,7 +153,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, rng, depth + 1)?
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, &None, rng, depth + 1)?
         };
 
         node.visits += 1;
