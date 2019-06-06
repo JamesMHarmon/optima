@@ -48,14 +48,14 @@ fn main() {
         MCTSOptions::new(
             0.0,
             0.0,
-            &|_| { 4.0 },
+            &|_,_| { 4.0 },
             &|_| { 0.0 },
             thread_rng(),
         )
     );
 
     let now = Instant::now();
-    let res = mcts.get_next_action(800);
+    let res = mcts.get_next_action(10);
     let time = now.elapsed().as_millis();
     println!("TIME: {}",time);
 

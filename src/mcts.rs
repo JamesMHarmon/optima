@@ -1,21 +1,27 @@
 use rand::{ Rng };
+use rand::prelude::*;
+use rand::distributions::WeightedIndex;
+
 use super::engine::{GameEngine};
 use super::analysis::{ActionWithPolicy};
 
-pub struct MCTSOptions<'a, S, R: Rng> {
+type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
+type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
+
+pub struct MCTSOptions<'a, S, A, R: Rng> {
     dirichlet_alpha: f64,
     dirichlet_epsilon: f64,
-    cpuct: &'a dyn Fn(&S) -> f64,
-    temperature: &'a dyn Fn(&S) -> f64,
+    cpuct: Cpuct<'a, S, A>,
+    temperature: Temp<'a, S>,
     rng: R
 }
 
-impl<'a, S, R: Rng> MCTSOptions<'a, S, R> {
+impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
     pub fn new(
         dirichlet_alpha: f64,
         dirichlet_epsilon: f64,
-        cpuct: &'a dyn Fn(&S) -> f64,
-        temperature: &'a dyn Fn(&S) -> f64,
+        cpuct: Cpuct<'a, S, A>,
+        temperature: Temp<'a, S>,
         rng: R
     ) -> Self {
         MCTSOptions {
@@ -29,7 +35,7 @@ impl<'a, S, R: Rng> MCTSOptions<'a, S, R> {
 }
 
 pub struct MCTS<'a, S, A, E: GameEngine<S, A>, R: Rng> {
-    options: MCTSOptions<'a, S, R>,
+    options: MCTSOptions<'a, S, A, R>,
     game_engine: &'a E,
     starting_game_state: Option<S>,
     root: Option<MCTSNode<S, A>>,
@@ -59,8 +65,9 @@ struct StateAnalysisValue {
     value: f64
 }
 
+#[allow(non_snake_case)]
 impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
-    pub fn new(game_state: S, game_engine: &'a E, options: MCTSOptions<'a, S, R>) -> Self {
+    pub fn new(game_state: S, game_engine: &'a E, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
             game_engine,
@@ -69,14 +76,15 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }
     }
 
-    pub fn get_next_action(&mut self, number_of_nodes_to_search: usize) -> Result<(A, usize), &'static str> {
+    pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
         let game_engine = self.game_engine;
         let cpuct = self.options.cpuct;
+        let temp = self.options.temperature;
         let root_node = self.get_or_create_root_node();
         let mut max_depth: usize = 0;
 
-        for _ in 0..number_of_nodes_to_search {
-            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, 0);
+        for _ in 0..number_of_playouts {
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, 0)?;
             max_depth = md;
         }
 
@@ -89,32 +97,26 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     }
 
     fn take_most_visited_node(&mut self, current_root: MCTSNode<S, A>) -> Result<MCTSChildNode<S, A>, &'static str> {
-        let candidate_nodes = current_root.children;
-        let visited_nodes: Vec<MCTSChildNode<S, A>> = candidate_nodes.into_iter().filter(|n| { n.node.is_some() }).collect();
-        let max_visits = visited_nodes.iter().map(|n| { n.node.as_ref().unwrap().visits }).max().expect("No visited_nodes to choose from");
-        
-        for node in visited_nodes.iter() {
-            println!("Visits: {:?}, W: {:?}", node.node.as_ref().unwrap().visits, node.policy_score);
-        }
-        
+        let visited_nodes: Vec<MCTSChildNode<S, A>> = current_root.children.into_iter().filter(|n| { n.node.is_some() }).collect();
+        let max_visits = visited_nodes.iter().map(|n| { n.node.as_ref().unwrap().visits }).max().ok_or("No visited_nodes to choose from")?;
+
         let mut max_nodes: Vec<MCTSChildNode<S, A>> = visited_nodes.into_iter().filter(|n| {
             n.node.as_ref().map_or(false, |n| { n.visits >= max_visits })
         }).collect();
 
-        match max_nodes.len() {
+        let chosen_idx = match max_nodes.len() {
             0 => Err("No candidate moves available"),
-            1 => Ok(max_nodes.remove(0)),
-            _ => {
-                println!("Random!");
-                let random_idx = self.options.rng.gen_range(0, max_nodes.len());
-                Ok(max_nodes.remove(random_idx))
-            }
-        }
+            1 => Ok(0),
+            len => Ok(self.options.rng.gen_range(0, len))
+        };
+
+        chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: &dyn Fn(&S) -> f64, depth: usize) -> (StateAnalysisValue, usize) {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         let game_state = &node.game_state;
-        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, game_state, cpuct);
+        let Nsb = node.visits - 1;
+        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp)?;
 
         let (result, depth) = match &mut selected_child_node.node {
             None => {
@@ -126,55 +128,62 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, depth + 1)
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, depth + 1)?
         };
 
         node.visits += 1;
         node.W += result.value;
-        (result, depth)
+        Ok((result, depth))
     }
 
-    #[allow(non_snake_case)]
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, game_state: &S, cpuct: &dyn Fn(&S) -> f64) -> &'a mut MCTSChildNode<S, A> {
-        // @TODO: Add temperature
-        // for puct in  MCTS::<S, A, E, R>::get_PUCT_for_nodes(node, cpuct) {
-        //     return puct.node
-        // }
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
+        let mut pucts = MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, Nsb, game_state, cpuct);
 
-        // @TODO: Update this to get either max or by dirichlet noise?
-        // @TODO: Update to randomize if multiple values are max.
-        // @TODO: Combine method with take most visited node?
-        let mut pucts = MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, game_state, cpuct);
-        let initial = pucts.remove(pucts.len() - 1);
-        let mut max_puct_score = initial.score;
-        let mut best_node = initial.node;
+        let temp = temp(game_state);
+        let chosen_puct_idx = if temp == 0.0 {
+            MCTS::<S, A, E, R>::select_path_using_PUCT_max(&pucts)
+        } else {
+            MCTS::<S, A, E, R>::select_path_using_PUCT_Temperature(&pucts, temp)
+        }?;
 
-        for puct in pucts {
-            if puct.score > max_puct_score {
-                max_puct_score = puct.score;
-                best_node = puct.node;
-            }
+        Ok(pucts.remove(chosen_puct_idx).node)
+    }
+
+    fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>) -> Result<usize, &'static str> {
+        let max_puct = pucts.iter().fold(std::f64::MIN, |acc, puct| f64::max(acc, puct.score));
+        let mut max_nodes: Vec<usize> = pucts.into_iter()
+            .enumerate()
+            .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
+            .collect();
+
+        match max_nodes.len() {
+            0 => Err("No candidate moves available"),
+            1 => Ok(max_nodes.remove(0)),
+            len => Ok(max_nodes.remove((&mut thread_rng()).gen_range(0, len)))
         }
+    }
 
-        best_node
+    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64) -> Result<usize, &'static str> {
+        let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
+
+        let weighted_index = WeightedIndex::new(puct_scores).map_err(|_| "Invalid puct scores")?;
+
+        let chosen_idx = weighted_index.sample(&mut thread_rng());
+        Ok(chosen_idx)
     }
 
     //@TODO: See if we can return an iterator here.
-    #[allow(non_snake_case)]
-    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, game_state: &S, cpuct: &dyn Fn(&S) -> f64) -> Vec<NodePUCT<'a, S, A>> {
-        // @TODO: See if this is equivalent to (node.visits - 1).
-        let Nsb: usize = nodes.iter()
-            .filter_map(|n| { n.node.as_ref() })
-            .map(|n| { n.visits })
-            .sum();
-
+    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>) -> Vec<NodePUCT<'a, S, A>> {
         nodes.iter_mut().map(|child| {
             let child_node = &child.node;
             let Psa = child.policy_score;
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
-            // Should the child's game state be passed here instead?
-            let cpuct = cpuct(&game_state);
-            let Usa = cpuct * Psa * (Nsb as f64).sqrt() / (1 + Nsa) as f64;
+
+            let cpuct = cpuct(&game_state, &child.action);
+            let root_Nsb = if Nsb == 0 { 1.0 } else {  ((Nsb + 1) as f64).sqrt() };
+            let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
+
+            println!("cpuct: {}, Psa: {}, Nsb: {}, Nsa: {}", cpuct, Psa, Nsb + 1, Nsa);
 
             let Qsa = child_node.as_ref().map_or(0.0, |n| { n.W / n.visits as f64 });
 
