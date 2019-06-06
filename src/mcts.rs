@@ -1,5 +1,5 @@
 use rand::{ Rng };
-use rand::prelude::*;
+use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
 
 use super::engine::{GameEngine};
@@ -80,23 +80,26 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let game_engine = self.game_engine;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
-        let root_node = self.get_or_create_root_node();
+        let rng = &mut self.options.rng;
+        let root = &mut self.root;
+        let starting_game_state = &mut self.starting_game_state;
+        let root_node = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
         let mut max_depth: usize = 0;
 
         for _ in 0..number_of_playouts {
-            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, 0)?;
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, rng, 0)?;
             max_depth = md;
         }
 
         let current_root = self.root.take().ok_or("No root node found!")?;
-        let most_visited_node = self.take_most_visited_node(current_root)?;
+        let most_visited_node = MCTS::<S, A, E, R>::take_most_visited_node(current_root, rng)?;
 
         // Update the tree now that this is the next root node.
         self.root = Some(most_visited_node.1);
         Ok((most_visited_node.0, max_depth))
     }
 
-    fn take_most_visited_node(&mut self, current_root: MCTSNode<S, A>) -> Result<(A, MCTSNode<S, A>), &'static str> {
+    fn take_most_visited_node(current_root: MCTSNode<S, A>, rng: &mut R) -> Result<(A, MCTSNode<S, A>), &'static str> {
         let visited_nodes: Vec<(A, MCTSNode<S, A>)> = current_root.children.into_iter()
             .filter_map(|n| {
                 let action = n.action;
@@ -111,16 +114,16 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let chosen_idx = match max_nodes.len() {
             0 => Err("No candidate moves available"),
             1 => Ok(0),
-            len => Ok(self.options.rng.gen_range(0, len))
+            len => Ok(rng.gen_range(0, len))
         };
 
         chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         let game_state = &node.game_state;
         let Nsb = node.visits - 1;
-        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp)?;
+        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, rng)?;
 
         let (result, depth) = match &mut selected_child_node.node {
             None => {
@@ -132,7 +135,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, depth + 1)?
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, rng, depth + 1)?
         };
 
         node.visits += 1;
@@ -140,20 +143,20 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         Ok((result, depth))
     }
 
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
         let mut pucts = MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, Nsb, game_state, cpuct);
 
         let temp = temp(game_state);
         let chosen_puct_idx = if temp == 0.0 {
-            MCTS::<S, A, E, R>::select_path_using_PUCT_max(&pucts)
+            MCTS::<S, A, E, R>::select_path_using_PUCT_max(&pucts, rng)
         } else {
-            MCTS::<S, A, E, R>::select_path_using_PUCT_Temperature(&pucts, temp)
+            MCTS::<S, A, E, R>::select_path_using_PUCT_Temperature(&pucts, temp, rng)
         }?;
 
         Ok(pucts.remove(chosen_puct_idx).node)
     }
 
-    fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>) -> Result<usize, &'static str> {
+    fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>, rng: &mut R) -> Result<usize, &'static str> {
         let max_puct = pucts.iter().fold(std::f64::MIN, |acc, puct| f64::max(acc, puct.score));
         let mut max_nodes: Vec<usize> = pucts.into_iter()
             .enumerate()
@@ -163,16 +166,16 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         match max_nodes.len() {
             0 => Err("No candidate moves available"),
             1 => Ok(max_nodes.remove(0)),
-            len => Ok(max_nodes.remove((&mut thread_rng()).gen_range(0, len)))
+            len => Ok(max_nodes.remove(rng.gen_range(0, len)))
         }
     }
 
-    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64) -> Result<usize, &'static str> {
+    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64, rng: &mut R) -> Result<usize, &'static str> {
         let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(puct_scores).map_err(|_| "Invalid puct scores")?;
 
-        let chosen_idx = weighted_index.sample(&mut thread_rng());
+        let chosen_idx = weighted_index.sample(rng);
         Ok(chosen_idx)
     }
 
@@ -208,11 +211,11 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         )
     }
 
-    fn get_or_create_root_node(&mut self) -> &mut MCTSNode<S, A> {
-        let starting_game_state = self.starting_game_state.take();
-        let game_engine = self.game_engine;
+    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> &'a mut MCTSNode<S, A> {
+        let starting_game_state = starting_game_state.take();
+        let game_engine = game_engine;
 
-        self.root.get_or_insert_with(|| {
+        root.get_or_insert_with(|| {
             MCTS::<S, A, E, R>::create_root_node(
                 starting_game_state.expect("Tried to use the same starting game state twice"),
                 game_engine
