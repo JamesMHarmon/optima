@@ -92,17 +92,21 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let most_visited_node = self.take_most_visited_node(current_root)?;
 
         // Update the tree now that this is the next root node.
-        self.root = most_visited_node.node;
-        Ok((most_visited_node.action, max_depth))
+        self.root = Some(most_visited_node.1);
+        Ok((most_visited_node.0, max_depth))
     }
 
-    fn take_most_visited_node(&mut self, current_root: MCTSNode<S, A>) -> Result<MCTSChildNode<S, A>, &'static str> {
-        let visited_nodes: Vec<MCTSChildNode<S, A>> = current_root.children.into_iter().filter(|n| { n.node.is_some() }).collect();
-        let max_visits = visited_nodes.iter().map(|n| { n.node.as_ref().unwrap().visits }).max().ok_or("No visited_nodes to choose from")?;
+    fn take_most_visited_node(&mut self, current_root: MCTSNode<S, A>) -> Result<(A, MCTSNode<S, A>), &'static str> {
+        let visited_nodes: Vec<(A, MCTSNode<S, A>)> = current_root.children.into_iter()
+            .filter_map(|n| {
+                let action = n.action;
+                n.node.map(|node| (action, node))
+            })
+            .collect();
 
-        let mut max_nodes: Vec<MCTSChildNode<S, A>> = visited_nodes.into_iter().filter(|n| {
-            n.node.as_ref().map_or(false, |n| { n.visits >= max_visits })
-        }).collect();
+        let max_visits = visited_nodes.iter().map(|n| { n.1.visits }).max().ok_or("No visited_nodes to choose from")?;
+
+        let mut max_nodes: Vec<(A, MCTSNode<S, A>)> = visited_nodes.into_iter().filter(|n| n.1.visits >= max_visits).collect();
 
         let chosen_idx = match max_nodes.len() {
             0 => Err("No candidate moves available"),
@@ -182,8 +186,6 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
             let cpuct = cpuct(&game_state, &child.action);
             let root_Nsb = if Nsb == 0 { 1.0 } else {  ((Nsb + 1) as f64).sqrt() };
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
-
-            println!("cpuct: {}, Psa: {}, Nsb: {}, Nsa: {}", cpuct, Psa, Nsb + 1, Nsa);
 
             let Qsa = child_node.as_ref().map_or(0.0, |n| { n.W / n.visits as f64 });
 

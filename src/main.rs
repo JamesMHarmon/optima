@@ -55,7 +55,7 @@ fn main() {
     );
 
     let now = Instant::now();
-    let res = mcts.get_next_action(10);
+    let res = mcts.get_next_action(800);
     let time = now.elapsed().as_millis();
     println!("TIME: {}",time);
 
