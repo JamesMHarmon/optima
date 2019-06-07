@@ -49,7 +49,7 @@ fn main() {
         &game_engine,
         MCTSOptions::new(
             Some(DirichletOptions {
-                alpha: 0.03,
+                alpha: 0.3,
                 epsilon: 0.25
             }),
             &|_,_| { 4.0 },
@@ -59,7 +59,7 @@ fn main() {
     );
 
     let now = Instant::now();
-    let res = mcts.get_next_action(800).unwrap();
+    let res = mcts.get_next_action(8000).unwrap();
     let time = now.elapsed().as_millis();
     println!("TIME: {}",time);
 
