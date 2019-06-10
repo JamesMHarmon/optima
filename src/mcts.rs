@@ -131,14 +131,16 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let game_state = &node.game_state;
         let Nsb = node.visits - 1;
 
-        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, dirichlet, rng)?;
+        let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, rng)?;
 
         let (result, depth) = match &mut selected_child_node.node {
             None => {
                 let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
                     game_state,
                     &selected_child_node.action,
-                    game_engine
+                    game_engine,
+                    dirichlet,
+                    rng
                 );
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
@@ -151,14 +153,14 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         Ok((result, depth))
     }
 
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>, dirichlet: &Option<DirichletOptions>, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
         let mut pucts = MCTS::<S, A, E, R>::get_PUCT_for_nodes(nodes, Nsb, game_state, cpuct);
 
         let temp = temp(game_state);
         let chosen_puct_idx = if temp == 0.0 {
             MCTS::<S, A, E, R>::select_path_using_PUCT_max(&pucts, rng)
         } else {
-            MCTS::<S, A, E, R>::select_path_using_PUCT_Temperature(&pucts, temp, dirichlet, rng)
+            MCTS::<S, A, E, R>::select_path_using_PUCT_Temperature(&pucts, temp, rng)
         }?;
 
         Ok(pucts.remove(chosen_puct_idx).node)
@@ -178,12 +180,8 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }
     }
 
-    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64, dirichlet: &Option<DirichletOptions>, rng: &mut R) -> Result<usize, &'static str> {
-        let mut e = 0.0;
-        let dirichlet_noise: Option<Vec<f64>> = dirichlet.as_ref().map(|dirichlet| { e = dirichlet.epsilon; Dirichlet::new_with_param(dirichlet.alpha, pucts.len()).sample(rng) });
-        let puct_scores = pucts.iter().enumerate()
-            .map(|(i, puct)| (i, puct.score.powf(1.0 / temp)))
-            .map(|(i, puct)| dirichlet_noise.as_ref().map_or(puct, |noise| (1.0 - e) * puct + e * noise[i] ));
+    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64, rng: &mut R) -> Result<usize, &'static str> {
+        let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(puct_scores).map_err(|_| "Invalid puct scores")?;
 
@@ -213,12 +211,25 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }).collect()
     }
 
-    fn expand_leaf(game_state: &S, action: &A, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    fn expand_leaf(game_state: &S, action: &A, game_engine: &E, dirichlet: &Option<DirichletOptions>, rng: &mut R) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
         let analysis_result = game_engine.get_state_analysis(&new_game_state);
 
+        let pucts: Vec<ActionWithPolicy<A>> = match dirichlet {
+            Some(dirichlet) => {
+                let e = dirichlet.epsilon;
+                let pucts = analysis_result.policy_scores;
+                let dirichlet_noise = Dirichlet::new_with_param(dirichlet.alpha, pucts.len()).sample(rng);
+                dirichlet_noise.into_iter().zip(pucts).map(|(noise, awp)| ActionWithPolicy {
+                    action: awp.action,
+                    policy_score: (1.0 - e) * awp.policy_score + e * noise
+                }).collect()
+            },
+            None => analysis_result.policy_scores
+        };
+
         (
-            MCTSNode::new(new_game_state, analysis_result.value_score, analysis_result.policy_scores),
+            MCTSNode::new(new_game_state, analysis_result.value_score, pucts),
             StateAnalysisValue { value: analysis_result.value_score }
         )
     }
