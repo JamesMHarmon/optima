@@ -80,17 +80,20 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
 
     pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
         let game_engine = self.game_engine;
-        let dirichlet = &self.options.dirichlet;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
+        let dirichlet = &self.options.dirichlet;
         let rng = &mut self.options.rng;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let root_node = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
+        let (mut root_node, root_was_expanded) = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
+        let number_of_playouts = number_of_playouts - if root_was_expanded { 1 } else { 0 };
         let mut max_depth: usize = 0;
 
+        MCTS::<S, A, E, R>::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
+
         for _ in 0..number_of_playouts {
-            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, dirichlet, rng, 0)?;
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, rng, 0)?;
             max_depth = md;
         }
 
@@ -127,7 +130,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, dirichlet: &Option<DirichletOptions>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         let game_state = &node.game_state;
         let Nsb = node.visits - 1;
 
@@ -138,14 +141,12 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                 let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
                     game_state,
                     &selected_child_node.action,
-                    game_engine,
-                    dirichlet,
-                    rng
+                    game_engine
                 );
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp, &None, rng, depth + 1)?
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp,rng, depth + 1)?
         };
 
         node.visits += 1;
@@ -168,8 +169,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
 
     fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>, rng: &mut R) -> Result<usize, &'static str> {
         let max_puct = pucts.iter().fold(std::f64::MIN, |acc, puct| f64::max(acc, puct.score));
-        let mut max_nodes: Vec<usize> = pucts.into_iter()
-            .enumerate()
+        let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
             .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
             .collect();
 
@@ -211,45 +211,58 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         }).collect()
     }
 
-    fn expand_leaf(game_state: &S, action: &A, game_engine: &E, dirichlet: &Option<DirichletOptions>, rng: &mut R) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    fn expand_leaf(game_state: &S, action: &A, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
-        let analysis_result = game_engine.get_state_analysis(&new_game_state);
+        MCTS::<S, A, E, R>::analyse_and_create_node(new_game_state, game_engine)
+    }
 
-        let pucts: Vec<ActionWithPolicy<A>> = match dirichlet {
-            Some(dirichlet) => {
-                let e = dirichlet.epsilon;
-                let pucts = analysis_result.policy_scores;
-                let dirichlet_noise = Dirichlet::new_with_param(dirichlet.alpha, pucts.len()).sample(rng);
-                dirichlet_noise.into_iter().zip(pucts).map(|(noise, awp)| ActionWithPolicy {
-                    action: awp.action,
-                    policy_score: (1.0 - e) * awp.policy_score + e * noise
-                }).collect()
-            },
-            None => analysis_result.policy_scores
-        };
+    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> (&'a mut MCTSNode<S, A>, bool) {
+        let starting_game_state = starting_game_state.take();
+        let game_engine = game_engine;
+        let root_was_expanded = root.is_none();
 
         (
-            MCTSNode::new(new_game_state, analysis_result.value_score, pucts),
+            root.get_or_insert_with(|| {
+                MCTS::<S, A, E, R>::analyse_and_create_node(
+                    starting_game_state.expect("Tried to use the same starting game state twice"),
+                    game_engine
+                ).0
+            }),
+            root_was_expanded
+        )
+    }
+
+    fn analyse_and_create_node(game_state: S, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+        let analysis_result = game_engine.get_state_analysis(&game_state);
+
+        (
+            MCTSNode::new(game_state, analysis_result.value_score, analysis_result.policy_scores),
             StateAnalysisValue { value: analysis_result.value_score }
         )
     }
 
-    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> &'a mut MCTSNode<S, A> {
-        let starting_game_state = starting_game_state.take();
-        let game_engine = game_engine;
+    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S, A>, dirichlet: &Option<DirichletOptions>, rng: &mut R) {
+        if let Some(dirichlet) = dirichlet {
+            let policy_scores: Vec<f64> = node.children.iter().map(|child_node| {
+                child_node.policy_score
+            }).collect();
 
-        root.get_or_insert_with(|| {
-            MCTS::<S, A, E, R>::create_root_node(
-                starting_game_state.expect("Tried to use the same starting game state twice"),
-                game_engine
-            )
-        })
+            let updated_policy_scores = MCTS::<S, A, E, R>::apply_dirichlet_noise(policy_scores, dirichlet, rng);
+
+            for (child, policy_score) in node.children.iter_mut().zip(updated_policy_scores.into_iter()) {
+                child.policy_score = policy_score;
+            }
+        }
     }
 
-    fn create_root_node(game_state: S, game_engine: &E) -> MCTSNode<S, A> {
-        let analysis_result = game_engine.get_state_analysis(&game_state);
+    fn apply_dirichlet_noise(policy_scores: Vec<f64>, dirichlet: &DirichletOptions, rng: &mut R) -> Vec<f64>
+    {
+        let e = dirichlet.epsilon;
+        let dirichlet_noise = Dirichlet::new_with_param(dirichlet.alpha, policy_scores.len()).sample(rng);
 
-        MCTSNode::new(game_state, analysis_result.value_score, analysis_result.policy_scores)
+        dirichlet_noise.into_iter().zip(policy_scores).map(|(noise, policy_score)|
+            (1.0 - e) * policy_score + e * noise
+        ).collect()
     }
 }
 

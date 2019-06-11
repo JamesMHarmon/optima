@@ -66,7 +66,7 @@ fn main() {
     println!("TIME: {}",time);
 
     println!("{:?}", res);
-    // println!("{:?}", mcts.get_next_action(1));
-    // println!("{:?}", mcts.get_next_action(800));
-    // println!("{:?}", mcts.get_next_action(800));
+    println!("{:?}", mcts.get_next_action(1));
+    println!("{:?}", mcts.get_next_action(800));
+    println!("{:?}", mcts.get_next_action(800));
 }
