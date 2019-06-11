@@ -60,13 +60,13 @@ fn main() {
 
 
     let now = Instant::now();
-    let res = mcts.get_next_action(800).unwrap();
+    let res = mcts.get_next_action(1).unwrap();
     let time = now.elapsed().as_millis();
 
     println!("TIME: {}",time);
 
-    println!("{:?}", res);
-    println!("{:?}", mcts.get_next_action(1));
-    println!("{:?}", mcts.get_next_action(800));
-    println!("{:?}", mcts.get_next_action(800));
+    // println!("{:?}", res);
+    // println!("{:?}", mcts.get_next_action(1));
+    // println!("{:?}", mcts.get_next_action(800));
+    // println!("{:?}", mcts.get_next_action(800));
 }

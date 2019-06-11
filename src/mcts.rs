@@ -86,8 +86,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         let rng = &mut self.options.rng;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let (mut root_node, root_was_expanded) = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
-        let number_of_playouts = number_of_playouts - if root_was_expanded { 1 } else { 0 };
+        let mut root_node = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
         let mut max_depth: usize = 0;
 
         MCTS::<S, A, E, R>::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
@@ -112,10 +111,6 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
                 n.node.map(|node| (action, node))
             })
             .collect();
-
-        for visited_node in visited_nodes.iter() {
-            println!("{}, {}", visited_node.1.visits, visited_node.1.W);
-        }
 
         let max_visits = visited_nodes.iter().map(|n| { n.1.visits }).max().ok_or("No visited_nodes to choose from")?;
 
@@ -197,7 +192,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
             let cpuct = cpuct(&game_state, &child.action);
-            let root_Nsb = if Nsb == 0 { 1.0 } else {  ((Nsb + 1) as f64).sqrt() };
+            let root_Nsb = ((Nsb + 1) as f64).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
 
             let Qsa = child_node.as_ref().map_or(0.0, |n| { n.W / n.visits as f64 });
@@ -216,20 +211,16 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
         MCTS::<S, A, E, R>::analyse_and_create_node(new_game_state, game_engine)
     }
 
-    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> (&'a mut MCTSNode<S, A>, bool) {
+    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> &'a mut MCTSNode<S, A> {
         let starting_game_state = starting_game_state.take();
         let game_engine = game_engine;
-        let root_was_expanded = root.is_none();
 
-        (
-            root.get_or_insert_with(|| {
-                MCTS::<S, A, E, R>::analyse_and_create_node(
-                    starting_game_state.expect("Tried to use the same starting game state twice"),
-                    game_engine
-                ).0
-            }),
-            root_was_expanded
-        )
+        root.get_or_insert_with(|| {
+            MCTS::<S, A, E, R>::analyse_and_create_node(
+                starting_game_state.expect("Tried to use the same starting game state twice"),
+                game_engine
+            ).0
+        })
     }
 
     fn analyse_and_create_node(game_state: S, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
