@@ -1,12 +1,15 @@
 extern crate quoridor;
 
+use pyo3::prelude::*;
+use pyo3::types::IntoPyDict;
+
 use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
 
 use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use quoridor::quoridor::engine::{GameState, Engine as QuoridorEngine};
 
-fn main() {
+fn main() -> PyResult<()> {
     let game_engine = QuoridorEngine {};
     let game_state = GameState::new();
     let seed: [u8; 32] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
@@ -36,4 +39,14 @@ fn main() {
     // println!("{:?}", mcts.get_next_action(1));
     // println!("{:?}", mcts.get_next_action(800));
     // println!("{:?}", mcts.get_next_action(800));
+
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let sys = py.import("sys")?;
+    let version: String = sys.get("version")?.extract()?;
+    let locals = [("os", py.import("os")?)].into_py_dict(py);
+    let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
+    let user: String = py.eval(code, None, Some(&locals))?.extract()?;
+    println!("Hello {}, I'm Python {}", user, version);
+    Ok(())
 }
