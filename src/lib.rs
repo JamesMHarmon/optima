@@ -1,7 +1,8 @@
 pub mod engine;
 pub mod mcts;
-pub mod analysis;
+pub mod analytics;
 pub mod quoridor;
+pub mod connect4;
 
 // https://github.com/dgrunwald/rust-cpython
 // #[macro_use] extern crate cpython;

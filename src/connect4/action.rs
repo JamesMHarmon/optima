@@ -4,4 +4,4 @@ pub enum Action {
 }
 
 #[derive(Debug)]
-pub struct ValidActions(u64)
+pub struct ValidActions(u64);

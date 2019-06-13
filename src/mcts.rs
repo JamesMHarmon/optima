@@ -3,7 +3,7 @@ use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
 
 use super::engine::{GameEngine};
-use super::analysis::{ActionWithPolicy};
+use super::analytics::{ActionWithPolicy,GameAnalytics};
 
 type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
 type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
@@ -68,7 +68,7 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
+impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     pub fn new(game_state: S, game_engine: &'a E, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
@@ -126,9 +126,14 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     }
 
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
-        let game_state = &node.game_state;
-        let Nsb = node.visits - 1;
+        // If the node is a terminal node.
+        if node.children.len() == 0 {
+            node.visits += 1;
+            return Ok((StateAnalysisValue { value: node.W }, depth));
+        }
 
+        let game_state = &node.game_state;
+        let Nsb = node.visits;
         let selected_child_node = MCTS::<S, A, E, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, rng)?;
 
         let (result, depth) = match &mut selected_child_node.node {
@@ -192,7 +197,7 @@ impl<'a, S, A, E: GameEngine<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
             let cpuct = cpuct(&game_state, &child.action);
-            let root_Nsb = ((Nsb + 1) as f64).sqrt();
+            let root_Nsb = (Nsb as f64).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
 
             let Qsa = child_node.as_ref().map_or(0.0, |n| { n.W / n.visits as f64 });

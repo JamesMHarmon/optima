@@ -2,42 +2,9 @@ extern crate quoridor;
 
 use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
-use quoridor::engine::{GameEngine};
-use quoridor::analysis::{ActionWithPolicy,GameStateAnalysis};
+
 use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
-use quoridor::quoridor::engine::{GameState};
-use quoridor::quoridor::action::{Action};
-
-struct QuoridorEngine {}
-
-impl GameEngine<GameState, Action> for QuoridorEngine {
-    fn get_state_analysis(&self, _: &GameState) -> GameStateAnalysis<Action> {
-        GameStateAnalysis::new(
-            vec!(ActionWithPolicy::new(
-                Action::MovePawn(1),
-                0.1
-            ), ActionWithPolicy::new(
-                Action::MovePawn(2),
-                0.2
-            ), ActionWithPolicy::new(
-                Action::MovePawn(3),
-                0.32
-            ), ActionWithPolicy::new(
-                Action::MovePawn(4),
-                0.1
-            ), ActionWithPolicy::new(
-                Action::MovePawn(5),
-                0.30
-            )),
-            0.5
-        )
-    }
-
-    fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
-        game_state.take_action(Action::MovePawn(1))
-    }
-}
-
+use quoridor::quoridor::engine::{GameState, Engine as QuoridorEngine};
 
 fn main() {
     let game_engine = QuoridorEngine {};
@@ -65,7 +32,7 @@ fn main() {
 
     println!("TIME: {}",time);
 
-    // println!("{:?}", res);
+    println!("{:?}", res);
     // println!("{:?}", mcts.get_next_action(1));
     // println!("{:?}", mcts.get_next_action(800));
     // println!("{:?}", mcts.get_next_action(800));

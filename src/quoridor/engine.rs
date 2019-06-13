@@ -1,4 +1,5 @@
 use super::action::{Action,ValidActions};
+use super::super::engine::{GameEngine};
 
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
 const RIGHT_COLUMN_MASK: u128 =                                 0b__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;
@@ -33,8 +34,8 @@ struct PathingResult {
 }
 
 impl GameState {
-    pub fn new() -> GameState {
-        GameState {
+    pub fn new() -> Self {
+        Self {
             p1_turn_to_move: true,
             p1_pawn_board: P1_STARTING_POS_MASK,
             p2_pawn_board: P2_STARTING_POS_MASK,
@@ -45,7 +46,7 @@ impl GameState {
         }
     }
 
-    pub fn take_action(&self, action: Action) -> GameState {
+    pub fn take_action(&self, action: Action) -> Self {
         match action {
             Action::MovePawn(board) => self.move_pawn(board),
             Action::PlaceHorizontalWall(board) => self.place_horizontal_wall(board),
@@ -61,10 +62,10 @@ impl GameState {
         }
     }
 
-    fn move_pawn(&self, pawn_board: u128) -> GameState {
+    fn move_pawn(&self, pawn_board: u128) -> Self {
         let p1_turn_to_move = self.p1_turn_to_move;
 
-        GameState {
+        Self {
             p1_turn_to_move: !p1_turn_to_move,
             p1_pawn_board: if p1_turn_to_move { pawn_board } else { self.p1_pawn_board },
             p2_pawn_board: if !p1_turn_to_move { pawn_board } else { self.p2_pawn_board },
@@ -72,10 +73,10 @@ impl GameState {
         }
     }
 
-    fn place_horizontal_wall(&self, horizontal_wall_placement: u128) -> GameState {
+    fn place_horizontal_wall(&self, horizontal_wall_placement: u128) -> Self {
         let p1_turn_to_move = self.p1_turn_to_move;
 
-        GameState {
+        Self {
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
@@ -84,10 +85,10 @@ impl GameState {
         }
     }
 
-    fn place_vertical_wall(&self, vertical_wall_placement: u128) -> GameState {
+    fn place_vertical_wall(&self, vertical_wall_placement: u128) -> Self {
         let p1_turn_to_move = self.p1_turn_to_move;
 
-        GameState {
+        Self {
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
@@ -347,5 +348,13 @@ impl GameState {
         let bottom_edge_touching = candidate_vertical_walls & (horizontal_wall_blocks << 8 | horizontal_wall_blocks << 9 | vertical_wall_blocks << 9 | VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK);
 
         (top_edge_touching & middle_touching) | (top_edge_touching & bottom_edge_touching) | (middle_touching & bottom_edge_touching)
+    }
+}
+
+pub struct Engine {}
+
+impl GameEngine<GameState, Action> for Engine {
+    fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
+        game_state.take_action(Action::MovePawn(1))
     }
 }
