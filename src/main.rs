@@ -1,7 +1,7 @@
 extern crate quoridor;
 
 use pyo3::prelude::*;
-use pyo3::types::IntoPyDict;
+use pyo3::types::PyTuple;
 
 use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
@@ -42,11 +42,20 @@ fn main() -> PyResult<()> {
 
     let gil = Python::acquire_gil();
     let py = gil.python();
+
     let sys = py.import("sys")?;
     let version: String = sys.get("version")?.extract()?;
-    let locals = [("os", py.import("os")?)].into_py_dict(py);
-    let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
-    let user: String = py.eval(code, None, Some(&locals))?.extract()?;
-    println!("Hello {}, I'm Python {}", user, version);
+
+
+
+    // let locals = [("os", py.import("os")?)].into_py_dict(py);
+    // let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
+    // let user: String = py.eval(code, None, Some(&locals))?.extract()?;
+
+    let test = py.import("test_7")?;
+    println!("Got this far");
+    let test_result: String = test.call("getBestMove", ("121213",), None)?.extract()?;
+
+    println!("Hello {}, I'm Python {}", test_result, version);
     Ok(())
 }
