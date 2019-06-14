@@ -56,11 +56,18 @@ fn main() -> PyResult<()> {
     let env_path = current_dir_result.to_str().unwrap();
     println!("Env Path: {}", env_path);
 
-    let module_name = "test_7";
+    path.call_method("append", (env_path.to_owned(), ), None)?;
+    path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None)?;
+    path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None)?;
+    path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None)?;
+
+    let module_name = "c4_model";
     println!("Loading: {}", module_name);
     let test = py.import(module_name)?;
     println!("Successfully Loaded: {}", module_name);
+    
     let test_result: String = test.call("getBestMove", ("121213",), None)?.extract()?;
+    println!("Best Move: {}", test_result);
 
     Ok(())
 }
