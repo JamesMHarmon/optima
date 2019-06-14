@@ -1,7 +1,8 @@
 extern crate quoridor;
 
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::PyList;
+use std::env;
 
 use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
@@ -44,18 +45,22 @@ fn main() -> PyResult<()> {
     let py = gil.python();
 
     let sys = py.import("sys")?;
+    let os = py.import("os")?;
     let version: String = sys.get("version")?.extract()?;
+    println!("Version: {}", version);
+    let path = sys.get("path")?.downcast_ref::<PyList>()?;
+    let cwd: String = os.call("getcwd", (), None)?.extract()?;
+    println!("CWD: {}", cwd);
 
+    let current_dir_result = env::current_dir()?;
+    let env_path = current_dir_result.to_str().unwrap();
+    println!("Env Path: {}", env_path);
 
-
-    // let locals = [("os", py.import("os")?)].into_py_dict(py);
-    // let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
-    // let user: String = py.eval(code, None, Some(&locals))?.extract()?;
-
-    let test = py.import("test_7")?;
-    println!("Got this far");
+    let module_name = "test_7";
+    println!("Loading: {}", module_name);
+    let test = py.import(module_name)?;
+    println!("Successfully Loaded: {}", module_name);
     let test_result: String = test.call("getBestMove", ("121213",), None)?.extract()?;
 
-    println!("Hello {}, I'm Python {}", test_result, version);
     Ok(())
 }
