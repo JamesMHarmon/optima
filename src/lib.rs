@@ -4,6 +4,8 @@ pub mod analytics;
 pub mod quoridor;
 pub mod connect4;
 
+mod bits;
+
 // https://github.com/dgrunwald/rust-cpython
 // #[macro_use] extern crate cpython;
 
@@ -97,38 +99,4 @@ pub mod connect4;
 //     }
 
 //     result
-// }
-
-// fn single_bit_index(mut bit: u128) -> usize {
-//     let mut n = 0;
-
-//     if bit >> 64 != 0 {
-//         n += 64;
-//         bit >>= 64;
-//     }
-//     if bit >> 32 != 0 {
-//         n += 32;
-//         bit >>= 32;
-//     }
-//     if bit >> 16 != 0 {
-//         n += 16;
-//         bit >>= 16;
-//     }
-//     if bit >> 8 != 0 {
-//         n += 8;
-//         bit >>= 8;
-//     }
-//     if bit >> 4 != 0 {
-//         n += 4;
-//         bit >>= 4;
-//     }
-//     if bit >> 2 != 0 {
-//         n += 2;
-//         bit >>= 2;
-//     }
-//     if bit >> 1 != 0 {
-//         n += 1;
-//     }
-
-//     return n;
 // }

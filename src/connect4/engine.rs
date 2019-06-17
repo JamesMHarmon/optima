@@ -1,3 +1,6 @@
+use crate::engine::GameEngine;
+use crate::connect4::action::Action;
+
 #[derive(Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
@@ -14,16 +17,24 @@ impl GameState {
         }
     }
 
-    pub fn drop_piece(&mut self, column: usize) {
+    pub fn drop_piece(&self, column: usize) -> Self {
         let column_adder = 1 << 7 * (column - 1);
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
         let dropped_piece = (all_pieces + column_adder) & !all_pieces;
-        self.p1_turn_to_move = !self.p1_turn_to_move;
+        let p1_turn_to_move = self.p1_turn_to_move;
+        let mut p1_piece_board = self.p1_piece_board;
+        let mut p2_piece_board = self.p2_piece_board;
 
-        if !self.p1_turn_to_move {
-            self.p1_piece_board = self.p1_piece_board | dropped_piece;
+        if p1_turn_to_move {
+            p1_piece_board = self.p1_piece_board | dropped_piece;
         } else {
-            self.p2_piece_board = self.p2_piece_board | dropped_piece;
+            p2_piece_board = self.p2_piece_board | dropped_piece;
+        }
+
+        GameState {
+            p1_turn_to_move: !p1_turn_to_move,
+            p1_piece_board,
+            p2_piece_board
         }
     }
 
@@ -38,6 +49,17 @@ impl GameState {
         }).collect();
 
         valid_columns
+    }
+}
+
+
+pub struct Engine {}
+
+impl GameEngine<GameState, Action> for Engine {
+    fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
+        match action {
+            Action::DropPiece(column) => game_state.drop_piece(*column as usize)
+        }
     }
 }
 
@@ -56,32 +78,32 @@ mod tests {
     #[test]
     fn test_drop_piece_switches_player() {
         let mut state = GameState::new();
-        state.drop_piece(1);
+        state = state.drop_piece(1);
         assert_eq!(state.p1_turn_to_move, false);
-        state.drop_piece(1);
+        state = state.drop_piece(1);
         assert_eq!(state.p1_turn_to_move, true);
     }
 
     #[test]
     fn test_drop_piece_empty_first_column() {
         let mut state = GameState::new();
-        state.drop_piece(1);
+        state = state.drop_piece(1);
         assert_eq!(state.p1_piece_board, 1);
     }
 
     #[test]
     fn test_drop_piece_empty_last_column() {
         let mut state = GameState::new();
-        state.drop_piece(7);
+        state = state.drop_piece(7);
         assert_eq!(state.p1_piece_board, 1 << 7 * 6);
     }
 
     #[test]
     fn test_drop_piece_empty_column_includes_other_pieces() {
         let mut state = GameState::new();
-        state.drop_piece(1);
-        state.drop_piece(2);
-        state.drop_piece(3);
+        state = state.drop_piece(1);
+        state = state.drop_piece(2);
+        state = state.drop_piece(3);
 
         let piece_1 = 1;
         let piece_3 = 1 << 7 * 2;
@@ -91,13 +113,13 @@ mod tests {
     #[test]
     fn test_drop_piece_column_on_other_player_piece() {
         let mut state = GameState::new();
-        state.drop_piece(1);
-        state.drop_piece(1);
-        state.drop_piece(4);
-        state.drop_piece(4);
-        state.drop_piece(4);
-        state.drop_piece(4);
-        state.drop_piece(4);
+        state = state.drop_piece(1);
+        state = state.drop_piece(1);
+        state = state.drop_piece(4);
+        state = state.drop_piece(4);
+        state = state.drop_piece(4);
+        state = state.drop_piece(4);
+        state = state.drop_piece(4);
 
         let piece_1_1 = 1;
         let piece_1_2 = 2;
@@ -119,7 +141,7 @@ mod tests {
 
         for column in 1..8 {
             for _ in 1..6 {
-                state.drop_piece(column);
+                state = state.drop_piece(column);
             }
         }
 
@@ -132,7 +154,7 @@ mod tests {
 
         for column in 1..8 {
             for _ in 1..7 {
-                state.drop_piece(column);
+                state = state.drop_piece(column);
             }
         }
 
@@ -145,11 +167,11 @@ mod tests {
 
         for column in 1..8 {
             for _ in 1..6 {
-                state.drop_piece(column);
+                state = state.drop_piece(column);
             }
         }
 
-        state.drop_piece(1);
+        state = state.drop_piece(1);
 
         assert_eq!(state.get_valid_actions().as_slice(), [false, true, true, true, true, true, true]);
     }
@@ -160,11 +182,11 @@ mod tests {
 
         for column in 1..8 {
             for _ in 1..6 {
-                state.drop_piece(column);
+                state = state.drop_piece(column);
             }
         }
 
-        state.drop_piece(7);
+        state = state.drop_piece(7);
 
         assert_eq!(state.get_valid_actions().as_slice(), [true, true, true, true, true, true, false]);
     }
@@ -175,15 +197,14 @@ mod tests {
 
         for column in 1..8 {
             for _ in 1..6 {
-                state.drop_piece(column);
+                state = state.drop_piece(column);
             }
         }
 
-        state.drop_piece(3);
-        state.drop_piece(4);
-        state.drop_piece(5);
+        state = state.drop_piece(3);
+        state = state.drop_piece(4);
+        state = state.drop_piece(5);
 
         assert_eq!(state.get_valid_actions().as_slice(), [true, true, false, false, false, true, true]);
     }
 }
-

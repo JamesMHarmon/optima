@@ -93,7 +93,10 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
 
         for _ in 0..number_of_playouts {
             let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, rng, 0)?;
-            max_depth = md;
+
+            if md > max_depth {
+                max_depth = md;
+            }
         }
 
         let current_root = self.root.take().ok_or("No root node found!")?;

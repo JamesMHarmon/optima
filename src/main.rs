@@ -8,10 +8,12 @@ use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
 
 use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
-use quoridor::quoridor::engine::{GameState, Engine as QuoridorEngine};
+use quoridor::connect4::engine::{GameState, Engine as Connect4Engine};
 
-fn main() -> PyResult<()> {
-    let game_engine = QuoridorEngine {};
+fn main() {
+    set_path();
+
+    let game_engine = Connect4Engine {};
     let game_state = GameState::new();
     let seed: [u8; 32] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
     let seedable_rng: StdRng = SeedableRng::from_seed(seed);
@@ -29,45 +31,31 @@ fn main() -> PyResult<()> {
         )
     );
 
-
     let now = Instant::now();
-    let res = mcts.get_next_action(1).unwrap();
+
+    for _ in 1..10 {
+        let res = mcts.get_next_action(1).unwrap();
+        println!("Action: {:?}", res.0);
+    }
     let time = now.elapsed().as_millis();
 
     println!("TIME: {}",time);
+}
 
-    println!("{:?}", res);
-    // println!("{:?}", mcts.get_next_action(1));
-    // println!("{:?}", mcts.get_next_action(800));
-    // println!("{:?}", mcts.get_next_action(800));
-
+// @TODO: Improve error handling
+fn set_path() {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let sys = py.import("sys")?;
-    let os = py.import("os")?;
-    let version: String = sys.get("version")?.extract()?;
-    println!("Version: {}", version);
-    let path = sys.get("path")?.downcast_ref::<PyList>()?;
-    let cwd: String = os.call("getcwd", (), None)?.extract()?;
-    println!("CWD: {}", cwd);
-
-    let current_dir_result = env::current_dir()?;
-    let env_path = current_dir_result.to_str().unwrap();
+    let current_dir_result = env::current_dir().unwrap();
+    let env_path = current_dir_result.to_str().ok_or("Path not valid").unwrap();
     println!("Env Path: {}", env_path);
 
-    path.call_method("append", (env_path.to_owned(), ), None)?;
-    path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None)?;
-    path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None)?;
-    path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None)?;
+    let sys = py.import("sys").unwrap();
+    let path = sys.get("path").unwrap().downcast_ref::<PyList>().unwrap();
 
-    let module_name = "c4_model";
-    println!("Loading: {}", module_name);
-    let test = py.import(module_name)?;
-    println!("Successfully Loaded: {}", module_name);
-    
-    let test_result: String = test.call("getBestMove", ("121213",), None)?.extract()?;
-    println!("Best Move: {}", test_result);
-
-    Ok(())
+    path.call_method("append", (env_path.to_owned(), ), None).unwrap();
+    path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None).unwrap();
+    path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None).unwrap();
+    path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None).unwrap();
 }
