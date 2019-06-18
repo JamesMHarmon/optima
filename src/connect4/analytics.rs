@@ -8,10 +8,11 @@ use super::action::{Action};
 use super::engine::Engine;
 
 impl GameAnalytics<GameState, Action> for Engine {
+    /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
+    /// If the evaluation is a draw then 0.0 will be returned.
+    /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
+    /// is terminal then the vector will be empty.
     fn get_state_analysis(&mut self, game_state: &GameState) -> GameStateAnalysis<Action> {
-
-        // @TODO: Add Cache
-        // @TODO: Do we flip the value depending on the player?
         if let Some(value) = game_state.is_terminal() {
             return GameStateAnalysis::new(
                 Vec::new(),

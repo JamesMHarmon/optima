@@ -56,6 +56,14 @@ impl GameState {
         valid_columns
     }
 
+    /// Determines if the current state is either a winning or drawn position.
+    /// 
+    /// Win: If the position is winning then this method will return Some(-1.0) since the value of the position
+    /// is always from the reference of the current player to move, who just lost.
+    /// 
+    /// Drawn: If the position is a draw then the return will be Some(0.0);
+    /// 
+    /// Not Terminal: If the position is not yet the end of the game then None will be returned.
     pub fn is_terminal(&self) -> Option<f64> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
@@ -64,8 +72,7 @@ impl GameState {
         }
 
         if self.has_connected_4() {
-            // @TODO: Should we flip depending on the player?
-            return Some(1.0);
+            return Some(-1.0);
         }
 
         None

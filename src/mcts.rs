@@ -64,7 +64,7 @@ struct NodePUCT<'a, S, A> {
 }
 
 struct StateAnalysisValue {
-    value: f64
+    value_score: f64
 }
 
 #[allow(non_snake_case)]
@@ -132,7 +132,7 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         // If the node is a terminal node.
         if node.children.len() == 0 {
             node.visits += 1;
-            return Ok((StateAnalysisValue { value: node.W }, depth));
+            return Ok((StateAnalysisValue { value_score: node.W }, depth));
         }
 
         let game_state = &node.game_state;
@@ -152,8 +152,11 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
             Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp,rng, depth + 1)?
         };
 
+        // Reverse the value score since the value is of the child nodes evaluation, which is the other player.
+        let result = StateAnalysisValue { value_score: 1.0 - result.value_score };
+
         node.visits += 1;
-        node.W += result.value;
+        node.W += result.value_score;
         Ok((result, depth))
     }
 
@@ -231,12 +234,15 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         })
     }
 
+    // Value range is [-1, 1] for the "get_state_analysis" method. However internally for the MCTS a range of
+    // [0, 1] is used.
     fn analyse_and_create_node(game_state: S, game_engine: &mut E) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let analysis_result = game_engine.get_state_analysis(&game_state);
+        let value_score = (analysis_result.value_score + 1.0) / 2.0;
 
         (
-            MCTSNode::new(game_state, analysis_result.value_score, analysis_result.policy_scores),
-            StateAnalysisValue { value: analysis_result.value_score }
+            MCTSNode::new(game_state, value_score, analysis_result.policy_scores),
+            StateAnalysisValue { value_score }
         )
     }
 
