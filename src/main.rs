@@ -9,6 +9,7 @@ use std::time::{Instant};
 
 use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use quoridor::connect4::engine::{GameState, Engine as Connect4Engine};
+use quoridor::engine::GameEngine;
 
 fn main() {
     set_path();
@@ -33,10 +34,15 @@ fn main() {
 
     let now = Instant::now();
 
-    for _ in 1..10 {
-        let res = mcts.get_next_action(1).unwrap();
+    let mut state: GameState = GameState::new();
+
+    println!("Next Action");
+    while game_engine.is_terminal_state(&state) == None {
+        let res = mcts.get_next_action(10).unwrap();
+        state = game_engine.take_action(&state, &res.0);
         println!("Action: {:?}", res.0);
     }
+
     let time = now.elapsed().as_millis();
 
     println!("TIME: {}",time);

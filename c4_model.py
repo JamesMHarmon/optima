@@ -16,8 +16,6 @@ def convertGameStateToInput(p1, p2):
 def analyse(p1, p2):
     input = convertGameStateToInput(p1, p2)
 
-    print("State:", input)
-
     global model
     if model == None:
         model = model_sen.compile_model()

@@ -1,6 +1,8 @@
 use crate::engine::GameEngine;
 use crate::connect4::action::Action;
 
+const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
+
 #[derive(Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
@@ -50,6 +52,47 @@ impl GameState {
 
         valid_columns
     }
+
+    pub fn is_terminal(&self) -> Option<f64> {
+        let all_pieces = self.p1_piece_board | self.p2_piece_board;
+
+        if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
+            return Some(0.0);
+        }
+
+        if self.has_connected_4() {
+            // @TODO: Should we flip depending on the player?
+            return Some(1.0);
+        }
+
+        None
+    }
+
+    fn has_connected_4(&self) -> bool {
+        let board = if self.p1_turn_to_move { self.p2_piece_board } else { self.p1_piece_board };
+
+        let c2 = board & (board << 6);
+        if c2 & (c2 << (2 * 6)) != 0 {
+            return true;
+        }
+
+        let c2 = board & (board << 7);
+        if c2 & (c2 << (2 * 7)) != 0 {
+            return true;
+        }
+
+        let c2 = board & (board << 8);
+        if c2 & (c2 << (2 * 8)) != 0 {
+            return true;
+        }
+
+        let c2 = board & (board << 1);
+        if c2 & (c2 << 2) != 0 {
+            return true;
+        }
+
+        return false;
+    }
 }
 
 
@@ -60,6 +103,10 @@ impl GameEngine<GameState, Action> for Engine {
         match action {
             Action::DropPiece(column) => game_state.drop_piece(*column as usize)
         }
+    }
+
+    fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
+        game_state.is_terminal()
     }
 }
 

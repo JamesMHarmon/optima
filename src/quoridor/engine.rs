@@ -62,6 +62,18 @@ impl GameState {
         }
     }
 
+    pub fn is_terminal(&self) -> Option<f64> {
+        let pawn_board = if self.p1_turn_to_move { self.p2_pawn_board } else { self.p1_pawn_board };
+        let objective_mask = if self.p1_turn_to_move { P2_OBJECTIVE_MASK } else { P1_OBJECTIVE_MASK };
+
+        // @TODO: Flip depending on the active player?
+        if pawn_board & objective_mask != 0 {
+            Some(1.0)
+        } else {
+            None
+        }
+    }
+
     fn move_pawn(&self, pawn_board: u128) -> Self {
         let p1_turn_to_move = self.p1_turn_to_move;
 
@@ -356,5 +368,9 @@ pub struct Engine {}
 impl GameEngine<GameState, Action> for Engine {
     fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
         game_state.take_action(Action::MovePawn(1))
+    }
+
+    fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
+        game_state.is_terminal()
     }
 }

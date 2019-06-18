@@ -1,6 +1,4 @@
 use pyo3::prelude::*;
-use pyo3::types::PyList;
-use std::env;
 
 
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
@@ -37,21 +35,17 @@ fn game_state_to_input(game_state: &GameState) -> (Vec<f64>, Vec<f64>) {
 }
 
 fn predict(model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f64, Vec<f64>)> {
-    use std::time::{Instant};
-
     let gil = Python::acquire_gil();
     let py = gil.python();
 
     let c4_model_module_name = "c4_model";
     let c4 = py.import(c4_model_module_name)?;
 
-    let now = Instant::now();
     let result: (f64, Vec<f64>) = c4.call(
         "analyse",
         (model_input.0.to_owned(), model_input.1.to_owned()),
         None
     )?.extract()?;
-    println!("Analysising: {}", now.elapsed().as_millis());
 
     Ok(result)
 }
