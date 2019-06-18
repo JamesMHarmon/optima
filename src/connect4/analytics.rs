@@ -12,6 +12,15 @@ impl GameAnalytics<GameState, Action> for Engine {
         let input = game_state_to_input(game_state);
         let prediction = predict(&input).unwrap();
 
+        // @TODO: Add Cache
+        // @TODO: Do we flip the value depending on the player?
+        if let Some(value) = game_state.is_terminal() {
+            return GameStateAnalysis::new(
+                Vec::new(),
+                value
+            )
+        }
+
         let actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
         {
             if *v {
