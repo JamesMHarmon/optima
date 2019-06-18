@@ -6,9 +6,10 @@ edition = "2018"
 publish = false
 
 [lib]
-name="quoridor_cpython"
-crate-type = ["cdylib"]
+name="quoridor"
+
+[dependencies]
+rand=""
 
 [dependencies.pyo3]
-version = "0.7.0-alpha.1"
-features = ["extension-module"]
+version = "0.7.0"
