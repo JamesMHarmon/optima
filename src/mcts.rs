@@ -1,9 +1,11 @@
+use std::hash::Hash;
 use rand::{ Rng };
 use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
 
 use super::engine::{GameEngine};
 use super::analytics::{ActionWithPolicy,GameAnalytics};
+use super::analysis_cache::{AnalysisCache};
 
 type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
 type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
@@ -36,9 +38,10 @@ impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
     }
 }
 
-pub struct MCTS<'a, S, A, E: GameEngine<S, A>, R: Rng> {
+pub struct MCTS<'a, S: Hash + Eq, A: Clone, E: GameEngine<S, A>, R: Rng> {
     options: MCTSOptions<'a, S, A, R>,
-    game_engine: &'a mut E,
+    game_engine: &'a E,
+    analysis_cache: AnalysisCache<S, A>,
     starting_game_state: Option<S>,
     root: Option<MCTSNode<S, A>>,
 }
@@ -68,31 +71,33 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
-    pub fn new(game_state: S, game_engine: &'a mut E, options: MCTSOptions<'a, S, A, R>) -> Self {
+impl<'a, S: Hash + Eq + Clone, A: Clone, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
+    pub fn new(game_state: S, game_engine: &'a E, analysis_cache: AnalysisCache<S, A>, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
             game_engine,
+            analysis_cache,
             starting_game_state: Some(game_state),
             root: None
         }
     }
 
     pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
-        let game_engine = &mut self.game_engine;
+        let game_engine = &self.game_engine;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
         let dirichlet = &self.options.dirichlet;
+        let analysis_cache = &mut self.analysis_cache;
         let rng = &mut self.options.rng;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let mut root_node = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine);
+        let mut root_node = MCTS::<S, A, E, R>::get_or_create_root_node(root, starting_game_state, game_engine, analysis_cache);
         let mut max_depth: usize = 0;
 
         MCTS::<S, A, E, R>::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
         for _ in 0..number_of_playouts {
-            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, cpuct, temp, rng, 0)?;
+            let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, analysis_cache, cpuct, temp, rng, 0)?;
 
             if md > max_depth {
                 max_depth = md;
@@ -128,7 +133,7 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &mut E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, analysis_cache: &mut AnalysisCache<S, A>, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         // If the node is a terminal node.
         if node.children.len() == 0 {
             node.visits += 1;
@@ -144,12 +149,13 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
                 let (expanded_node, state_analysis) = MCTS::<S, A, E, R>::expand_leaf(
                     game_state,
                     &selected_child_node.action,
-                    game_engine
+                    game_engine,
+                    analysis_cache
                 );
                 selected_child_node.node = Some(expanded_node);
                 (state_analysis, depth)
             },
-            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, cpuct, temp,rng, depth + 1)?
+            Some(node) => MCTS::<S, A, E, R>::recurse_path_and_expand(node, game_engine, analysis_cache, cpuct, temp,rng, depth + 1)?
         };
 
         // Reverse the value score since the value is of the child nodes evaluation, which is the other player.
@@ -217,27 +223,29 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         }).collect()
     }
 
-    fn expand_leaf(game_state: &S, action: &A, game_engine: &mut E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    fn expand_leaf(game_state: &S, action: &A, game_engine: &E, analysis_cache: &mut AnalysisCache<S, A>) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
-        MCTS::<S, A, E, R>::analyse_and_create_node(new_game_state, game_engine)
+        MCTS::<S, A, E, R>::analyse_and_create_node(new_game_state, game_engine, analysis_cache)
     }
 
-    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &mut E) -> &'a mut MCTSNode<S, A> {
+    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E, analysis_cache: &mut AnalysisCache<S, A>) -> &'a mut MCTSNode<S, A> {
         let starting_game_state = starting_game_state.take();
         let game_engine = game_engine;
 
         root.get_or_insert_with(|| {
             MCTS::<S, A, E, R>::analyse_and_create_node(
                 starting_game_state.expect("Tried to use the same starting game state twice"),
-                game_engine
+                game_engine,
+                analysis_cache
             ).0
         })
     }
 
     // Value range is [-1, 1] for the "get_state_analysis" method. However internally for the MCTS a range of
     // [0, 1] is used.
-    fn analyse_and_create_node(game_state: S, game_engine: &mut E) -> (MCTSNode<S, A>, StateAnalysisValue) {
-        let analysis_result = game_engine.get_state_analysis(&game_state);
+    fn analyse_and_create_node(game_state: S, game_engine: &E, analysis_cache: &mut AnalysisCache<S, A>) -> (MCTSNode<S, A>, StateAnalysisValue) {
+        let analysis_result = analysis_cache.get_or_insert(game_state.clone(), || game_engine.get_state_analysis(&game_state));
+
         let value_score = (analysis_result.value_score + 1.0) / 2.0;
 
         (

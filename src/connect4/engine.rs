@@ -1,6 +1,3 @@
-use fnv::FnvHashMap;
-
-use super::super::analytics::{GameStateAnalysis};
 use super::super::engine::GameEngine;
 use super::action::Action;
 
@@ -105,21 +102,10 @@ impl GameState {
     }
 }
 
-// @TODO: Remove pub
-pub struct Engine {
-    pub analysis_cache: FnvHashMap<GameState, GameStateAnalysis<Action>>,
-    pub hits: u128,
-    pub misses: u128
-}
+pub struct Engine {}
 
 impl Engine {
-    pub fn new() -> Self {
-        Self {
-            analysis_cache: FnvHashMap::with_capacity_and_hasher(2_000_000, Default::default()),
-            hits: 0,
-            misses: 0
-        }
-    }
+    pub fn new() -> Self { Self {} }
 }
 
 impl GameEngine<GameState, Action> for Engine {

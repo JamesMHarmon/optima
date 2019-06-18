@@ -1,6 +1,7 @@
 pub mod engine;
 pub mod mcts;
 pub mod analytics;
+pub mod analysis_cache;
 pub mod quoridor;
 pub mod connect4;
 

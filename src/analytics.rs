@@ -1,7 +1,8 @@
 pub trait GameAnalytics<S, A> {
-    fn get_state_analysis(&mut self, game_state: &S) -> GameStateAnalysis<A>;
+    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysis<A>;
 }
 
+#[derive(Clone)]
 pub struct GameStateAnalysis<A> {
     pub policy_scores: Vec<ActionWithPolicy<A>>,
     pub value_score: f64
@@ -16,6 +17,7 @@ impl<A> GameStateAnalysis<A> {
     }
 }
 
+#[derive(Clone)]
 pub struct ActionWithPolicy<A> {
     pub action: A,
     pub policy_score: f64,
