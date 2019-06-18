@@ -4,6 +4,9 @@ import keras
 import math
 import model_sen
 
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"]="0";
+
 model = None
 
 def convertGameStateToInput(p1, p2):
@@ -14,15 +17,15 @@ def convertGameStateToInput(p1, p2):
     return np.stack((p1_board, p2_board), axis=2)
 
 def analyse(p1, p2):
+    global model
+
     input = convertGameStateToInput(p1, p2)
 
-    global model
-    if model == None:
+    if model is None:
         model = model_sen.compile_model()
 
     prediction = model.predict(np.asarray([input]))
-    value = prediction[0][0]
+    value = prediction[0][0][0]
     policy = prediction[1][0]
 
     return (value, policy)
-

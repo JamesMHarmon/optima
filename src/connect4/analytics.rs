@@ -12,13 +12,17 @@ impl GameAnalytics<GameState, Action> for Engine {
         let input = game_state_to_input(game_state);
         let prediction = predict(&input).unwrap();
 
-        //@TODO: Filter out to only include valid moves;
-        let actions_with_policies: Vec<ActionWithPolicy<Action>> = prediction.1.iter().enumerate().map(
-            |(i, p)| ActionWithPolicy::new(
-                Action::DropPiece((i + 1) as u64),
-                *p
-            )
-        ).collect();
+        let actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
+        {
+            if *v {
+                Some(ActionWithPolicy::new(
+                    Action::DropPiece((i + 1) as u64),
+                    p
+                ))
+            } else {
+                None
+            }
+        }).collect();
 
         GameStateAnalysis::new(
             actions_with_policies,
