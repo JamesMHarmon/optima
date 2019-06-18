@@ -270,6 +270,11 @@ impl<'a, S: Hash + Eq + Clone, A: Clone, E: GameEngine<S, A> + GameAnalytics<S, 
 
     fn apply_dirichlet_noise(policy_scores: Vec<f64>, dirichlet: &DirichletOptions, rng: &mut R) -> Vec<f64>
     {
+        // Do not apply noise if there is only one action.
+        if policy_scores.len() < 2 {
+            return policy_scores;
+        }
+
         let e = dirichlet.epsilon;
         let dirichlet_noise = Dirichlet::new_with_param(dirichlet.alpha, policy_scores.len()).sample(rng);
 
