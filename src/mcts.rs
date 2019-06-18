@@ -38,7 +38,7 @@ impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
 
 pub struct MCTS<'a, S, A, E: GameEngine<S, A>, R: Rng> {
     options: MCTSOptions<'a, S, A, R>,
-    game_engine: &'a E,
+    game_engine: &'a mut E,
     starting_game_state: Option<S>,
     root: Option<MCTSNode<S, A>>,
 }
@@ -69,7 +69,7 @@ struct StateAnalysisValue {
 
 #[allow(non_snake_case)]
 impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
-    pub fn new(game_state: S, game_engine: &'a E, options: MCTSOptions<'a, S, A, R>) -> Self {
+    pub fn new(game_state: S, game_engine: &'a mut E, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
             game_engine,
@@ -79,7 +79,7 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
     }
 
     pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
-        let game_engine = self.game_engine;
+        let game_engine = &mut self.game_engine;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
         let dirichlet = &self.options.dirichlet;
@@ -128,7 +128,7 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         chosen_idx.map(|idx| max_nodes.remove(idx))
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &mut E, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         // If the node is a terminal node.
         if node.children.len() == 0 {
             node.visits += 1;
@@ -214,12 +214,12 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         }).collect()
     }
 
-    fn expand_leaf(game_state: &S, action: &A, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    fn expand_leaf(game_state: &S, action: &A, game_engine: &mut E) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
         MCTS::<S, A, E, R>::analyse_and_create_node(new_game_state, game_engine)
     }
 
-    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &E) -> &'a mut MCTSNode<S, A> {
+    fn get_or_create_root_node(root: &'a mut Option<MCTSNode<S, A>>, starting_game_state: &mut Option<S>, game_engine: &mut E) -> &'a mut MCTSNode<S, A> {
         let starting_game_state = starting_game_state.take();
         let game_engine = game_engine;
 
@@ -231,7 +231,7 @@ impl<'a, S, A, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A,
         })
     }
 
-    fn analyse_and_create_node(game_state: S, game_engine: &E) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    fn analyse_and_create_node(game_state: S, game_engine: &mut E) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let analysis_result = game_engine.get_state_analysis(&game_state);
 
         (

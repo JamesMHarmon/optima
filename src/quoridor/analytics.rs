@@ -4,7 +4,7 @@ use super::action::{Action};
 use super::engine::Engine;
 
 impl GameAnalytics<GameState, Action> for Engine {
-    fn get_state_analysis(&self, _: &GameState) -> GameStateAnalysis<Action> {
+    fn get_state_analysis(&mut self, _: &GameState) -> GameStateAnalysis<Action> {
         GameStateAnalysis::new(
             vec!(ActionWithPolicy::new(
                 Action::MovePawn(1),

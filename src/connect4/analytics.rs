@@ -8,9 +8,7 @@ use super::action::{Action};
 use super::engine::Engine;
 
 impl GameAnalytics<GameState, Action> for Engine {
-    fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysis<Action> {
-        let input = game_state_to_input(game_state);
-        let prediction = predict(&input).unwrap();
+    fn get_state_analysis(&mut self, game_state: &GameState) -> GameStateAnalysis<Action> {
 
         // @TODO: Add Cache
         // @TODO: Do we flip the value depending on the player?
@@ -21,21 +19,44 @@ impl GameAnalytics<GameState, Action> for Engine {
             )
         }
 
-        let actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
-        {
-            if *v {
-                Some(ActionWithPolicy::new(
-                    Action::DropPiece((i + 1) as u64),
-                    p
-                ))
-            } else {
-                None
-            }
-        }).collect();
+        if self.analysis_cache.contains_key(&game_state) {
+            self.hits += 1;
+        } else {
+            self.misses += 1;
+        }
 
+        if (self.hits + self.misses) % 1000 == 0 {
+            println!("Hits: {}, Misses: {}, Percentage: {}", self.hits, self.misses, self.hits as f32 / (self.hits as f32 + self.misses as f32))
+        }
+
+        let game_state_analysis = self.analysis_cache.entry(game_state.to_owned()).or_insert_with(|| {
+            let input = game_state_to_input(game_state);
+            let prediction = predict(&input).unwrap();
+            let actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
+            {
+                if *v {
+                    Some(ActionWithPolicy::new(
+                        Action::DropPiece((i + 1) as u64),
+                        p
+                    ))
+                } else {
+                    None
+                }
+            }).collect();
+
+            GameStateAnalysis::new(
+                actions_with_policies,
+                prediction.0
+            )
+        });
+
+        // @TODO: Update this to use to_owned
         GameStateAnalysis::new(
-            actions_with_policies,
-            prediction.0
+            game_state_analysis.policy_scores.iter().map(|awp| ActionWithPolicy::new(
+                Action::DropPiece(match awp.action { Action::DropPiece(a) => a }),
+                awp.policy_score
+            )).collect(),
+            game_state_analysis.value_score
         )
     }
 }

@@ -1,5 +1,5 @@
 pub trait GameAnalytics<S, A> {
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysis<A>;
+    fn get_state_analysis(&mut self, game_state: &S) -> GameStateAnalysis<A>;
 }
 
 pub struct GameStateAnalysis<A> {

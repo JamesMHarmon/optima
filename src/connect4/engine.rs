@@ -1,9 +1,12 @@
-use crate::engine::GameEngine;
-use crate::connect4::action::Action;
+use fnv::FnvHashMap;
+
+use super::super::analytics::{GameStateAnalysis};
+use super::super::engine::GameEngine;
+use super::action::Action;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 
-#[derive(Debug)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_piece_board: u64,
@@ -95,8 +98,22 @@ impl GameState {
     }
 }
 
+// @TODO: Remove pub
+pub struct Engine {
+    pub analysis_cache: FnvHashMap<GameState, GameStateAnalysis<Action>>,
+    pub hits: u128,
+    pub misses: u128
+}
 
-pub struct Engine {}
+impl Engine {
+    pub fn new() -> Self {
+        Self {
+            analysis_cache: FnvHashMap::with_capacity_and_hasher(2_000_000, Default::default()),
+            hits: 0,
+            misses: 0
+        }
+    }
+}
 
 impl GameEngine<GameState, Action> for Engine {
     fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {

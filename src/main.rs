@@ -14,13 +14,15 @@ use quoridor::engine::GameEngine;
 fn main() {
     set_path();
 
-    let game_engine = Connect4Engine {};
+    let mut game_engine = Connect4Engine::new();
+    // @TODO: Remove second ref
+    let game_engine2 = Connect4Engine::new();
     let game_state = GameState::new();
     let seed: [u8; 32] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
     let seedable_rng: StdRng = SeedableRng::from_seed(seed);
     let mut mcts = MCTS::new(
         game_state,
-        &game_engine,
+        &mut game_engine,
         MCTSOptions::new(
             Some(DirichletOptions {
                 alpha: 0.3,
@@ -37,9 +39,9 @@ fn main() {
     let mut state: GameState = GameState::new();
 
     println!("Next Action");
-    while game_engine.is_terminal_state(&state) == None {
-        let res = mcts.get_next_action(10).unwrap();
-        state = game_engine.take_action(&state, &res.0);
+    while game_engine2.is_terminal_state(&state) == None {
+        let res = mcts.get_next_action(800).unwrap();
+        state = game_engine2.take_action(&state, &res.0);
         println!("Action: {:?}", res.0);
     }
 

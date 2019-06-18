@@ -10,6 +10,7 @@ name="quoridor"
 
 [dependencies]
 rand=""
+fnv = ""
 
 [dependencies.pyo3]
 version = "0.7.0"
