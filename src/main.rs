@@ -46,12 +46,14 @@ fn main() {
         let metrics = mcts.get_root_node_metrics();
         mcts.advance_to_action(&action).unwrap();
         state = game_engine.take_action(&state, &action);
-        println!("Action: {:?}", action);
         println!("Metrics: {:?}", metrics);
+        println!("Action: {:?}", action);
     }
 
     let time = now.elapsed().as_millis();
 
+    println!("Result: {}", game_engine.is_terminal_state(&state).unwrap());
+    println!("Last Player: {}", if state.p1_turn_to_move { "P2" } else { "P1" });
     println!("TIME: {}",time);
 }
 
