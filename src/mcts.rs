@@ -38,7 +38,7 @@ impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
     }
 }
 
-pub struct MCTS<'a, S: Hash + Eq, A: Clone, E: GameEngine<S, A>, R: Rng> {
+pub struct MCTS<'a, S: Hash + Eq, A: Clone + Eq, E: GameEngine<S, A>, R: Rng> {
     options: MCTSOptions<'a, S, A, R>,
     game_engine: &'a E,
     analysis_cache: AnalysisCache<S, A>,
@@ -71,7 +71,15 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S: Hash + Eq + Clone, A: Clone, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
+#[derive(Debug)]
+pub struct NodeMetrics<A> {
+    pub visits: usize,
+    pub W: f64,
+    pub children_visits: Vec<(A, usize)>
+}
+
+#[allow(non_snake_case)]
+impl<'a, S: Hash + Eq + Clone, A: Clone + Eq, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
     pub fn new(game_state: S, game_engine: &'a E, analysis_cache: AnalysisCache<S, A>, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
@@ -82,7 +90,7 @@ impl<'a, S: Hash + Eq + Clone, A: Clone, E: GameEngine<S, A> + GameAnalytics<S, 
         }
     }
 
-    pub fn get_next_action(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
+    pub fn search(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
         let game_engine = &self.game_engine;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
@@ -104,33 +112,62 @@ impl<'a, S: Hash + Eq + Clone, A: Clone, E: GameEngine<S, A> + GameAnalytics<S, 
             }
         }
 
-        let current_root = self.root.take().ok_or("No root node found!")?;
-        let most_visited_node = MCTS::<S, A, E, R>::take_most_visited_node(current_root, rng)?;
+        let most_visited_action = MCTS::<S, A, E, R>::get_most_visited_action(&root_node, rng)?;
 
-        // Update the tree now that this is the next root node.
-        self.root = Some(most_visited_node.1);
-        Ok((most_visited_node.0, max_depth))
+        Ok((most_visited_action, max_depth))
     }
 
-    fn take_most_visited_node(current_root: MCTSNode<S, A>, rng: &mut R) -> Result<(A, MCTSNode<S, A>), &'static str> {
-        let visited_nodes: Vec<(A, MCTSNode<S, A>)> = current_root.children.into_iter()
+    pub fn advance_to_action(&mut self, action: &A) -> Result<(), &'static str> {
+        let mut current_root = self.root.take().ok_or("No root node found!")?;
+        let node = MCTS::<S, A, E, R>::take_node_of_action(&mut current_root, action)?;
+        self.root = Some(node.unwrap_or_else(|| {
+            MCTS::<S, A, E, R>::expand_leaf(&current_root.game_state, action, self.game_engine, &mut self.analysis_cache).0
+        }));
+
+        Ok(())
+    }
+
+    pub fn get_root_node_metrics(&self) -> Result<NodeMetrics<A>, &'static str> {
+        let root = self.root.as_ref().ok_or("No root node found!")?;
+
+        Ok(NodeMetrics {
+            visits: root.visits,
+            W: root.W,
+            children_visits: root.children.iter().map(|n| (
+                n.action.clone(),
+                n.node.as_ref().map_or(0, |n| n.visits)
+            )).collect()
+        })
+    }
+
+    fn get_most_visited_action(current_root: &MCTSNode<S, A>, rng: &mut R) -> Result<A, &'static str> {
+        let max_visits = current_root.children.iter()
+            .map(|n| n.node.as_ref().map_or(0, |n| n.visits))
+            .max().ok_or("No visited_nodes to choose from")?;
+
+        let mut max_actions: Vec<A> = current_root.children.iter()
             .filter_map(|n| {
-                let action = n.action;
-                n.node.map(|node| (action, node))
+                if n.node.as_ref().map_or(0, |n| n.visits) >= max_visits {
+                    Some(n.action.clone())
+                } else {
+                    None
+                }
             })
             .collect();
 
-        let max_visits = visited_nodes.iter().map(|n| { n.1.visits }).max().ok_or("No visited_nodes to choose from")?;
-
-        let mut max_nodes: Vec<(A, MCTSNode<S, A>)> = visited_nodes.into_iter().filter(|n| n.1.visits >= max_visits).collect();
-
-        let chosen_idx = match max_nodes.len() {
+        let chosen_idx = match max_actions.len() {
             0 => Err("No candidate moves available"),
             1 => Ok(0),
             len => Ok(rng.gen_range(0, len))
-        };
+        }?;
 
-        chosen_idx.map(|idx| max_nodes.remove(idx))
+        Ok(max_actions.remove(chosen_idx))
+    }
+
+    fn take_node_of_action(current_root: &mut MCTSNode<S, A>, action: &A) -> Result<Option<MCTSNode<S, A>>, &'static str> {
+        let matching_action = current_root.children.iter_mut().find(|n| n.action == *action).ok_or("No matching Action")?;
+
+        Ok(matching_action.node.take())
     }
 
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, analysis_cache: &mut AnalysisCache<S, A>, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {

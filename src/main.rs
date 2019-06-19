@@ -40,11 +40,14 @@ fn main() {
 
     let mut state: GameState = GameState::new();
 
-    println!("Next Action");
     while game_engine.is_terminal_state(&state) == None {
-        let res = mcts.get_next_action(800).unwrap();
-        state = game_engine.take_action(&state, &res.0);
-        println!("Action: {:?}", res.0);
+        let search_result = mcts.search(800).unwrap();
+        let action = search_result.0;
+        let metrics = mcts.get_root_node_metrics();
+        mcts.advance_to_action(&action).unwrap();
+        state = game_engine.take_action(&state, &action);
+        println!("Action: {:?}", action);
+        println!("Metrics: {:?}", metrics);
     }
 
     let time = now.elapsed().as_millis();
