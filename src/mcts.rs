@@ -90,7 +90,7 @@ impl<'a, S: Hash + Eq + Clone, A: Clone + Eq, E: GameEngine<S, A> + GameAnalytic
         }
     }
 
-    pub fn search(&mut self, number_of_playouts: usize) -> Result<(A, usize), &'static str> {
+    pub fn search(&mut self, visits: usize) -> Result<(A, usize), &'static str> {
         let game_engine = &self.game_engine;
         let cpuct = self.options.cpuct;
         let temp = self.options.temperature;
@@ -104,7 +104,7 @@ impl<'a, S: Hash + Eq + Clone, A: Clone + Eq, E: GameEngine<S, A> + GameAnalytic
 
         MCTS::<S, A, E, R>::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
-        for _ in 0..number_of_playouts {
+        while root_node.visits < visits {
             let (_, md) = MCTS::<S, A, E, R>::recurse_path_and_expand(root_node, game_engine, analysis_cache, cpuct, temp, rng, 0)?;
 
             if md > max_depth {
