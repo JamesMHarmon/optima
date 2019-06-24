@@ -4,100 +4,40 @@ use std::io::Write;
 use std::fs::OpenOptions;
 use std::env;
 
-use rand::RngCore;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use serde::{Serialize, Deserialize};
 
-use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
-use uuid::Uuid;
 
-use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions,NodeMetrics};
-use quoridor::connect4::action::Action;
-use quoridor::connect4::engine::{GameState, Engine as Connect4Engine};
-use quoridor::engine::GameEngine;
+use quoridor::self_play;
+use quoridor::connect4::engine::{Engine as Connect4Engine};
 use quoridor::analysis_cache::{AnalysisCache};
 
-#[derive(Serialize, Deserialize, Debug)]
-struct SelfPlayMetrics<A> {
-    guid: String,
-    analysis: Vec<(A, NodeMetrics<A>)>
-}
-
-fn main() {
+fn main() -> Result<(), &'static str>{
     set_python_paths();
+    create_model();
 
     let game_engine = Connect4Engine::new();
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
         .open("results.txt")
-        .unwrap();
+        .expect("Couldn't open or create the results.txt file");
 
     loop {
-        let game_state = GameState::new();
-        let analysis_cache = AnalysisCache::new();
-        let uuid = Uuid::new_v4();
-        let seedable_rng = create_rng(uuid);
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            analysis_cache,
-            MCTSOptions::new(
-                Some(DirichletOptions {
-                    alpha: 0.3,
-                    epsilon: 0.25
-                }),
-                &|_,_| 4.0,
-                &|_| 1.0,
-                seedable_rng,
-            )
-        );
+        let mut analysis_cache = AnalysisCache::new();
 
         let now = Instant::now();
-        let mut state: GameState = GameState::new();
-        let mut self_play_metrics = SelfPlayMetrics::<Action> {
-            guid: format!("{}", uuid),
-            analysis: Vec::new()
-        };
-
-        while game_engine.is_terminal_state(&state) == None {
-            let search_result = mcts.search(800).unwrap();
-            let action = search_result.0;
-            let metrics = mcts.get_root_node_metrics().unwrap();
-
-            println!("Metrics: {:?}", metrics);
-            println!("Action: {:?}", action);
-
-            mcts.advance_to_action(&action).unwrap();
-            state = game_engine.take_action(&state, &action);
-            self_play_metrics.analysis.push((action, metrics));
-        }
-
+        let self_play_metrics = self_play::self_play(&game_engine, &mut analysis_cache)?;
         let time = now.elapsed().as_millis();
 
-        let serialized = serde_json::to_string(&self_play_metrics).unwrap();
+        let serialized = serde_json::to_string(&self_play_metrics).expect("Failed to serialize results");
 
-        writeln!(file, "{}", serialized).unwrap();
+        writeln!(file, "{}", serialized).expect("File to write to results.txt.");
 
         println!("{:?}", self_play_metrics);
-        println!("Result: {}", game_engine.is_terminal_state(&state).unwrap());
-        println!("Last Player: {}", if state.p1_turn_to_move { "P2" } else { "P1" });
         println!("TIME: {}",time);
     }
-}
-
-fn create_rng(uuid: Uuid) -> impl RngCore {
-    let uuid_bytes: &[u8; 16] = uuid.as_bytes();
-    let mut seed = [0; 32];
-    seed[..16].clone_from_slice(uuid_bytes);
-    seed[16..32].clone_from_slice(uuid_bytes);
-
-    let seedable_rng: StdRng = SeedableRng::from_seed(seed);
-
-    seedable_rng
 }
 
 // @TODO: Improve error handling
@@ -116,4 +56,12 @@ fn set_python_paths() {
     path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None).unwrap();
     path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None).unwrap();
     path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None).unwrap();
+}
+
+fn create_model() {
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let c4 = py.import("c4_model").unwrap();
+
+    c4.call("create_model", (), None).unwrap();
 }

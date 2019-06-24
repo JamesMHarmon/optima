@@ -4,6 +4,7 @@ use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
 use serde::{Serialize, Deserialize};
 
+use super::game_state::GameState;
 use super::engine::{GameEngine};
 use super::analytics::{ActionWithPolicy,GameAnalytics};
 use super::analysis_cache::{AnalysisCache};
@@ -42,7 +43,7 @@ impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
 pub struct MCTS<'a, S: Hash + Eq, A: Clone + Eq, E: GameEngine<S, A>, R: Rng> {
     options: MCTSOptions<'a, S, A, R>,
     game_engine: &'a E,
-    analysis_cache: AnalysisCache<S, A>,
+    analysis_cache: &'a mut AnalysisCache<S, A>,
     starting_game_state: Option<S>,
     root: Option<MCTSNode<S, A>>,
 }
@@ -80,8 +81,13 @@ pub struct NodeMetrics<A> {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S: Hash + Eq + Clone, A: Clone + Eq, E: GameEngine<S, A> + GameAnalytics<S, A>, R: Rng> MCTS<'a, S, A, E, R> where E: 'a {
-    pub fn new(game_state: S, game_engine: &'a E, analysis_cache: AnalysisCache<S, A>, options: MCTSOptions<'a, S, A, R>) -> Self {
+impl<'a, S, A, E, R: Rng> MCTS<'a, S, A, E, R>
+where
+    S: GameState,
+    A: Clone + Eq,
+    E: 'a + GameEngine<S, A> + GameAnalytics<S, A> 
+{
+    pub fn new(game_state: S, game_engine: &'a E, analysis_cache: &'a mut AnalysisCache<S, A>, options: MCTSOptions<'a, S, A, R>) -> Self {
         MCTS {
             options,
             game_engine,

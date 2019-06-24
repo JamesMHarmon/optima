@@ -21,11 +21,26 @@ def analyse(p1, p2):
 
     input = convertGameStateToInput(p1, p2)
 
-    if model is None:
-        model = model_sen.compile_model()
-
     prediction = model.predict(np.asarray([input]))
     value = prediction[0][0][0]
     policy = prediction[1][0]
 
     return (value, policy)
+
+def create_model():
+    global model
+
+    model = model_sen.compile_model(
+        num_filters=64,
+        num_blocks=5,
+        input_shape=(6, 7, 2)
+    )
+    return
+
+def load_model_(path):
+    global model
+    model = load_model(path)
+    return model
+
+def train_model():
+    return

@@ -1,4 +1,5 @@
 use super::super::engine::GameEngine;
+use super::super::game_state;
 use super::action::Action;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
@@ -10,15 +11,17 @@ pub struct GameState {
     pub p2_piece_board: u64
 }
 
-impl GameState {
-    pub fn new() -> Self {
+impl game_state::GameState for GameState {
+    fn initial() -> Self {
         GameState {
             p1_turn_to_move: true,
             p1_piece_board: 0,
             p2_piece_board: 0
         }
     }
+}
 
+impl GameState {
     pub fn drop_piece(&self, column: usize) -> Self {
         let column_adder = 1 << 7 * (column - 1);
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
@@ -126,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_new_state_is_correct() {
-        let state = GameState::new();
+        let state = GameState::initial();
         assert_eq!(state.p1_turn_to_move, true);
         assert_eq!(state.p1_piece_board, 0);
         assert_eq!(state.p2_piece_board, 0);
@@ -134,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_drop_piece_switches_player() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
         state = state.drop_piece(1);
         assert_eq!(state.p1_turn_to_move, false);
         state = state.drop_piece(1);
@@ -143,21 +146,21 @@ mod tests {
 
     #[test]
     fn test_drop_piece_empty_first_column() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
         state = state.drop_piece(1);
         assert_eq!(state.p1_piece_board, 1);
     }
 
     #[test]
     fn test_drop_piece_empty_last_column() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
         state = state.drop_piece(7);
         assert_eq!(state.p1_piece_board, 1 << 7 * 6);
     }
 
     #[test]
     fn test_drop_piece_empty_column_includes_other_pieces() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
         state = state.drop_piece(1);
         state = state.drop_piece(2);
         state = state.drop_piece(3);
@@ -169,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_drop_piece_column_on_other_player_piece() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
         state = state.drop_piece(1);
         state = state.drop_piece(1);
         state = state.drop_piece(4);
@@ -194,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_get_valid_actions_all_columns_available() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
 
         for column in 1..8 {
             for _ in 1..6 {
@@ -207,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_get_valid_actions_all_columns_full() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
 
         for column in 1..8 {
             for _ in 1..7 {
@@ -220,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_get_valid_actions_first_column_full() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
 
         for column in 1..8 {
             for _ in 1..6 {
@@ -235,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_get_valid_actions_last_column_full() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
 
         for column in 1..8 {
             for _ in 1..6 {
@@ -250,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_get_valid_actions_three_columns_full() {
-        let mut state = GameState::new();
+        let mut state = GameState::initial();
 
         for column in 1..8 {
             for _ in 1..6 {
