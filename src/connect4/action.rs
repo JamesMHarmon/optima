@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Eq, PartialEq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Action {
     DropPiece(u64)
 }

@@ -2,6 +2,7 @@ use std::hash::Hash;
 use rand::{ Rng };
 use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
+use serde::{Serialize, Deserialize};
 
 use super::engine::{GameEngine};
 use super::analytics::{ActionWithPolicy,GameAnalytics};
@@ -71,7 +72,7 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NodeMetrics<A> {
     pub visits: usize,
     pub W: f64,
