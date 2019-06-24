@@ -1,11 +1,13 @@
 extern crate quoridor;
 
+use rand::RngCore;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::env;
 
 use rand::prelude::{SeedableRng, StdRng};
 use std::time::{Instant};
+use uuid::Uuid;
 
 use quoridor::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use quoridor::connect4::engine::{GameState, Engine as Connect4Engine};
@@ -18,9 +20,8 @@ fn main() {
     let game_engine = Connect4Engine::new();
     let game_state = GameState::new();
     let analysis_cache = AnalysisCache::new();
-    // @TODO: Convert seed to use a guid
-    let seed: [u8; 32] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
-    let seedable_rng: StdRng = SeedableRng::from_seed(seed);
+    let seedable_rng = create_rng();
+
     let mut mcts = MCTS::new(
         game_state,
         &game_engine,
@@ -55,6 +56,20 @@ fn main() {
     println!("Result: {}", game_engine.is_terminal_state(&state).unwrap());
     println!("Last Player: {}", if state.p1_turn_to_move { "P2" } else { "P1" });
     println!("TIME: {}",time);
+}
+
+fn create_rng() -> impl RngCore {
+    let uuid = Uuid::new_v4();
+    let uuid_bytes: &[u8; 16] = uuid.as_bytes();
+    let mut seed = [0; 32];
+    seed[..16].clone_from_slice(uuid_bytes);
+    seed[16..32].clone_from_slice(uuid_bytes);
+
+    println!("uuid: {}", uuid);
+
+    let seedable_rng: StdRng = SeedableRng::from_seed(seed);
+
+    seedable_rng
 }
 
 // @TODO: Improve error handling

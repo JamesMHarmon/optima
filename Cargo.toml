@@ -11,6 +11,5 @@ name="quoridor"
 [dependencies]
 rand=""
 fnv = ""
-
-[dependencies.pyo3]
-version = "0.7.0"
+uuid = { version = "0.7", features = ["v4"] }
+pyo3 = "0.7.0"

@@ -238,7 +238,6 @@ impl<'a, S: Hash + Eq + Clone, A: Clone + Eq, E: GameEngine<S, A> + GameAnalytic
         Ok(chosen_idx)
     }
 
-    //@TODO: See if we can return an iterator here.
     fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>) -> Vec<NodePUCT<'a, S, A>> {
         nodes.iter_mut().map(|child| {
             let child_node = &child.node;
