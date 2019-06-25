@@ -5,6 +5,7 @@ pub mod analysis_cache;
 pub mod game_state;
 pub mod rng;
 pub mod self_play;
+pub mod self_learn;
 
 pub mod quoridor;
 pub mod connect4;
