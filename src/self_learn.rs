@@ -1,20 +1,25 @@
+use super::model::Model;
 use std::io::Write;
+use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
-use std::env;
-use std::path::Path;
+use std::path::{Path,PathBuf};
 use serde::{Serialize, Deserialize};
 
 // game/run/iteration/
 //                  ./games
 //                  ./nets
-pub struct SelfLearn {
-    options: SelfLearnOptions
-    // game_engine: E,
+pub struct SelfLearn<M>
+    where M: Model
+{
+    options: SelfLearnOptions,
+    game_name: String,
+    run_name: String,
+    model: M,
+    run_directory: PathBuf
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SelfLearnOptions {
-    pub run_name: String,
     pub number_of_games_per_net: usize,
     pub moving_window_size: usize,
     pub train_ratio: f64,
@@ -30,22 +35,100 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl SelfLearn {
-    pub fn new(game_name: String, options: SelfLearnOptions) -> Result<(), &'static str> {
-        Ok(SelfLearn::initialize_directories_and_files(game_name, &options)?)
+impl<M> SelfLearn<M> 
+    where M: Model
+{
+    pub fn new(game_name: String, run_name: String, mut model: M, options: SelfLearnOptions) -> Result<Self, &'static str>
+    {
+        if game_name.contains("_") {
+            return Err("game_name cannot contain any '_' characters");
+        }
+
+        if run_name.contains("_") {
+            return Err("run_name cannot contain any '_' characters");
+        }
+
+        let run_directory = SelfLearn::<M>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        let model_name = Self::get_model_name(&game_name, &run_name, 1);
+
+        model.create(&model_name);
+
+        Ok(Self {
+            game_name,
+            run_name,
+            run_directory,
+            model,
+            options
+        })
     }
 
-    fn initialize_directories_and_files(game_name: String, options: &SelfLearnOptions) -> Result<(), &'static str> {
-        let directory_name = format!("./{}_runs/{}", game_name, options.run_name);
-        
-        create_dir_all(&directory_name).expect("Run already exists or unable to create directories");
+    pub fn from(game_name: String, run_name: String, model: M) -> Result<Self, &'static str> {
+        let run_directory = Self::get_run_directory(&game_name, &run_name);
+        let options = Self::get_config(&run_directory)?;
 
-        let config_path_name = format!("{}/config.json", directory_name);
-        let config_path = Path::new(&config_path_name);
+        // TODO: get latest model name and games.
+
+        Ok(Self {
+            game_name,
+            run_name,
+            run_directory,
+            model,
+            options
+        })
+    }
+
+    pub fn learn(&self) {
+        // create a net
+        // get number of games left to play
+
+        loop {
+            // load the net
+            // play n games
+            // train
+        }
+    }
+
+    fn get_number_of_games_to_play() {
+
+    }
+
+    fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {
+        format!("{}_{}_{:0>5}", game_name, run_name, model_number)
+    }
+
+    fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
+        PathBuf::from(format!("./{}_runs/{}", game_name, run_name))
+    }
+
+    fn get_config_path(run_directory: &Path) -> PathBuf {
+        run_directory.join("config.json")
+    }
+
+    fn get_config(run_directory: &Path) -> Result<SelfLearnOptions, &'static str> {
+        let config_path = Self::get_config_path(run_directory);
+        let mut file = OpenOptions::new()
+            .read(true)
+            .open(config_path)
+            .expect("Couldn't load config file.");
+
+        let mut config_file_contents = String::new();
+        file.read_to_string(&mut config_file_contents).expect("Failed to read config file");
+        let options: SelfLearnOptions = serde_json::from_str(&config_file_contents).expect("Failed to parse config file");
+        Ok(options)
+    }
+
+    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
+        let run_directory = SelfLearn::<M>::get_run_directory(game_name, run_name);
+        create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
+
+        let config_path = Self::get_config_path(&run_directory);
 
         if config_path.exists() {
             return Err("Run already exists");
         }
+
+        println!("{:?}", run_directory);
+        println!("{:?}", config_path);
 
         let mut file = OpenOptions::new()
             .write(true)
@@ -56,7 +139,7 @@ impl SelfLearn {
         let serialized_options = serde_json::to_string_pretty(options).expect("Unable to serialize options");
         file.write(serialized_options.as_bytes()).expect("Unable to write options to file");
 
-        Ok(())
+        Ok(run_directory)
     }
 }
 

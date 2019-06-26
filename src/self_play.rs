@@ -6,7 +6,6 @@ use super::analytics::GameAnalytics;
 use super::rng;
 use super::mcts::{DirichletOptions,MCTS,MCTSOptions,NodeMetrics};
 use super::engine::GameEngine;
-use super::analysis_cache::{AnalysisCache};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfPlayMetrics<A> {
@@ -14,11 +13,12 @@ pub struct SelfPlayMetrics<A> {
     analysis: Vec<(A, NodeMetrics<A>)>
 }
 
-pub fn self_play<'a, S, A, E>(game_engine: &'a E, analysis_cache: &mut AnalysisCache<S, A>) -> Result<SelfPlayMetrics<A>, &'static str>
+pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
     A: Clone + Eq,
-    E: 'a + GameEngine<S, A> + GameAnalytics<S, A> 
+    E: 'a + GameEngine<S, A>,
+    M: 'a + GameAnalytics<S, A>
 {
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);
@@ -27,7 +27,7 @@ pub fn self_play<'a, S, A, E>(game_engine: &'a E, analysis_cache: &mut AnalysisC
     let mut mcts = MCTS::new(
         game_state,
         game_engine,
-        analysis_cache,
+        analytics,
         MCTSOptions::new(
             Some(DirichletOptions {
                 alpha: 0.3,

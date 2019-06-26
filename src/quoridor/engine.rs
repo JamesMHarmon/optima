@@ -238,7 +238,7 @@ impl GameState {
             let with_removed_candidate = horizontal_connecting_candidates & (horizontal_connecting_candidates - 1);
             let removed_candidate = with_removed_candidate ^ horizontal_connecting_candidates;
 
-            let state_with_candidate = GameState {
+            let state_with_candidate = Self {
                 horizontal_wall_placement_board: self.horizontal_wall_placement_board | removed_candidate,
                 ..*self
             };
@@ -261,7 +261,7 @@ impl GameState {
             let with_removed_candidate = vertical_connecting_candidates & (vertical_connecting_candidates - 1);
             let removed_candidate = with_removed_candidate ^ vertical_connecting_candidates;
 
-            let state_with_candidate = GameState {
+            let state_with_candidate = Self {
                 vertical_wall_placement_board: self.vertical_wall_placement_board | removed_candidate,
                 ..*self
             };

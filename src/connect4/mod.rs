@@ -1,3 +1,3 @@
 pub mod action;
-pub mod analytics;
+pub mod model;
 pub mod engine;

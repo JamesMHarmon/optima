@@ -36,7 +36,7 @@ impl GameState {
             p2_piece_board = self.p2_piece_board | dropped_piece;
         }
 
-        GameState {
+        Self {
             p1_turn_to_move: !p1_turn_to_move,
             p1_piece_board,
             p2_piece_board

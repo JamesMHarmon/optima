@@ -1,13 +1,30 @@
 use pyo3::prelude::*;
 
-
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
+use super::super::model::{self, TrainOptions};
 use super::engine::{GameState};
 use super::action::{Action};
-use super::engine::Engine;
 
-impl GameAnalytics<GameState, Action> for Engine {
+pub struct Model {
+    model_name: String
+}
+
+impl Model {
+    pub fn new() -> Self {
+        Self {
+            model_name: "FIX_THIS".to_string()
+        }
+    }
+}
+
+
+impl model::Model for Model {
+    fn create(&mut self, name: &str) {}
+    fn train(&mut self, from_name: &str, target_name: &str, options: &TrainOptions) {}
+}
+
+impl GameAnalytics<GameState, Action> for Model {
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
@@ -21,7 +38,7 @@ impl GameAnalytics<GameState, Action> for Engine {
         }
 
         let input = game_state_to_input(game_state);
-        let prediction = predict(&input).unwrap();
+        let prediction = predict(&self.model_name, &input).unwrap();
         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
         {
             if *v {
@@ -48,7 +65,7 @@ fn game_state_to_input(game_state: &GameState) -> (Vec<f64>, Vec<f64>) {
     )
 }
 
-fn predict(model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f64, Vec<f64>)> {
+fn predict(model_name: &str, model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f64, Vec<f64>)> {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
@@ -57,7 +74,7 @@ fn predict(model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f64, Vec<f64>)> {
 
     let result: (f64, Vec<f64>) = c4.call(
         "analyse",
-        (model_input.0.to_owned(), model_input.1.to_owned()),
+        (model_name, model_input.0.to_owned(), model_input.1.to_owned()),
         None
     )?.extract()?;
 
