@@ -1,4 +1,4 @@
-use super::model::Model;
+use super::model::{Model, ModelFactory};
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
@@ -8,13 +8,14 @@ use serde::{Serialize, Deserialize};
 // game/run/iteration/
 //                  ./games
 //                  ./nets
-pub struct SelfLearn<M>
-    where M: Model
+pub struct SelfLearn<F>
+where
+    F: ModelFactory
 {
     options: SelfLearnOptions,
     game_name: String,
     run_name: String,
-    model: M,
+    model_factory: F,
     run_directory: PathBuf
 }
 
@@ -35,10 +36,11 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl<M> SelfLearn<M> 
-    where M: Model
+impl<F> SelfLearn<F>
+where
+    F: ModelFactory
 {
-    pub fn new(game_name: String, run_name: String, mut model: M, options: SelfLearnOptions) -> Result<Self, &'static str>
+    pub fn new(game_name: String, run_name: String, model_factory: F, options: SelfLearnOptions) -> Result<Self, &'static str>
     {
         if game_name.contains("_") {
             return Err("game_name cannot contain any '_' characters");
@@ -48,21 +50,21 @@ impl<M> SelfLearn<M>
             return Err("run_name cannot contain any '_' characters");
         }
 
-        let run_directory = SelfLearn::<M>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        let run_directory = SelfLearn::<F>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_name = Self::get_model_name(&game_name, &run_name, 1);
 
-        model.create(&model_name);
+        model_factory.create(&model_name);
 
         Ok(Self {
             game_name,
             run_name,
             run_directory,
-            model,
+            model_factory,
             options
         })
     }
 
-    pub fn from(game_name: String, run_name: String, model: M) -> Result<Self, &'static str> {
+    pub fn from(game_name: String, run_name: String, model_factory: F) -> Result<Self, &'static str> {
         let run_directory = Self::get_run_directory(&game_name, &run_name);
         let options = Self::get_config(&run_directory)?;
 
@@ -72,7 +74,7 @@ impl<M> SelfLearn<M>
             game_name,
             run_name,
             run_directory,
-            model,
+            model_factory,
             options
         })
     }
@@ -118,7 +120,7 @@ impl<M> SelfLearn<M>
     }
 
     fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
-        let run_directory = SelfLearn::<M>::get_run_directory(game_name, run_name);
+        let run_directory = SelfLearn::<F>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);

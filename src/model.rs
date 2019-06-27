@@ -1,6 +1,13 @@
 pub trait Model {
-    fn create(&mut self, name: &str);
-    fn train(&mut self, from_name: &str, target_name: &str, options: &TrainOptions);
+
+}
+
+pub trait ModelFactory
+{
+    type M: Model;
+
+    fn create(&self, name: &str) -> Self::M;
+    fn train(&self, from_name: &str, target_name: &str, options: &TrainOptions) -> Self::M;
 }
 
 pub struct TrainOptions {

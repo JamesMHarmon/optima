@@ -1,28 +1,24 @@
 use pyo3::prelude::*;
 
+use super::super::model;
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
-use super::super::model::{self, TrainOptions};
 use super::engine::{GameState};
 use super::action::{Action};
 
 pub struct Model {
-    model_name: String
+    name: String
 }
 
 impl Model {
-    pub fn new() -> Self {
+    pub fn new(name: String) -> Self {
         Self {
-            model_name: "FIX_THIS".to_string()
+            name
         }
     }
 }
 
-
-impl model::Model for Model {
-    fn create(&mut self, name: &str) {}
-    fn train(&mut self, from_name: &str, target_name: &str, options: &TrainOptions) {}
-}
+impl model::Model for Model {}
 
 impl GameAnalytics<GameState, Action> for Model {
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
@@ -38,7 +34,7 @@ impl GameAnalytics<GameState, Action> for Model {
         }
 
         let input = game_state_to_input(game_state);
-        let prediction = predict(&self.model_name, &input).unwrap();
+        let prediction = predict(&self.name, &input).unwrap();
         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
         {
             if *v {

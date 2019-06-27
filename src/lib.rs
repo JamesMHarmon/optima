@@ -3,7 +3,6 @@ pub mod mcts;
 pub mod analytics;
 pub mod analysis_cache;
 pub mod game_state;
-pub mod game;
 pub mod model;
 pub mod rng;
 pub mod self_play;
