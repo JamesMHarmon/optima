@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use super::analytics::GameAnalytics;
 use super::engine::GameEngine;
 use super::game_state::GameState;
-use super::self_play;
+use super::self_play::{self,SelfPlayOptions};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory};
 
@@ -24,8 +24,6 @@ where
     F: ModelFactory<M=M>
 {
     options: SelfLearnOptions,
-    game_name: String,
-    run_name: String,
     run_directory: PathBuf,
     model_factory: F,
     latest_model: M,
@@ -92,8 +90,6 @@ where
 
         Ok(Self {
             options,
-            game_name,
-            run_name,
             run_directory,
             model_factory,
             latest_model,
@@ -102,6 +98,16 @@ where
     }
 
     pub fn learn(&mut self) -> Result<(), &'static str> {
+        let options = &self.options;
+        let number_of_games_per_net = options.number_of_games_per_net;
+        let self_play_options = SelfPlayOptions {
+            epsilon: 0.0,
+            alpha: 0.0,
+            cpuct: options.cpuct,
+            temperature: options.temperature,
+            visits: options.visits
+        };
+
         loop {
             let model_name = self.latest_model.get_name();
             let mut self_play_persistance = SelfPlayPersistance::new(
@@ -110,10 +116,9 @@ where
             )?;
 
             let mut games = self_play_persistance.read::<A>()?;
-            let number_of_games_per_net = self.options.number_of_games_per_net;
 
             while games.len() < number_of_games_per_net {
-                let self_play_metrics = self_play::self_play(self.game_engine, &self.latest_model).unwrap();
+                let self_play_metrics = self_play::self_play(self.game_engine, &self.latest_model, &self_play_options).unwrap();
                 self_play_persistance.write(&self_play_metrics)?;
                 games.push(self_play_metrics);
                 println!("Played a game: {}", games.len());

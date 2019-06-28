@@ -60,21 +60,6 @@ where
             children_visits: seq.next_element()?.unwrap()
         })
     }
-
-    // fn visit_f64<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-    // where
-    //     M: MapAccess<'de>,
-    // {
-    //     let mut metrics = NodeMetrics {};
-
-    //     // While there are entries remaining in the input, add them
-    //     // into our map.
-    //     while let Some((key, value)) = access.next_entry()? {
-    //         map.insert(key, value);
-    //     }
-
-    //     Ok(map)
-    // }
 }
 
 impl<'de, A> Deserialize<'de> for NodeMetrics<A>

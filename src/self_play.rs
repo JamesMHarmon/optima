@@ -14,7 +14,16 @@ pub struct SelfPlayMetrics<A> {
     analysis: Vec<(A, NodeMetrics<A>)>
 }
 
-pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfPlayMetrics<A>, &'static str>
+#[derive(Debug)]
+pub struct SelfPlayOptions {
+    pub temperature: f64,
+    pub visits: usize,
+    pub cpuct: f64,
+    pub alpha: f64,
+    pub epsilon: f64
+}
+
+pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
     A: Clone + Eq,
@@ -24,6 +33,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfP
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);
     let game_state: S = S::initial();
+    let cpuct = options.cpuct;
+    let temperature = options.temperature;
 
     let mut mcts = MCTS::new(
         game_state,
@@ -31,8 +42,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfP
         analytics,
         MCTSOptions::new(
             Some(DirichletOptions {
-                alpha: 0.3,
-                epsilon: 0.25
+                alpha: options.alpha,
+                epsilon: options.epsilon
             }),
             &|_,_| 4.0,
             &|_| 1.0,
@@ -47,7 +58,7 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfP
     };
 
     while game_engine.is_terminal_state(&state) == None {
-        let search_result = mcts.search(5)?;
+        let search_result = mcts.search(options.visits)?;
         let action = search_result.0;
         let metrics = mcts.get_root_node_metrics()?;
 
