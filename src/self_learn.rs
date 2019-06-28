@@ -1,8 +1,10 @@
-use crate::analytics::GameAnalytics;
-use crate::engine::GameEngine;
-use crate::game_state::GameState;
+use super::analytics::GameAnalytics;
+use super::engine::GameEngine;
+use super::game_state::GameState;
 use super::self_play;
+use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory};
+
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
@@ -15,7 +17,7 @@ use serde::{Serialize, Deserialize};
 pub struct SelfLearn<'a, S, A, E, M, F>
 where
     S: GameState,
-    A: Clone + Eq,
+    A: Clone + Eq + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model + GameAnalytics<State=S,Action=A>,
     F: ModelFactory<M=M>
@@ -49,7 +51,7 @@ pub struct SelfLearnOptions {
 impl<'a, S, A, E, M, F> SelfLearn<'a, S, A, E, M, F>
 where
     S: GameState,
-    A: Clone + Eq,
+    A: Clone + Eq + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model + GameAnalytics<State=S,Action=A>,
     F: ModelFactory<M=M>
@@ -107,17 +109,30 @@ where
         })
     }
 
-    pub fn learn(&self) {
-        // create a net
-        // get number of games left to play
+    pub fn learn(&self) -> Result<(), &'static str> {
+        // load the latest net
+        // load the latest games
 
+        
 
         loop {
-            self_play::self_play(self.game_engine, &self.latest_model).unwrap();
-            // load the net
-            // play n games
-            // train
-            println!("Played a game");
+            let model_name = self.latest_model.get_name();
+            let mut self_play_persistance = SelfPlayPersistance::new(
+                &self.run_directory,
+                model_name
+            )?;
+
+            // while num_games < target {
+            loop {
+
+                let self_play_metrics = self_play::self_play(self.game_engine, &self.latest_model).unwrap();
+                self_play_persistance.write(self_play_metrics)?;
+
+                println!("Played a game");
+            }
+
+            // train new net.
+            // load latest net
         }
     }
 
@@ -175,28 +190,3 @@ where
         Ok(run_directory)
     }
 }
-
-//     set_python_paths();
-//     create_model();
-
-//     let game_engine = Connect4Engine::new();
-//     let mut file = OpenOptions::new()
-//         .append(true)
-//         .create(true)
-//         .open("results.txt")
-//         .expect("Couldn't open or create the results.txt file");
-
-//     loop {
-//         let mut analysis_cache = AnalysisCache::new();
-
-//         let now = Instant::now();
-//         let self_play_metrics = self_play::self_play(&game_engine, &mut analysis_cache)?;
-//         let time = now.elapsed().as_millis();
-
-//         let serialized = serde_json::to_string(&self_play_metrics).expect("Failed to serialize results");
-
-//         writeln!(file, "{}", serialized).expect("File to write to results.txt.");
-
-//         println!("{:?}", self_play_metrics);
-//         println!("TIME: {}",time);
-//     }

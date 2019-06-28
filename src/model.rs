@@ -1,4 +1,6 @@
-pub trait Model {}
+pub trait Model {
+    fn get_name(&self) -> &str;
+}
 
 pub trait ModelFactory
 {

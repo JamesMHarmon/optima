@@ -18,7 +18,11 @@ impl Model {
     }
 }
 
-impl model::Model for Model {}
+impl model::Model for Model {
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+}
 
 impl GameAnalytics for Model {
     type Action = Action;
@@ -35,6 +39,8 @@ impl GameAnalytics for Model {
                 value
             )
         }
+
+        // @TODO: Add the cache back
 
         let input = game_state_to_input(game_state);
         let prediction = predict(&self.name, &input).unwrap();

@@ -46,7 +46,7 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfP
     };
 
     while game_engine.is_terminal_state(&state) == None {
-        let search_result = mcts.search(800)?;
+        let search_result = mcts.search(5)?;
         let action = search_result.0;
         let metrics = mcts.get_root_node_metrics()?;
 

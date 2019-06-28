@@ -6,6 +6,7 @@ pub mod game_state;
 pub mod model;
 pub mod rng;
 pub mod self_play;
+pub mod self_play_persistance;
 pub mod self_learn;
 
 pub mod quoridor;

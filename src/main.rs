@@ -32,7 +32,7 @@ fn main() -> Result<(), &'static str>{
 
     let learner = SelfLearn::from("Connect4".to_string(), "Run-1".to_string(), model_factory, &game_engine)?;
 
-    learner.learn();
+    learner.learn()?;
 
     Ok(())
 }
