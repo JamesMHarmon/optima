@@ -1,5 +1,8 @@
-pub trait GameAnalytics<S, A> {
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysis<A>;
+pub trait GameAnalytics {
+    type Action;
+    type State;
+
+    fn get_state_analysis(&self, game_state: &Self::State) -> GameStateAnalysis<Self::Action>;
 }
 
 #[derive(Clone)]

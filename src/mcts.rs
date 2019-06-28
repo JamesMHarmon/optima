@@ -42,8 +42,8 @@ pub struct MCTS<'a, S, A, E, M, R>
 where
     S: GameState,
     A: Clone + Eq,
-    E: GameEngine<S, A>,
-    M: GameAnalytics<S, A>,
+    E: GameEngine,
+    M: GameAnalytics,
     R: Rng
 {
     options: MCTSOptions<'a, S, A, R>,
@@ -90,8 +90,8 @@ impl<'a, S, A, E, M, R> MCTS<'a, S, A, E, M, R>
 where
     S: GameState,
     A: Clone + Eq,
-    E: 'a + GameEngine<S, A>,
-    M: 'a + GameAnalytics<S, A>,
+    E: 'a + GameEngine<State=S,Action=A>,
+    M: 'a + GameAnalytics<State=S,Action=A>,
     R: Rng
 {
     pub fn new(

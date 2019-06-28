@@ -1,3 +1,7 @@
+use crate::analytics::GameAnalytics;
+use crate::engine::GameEngine;
+use crate::game_state::GameState;
+use super::self_play;
 use super::model::{Model, ModelFactory};
 use std::io::Write;
 use std::io::Read;
@@ -8,15 +12,21 @@ use serde::{Serialize, Deserialize};
 // game/run/iteration/
 //                  ./games
 //                  ./nets
-pub struct SelfLearn<F>
+pub struct SelfLearn<'a, S, A, E, M, F>
 where
-    F: ModelFactory
+    S: GameState,
+    A: Clone + Eq,
+    E: 'a + GameEngine<State=S,Action=A>,
+    M: 'a + Model + GameAnalytics<State=S,Action=A>,
+    F: ModelFactory<M=M>
 {
     options: SelfLearnOptions,
     game_name: String,
     run_name: String,
+    run_directory: PathBuf,
     model_factory: F,
-    run_directory: PathBuf
+    latest_model: M,
+    game_engine: &'a E
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,12 +46,21 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl<F> SelfLearn<F>
+impl<'a, S, A, E, M, F> SelfLearn<'a, S, A, E, M, F>
 where
-    F: ModelFactory
+    S: GameState,
+    A: Clone + Eq,
+    E: 'a + GameEngine<State=S,Action=A>,
+    M: 'a + Model + GameAnalytics<State=S,Action=A>,
+    F: ModelFactory<M=M>
 {
-    pub fn new(game_name: String, run_name: String, model_factory: F, options: SelfLearnOptions) -> Result<Self, &'static str>
-    {
+    pub fn new(
+        game_name: String,
+        run_name: String,
+        model_factory: F,
+        game_engine: &'a E,
+        options: SelfLearnOptions
+    ) -> Result<Self, &'static str> {
         if game_name.contains("_") {
             return Err("game_name cannot contain any '_' characters");
         }
@@ -50,32 +69,41 @@ where
             return Err("run_name cannot contain any '_' characters");
         }
 
-        let run_directory = SelfLearn::<F>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        let run_directory = SelfLearn::<S,A,E,M,F>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_name = Self::get_model_name(&game_name, &run_name, 1);
 
-        model_factory.create(&model_name);
+        let latest_model = model_factory.create(&model_name);
 
         Ok(Self {
+            options,
             game_name,
             run_name,
             run_directory,
             model_factory,
-            options
+            latest_model,
+            game_engine
         })
     }
 
-    pub fn from(game_name: String, run_name: String, model_factory: F) -> Result<Self, &'static str> {
+    pub fn from(
+        game_name: String,
+        run_name: String,
+        model_factory: F,
+        game_engine: &'a E
+    ) -> Result<Self, &'static str> {
         let run_directory = Self::get_run_directory(&game_name, &run_name);
         let options = Self::get_config(&run_directory)?;
-
-        // TODO: get latest model name and games.
+        let a_name = Self::get_model_name(&game_name, &run_name, 1);
+        let latest_model = model_factory.get_latest(&a_name);
 
         Ok(Self {
+            options,
             game_name,
             run_name,
             run_directory,
             model_factory,
-            options
+            latest_model,
+            game_engine
         })
     }
 
@@ -83,7 +111,9 @@ where
         // create a net
         // get number of games left to play
 
+
         loop {
+            self_play::self_play(self.game_engine, &self.latest_model).unwrap();
             // load the net
             // play n games
             // train
@@ -120,7 +150,7 @@ where
     }
 
     fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
-        let run_directory = SelfLearn::<F>::get_run_directory(game_name, run_name);
+        let run_directory = SelfLearn::<S,A,E,M,F>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);
@@ -169,30 +199,3 @@ where
 //         println!("{:?}", self_play_metrics);
 //         println!("TIME: {}",time);
 //     }
-
-
-// // @TODO: Improve error handling
-// fn set_python_paths() {
-//     let gil = Python::acquire_gil();
-//     let py = gil.python();
-
-//     let current_dir_result = env::current_dir().unwrap();
-//     let env_path = current_dir_result.to_str().ok_or("Path not valid").unwrap();
-//     println!("Env Path: {}", env_path);
-
-//     let sys = py.import("sys").unwrap();
-//     let path = sys.get("path").unwrap().downcast_ref::<PyList>().unwrap();
-
-//     path.call_method("append", (env_path.to_owned(), ), None).unwrap();
-//     path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None).unwrap();
-//     path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None).unwrap();
-//     path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None).unwrap();
-// }
-
-// fn create_model() {
-//     let gil = Python::acquire_gil();
-//     let py = gil.python();
-//     let c4 = py.import("c4_model").unwrap();
-
-//     c4.call("create_model", (), None).unwrap();
-// }

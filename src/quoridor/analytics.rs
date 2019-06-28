@@ -3,7 +3,10 @@ use super::engine::{GameState};
 use super::action::{Action};
 use super::engine::Engine;
 
-impl GameAnalytics<GameState, Action> for Engine {
+impl GameAnalytics for Engine {
+    type Action = Action;
+    type State = GameState;
+
     fn get_state_analysis(&self, _: &GameState) -> GameStateAnalysis<Action> {
         GameStateAnalysis::new(
             vec!(ActionWithPolicy::new(

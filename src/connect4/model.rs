@@ -20,7 +20,10 @@ impl Model {
 
 impl model::Model for Model {}
 
-impl GameAnalytics<GameState, Action> for Model {
+impl GameAnalytics for Model {
+    type Action = Action;
+    type State = GameState;
+
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position

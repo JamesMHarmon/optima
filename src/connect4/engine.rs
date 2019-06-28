@@ -111,7 +111,10 @@ impl Engine {
     pub fn new() -> Self { Self {} }
 }
 
-impl GameEngine<GameState, Action> for Engine {
+impl GameEngine for Engine {
+    type Action = Action;
+    type State = GameState;
+
     fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
         match action {
             Action::DropPiece(column) => game_state.drop_piece(*column as usize)

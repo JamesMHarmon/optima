@@ -365,7 +365,10 @@ impl GameState {
 
 pub struct Engine {}
 
-impl GameEngine<GameState, Action> for Engine {
+impl GameEngine for Engine {
+    type Action = Action;
+    type State = GameState;
+
     fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
         game_state.take_action(Action::MovePawn(1))
     }

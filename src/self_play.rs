@@ -17,8 +17,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M) -> Result<SelfP
     where
     S: GameState,
     A: Clone + Eq,
-    E: 'a + GameEngine<S, A>,
-    M: 'a + GameAnalytics<S, A>
+    E: 'a + GameEngine<State=S, Action=A>,
+    M: 'a + GameAnalytics<State=S, Action=A>
 {
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);
