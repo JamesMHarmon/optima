@@ -1,28 +1,90 @@
+#[macro_use]
+extern crate clap;
 extern crate quoridor;
+
+use clap::App;
 
 use quoridor::connect4::engine::{Engine as Connect4Engine};
 use quoridor::connect4::model_factory::{ModelFactory as Connect4ModelFactory};
-use quoridor::self_learn::{SelfLearn};
+use quoridor::self_learn::{SelfLearn,SelfLearnOptions};
 
-fn main() -> Result<(), &'static str>{
-    let model_factory = Connect4ModelFactory::new();
-    let game_engine = Connect4Engine::new();
+const C4_NAME: &str = "Connect4";
 
-    SelfLearn::<_,_,Connect4Engine,_,_>::create(
-        "Connect4".to_string(), 
-        "Run-2".to_string(),
-        &model_factory
-    ).ok();
+fn main() -> Result<(), &'static str> {
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
 
-    let runner = SelfLearn::from(
-        "Connect4".to_string(),
-        "Run-2".to_string(),
-        model_factory,
-        &game_engine
-    );
+    if let Some(matches) = matches.subcommand_matches("init") {
+        // let game_name = matches.value_of("game").unwrap();
+        let run_name = matches.value_of("run").unwrap();
+        let options = get_options_from_matches(matches)?;
 
-    runner?.learn()?;
+        return create_connect4(run_name, &options);
+    } else if let Some(matches) = matches.subcommand_matches("run") {
+        // let game_name = matches.value_of("game").unwrap();
+        let run_name = matches.value_of("run").unwrap();
+
+        return run_connect4(run_name);
+    }
 
     Ok(())
 }
 
+fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'static str> {
+    let model_factory = Connect4ModelFactory::new();
+
+    SelfLearn::<_,_,Connect4Engine,_,_>::create(
+        C4_NAME.to_owned(),
+        run_name.to_owned(),
+        &model_factory,
+        options
+    )
+}
+
+fn run_connect4(run_name: &str) -> Result<(), &'static str> {
+    let model_factory = Connect4ModelFactory::new();
+    let game_engine = Connect4Engine::new();
+
+    let mut runner = SelfLearn::from(
+        C4_NAME.to_owned(),
+        run_name.to_owned(),
+        model_factory,
+        &game_engine
+    )?;
+
+    runner.learn()
+}
+
+fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptions, &'static str> {
+    let mut options = SelfLearnOptions {
+        number_of_games_per_net: 32_000,
+        moving_window_size: 500_000,
+        train_ratio: 0.9,
+        train_batch_size: 512,
+        epochs: 2,
+        learning_rate: 0.001,
+        policy_loss_weight: 1.0,
+        value_loss_weight: 0.5,
+        temperature: 1.0,
+        visits: 800,
+        cpuct: 4.0,
+        number_of_filters: 64,
+        number_of_residual_blocks: 5
+    };
+
+    if let Some(number_of_games_per_net) = matches.value_of("number_of_games_per_net") { options.number_of_games_per_net = number_of_games_per_net.parse().map_err(|_| "Could not parse number_of_games_per_net")? };
+    if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse().map_err(|_| "Could not parse moving_window_size")? };
+    if let Some(train_ratio) = matches.value_of("train_ratio") { options.train_ratio = train_ratio.parse().map_err(|_| "Could not parse train_ratio")? };
+    if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse().map_err(|_| "Could not parse train_batch_size")? };
+    if let Some(epochs) = matches.value_of("epochs") { options.epochs = epochs.parse().map_err(|_| "Could not parse epochs")? };
+    if let Some(learning_rate) = matches.value_of("learning_rate") { options.learning_rate = learning_rate.parse().map_err(|_| "Could not parse learning_rate")? };
+    if let Some(policy_loss_weight) = matches.value_of("policy_loss_weight") { options.policy_loss_weight = policy_loss_weight.parse().map_err(|_| "Could not parse policy_loss_weight")? };
+    if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse().map_err(|_| "Could not parse value_loss_weight")? };
+    if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse().map_err(|_| "Could not parse temperature")? };
+    if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse().map_err(|_| "Could not parse visits")? };
+    if let Some(cpuct) = matches.value_of("cpuct") { options.cpuct = cpuct.parse().map_err(|_| "Could not parse cpuct")? };
+    if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse().map_err(|_| "Could not parse number_of_filters")? };
+    if let Some(number_of_residual_blocks) = matches.value_of("number_of_residual_blocks") { options.number_of_residual_blocks = number_of_residual_blocks.parse().map_err(|_| "Could not parse number_of_residual_blocks")? };
+
+    Ok(options)
+}

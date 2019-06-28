@@ -1,0 +1,107 @@
+name: quoridor-engine
+version: "0.1"
+author: James Harmon <JamesMHarmon@gmail.com>
+about: AlphaZero in Rust
+settings:
+    - ArgRequiredElseHelp
+
+subcommands:
+    - init:
+        about: Initializes a new run of a game.
+        args:
+            - game:
+                required: true
+                long: game
+                short: g
+                takes_value: true
+                value_name: GAME NAME
+                help: Name of the game to run.
+            - run:
+                required: true
+                long: run
+                short: r
+                takes_value: true
+                value_name: RUN NAME
+                help: Name of the run, cannot contain '_'.
+            - number_of_games_per_net:
+                long: number_of_games_per_net
+                takes_value: true
+                help: "[Default: 32,000] The number of games to self play until a new net is generated."
+                value_name: SIZE
+            - moving_window_size:
+                long: moving_window_size
+                takes_value: true
+                help: "[Default: 500,000] How many games to go back and sample from when training a new net."
+                value_name: SIZE
+            - train_ratio:
+                long: train_ratio
+                takes_value: true
+                help: "[Default: 0.9] The ratio of training to test data when training a new net."
+                value_name: RATIO
+            - train_batch_size:
+                long: train_batch_size
+                takes_value: true
+                help: "[Default: 512] The batch size of sample games to provide a net during training."
+                value_name: SIZE
+            - epochs:
+                long: epochs
+                takes_value: true
+                help: "[Default: 2] The number of epochs to use when training a net."
+                value_name: EPOCHS
+            - learning_rate:
+                long: learning_rate
+                takes_value: true
+                help: "[Default: 0.001] The learning rate to use when training a net."
+                value_name: RATE
+            - policy_loss_weight:
+                long: policy_loss_weight
+                takes_value: true
+                help: "[Default: 1.0] The weight of the policy loss to apply compared to the value loss."
+                value_name: LOSS
+            - value_loss_weight:
+                long: value_loss_weight
+                takes_value: true
+                help: "[Default: 0.5] The weight of the value loss to apply compared to the policy loss."
+                value_name: LOSS
+            - temperature:
+                long: temperature
+                takes_value: true
+                help: "[Default: 1.0] The temperature to use during self play games. The higher the temp, the more exploration."
+                value_name: TEMP
+            - visits:
+                long: visits
+                takes_value: true
+                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take."
+                value_name: VISITS
+            - cpuct:
+                long: cpuct
+                takes_value: true
+                help: "[Default: 4.0] The cpuct value within the MCTS algorithm."
+                value_name: CPUCT
+            - number_of_filters:
+                long: number_of_filters
+                takes_value: true
+                help: "[Default: 64] The number of number of filters to use within a convolution layer as part of the net."
+                value_name: NUM
+            - number_of_residual_blocks:
+                long: number_of_residual_blocks
+                takes_value: true
+                help: "[Default: 5] The number of residual blocks to use as part of the net."
+                value_name: NUM
+    - run:
+        about: Continues on an existing run.
+        args:
+            - game:
+                required: true
+                short: g
+                long: game
+                takes_value: true
+                value_name: GAME NAME
+                help: Name of the game to run.
+            - run:
+                required: true
+                short: r
+                long: run
+                takes_value: true
+                value_name: RUN NAME
+                help: Name of the run, cannot contain '_'.
