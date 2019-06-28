@@ -4,7 +4,8 @@ use uuid::Uuid;
 use super::game_state::GameState;
 use super::analytics::GameAnalytics;
 use super::rng;
-use super::mcts::{DirichletOptions,MCTS,MCTSOptions,NodeMetrics};
+use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
+use super::node_metrics::{NodeMetrics};
 use super::engine::GameEngine;
 
 #[derive(Serialize, Deserialize, Debug)]

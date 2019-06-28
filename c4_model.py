@@ -1,6 +1,7 @@
 from keras.models import load_model
 from os import listdir
 from os.path import isfile, join
+import os
 import numpy as np
 import keras
 import math
@@ -34,9 +35,8 @@ def create(name):
         num_blocks=5,
         input_shape=(6, 7, 2)
     )
-    models[name] = model
-    path = get_model_path(name)
-    model.save(path)
+    
+    save_model(name, model)
 
 def get_latest(name):
     directory_path = get_model_directory(name)
@@ -46,6 +46,16 @@ def get_latest(name):
     return onlynets[0][:-3]
 
 ## PRIVATE...
+
+def save_model(name, model):
+    models[name] = model
+    directory = get_model_directory(name)
+    path = get_model_path(name)
+    
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    
+    model.save(path)
 
 def get_or_load_model(name):
     path = get_model_path(name)

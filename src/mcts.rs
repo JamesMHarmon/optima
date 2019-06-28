@@ -1,11 +1,11 @@
 use rand::{ Rng };
 use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
-use serde::{Serialize, Deserialize};
 
 use super::game_state::GameState;
 use super::engine::{GameEngine};
 use super::analytics::{ActionWithPolicy,GameAnalytics};
+use super::node_metrics::{NodeMetrics};
 
 type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
 type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
@@ -78,14 +78,6 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-#[derive(Serialize, Deserialize, Debug)]
-pub struct NodeMetrics<A> {
-    pub visits: usize,
-    pub W: f64,
-    pub children_visits: Vec<(A, usize)>
-}
-
-#[allow(non_snake_case)]
 impl<'a, S, A, E, M, R> MCTS<'a, S, A, E, M, R>
 where
     S: GameState,
@@ -118,7 +110,7 @@ where
         let rng = &mut self.options.rng;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let mut root_node = MCTS::<S, A, E, M, R>::get_or_create_root_node(root, starting_game_state, game_engine, analytics);
+        let mut root_node = MCTS::<S, A, E, M, R>::get_or_create_root_node(root, starting_game_state, analytics);
         let mut max_depth: usize = 0;
 
         Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
@@ -280,22 +272,19 @@ where
 
     fn expand_leaf(game_state: &S, action: &A, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
-        MCTS::<S, A, E, M, R>::analyse_and_create_node(new_game_state, game_engine, analytics)
+        MCTS::<S, A, E, M, R>::analyse_and_create_node(new_game_state, analytics)
     }
 
     fn get_or_create_root_node(
         root: &'a mut Option<MCTSNode<S, A>>,
         starting_game_state: &mut Option<S>,
-        game_engine: &E,
         analytics: &M
     ) -> &'a mut MCTSNode<S, A> {
         let starting_game_state = starting_game_state.take();
-        let game_engine = game_engine;
 
         root.get_or_insert_with(|| {
             Self::analyse_and_create_node(
                 starting_game_state.expect("Tried to use the same starting game state twice"),
-                game_engine,
                 analytics
             ).0
         })
@@ -303,8 +292,8 @@ where
 
     // Value range is [-1, 1] for the "get_state_analysis" method. However internally for the MCTS a range of
     // [0, 1] is used.
-    fn analyse_and_create_node(game_state: S, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
-        let analysis_result = analytics.get_state_analysis(&game_state); // analytics.get_or_insert(game_state.clone(), || game_engine.get_state_analysis(&game_state));
+    fn analyse_and_create_node(game_state: S, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
+        let analysis_result = analytics.get_state_analysis(&game_state);
 
         let value_score = (analysis_result.value_score + 1.0) / 2.0;
 

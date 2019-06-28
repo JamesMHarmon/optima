@@ -54,7 +54,7 @@ impl SelfPlayPersistance
                 let buf = BufReader::new(file);
                 let games: Vec<SelfPlayMetrics<A>> = buf.lines()
                     .filter_map(|l| l.ok())
-                    .filter_map(|l| serde_json::from_str(&l).ok())
+                    .map(|l| serde_json::from_str(&l).unwrap())
                     .collect();
 
                 Ok(games)
