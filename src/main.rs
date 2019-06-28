@@ -68,6 +68,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         temperature: 1.0,
         visits: 800,
         cpuct: 4.0,
+        alpha: 0.3,
+        epsilon: 0.25,
         number_of_filters: 64,
         number_of_residual_blocks: 5
     };
@@ -83,6 +85,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
     if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse().map_err(|_| "Could not parse temperature")? };
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse().map_err(|_| "Could not parse visits")? };
     if let Some(cpuct) = matches.value_of("cpuct") { options.cpuct = cpuct.parse().map_err(|_| "Could not parse cpuct")? };
+    if let Some(alpha) = matches.value_of("alpha") { options.alpha = alpha.parse().map_err(|_| "Could not parse alpha")? };
+    if let Some(epsilon) = matches.value_of("epsilon") { options.epsilon = epsilon.parse().map_err(|_| "Could not parse epsilon")? };
     if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse().map_err(|_| "Could not parse number_of_filters")? };
     if let Some(number_of_residual_blocks) = matches.value_of("number_of_residual_blocks") { options.number_of_residual_blocks = number_of_residual_blocks.parse().map_err(|_| "Could not parse number_of_residual_blocks")? };
 

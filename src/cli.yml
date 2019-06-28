@@ -78,6 +78,16 @@ subcommands:
                 takes_value: true
                 help: "[Default: 4.0] The cpuct value within the MCTS algorithm."
                 value_name: CPUCT
+            - alpha:
+                long: alpha
+                takes_value: true
+                help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise."
+                value_name: alpha
+            - epsilon:
+                long: epsilon
+                takes_value: true
+                help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise."
+                value_name: epsilon
             - number_of_filters:
                 long: number_of_filters
                 takes_value: true

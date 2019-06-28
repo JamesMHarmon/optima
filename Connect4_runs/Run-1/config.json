@@ -10,6 +10,8 @@
   "temperature": 1.0,
   "visits": 800,
   "cpuct": 4.0,
+  "alpha": 0.3,
+  "epsilon": 0.25,
   "number_of_filters": 128,
   "number_of_residual_blocks": 5
 }

@@ -43,6 +43,8 @@ pub struct SelfLearnOptions {
     pub temperature: f64,
     pub visits: usize,
     pub cpuct: f64,
+    pub alpha: f64,
+    pub epsilon: f64,
     pub number_of_filters: usize,
     pub number_of_residual_blocks: usize
 }
@@ -101,8 +103,8 @@ where
         let options = &self.options;
         let number_of_games_per_net = options.number_of_games_per_net;
         let self_play_options = SelfPlayOptions {
-            epsilon: 0.0,
-            alpha: 0.0,
+            epsilon: options.epsilon,
+            alpha: options.alpha,
             cpuct: options.cpuct,
             temperature: options.temperature,
             visits: options.visits
