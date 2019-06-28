@@ -11,7 +11,7 @@ import model_sen
 
 models = {}
 
-def analyse(name, p1, p2):
+def predict(name, p1, p2):
     model = get_or_load_model(name)
     input = convertGameStateToInput(p1, p2)
 
@@ -43,7 +43,7 @@ def get_latest(name):
     onlyfiles = [f for f in listdir(directory_path) if isfile(join(directory_path, f))]
     onlynets = [f for f in onlyfiles if f.startswith(name[:-5]) and f.endswith('.h5')]
     onlynets.sort(reverse=True)
-    return onlynets[0]
+    return onlynets[0][:-3]
 
 ## PRIVATE...
 

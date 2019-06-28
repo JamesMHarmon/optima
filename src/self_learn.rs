@@ -117,6 +117,7 @@ where
             // load the net
             // play n games
             // train
+            println!("Played a game");
         }
     }
 

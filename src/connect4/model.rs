@@ -72,7 +72,7 @@ fn predict(model_name: &str, model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f6
     let c4 = py.import(c4_model_module_name)?;
 
     let result: (f64, Vec<f64>) = c4.call(
-        "analyse",
+        "predict",
         (model_name, model_input.0.to_owned(), model_input.1.to_owned()),
         None
     )?.extract()?;
