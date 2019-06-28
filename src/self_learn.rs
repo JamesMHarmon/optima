@@ -1,15 +1,16 @@
+use std::io::Write;
+use std::io::Read;
+use std::fs::{create_dir_all, OpenOptions};
+use std::path::{Path,PathBuf};
+use serde::{Serialize, Deserialize};
+use serde::de::DeserializeOwned;
+
 use super::analytics::GameAnalytics;
 use super::engine::GameEngine;
 use super::game_state::GameState;
 use super::self_play;
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory};
-
-use std::io::Write;
-use std::io::Read;
-use std::fs::{create_dir_all, OpenOptions};
-use std::path::{Path,PathBuf};
-use serde::{Serialize, Deserialize};
 
 // game/run/iteration/
 //                  ./games
@@ -51,7 +52,7 @@ pub struct SelfLearnOptions {
 impl<'a, S, A, E, M, F> SelfLearn<'a, S, A, E, M, F>
 where
     S: GameState,
-    A: Clone + Eq + Serialize,
+    A: Clone + Eq + DeserializeOwned + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model + GameAnalytics<State=S,Action=A>,
     F: ModelFactory<M=M>
@@ -109,39 +110,40 @@ where
         })
     }
 
-    pub fn learn(&self) -> Result<(), &'static str> {
-        // load the latest net
-        // load the latest games
-
-        
-
+    pub fn learn(&mut self) -> Result<(), &'static str> {
         loop {
             let model_name = self.latest_model.get_name();
             let mut self_play_persistance = SelfPlayPersistance::new(
                 &self.run_directory,
-                model_name
+                model_name.to_owned()
             )?;
 
-            // while num_games < target {
-            loop {
+            let mut games = self_play_persistance.read::<A>()?;
+            let number_of_games_per_net = self.options.number_of_games_per_net;
 
+            while games.len() < number_of_games_per_net {
                 let self_play_metrics = self_play::self_play(self.game_engine, &self.latest_model).unwrap();
-                self_play_persistance.write(self_play_metrics)?;
-
-                println!("Played a game");
+                self_play_persistance.write(&self_play_metrics)?;
+                games.push(self_play_metrics);
+                println!("Played a game: {}", games.len());
             }
 
-            // train new net.
-            // load latest net
+            // @TODO: Train a new model here.
+            let new_model_name = Self::increment_model_name(&model_name);
+            self.latest_model = self.model_factory.create(&new_model_name);
         }
-    }
-
-    fn get_number_of_games_to_play() {
-
     }
 
     fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {
         format!("{}_{}_{:0>5}", game_name, run_name, model_number)
+    }
+
+    fn increment_model_name(name: &str) -> String {
+        let len = name.len();
+        let head = &name[0..len-5];
+        let tail = &name[len-5..];
+        let count = tail.parse::<usize>().expect("Could not parse num from name");
+        format!("{}{:0>5}", head, count + 1)
     }
 
     fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
