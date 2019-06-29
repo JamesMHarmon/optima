@@ -29,11 +29,11 @@ def convertGameStateToInput(p1, p2):
     p2_board = p2.reshape(6, 7)
     return np.stack((p1_board, p2_board), axis=2)
 
-def create(name):
+def create(name, num_filters=64, num_blocks=5, input_shape=(6, 7, 2)):
     model = model_sen.compile_model(
-        num_filters=64,
-        num_blocks=5,
-        input_shape=(6, 7, 2)
+        num_filters,
+        num_blocks,
+        input_shape
     )
     
     save_model(name, model)

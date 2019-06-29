@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
 
-use super::super::model;
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
+use super::super::model::{self,TrainOptions};
+use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
 use super::action::{Action};
 
@@ -19,8 +20,18 @@ impl Model {
 }
 
 impl model::Model for Model {
+    type State = GameState;
+    type Action = Action;
+
     fn get_name(&self) -> &str {
         &self.name
+    }
+
+    fn train(&self, target_name: &str, sample_metrics: Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
+    {
+        // TODO: Implement training of the model.
+
+        Model::new(target_name.to_owned())
     }
 }
 

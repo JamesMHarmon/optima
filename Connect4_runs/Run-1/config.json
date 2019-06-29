@@ -1,6 +1,6 @@
 {
-  "number_of_games_per_net": 1000,
-  "moving_window_size": 10000,
+  "number_of_games_per_net": 32000,
+  "moving_window_size": 500000,
   "train_ratio": 0.9,
   "train_batch_size": 512,
   "epochs": 2,
@@ -12,6 +12,6 @@
   "cpuct": 4.0,
   "alpha": 0.3,
   "epsilon": 0.25,
-  "number_of_filters": 128,
+  "number_of_filters": 64,
   "number_of_residual_blocks": 5
 }

@@ -1,10 +1,10 @@
 use std::env;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList};
+use pyo3::types::{PyList,IntoPyDict};
 
 use super::model::{Model};
-use super::super::model::{self, TrainOptions};
+use super::super::model;
 
 pub struct ModelFactory {}
 
@@ -36,11 +36,19 @@ impl ModelFactory {
 impl model::ModelFactory for ModelFactory {
     type M = Model;
 
-    fn create(&self, name: &str) -> Model {
+    fn create(&self, name: &str, num_filters: usize, num_blocks: usize) -> Model {
         let gil = Python::acquire_gil();
         let py = gil.python();
         let c4 = py.import("c4_model").unwrap();
-        c4.call("create", (name,), None).unwrap();
+
+        let locals = [
+            ("num_filters", num_filters),
+            ("num_blocks", num_blocks)
+        ].into_py_dict(py);
+
+        locals.set_item("input_shape", (6, 7, 2)).unwrap();
+
+        c4.call("create", (name,), Some(&locals)).unwrap();
 
         Model::new(name.to_owned())
     }
@@ -52,12 +60,5 @@ impl model::ModelFactory for ModelFactory {
         let name: String = c4.call("get_latest", (name,), None).unwrap().extract().unwrap();
 
         Model::new(name)
-    }
-
-    fn train(&self, from_name: &str, target_name: &str, options: &TrainOptions) -> Model
-    {
-        // TODO: Implement training of the model.
-
-        Model::new(target_name.to_owned())
     }
 }

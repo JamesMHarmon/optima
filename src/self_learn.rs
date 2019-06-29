@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
@@ -8,9 +9,9 @@ use serde::de::DeserializeOwned;
 use super::analytics::GameAnalytics;
 use super::engine::GameEngine;
 use super::game_state::GameState;
-use super::self_play::{self,SelfPlayOptions};
+use super::self_play::{self,SelfPlayOptions,SelfPlaySample};
 use super::self_play_persistance::{SelfPlayPersistance};
-use super::model::{Model, ModelFactory};
+use super::model::{Model, ModelFactory,TrainOptions};
 
 // game/run/iteration/
 //                  ./games
@@ -54,7 +55,7 @@ where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model + GameAnalytics<State=S,Action=A>,
+    M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>,
     F: ModelFactory<M=M>
 {
     pub fn create(
@@ -74,7 +75,7 @@ where
         SelfLearn::<S,A,E,M,F>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_name = Self::get_model_name(&game_name, &run_name, 1);
 
-        model_factory.create(&model_name);
+        model_factory.create(&model_name, options.number_of_filters, options.number_of_residual_blocks);
 
         Ok(())
     }
@@ -111,25 +112,68 @@ where
         };
 
         loop {
-            let model_name = self.latest_model.get_name();
+            let latest_model = &self.latest_model;
+            let model_name = latest_model.get_name();
             let mut self_play_persistance = SelfPlayPersistance::new(
                 &self.run_directory,
                 model_name.to_owned()
             )?;
 
-            let mut games = self_play_persistance.read::<A>()?;
+            let mut num_games = self_play_persistance.read::<A>()?.len();
 
-            while games.len() < number_of_games_per_net {
-                let self_play_metrics = self_play::self_play(self.game_engine, &self.latest_model, &self_play_options).unwrap();
+            while num_games < number_of_games_per_net {
+                let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).unwrap();
                 self_play_persistance.write(&self_play_metrics)?;
-                games.push(self_play_metrics);
-                println!("Played a game: {}", games.len());
+                num_games += 1;
+                println!("Played a game: {}", num_games);
             }
 
-            // @TODO: Train a new model here.
-            let new_model_name = Self::increment_model_name(&model_name);
-            self.latest_model = self.model_factory.create(&new_model_name);
+            self.latest_model = Self::train_model(
+                latest_model,
+                &self_play_persistance,
+                &self.game_engine,
+                options
+            )?;
         }
+    }
+
+    fn train_model(model: &M, self_play_persistance: &SelfPlayPersistance, game_engine: &E, options: &SelfLearnOptions) -> Result<M, &'static str> {
+        let source_model_name = &model.get_name();
+        let new_model_name = Self::increment_model_name(source_model_name);
+        let metric_iter = self_play_persistance.read_all_reverse_iter::<A>()?;
+        let mut rng = rand::thread_rng();
+
+        let sample_metrics: Vec<SelfPlaySample<S, A>> = metric_iter
+            .take(options.number_of_games_per_net)
+            .map(|m| {
+                let score = m.score();
+                let mut analysis = m.take_analysis();
+                let l = analysis.len();
+                let i = rng.gen_range(0, l);
+                let sample_is_p1 = i % 2 == 0;
+                let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
+                let game_state = analysis.iter().take(i + 1).fold(S::initial(), |s,m| game_engine.take_action(&s, &m.0));
+
+                SelfPlaySample {
+                    game_state,
+                    score,
+                    policy: analysis.remove(i).1
+                }
+            })
+            .collect();
+
+        Ok(model.train(
+            &new_model_name,
+            sample_metrics,
+            &TrainOptions {
+                train_ratio: options.train_ratio,
+                train_batch_size: options.train_batch_size,
+                epochs: options.epochs,
+                learning_rate: options.learning_rate,
+                policy_loss_weight: options.policy_loss_weight,
+                value_loss_weight: options.value_loss_weight
+            }
+        ))
     }
 
     fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {

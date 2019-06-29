@@ -46,6 +46,16 @@ impl SelfPlayPersistance
 
     pub fn read<A: DeserializeOwned>(&self) -> Result<Vec<SelfPlayMetrics<A>>, &'static str> {
         let file_path = Self::get_file_path(&self.games_dir, &self.name);
+        Self::read_metrics_from_file(&file_path)
+    }
+
+    pub fn read_all_reverse_iter<A: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A>, &'static str> {
+        let file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
+
+        Ok(SelfPlayMetricsIterator::new(file_paths))
+    }
+
+    fn read_metrics_from_file<A: DeserializeOwned>(file_path: &Path) -> Result<Vec<SelfPlayMetrics<A>>, &'static str> {
         let file = File::open(file_path);
 
         match file {
@@ -64,5 +74,58 @@ impl SelfPlayPersistance
 
     fn get_file_path(games_dir: &Path, name: &str) -> PathBuf {
         games_dir.join(format!("{}.json", name))
+    }
+
+    fn get_game_files_in_dir(games_dir: &Path) -> Result<Vec<PathBuf>, &'static str> {
+        let file_paths: Vec<PathBuf> = fs::read_dir(games_dir).map_err(|_| "Error reading games_dir")?
+            .filter_map(|e| e.map(|e| e.path()).ok())
+            .filter(|p| p.is_file())
+            .collect();
+
+        Ok(file_paths)
+    }
+}
+
+pub struct SelfPlayMetricsIterator<A>
+where
+    A: DeserializeOwned
+{
+    file_paths: Vec<PathBuf>,
+    metrics: Vec<SelfPlayMetrics<A>>
+}
+
+impl<A> SelfPlayMetricsIterator<A>
+where
+    A: DeserializeOwned
+{
+    pub fn new(file_paths: Vec<PathBuf>) -> Self {
+        Self { file_paths, metrics: Vec::new() }
+    }
+}
+
+impl<A> Iterator for SelfPlayMetricsIterator<A>
+where
+    A: DeserializeOwned
+{
+    type Item = SelfPlayMetrics<A>;
+
+    fn next(&mut self) -> Option<SelfPlayMetrics<A>> {
+        loop {
+            let metric = self.metrics.pop();
+
+            if metric.is_some() {
+                return metric;
+            }
+
+            let file_path = self.file_paths.pop();
+
+            if file_path.is_none() {
+                return None;
+            }
+
+            let metrics = SelfPlayPersistance::read_metrics_from_file(&file_path.unwrap()).unwrap();
+
+            self.metrics = metrics;
+        }
     }
 }
