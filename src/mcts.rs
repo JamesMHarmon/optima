@@ -7,8 +7,8 @@ use super::engine::{GameEngine};
 use super::analytics::{ActionWithPolicy,GameAnalytics};
 use super::node_metrics::{NodeMetrics};
 
-type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
-type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
+pub type Cpuct<'a, S, A> = &'a dyn Fn(&S, &A) -> f64;
+pub type Temp<'a, S> = &'a dyn Fn(&S) -> f64;
 
 pub struct DirichletOptions {
     pub alpha: f64,

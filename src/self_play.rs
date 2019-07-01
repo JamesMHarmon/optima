@@ -4,7 +4,7 @@ use uuid::Uuid;
 use super::game_state::GameState;
 use super::analytics::GameAnalytics;
 use super::rng;
-use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
+use super::mcts::{Cpuct,DirichletOptions,MCTS,MCTSOptions,Temp};
 use super::node_metrics::{NodeMetrics};
 use super::engine::GameEngine;
 
@@ -52,6 +52,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfP
     let game_state: S = S::initial();
     let cpuct = options.cpuct;
     let temperature = options.temperature;
+    let cpuct_fn: Cpuct<S, A> = &|_,_| cpuct;
+    let temp_fn: Temp<S> = &|_| temperature;
 
     let mut mcts = MCTS::new(
         game_state,
@@ -62,8 +64,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfP
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            &|_,_| 4.0,
-            &|_| 1.0,
+            cpuct_fn,
+            temp_fn,
             seedable_rng,
         )
     );
