@@ -16,17 +16,15 @@ use super::model::{Model, ModelFactory,TrainOptions};
 // game/run/iteration/
 //                  ./games
 //                  ./nets
-pub struct SelfLearn<'a, S, A, E, M, F>
+pub struct SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
     A: Clone + Eq + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model + GameAnalytics<State=S,Action=A>,
-    F: ModelFactory<M=M>
+    M: 'a + Model + GameAnalytics<State=S,Action=A>
 {
     options: SelfLearnOptions,
     run_directory: PathBuf,
-    model_factory: F,
     latest_model: M,
     game_engine: &'a E
 }
@@ -50,20 +48,22 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl<'a, S, A, E, M, F> SelfLearn<'a, S, A, E, M, F>
+impl<'a, S, A, E, M> SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize,
     E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>,
-    F: ModelFactory<M=M>
+    M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>
 {
-    pub fn create(
+    pub fn create<F>(
         game_name: String,
         run_name: String,
         model_factory: &F,
         options: &SelfLearnOptions
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), &'static str>
+    where
+        F: ModelFactory<M=M>
+    {
         if game_name.contains("_") {
             return Err("game_name cannot contain any '_' characters");
         }
@@ -72,7 +72,7 @@ where
             return Err("run_name cannot contain any '_' characters");
         }
 
-        SelfLearn::<S,A,E,M,F>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        SelfLearn::<S,A,E,M>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_name = Self::get_model_name(&game_name, &run_name, 1);
 
         model_factory.create(&model_name, options.number_of_filters, options.number_of_residual_blocks);
@@ -80,12 +80,15 @@ where
         Ok(())
     }
 
-    pub fn from(
+    pub fn from<F>(
         game_name: String,
         run_name: String,
         model_factory: F,
         game_engine: &'a E
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, &'static str> 
+    where
+        F: ModelFactory<M=M>
+    {
         let run_directory = Self::get_run_directory(&game_name, &run_name);
         let options = Self::get_config(&run_directory)?;
         let a_name = Self::get_model_name(&game_name, &run_name, 1);
@@ -94,7 +97,6 @@ where
         Ok(Self {
             options,
             run_directory,
-            model_factory,
             latest_model,
             game_engine
         })
@@ -210,7 +212,7 @@ where
     }
 
     fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
-        let run_directory = SelfLearn::<S,A,E,M,F>::get_run_directory(game_name, run_name);
+        let run_directory = SelfLearn::<S,A,E,M>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);

@@ -29,6 +29,7 @@ impl model::Model for Model {
         &self.name
     }
 
+    #[allow(non_snake_case)]
     fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
     {
         let gil = Python::acquire_gil();
