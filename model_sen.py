@@ -75,19 +75,6 @@ def ResNet(num_filters, num_blocks, input_shape):
 
     return model
 
-def compile_model(num_filters, num_blocks, input_shape):
+def create_model(num_filters, num_blocks, input_shape):
     model = ResNet(num_filters, num_blocks, input_shape)
-    # model.summary()
-
-    # y_trains = { "value_head": yv_train, "policy_head": yp_train }
-    # y_tests = { "value_head": yv_test, "policy_head": yp_test }
-    loss_funcs = { "value_head": "mean_squared_error", "policy_head": "categorical_crossentropy" }
-    loss_weights = { "value_head": 0.5, "policy_head": 1.0 }
-
-    model.compile(
-        optimizer=Nadam(),
-        loss=loss_funcs,
-        loss_weights=loss_weights,
-        metrics=['accuracy'])
-
     return model

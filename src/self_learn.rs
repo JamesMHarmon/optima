@@ -144,7 +144,7 @@ where
         let mut rng = rand::thread_rng();
 
         let sample_metrics: Vec<SelfPlaySample<S, A>> = metric_iter
-            .take(options.number_of_games_per_net)
+            .take(options.moving_window_size)
             .map(|m| {
                 let score = m.score();
                 let mut analysis = m.take_analysis();
@@ -164,7 +164,7 @@ where
 
         Ok(model.train(
             &new_model_name,
-            sample_metrics,
+            &sample_metrics,
             &TrainOptions {
                 train_ratio: options.train_ratio,
                 train_batch_size: options.train_batch_size,

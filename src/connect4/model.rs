@@ -1,8 +1,10 @@
 use pyo3::prelude::*;
+use pyo3::types::{PyDict};
 
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
 use super::super::model::{self,TrainOptions};
+use super::super::node_metrics::NodeMetrics;
 use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
 use super::action::{Action};
@@ -27,9 +29,31 @@ impl model::Model for Model {
         &self.name
     }
 
-    fn train(&self, target_name: &str, sample_metrics: Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
+    fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
     {
-        // TODO: Implement training of the model.
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+
+        let c4_model_module_name = "c4_model";
+        let c4 = py.import(c4_model_module_name).unwrap();
+
+        let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
+        let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
+
+        let py_options = PyDict::new(py);
+        py_options.set_item("X", X).unwrap();
+        py_options.set_item("yv", yv).unwrap();
+        py_options.set_item("yp", yp).unwrap();
+
+        py_options.set_item("train_ratio", options.train_ratio).unwrap();
+        py_options.set_item("train_batch_size", options.train_batch_size).unwrap();
+        py_options.set_item("epochs", options.epochs).unwrap();
+        py_options.set_item("learning_rate", options.learning_rate).unwrap();
+        py_options.set_item("policy_loss_weight", options.policy_loss_weight).unwrap();
+        py_options.set_item("value_loss_weight", options.value_loss_weight).unwrap();
+
+        c4.call("train", (&self.name, target_name), Some(py_options)).unwrap();
 
         Model::new(target_name.to_owned())
     }
@@ -54,7 +78,7 @@ impl GameAnalytics for Model {
         // @TODO: Add the cache back
 
         let input = game_state_to_input(game_state);
-        let prediction = predict(&self.name, &input).unwrap();
+        let prediction = predict(&self.name, input).unwrap();
         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
         {
             if *v {
@@ -74,14 +98,28 @@ impl GameAnalytics for Model {
     }
 }
 
-fn game_state_to_input(game_state: &GameState) -> (Vec<f64>, Vec<f64>) {
-    (
-        map_board_to_vec(game_state.p1_piece_board).to_vec(),
-        map_board_to_vec(game_state.p2_piece_board).to_vec()
-    )
+fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
+    let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
+
+    map_board_to_vec(game_state.p1_piece_board).iter()
+        .zip(map_board_to_vec(game_state.p2_piece_board).iter())
+        .enumerate()
+        .fold(result, |mut r, (i, (p1, p2))| {
+            let column_idx = i % 7;
+            
+            if column_idx == 0 {
+                r.push(Vec::with_capacity(7))
+            }
+
+            let column_vec = r.last_mut().unwrap();
+
+            column_vec.push(vec!(*p1, *p2));
+
+            r
+        })
 }
 
-fn predict(model_name: &str, model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f64, Vec<f64>)> {
+fn predict(model_name: &str, model_input: Vec<Vec<Vec<f64>>>) -> PyResult<(f64, Vec<f64>)> {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
@@ -90,11 +128,21 @@ fn predict(model_name: &str, model_input: &(Vec<f64>, Vec<f64>)) -> PyResult<(f6
 
     let result: (f64, Vec<f64>) = c4.call(
         "predict",
-        (model_name, model_input.0.to_owned(), model_input.1.to_owned()),
+        (model_name, model_input),
         None
     )?.extract()?;
 
     Ok(result)
+}
+
+fn map_policy_to_vec_input(policy_metrics: &NodeMetrics<Action>) -> [f64; 7] {
+    let total_visits = policy_metrics.visits as f64 - 1.0;
+    let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
+        match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
+        r
+    });
+
+    result
 }
 
 fn map_board_to_vec(mut board: u64) -> [f64; 42] {

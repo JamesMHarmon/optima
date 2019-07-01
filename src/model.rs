@@ -6,7 +6,7 @@ pub trait Model {
     type Action;
 
     fn get_name(&self) -> &str;
-    fn train(&self, target_name: &str, sample_metrics: Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Self;
+    fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Self;
 }
 
 pub trait ModelFactory
