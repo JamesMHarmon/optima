@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use rand::{ Rng };
 use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
@@ -41,7 +42,7 @@ impl<'a, S, A, R: Rng> MCTSOptions<'a, S, A, R> {
 pub struct MCTS<'a, S, A, E, M, R>
 where
     S: GameState,
-    A: Clone + Eq,
+    A: Clone + Eq + Debug,
     E: GameEngine,
     M: GameAnalytics,
     R: Rng
@@ -55,6 +56,7 @@ where
 
 
 #[allow(non_snake_case)]
+#[derive(Debug)]
 struct MCTSNode<S, A> {
     visits: usize,
     W: f64,
@@ -62,6 +64,7 @@ struct MCTSNode<S, A> {
     children: Vec<MCTSChildNode<S, A>>
 }
 
+#[derive(Debug)]
 struct MCTSChildNode<S, A> {
     action: A,
     policy_score: f64,
@@ -81,7 +84,7 @@ struct StateAnalysisValue {
 impl<'a, S, A, E, M, R> MCTS<'a, S, A, E, M, R>
 where
     S: GameState,
-    A: Clone + Eq,
+    A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + GameAnalytics<State=S,Action=A>,
     R: Rng
@@ -189,8 +192,11 @@ where
     fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, analytics: &M, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
         // If the node is a terminal node.
         if node.children.len() == 0 {
+            let visits = node.visits;
+            let value_score = node.W / visits as f64;
             node.visits += 1;
-            return Ok((StateAnalysisValue { value_score: node.W }, depth));
+            node.W += value_score;
+            return Ok((StateAnalysisValue { value_score }, depth));
         }
 
         let game_state = &node.game_state;
@@ -704,8 +710,8 @@ mod tests {
     }
 
     #[test]
-    fn test_mcts_correctly_handles_terminal_nodes() {
-        let game_state = CountingGameState::from_starting_count(true, 99);
+    fn test_mcts_correctly_handles_terminal_nodes_1() {
+        let game_state = CountingGameState::from_starting_count(false, 99);
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
@@ -723,11 +729,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 796.5200000000013,
+            W: 8.999999999999986,
             children_visits: vec!(
-                (CountingAction::Increment, 273),
-                (CountingAction::Decrement, 168),
-                (CountingAction::Stay, 358)
+                (CountingAction::Increment, 182),
+                (CountingAction::Decrement, 314),
+                (CountingAction::Stay, 303)
             )
         });
     }
@@ -752,11 +758,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 789.7900000000034,
+            W: 784.5800000000062,
             children_visits: vec!(
-                (CountingAction::Increment, 367),
-                (CountingAction::Decrement, 160),
-                (CountingAction::Stay, 272)
+                (CountingAction::Increment, 314),
+                (CountingAction::Decrement, 180),
+                (CountingAction::Stay, 305)
             )
         });
     }

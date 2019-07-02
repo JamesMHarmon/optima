@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
@@ -43,7 +44,7 @@ impl<A> SelfPlayMetrics<A> {
 pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
-    A: Clone + Eq,
+    A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S, Action=A>,
     M: 'a + GameAnalytics<State=S, Action=A>
 {

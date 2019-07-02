@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use rand::Rng;
 use std::io::Write;
 use std::io::Read;
@@ -51,7 +52,7 @@ pub struct SelfLearnOptions {
 impl<'a, S, A, E, M> SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
-    A: Clone + Eq + DeserializeOwned + Serialize,
+    A: Clone + Eq + DeserializeOwned + Serialize + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>
 {
