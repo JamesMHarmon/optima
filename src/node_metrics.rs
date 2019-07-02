@@ -5,7 +5,7 @@ use serde::ser::{Serialize, Serializer,SerializeTuple};
 use serde::de::{Deserialize, Deserializer, Visitor};
 
 #[allow(non_snake_case)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A> {
     pub visits: usize,
     pub W: f64,
