@@ -113,13 +113,13 @@ where
         let analytics = &mut self.analytics;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let mut root_node = MCTS::<S, A, E, M, R>::get_or_create_root_node(root, starting_game_state, analytics);
+        let mut root_node = MCTS::<S,A,E,M,R>::get_or_create_root_node(root, starting_game_state, analytics);
         let mut max_depth: usize = 0;
 
         Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
         while root_node.visits < visits {
-            let (_, md) = Self::recurse_path_and_expand(root_node, game_engine, analytics, cpuct, temp, rng, 0)?;
+            let md = Self::recurse_path_and_expand(root_node, game_engine, analytics, cpuct, temp, rng)?;
 
             if md > max_depth {
                 max_depth = md;
@@ -189,40 +189,56 @@ where
         Ok(matching_action.node.take())
     }
 
-    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, analytics: &M, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R, depth: usize) -> Result<(StateAnalysisValue, usize), &'static str> {
-        // If the node is a terminal node.
-        if node.children.len() == 0 {
+    fn recurse_path_and_expand(node: &mut MCTSNode<S, A>, game_engine: &E, analytics: &M, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R) -> Result<usize, &'static str> {
+        let mut depth = 0;
+        let mut Ws_to_update: Vec<&mut f64> = Vec::new();
+        let mut node = node;
+        let value_score: f64;
+
+        loop {
+            let W = node.W;
             let visits = node.visits;
-            let value_score = node.W / visits as f64;
+            depth += 1;
             node.visits += 1;
-            node.W += value_score;
-            return Ok((StateAnalysisValue { value_score }, depth));
-        }
+            Ws_to_update.push(&mut node.W);
 
-        let game_state = &node.game_state;
-        let Nsb = node.visits;
-        let selected_child_node = MCTS::<S, A, E, M, R>::select_path_using_PUCT(&mut node.children, Nsb, game_state, cpuct, temp, rng)?;
+            // If the node is a terminal node.
+            let children = &mut node.children;
+            if children.len() == 0 {
+                value_score = W / visits as f64;
+                break;
+            }
 
-        let (result, depth) = match &mut selected_child_node.node {
-            None => {
-                let (expanded_node, state_analysis) = MCTS::<S, A, E, M, R>::expand_leaf(
+            let game_state = &node.game_state;
+            let selected_child_node = MCTS::<S,A,E,M,R>::select_path_using_PUCT(children, visits, game_state, cpuct, temp, rng)?;
+
+            if selected_child_node.node.is_none() {
+                let (expanded_node, state_analysis) = MCTS::<S,A,E,M,R>::expand_leaf(
                     game_state,
                     &selected_child_node.action,
                     game_engine,
                     analytics
                 );
-                selected_child_node.node = Some(expanded_node);
-                (state_analysis, depth)
-            },
-            Some(node) => MCTS::<S, A, E, M, R>::recurse_path_and_expand(node, game_engine, analytics, cpuct, temp,rng, depth + 1)?
-        };
 
-        // Reverse the value score since the value is of the child nodes evaluation, which is the other player.
-        let result = StateAnalysisValue { value_score: 1.0 - result.value_score };
+                selected_child_node.node.replace(expanded_node);
 
-        node.visits += 1;
-        node.W += result.value_score;
-        Ok((result, depth))
+                // Flip the score in this case because we are going one node deeper and that viewpoint is from
+                // the next player and not the current node's player.
+                value_score = 1.0 - state_analysis.value_score;
+                break;
+            }
+
+            let mut_node = selected_child_node.node.as_mut();
+            node = mut_node.unwrap();
+        }
+
+        // Reverse the value score at each depth according to the player's valuation perspective.
+        for (i, W) in Ws_to_update.into_iter().rev().enumerate() {
+            let score = if i % 2 == 0 { value_score } else { 1.0 - value_score };
+            *W = *W + score;
+        }
+
+        Ok(depth)
     }
 
     fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: Cpuct<S, A>, temp: Temp<S>, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
@@ -272,7 +288,6 @@ where
 
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
             let Qsa = child_node.as_ref().map_or(0.0, |n| { 1.0 - n.W / n.visits as f64 });
-
             let PUCT = Qsa + Usa;
 
             NodePUCT {
@@ -284,7 +299,7 @@ where
 
     fn expand_leaf(game_state: &S, action: &A, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
-        MCTS::<S, A, E, M, R>::analyse_and_create_node(new_game_state, analytics)
+        MCTS::<S,A,E,M,R>::analyse_and_create_node(new_game_state, analytics)
     }
 
     fn get_or_create_root_node(
@@ -321,7 +336,7 @@ where
                 child_node.policy_score
             }).collect();
 
-            let updated_policy_scores = MCTS::<S, A, E, M, R>::apply_dirichlet_noise(policy_scores, dirichlet, rng);
+            let updated_policy_scores = MCTS::<S,A,E,M,R>::apply_dirichlet_noise(policy_scores, dirichlet, rng);
 
             for (child, policy_score) in node.children.iter_mut().zip(updated_policy_scores.into_iter()) {
                 child.policy_score = policy_score;
