@@ -125,7 +125,7 @@ where
             let mut num_games = self_play_persistance.read::<A>()?.len();
 
             while num_games < number_of_games_per_net {
-                let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap();
+                let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).await?;
                 self_play_persistance.write(&self_play_metrics)?;
                 num_games += 1;
                 println!("Played a game: {}", num_games);

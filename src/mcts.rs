@@ -150,7 +150,7 @@ where
             node.replace(Self::expand_leaf(&root_node.game_state, &action, game_engine, analytics).await.0);
         }
 
-        self.root.replace(node.unwrap());
+        self.root.replace(node.ok_or("Node should have been replaced but found None")?);
 
         Ok(())
     }
@@ -383,8 +383,8 @@ where
             break;
         }
 
-        let mut_node = selected_child_node.node.as_mut();
-        node = mut_node.unwrap();
+        let mut_node = selected_child_node.node.as_mut().ok_or("Expected node but was None")?;
+        node = mut_node;
     }
 
     // Reverse the value score at each depth according to the player's valuation perspective.
