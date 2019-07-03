@@ -233,7 +233,7 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: f64) -> Vec<NodePUCT<'a, S, A>> {
+    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, _game_state: &S, cpuct: f64) -> Vec<NodePUCT<'a, S, A>> {
         nodes.iter_mut().map(|child| {
             let child_node = &child.node;
             let Psa = child.policy_score;
@@ -496,8 +496,7 @@ mod tests {
         type Output = GameStateAnalysis<CountingAction>;
 
         fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let mut s = self;
-            Poll::Ready(s.output.take().unwrap())
+            Poll::Ready(self.get_mut().output.take().unwrap())
         }
     }
 

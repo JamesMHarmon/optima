@@ -118,8 +118,7 @@ impl Future for GameStateAnalysisFuture {
     type Output = GameStateAnalysis<Action>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut s = self;
-        Poll::Ready(s.output.take().unwrap())
+        Poll::Ready(self.get_mut().output.take().unwrap())
     }
 }
 
