@@ -1,3 +1,5 @@
+#![feature(async_await)]
+
 pub mod engine;
 pub mod mcts;
 pub mod analytics;

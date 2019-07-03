@@ -1,8 +1,12 @@
-pub trait GameAnalytics {
+use std::future::Future;
+
+pub trait GameAnalytics
+{
+    type Future: Future<Output=GameStateAnalysis<Self::Action>>;
     type Action;
     type State;
 
-    fn get_state_analysis(&self, game_state: &Self::State) -> GameStateAnalysis<Self::Action>;
+    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
 }
 
 #[derive(Clone)]

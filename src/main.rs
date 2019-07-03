@@ -1,8 +1,11 @@
+#![feature(async_await)]
+
 #[macro_use]
 extern crate clap;
 extern crate quoridor;
 
 use clap::App;
+use tokio::runtime::current_thread;
 
 use quoridor::connect4::engine::{Engine as Connect4Engine};
 use quoridor::connect4::model_factory::{ModelFactory as Connect4ModelFactory};
@@ -24,7 +27,9 @@ fn main() -> Result<(), &'static str> {
         // let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
 
-        return run_connect4(run_name);
+        let result = current_thread::block_on_all(run_connect4(run_name));
+
+        return result;
     }
 
     Ok(())
@@ -41,7 +46,7 @@ fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'s
     )
 }
 
-fn run_connect4(run_name: &str) -> Result<(), &'static str> {
+async fn run_connect4(run_name: &str) -> Result<(), &'static str> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
 
@@ -52,7 +57,7 @@ fn run_connect4(run_name: &str) -> Result<(), &'static str> {
         &game_engine
     )?;
 
-    runner.learn()
+    runner.learn().await
 }
 
 fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptions, &'static str> {

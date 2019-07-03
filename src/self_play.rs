@@ -5,7 +5,7 @@ use uuid::Uuid;
 use super::game_state::GameState;
 use super::analytics::GameAnalytics;
 use super::rng;
-use super::mcts::{Cpuct,DirichletOptions,MCTS,MCTSOptions,Temp};
+use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use super::node_metrics::{NodeMetrics};
 use super::engine::GameEngine;
 
@@ -41,7 +41,7 @@ impl<A> SelfPlayMetrics<A> {
     }
 }
 
-pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
+pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, options: &'a SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -53,8 +53,6 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfP
     let game_state: S = S::initial();
     let cpuct = options.cpuct;
     let temperature = options.temperature;
-    let cpuct_fn: Cpuct<S, A> = &|_,_| cpuct;
-    let temp_fn: Temp<S> = &|_| temperature;
 
     let mut mcts = MCTS::new(
         game_state,
@@ -65,8 +63,8 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfP
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            cpuct_fn,
-            temp_fn,
+            2.0,
+            1.0,
             seedable_rng,
         )
     );
@@ -79,11 +77,11 @@ pub fn self_play<'a, S, A, E, M>(game_engine: &E, analytics: &M, options: &SelfP
     };
 
     while game_engine.is_terminal_state(&state) == None {
-        let search_result = mcts.search(options.visits)?;
+        let search_result = mcts.search(options.visits).await?;
         let action = search_result.0;
         let metrics = mcts.get_root_node_metrics()?;
 
-        mcts.advance_to_action(&action)?;
+        mcts.advance_to_action(action.to_owned()).await?;
         state = game_engine.take_action(&state, &action);
         self_play_metrics.analysis.push((action, metrics));
     };

@@ -1,3 +1,7 @@
+use std::task::Poll;
+use std::task::Context;
+use std::pin::Pin;
+use std::future::Future;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
 
@@ -61,6 +65,7 @@ impl model::Model for Model {
 }
 
 impl GameAnalytics for Model {
+    type Future = GameStateAnalysisFuture;
     type Action = Action;
     type State = GameState;
 
@@ -68,12 +73,12 @@ impl GameAnalytics for Model {
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysis<Action> {
+    fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysisFuture {
         if let Some(value) = game_state.is_terminal() {
-            return GameStateAnalysis::new(
+            return GameStateAnalysisFuture::new(GameStateAnalysis::new(
                 Vec::new(),
                 value
-            )
+            ))
         }
 
         // @TODO: Add the cache back
@@ -92,10 +97,29 @@ impl GameAnalytics for Model {
             }
         }).collect();
 
-        GameStateAnalysis::new(
+        GameStateAnalysisFuture::new(GameStateAnalysis::new(
             valid_actions_with_policies,
             prediction.0
-        )
+        ))
+    }
+}
+
+pub struct GameStateAnalysisFuture {
+    output: Option<GameStateAnalysis<Action>>
+}
+
+impl GameStateAnalysisFuture {
+    fn new(output: GameStateAnalysis<Action>) -> Self {
+        Self { output: Some(output) }
+    }
+}
+
+impl Future for GameStateAnalysisFuture {
+    type Output = GameStateAnalysis<Action>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut s = self;
+        Poll::Ready(s.output.take().unwrap())
     }
 }
 

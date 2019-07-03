@@ -10,9 +10,10 @@ name="quoridor"
 
 [dependencies]
 rand=""
-fnv = ""
-uuid = { version = "0.7", features = ["v4"] }
-pyo3 = "0.7.0"
-serde = { version = "", features = ["derive"] }
-serde_json = "1.0"
-clap = {version = "2.33", features = ["yaml"]}
+fnv=""
+uuid={version="0.7",features=["v4"]}
+pyo3="0.7.0"
+serde={version="",features=["derive"]}
+serde_json="1.0"
+clap={version="2.33",features=["yaml"]}
+tokio={git="https://github.com/tokio-rs/tokio"}
