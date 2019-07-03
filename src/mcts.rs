@@ -398,429 +398,431 @@ where
 
 
 
-// #[cfg(test)]
-// mod tests {
-//     use std::task::{Context,Poll};
-//     use std::pin::Pin;
-//     use std::future::Future;
-//     use uuid::Uuid;
-//     use super::*;
-//     use super::super::rng;
-//     use super::super::game_state::{GameState};
-//     use super::super::analytics::{GameStateAnalysis};
+#[cfg(test)]
+mod tests {
+    use tokio::runtime::current_thread;
+    use std::task::{Context,Poll};
+    use std::pin::Pin;
+    use std::future::Future;
+    use uuid::Uuid;
+    use super::*;
+    use super::super::rng;
+    use super::super::game_state::{GameState};
+    use super::super::analytics::{GameStateAnalysis};
 
-//     #[derive(Hash, PartialEq, Eq, Clone, Debug)]
-//     struct CountingGameState {
-//         pub p1_turn: bool,
-//         pub count: usize
-//     }
+    #[derive(Hash, PartialEq, Eq, Clone, Debug)]
+    struct CountingGameState {
+        pub p1_turn: bool,
+        pub count: usize
+    }
 
-//     impl CountingGameState {
-//         fn from_starting_count(p1_turn: bool, count: usize) -> Self {
-//             Self { p1_turn, count }
-//         }
+    impl CountingGameState {
+        fn from_starting_count(p1_turn: bool, count: usize) -> Self {
+            Self { p1_turn, count }
+        }
 
-//         fn is_terminal_state(&self) -> Option<f64> {
-//             if self.count == 100 {
-//                 Some(if self.p1_turn { 1.0 } else { -1.0 })
-//             } else if self.count == 0 {
-//                 Some(if self.p1_turn { -1.0 } else { 1.0 })
-//             } else {
-//                 None
-//             }
-//         }
-//     }
+        fn is_terminal_state(&self) -> Option<f64> {
+            if self.count == 100 {
+                Some(if self.p1_turn { 1.0 } else { -1.0 })
+            } else if self.count == 0 {
+                Some(if self.p1_turn { -1.0 } else { 1.0 })
+            } else {
+                None
+            }
+        }
+    }
 
-//     impl GameState for CountingGameState {
-//         fn initial() -> Self {
-//             Self { p1_turn: true, count: 50 }
-//         }
-//     }
+    impl GameState for CountingGameState {
+        fn initial() -> Self {
+            Self { p1_turn: true, count: 50 }
+        }
+    }
 
-//     struct CountingGameEngine {
+    struct CountingGameEngine {
 
-//     }
+    }
 
-//     impl CountingGameEngine {
-//         fn new() -> Self { Self {} }
-//     }
+    impl CountingGameEngine {
+        fn new() -> Self { Self {} }
+    }
 
-//     #[derive(PartialEq, Eq, Clone, Debug)]
-//     enum CountingAction {
-//         Increment,
-//         Decrement,
-//         Stay
-//     }
+    #[derive(PartialEq, Eq, Clone, Debug)]
+    enum CountingAction {
+        Increment,
+        Decrement,
+        Stay
+    }
 
-//     impl GameEngine for CountingGameEngine {
-//         type Action = CountingAction;
-//         type State = CountingGameState;
+    impl GameEngine for CountingGameEngine {
+        type Action = CountingAction;
+        type State = CountingGameState;
 
-//         fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
-//             let count = game_state.count;
+        fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
+            let count = game_state.count;
 
-//             let new_count = match action {
-//                 CountingAction::Increment => count + 1,
-//                 CountingAction::Decrement => count - 1,
-//                 CountingAction::Stay => count
-//             };
+            let new_count = match action {
+                CountingAction::Increment => count + 1,
+                CountingAction::Decrement => count - 1,
+                CountingAction::Stay => count
+            };
 
-//             Self::State { p1_turn: !game_state.p1_turn, count: new_count }
-//         }
+            Self::State { p1_turn: !game_state.p1_turn, count: new_count }
+        }
 
-//         fn is_terminal_state(&self, game_state: &Self::State) -> Option<f64> {
-//             game_state.is_terminal_state()
-//         }
-//     }
+        fn is_terminal_state(&self, game_state: &Self::State) -> Option<f64> {
+            game_state.is_terminal_state()
+        }
+    }
 
-//     struct CountingAnalytics {
+    struct CountingAnalytics {
 
-//     }
+    }
 
-//     impl CountingAnalytics {
-//         fn new() -> Self { Self {} }
-//     }
+    impl CountingAnalytics {
+        fn new() -> Self { Self {} }
+    }
 
-//     struct CountingGameStateAnalysisFuture {
-//         value: GameStateAnalysis<CountingAction>
-//     }
+    struct CountingGameStateAnalysisFuture {
+        output: Option<GameStateAnalysis<CountingAction>>
+    }
 
-//     impl CountingGameStateAnalysisFuture {
-//         fn new(value: GameStateAnalysis<CountingAction>) -> Self {
-//             Self { value }
-//         }
-//     }
+    impl CountingGameStateAnalysisFuture {
+        fn new(output: GameStateAnalysis<CountingAction>) -> Self {
+            Self { output: Some(output) }
+        }
+    }
 
-//     impl Future for CountingGameStateAnalysisFuture {
-//         type Output = GameStateAnalysis<CountingAction>;
+    impl Future for CountingGameStateAnalysisFuture {
+        type Output = GameStateAnalysis<CountingAction>;
 
-//         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//             Poll::Ready(self.value)
-//         }
-//     }
+        fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let mut s = self;
+            Poll::Ready(s.output.take().unwrap())
+        }
+    }
 
-//     impl GameAnalytics for CountingAnalytics {
-//         type Action = CountingAction;
-//         type State = CountingGameState;
-//         type Future = CountingGameStateAnalysisFuture;
+    impl GameAnalytics for CountingAnalytics {
+        type Action = CountingAction;
+        type State = CountingGameState;
+        type Future = CountingGameStateAnalysisFuture;
 
-//         fn get_state_analysis(&self, game_state: &Self::State) -> CountingGameStateAnalysisFuture {
-//             let count = game_state.count as f64;
+        fn get_state_analysis(&self, game_state: &Self::State) -> CountingGameStateAnalysisFuture {
+            let count = game_state.count as f64;
 
-//             if let Some(score) = game_state.is_terminal_state() {
-//                 return CountingGameStateAnalysisFuture::new(GameStateAnalysis {
-//                     policy_scores: Vec::new(),
-//                     value_score: score
-//                 });
-//             }
+            if let Some(score) = game_state.is_terminal_state() {
+                return CountingGameStateAnalysisFuture::new(GameStateAnalysis {
+                    policy_scores: Vec::new(),
+                    value_score: score
+                });
+            }
             
-//             CountingGameStateAnalysisFuture::new(GameStateAnalysis {
-//                 policy_scores: vec!(
-//                     ActionWithPolicy {
-//                         action: CountingAction::Increment,
-//                         policy_score: 0.3
-//                     },
-//                     ActionWithPolicy {
-//                         action: CountingAction::Decrement,
-//                         policy_score: 0.3
-//                     },
-//                     ActionWithPolicy {
-//                         action: CountingAction::Stay,
-//                         policy_score: 0.4
-//                     },
-//                 ),
-//                 value_score: (if game_state.p1_turn { count } else { 100.0 - count } / 50.0) - 1.0
-//             })
-//         }
-//     }
+            CountingGameStateAnalysisFuture::new(GameStateAnalysis {
+                policy_scores: vec!(
+                    ActionWithPolicy {
+                        action: CountingAction::Increment,
+                        policy_score: 0.3
+                    },
+                    ActionWithPolicy {
+                        action: CountingAction::Decrement,
+                        policy_score: 0.3
+                    },
+                    ActionWithPolicy {
+                        action: CountingAction::Stay,
+                        policy_score: 0.4
+                    },
+                ),
+                value_score: (if game_state.p1_turn { count } else { 100.0 - count } / 50.0) - 1.0
+            })
+        }
+    }
 
-//     #[test]
-//     fn test_mcts_is_deterministic() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_is_deterministic() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state.to_owned(), &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state.to_owned(), &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         let mut mcts2 = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts2 = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(800).unwrap();
-//         mcts2.search(800).unwrap();
+        current_thread::block_on_all(mcts.search(800)).unwrap();
+        current_thread::block_on_all(mcts2.search(800)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics();
-//         let metrics2 = mcts.get_root_node_metrics();
+        let metrics = mcts.get_root_node_metrics();
+        let metrics2 = mcts.get_root_node_metrics();
 
-//         assert_eq!(metrics, metrics2);
-//     }
+        assert_eq!(metrics, metrics2);
+    }
 
-//     #[test]
-//     fn test_mcts_chooses_best_p1_move() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_chooses_best_p1_move() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         let (action, _) = mcts.search(800).unwrap();
+        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
 
-//         assert_eq!(action, CountingAction::Increment);
-//     }
+        assert_eq!(action, CountingAction::Increment);
+    }
 
-//     #[test]
-//     fn test_mcts_chooses_best_p2_move() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_chooses_best_p2_move() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.advance_to_action(&CountingAction::Increment).unwrap();
+        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
 
-//         let (action, _) = mcts.search(800).unwrap();
+        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
 
-//         assert_eq!(action, CountingAction::Decrement);
-//     }
+        assert_eq!(action, CountingAction::Decrement);
+    }
 
-//     #[test]
-//     fn test_mcts_advance_to_next_works_without_search() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_advance_to_next_works_without_search() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.advance_to_action(&CountingAction::Increment).unwrap();
-//     }
+        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+    }
 
-//     #[test]
-//     fn test_mcts_metrics_returns_accurate_results() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_metrics_returns_accurate_results() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(800).unwrap();
+        current_thread::block_on_all(mcts.search(800)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 800,
-//             W: 400.91999999999973,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 316),
-//                 (CountingAction::Decrement, 178),
-//                 (CountingAction::Stay, 305)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 800,
+            W: 400.91999999999973,
+            children_visits: vec!(
+                (CountingAction::Increment, 316),
+                (CountingAction::Decrement, 178),
+                (CountingAction::Stay, 305)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_weights_policy_initially() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_weights_policy_initially() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(100).unwrap();
+        current_thread::block_on_all(mcts.search(100)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 100,
-//             W: 50.03999999999999,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 33),
-//                 (CountingAction::Decrement, 27),
-//                 (CountingAction::Stay, 39)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 100,
+            W: 50.03999999999999,
+            children_visits: vec!(
+                (CountingAction::Increment, 33),
+                (CountingAction::Decrement, 27),
+                (CountingAction::Stay, 39)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_works_with_single_node() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_works_with_single_node() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(1).unwrap();
+        current_thread::block_on_all(mcts.search(1)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 1,
-//             W: 0.5,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 0),
-//                 (CountingAction::Decrement, 0),
-//                 (CountingAction::Stay, 0)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 1,
+            W: 0.5,
+            children_visits: vec!(
+                (CountingAction::Increment, 0),
+                (CountingAction::Decrement, 0),
+                (CountingAction::Stay, 0)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_works_with_two_nodes() {
-//         let game_state = CountingGameState::initial();
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_works_with_two_nodes() {
+        let game_state = CountingGameState::initial();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(2).unwrap();
+        current_thread::block_on_all(mcts.search(2)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 2,
-//             W: 1.0,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 0),
-//                 (CountingAction::Decrement, 0),
-//                 (CountingAction::Stay, 1)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 2,
+            W: 1.0,
+            children_visits: vec!(
+                (CountingAction::Increment, 0),
+                (CountingAction::Decrement, 0),
+                (CountingAction::Stay, 1)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_works_from_provided_non_initial_game_state() {
-//         let game_state = CountingGameState::from_starting_count(true, 95);
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_works_from_provided_non_initial_game_state() {
+        let game_state = CountingGameState::from_starting_count(true, 95);
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 0.1 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            0.1,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(8000).unwrap();
+        current_thread::block_on_all(mcts.search(8000)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 8000,
-//             W: 6875.169999999976,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 6462),
-//                 (CountingAction::Decrement, 728),
-//                 (CountingAction::Stay, 809)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 8000,
+            W: 6875.169999999976,
+            children_visits: vec!(
+                (CountingAction::Increment, 6462),
+                (CountingAction::Decrement, 728),
+                (CountingAction::Stay, 809)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_correctly_handles_terminal_nodes_1() {
-//         let game_state = CountingGameState::from_starting_count(false, 99);
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_correctly_handles_terminal_nodes_1() {
+        let game_state = CountingGameState::from_starting_count(false, 99);
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(800).unwrap();
+        current_thread::block_on_all(mcts.search(800)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 800,
-//             W: 8.999999999999986,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 182),
-//                 (CountingAction::Decrement, 314),
-//                 (CountingAction::Stay, 303)
-//             )
-//         });
-//     }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 800,
+            W: 8.999999999999986,
+            children_visits: vec!(
+                (CountingAction::Increment, 182),
+                (CountingAction::Decrement, 314),
+                (CountingAction::Stay, 303)
+            )
+        });
+    }
 
-//     #[test]
-//     fn test_mcts_correctly_handles_terminal_nodes_2() {
-//         let game_state = CountingGameState::from_starting_count(true, 98);
-//         let game_engine = CountingGameEngine::new();
-//         let analytics = CountingAnalytics::new();
-//         let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+    #[test]
+    fn test_mcts_correctly_handles_terminal_nodes_2() {
+        let game_state = CountingGameState::from_starting_count(true, 98);
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
 
-//         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
-//             None,
-//             &|_,_| { 1.0 },
-//             &|_| { 0.0 },
-//             rng::create_rng_from_uuid(uuid)
-//         ));
+        let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            1.0,
+            0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
 
-//         mcts.search(800).unwrap();
+        current_thread::block_on_all(mcts.search(800)).unwrap();
 
-//         let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
-//         assert_eq!(metrics, NodeMetrics {
-//             visits: 800,
-//             W: 784.5800000000062,
-//             children_visits: vec!(
-//                 (CountingAction::Increment, 314),
-//                 (CountingAction::Decrement, 180),
-//                 (CountingAction::Stay, 305)
-//             )
-//         });
-//     }
-// }
+        assert_eq!(metrics, NodeMetrics {
+            visits: 800,
+            W: 784.5800000000062,
+            children_visits: vec!(
+                (CountingAction::Increment, 314),
+                (CountingAction::Decrement, 180),
+                (CountingAction::Stay, 305)
+            )
+        });
+    }
+}
