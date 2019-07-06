@@ -16,7 +16,7 @@ pub struct GameStateAnalysis<A> {
 }
 
 impl<A> GameStateAnalysis<A> {
-    pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, value_score: f64) -> Self {
+    pub fn new(value_score: f64, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         GameStateAnalysis {
             policy_scores,
             value_score

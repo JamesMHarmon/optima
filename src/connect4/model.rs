@@ -1,7 +1,9 @@
-use std::task::Poll;
-use std::task::Context;
-use std::pin::Pin;
+use std::task::{Context,Poll,Waker};
+use std::sync::atomic::{AtomicUsize,Ordering};
 use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use chashmap::{CHashMap};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
 
@@ -14,13 +16,15 @@ use super::engine::{GameState};
 use super::action::{Action};
 
 pub struct Model {
-    name: String
+    name: String,
+    batching_model: Rc<BatchingModel>
 }
 
 impl Model {
     pub fn new(name: String) -> Self {
         Self {
-            name
+            name: name.to_owned(),
+            batching_model: Rc::new(BatchingModel::new(name))
         }
     }
 }
@@ -74,43 +78,117 @@ impl GameAnalytics for Model {
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
     fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysisFuture {
-        if let Some(value) = game_state.is_terminal() {
-            return GameStateAnalysisFuture::new(GameStateAnalysis::new(
-                Vec::new(),
-                value
-            ))
+        GameStateAnalysisFuture::new(
+            game_state.to_owned(),
+            self.batching_model.clone()
+        )
+    }
+}
+
+pub struct BatchingModel {
+    model_name: String,
+    num_to_anaylse: std::sync::atomic::AtomicUsize,
+    states_to_analyse: CHashMap<GameState, Vec<Waker>>,
+    state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>
+}
+
+impl BatchingModel {
+    fn new(model_name: String) -> Self {
+        Self {
+            model_name,
+            num_to_anaylse: AtomicUsize::new(0),
+            states_to_analyse: CHashMap::with_capacity(512),
+            state_analysis_cache: CHashMap::with_capacity(2_000_000)
         }
+    }
 
-        // @TODO: Add the cache back
+    fn poll(&self, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
+        if let Some(value) = game_state.is_terminal() {
+            return Poll::Ready(GameStateAnalysis::new(
+                value,
+                Vec::new()
+            ));
+        }
+        
+        let analysis = self.state_analysis_cache.get(game_state);
 
-        let input = game_state_to_input(game_state);
-        let prediction = predict(&self.name, input).unwrap();
-        let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter().zip(prediction.1).enumerate().filter_map(|(i, (v, p))|
-        {
-            if *v {
-                Some(ActionWithPolicy::new(
-                    Action::DropPiece((i + 1) as u64),
-                    p
-                ))
-            } else {
-                None
+        match analysis {
+            Some(analysis) => Poll::Ready(analysis.to_owned()),
+            None => {
+                self.register(game_state, waker.clone());
+                Poll::Pending
             }
-        }).collect();
+        }
+    }
 
-        GameStateAnalysisFuture::new(GameStateAnalysis::new(
-            valid_actions_with_policies,
-            prediction.0
-        ))
+    fn register(&self, game_state: &GameState, waker: Waker) {
+        let num_entries: usize = self.num_to_anaylse.fetch_add(1, Ordering::SeqCst) + 1;
+        println!("Registering: {:?}", game_state);
+
+        if num_entries >= 512 {
+            let entries: Vec<_> = self.states_to_analyse.clone().into_iter().collect();
+            let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
+
+            for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
+                self.state_analysis_cache.insert(s.to_owned(), analysis);
+                for w in wakers {
+                    w.wake();
+                }
+            }
+
+            self.num_to_anaylse.store(0, Ordering::SeqCst);
+        } else {
+            let w1 = waker.clone();
+            self.states_to_analyse.upsert(
+                game_state.to_owned(),
+                || vec!(w1),
+                |v| v.push(waker)
+            );
+        }
+    }
+
+    fn predict(&self, game_states: Vec<&GameState>) -> Vec<GameStateAnalysis<Action>> {
+        let input = game_states_to_input(&game_states);
+        let predictions = predict(&self.model_name, input).unwrap();
+
+        game_states.iter()
+            .zip(predictions.into_iter())
+            .map(|(game_state, (value_score, policy_scores))| {
+                let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
+                    .zip(policy_scores).enumerate()
+                    .filter_map(|(i, (v, p))|
+                    {
+                        if *v {
+                            Some(ActionWithPolicy::new(
+                                Action::DropPiece((i + 1) as u64),
+                                p
+                            ))
+                        } else {
+                            None
+                        }
+                    }).collect();
+
+                GameStateAnalysis {
+                    policy_scores: valid_actions_with_policies,
+                    value_score
+                }
+            })
+            .collect()
     }
 }
 
 pub struct GameStateAnalysisFuture {
-    output: Option<GameStateAnalysis<Action>>
+    game_state: GameState,
+    batching_model: Rc<BatchingModel>
 }
 
 impl GameStateAnalysisFuture {
-    fn new(output: GameStateAnalysis<Action>) -> Self {
-        Self { output: Some(output) }
+    fn new(
+        game_state: GameState,
+        batching_model: Rc<BatchingModel>
+    ) -> Self
+    {
+        Self { game_state, batching_model }
     }
 }
 
@@ -118,8 +196,12 @@ impl Future for GameStateAnalysisFuture {
     type Output = GameStateAnalysis<Action>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(self.get_mut().output.take().unwrap())
+        (*self).batching_model.poll(&self.game_state, cx.waker())
     }
+}
+
+fn game_states_to_input(game_states: &Vec<&GameState>) -> Vec<Vec<Vec<Vec<f64>>>> {
+    game_states.iter().map(|game_state| game_state_to_input(game_state)).collect()
 }
 
 fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
@@ -143,14 +225,14 @@ fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
         })
 }
 
-fn predict(model_name: &str, model_input: Vec<Vec<Vec<f64>>>) -> PyResult<(f64, Vec<f64>)> {
+fn predict(model_name: &str, model_input: Vec<Vec<Vec<Vec<f64>>>>) -> PyResult<Vec<(f64, Vec<f64>)>> {
     let gil = Python::acquire_gil();
     let py = gil.python();
 
     let c4_model_module_name = "c4_model";
     let c4 = py.import(c4_model_module_name)?;
 
-    let result: (f64, Vec<f64>) = c4.call(
+    let result: Vec<(f64, Vec<f64>)> = c4.call(
         "predict",
         (model_name, model_input),
         None

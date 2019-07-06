@@ -125,8 +125,23 @@ where
             let mut num_games = self_play_persistance.read::<A>()?.len();
 
             while num_games < number_of_games_per_net {
-                let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).await?;
-                self_play_persistance.write(&self_play_metrics)?;
+                let mut futures: Vec<_> = Vec::new();
+                
+                for _ in 0..512 {
+                    futures.push(async {
+                        println!("Two");
+                        let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap();
+                        // self_play_persistance.write(&self_play_metrics).unwrap();
+                        println!("{:?}", self_play_metrics);
+                    });
+                }
+
+                println!("One");
+
+                for future in futures {
+                    future.await;
+                }
+
                 num_games += 1;
                 println!("Played a game: {}", num_games);
             }

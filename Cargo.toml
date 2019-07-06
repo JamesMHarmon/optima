@@ -9,6 +9,7 @@ publish = false
 name="quoridor"
 
 [dependencies]
+chashmap=""
 rand=""
 fnv=""
 uuid={version="0.7",features=["v4"]}
