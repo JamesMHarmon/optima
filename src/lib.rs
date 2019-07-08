@@ -16,3 +16,4 @@ pub mod quoridor;
 pub mod connect4;
 
 mod bits;
+mod futures;

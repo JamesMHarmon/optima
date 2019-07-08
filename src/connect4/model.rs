@@ -1,8 +1,7 @@
+use std::sync::Arc;
 use std::task::{Context,Poll,Waker};
-use std::sync::atomic::{AtomicUsize,Ordering};
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 use chashmap::{CHashMap};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
@@ -17,14 +16,29 @@ use super::action::{Action};
 
 pub struct Model {
     name: String,
-    batching_model: Rc<BatchingModel>
+    batching_model: Arc<BatchingModel>
 }
 
 impl Model {
     pub fn new(name: String) -> Self {
+        let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
+        let batching_model_ref = batching_model.clone();
+
+        // @TODO: Add logic to destroy thread.
+        println!("Creating Thread");
+        std::thread::spawn(move || {
+            loop {
+                let num_analysed = batching_model_ref.run_predict();
+
+                if num_analysed == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+        });
+
         Self {
-            name: name.to_owned(),
-            batching_model: Rc::new(BatchingModel::new(name))
+            name,
+            batching_model
         }
     }
 }
@@ -87,19 +101,44 @@ impl GameAnalytics for Model {
 
 pub struct BatchingModel {
     model_name: String,
-    num_to_anaylse: std::sync::atomic::AtomicUsize,
     states_to_analyse: CHashMap<GameState, Vec<Waker>>,
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>
 }
 
 impl BatchingModel {
     fn new(model_name: String) -> Self {
+        let states_to_analyse = CHashMap::with_capacity(512);
+        let state_analysis_cache = CHashMap::with_capacity(2_000_000);
+
         Self {
             model_name,
-            num_to_anaylse: AtomicUsize::new(0),
-            states_to_analyse: CHashMap::with_capacity(512),
-            state_analysis_cache: CHashMap::with_capacity(2_000_000)
+            states_to_analyse,
+            state_analysis_cache
         }
+    }
+
+    fn run_predict(&self) -> usize {
+        let entries: Vec<_> = self.states_to_analyse.clone().into_iter().collect();
+
+        if entries.len() == 0 {
+            return 0;
+        }
+
+        self.states_to_analyse.clear();
+
+        let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
+        let num_analysed = analysis.len();
+
+        println!("Analysed: {}", num_analysed);
+
+        for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
+            self.state_analysis_cache.insert(s.to_owned(), analysis);
+            for w in wakers {
+                w.wake();
+            }
+        }
+
+        num_analysed
     }
 
     fn poll(&self, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
@@ -122,29 +161,12 @@ impl BatchingModel {
     }
 
     fn register(&self, game_state: &GameState, waker: Waker) {
-        let num_entries: usize = self.num_to_anaylse.fetch_add(1, Ordering::SeqCst) + 1;
-        println!("Registering: {:?}", game_state);
-
-        if num_entries >= 512 {
-            let entries: Vec<_> = self.states_to_analyse.clone().into_iter().collect();
-            let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
-
-            for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
-                self.state_analysis_cache.insert(s.to_owned(), analysis);
-                for w in wakers {
-                    w.wake();
-                }
-            }
-
-            self.num_to_anaylse.store(0, Ordering::SeqCst);
-        } else {
-            let w1 = waker.clone();
-            self.states_to_analyse.upsert(
-                game_state.to_owned(),
-                || vec!(w1),
-                |v| v.push(waker)
-            );
-        }
+        let w1 = waker.clone();
+        self.states_to_analyse.upsert(
+            game_state.to_owned(),
+            || vec!(w1),
+            |v| v.push(waker)
+        );
     }
 
     fn predict(&self, game_states: Vec<&GameState>) -> Vec<GameStateAnalysis<Action>> {
@@ -179,13 +201,13 @@ impl BatchingModel {
 
 pub struct GameStateAnalysisFuture {
     game_state: GameState,
-    batching_model: Rc<BatchingModel>
+    batching_model: Arc<BatchingModel>
 }
 
 impl GameStateAnalysisFuture {
     fn new(
         game_state: GameState,
-        batching_model: Rc<BatchingModel>
+        batching_model: Arc<BatchingModel>
     ) -> Self
     {
         Self { game_state, batching_model }

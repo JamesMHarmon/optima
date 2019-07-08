@@ -14,18 +14,19 @@ import model_sen
 
 models = {}
 
-def predict(name, game_position):
+def predict(name, game_positions):
     model = get_or_load_model(name)
-    input = convertGameStateToInput(game_position)
-
+    input = convertGameStatesToInput(game_positions)
     prediction = model.predict(input)
-    value = prediction[0][0][0]
-    policy = prediction[1][0]
 
-    return (value, policy)
+    values = prediction[0].reshape(-1)
+    policies = prediction[1]
+    
+    return list(zip(values, policies))
 
-def convertGameStateToInput(game_position):
-    return np.asarray(game_position).reshape(1, 6, 7, 2)
+
+def convertGameStatesToInput(game_positions):
+    return np.asarray(game_positions).reshape(-1, 6, 7, 2)
 
 def create(name, num_filters, num_blocks, input_shape):
     model = model_sen.create_model(

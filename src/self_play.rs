@@ -51,8 +51,10 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);
     let game_state: S = S::initial();
-    let cpuct = options.cpuct;
-    let temperature = options.temperature;
+
+    // @TODO: Add these back
+    let _cpuct = options.cpuct;
+    let _temperature = options.temperature;
 
     let mut mcts = MCTS::new(
         game_state,

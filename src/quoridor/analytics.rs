@@ -25,7 +25,7 @@ pub struct GameStateAnalysisFuture {
 impl Future for GameStateAnalysisFuture {
     type Output = GameStateAnalysis<Action>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Pending
     }
 }

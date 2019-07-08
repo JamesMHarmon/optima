@@ -13,6 +13,7 @@ use super::game_state::GameState;
 use super::self_play::{self,SelfPlayOptions,SelfPlaySample};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
+use super::futures::join_all::join_all;
 
 // game/run/iteration/
 //                  ./games
@@ -20,7 +21,7 @@ use super::model::{Model, ModelFactory,TrainOptions};
 pub struct SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
-    A: Clone + Eq + Serialize,
+    A: Clone + Eq + Serialize + Unpin,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model + GameAnalytics<State=S,Action=A>
 {
@@ -52,7 +53,7 @@ pub struct SelfLearnOptions {
 impl<'a, S, A, E, M> SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug,
+    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>
 {
@@ -125,24 +126,18 @@ where
             let mut num_games = self_play_persistance.read::<A>()?.len();
 
             while num_games < number_of_games_per_net {
-                let mut futures: Vec<_> = Vec::new();
-                
-                for _ in 0..512 {
-                    futures.push(async {
-                        println!("Two");
-                        let self_play_metrics = self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap();
-                        // self_play_persistance.write(&self_play_metrics).unwrap();
-                        println!("{:?}", self_play_metrics);
-                    });
+                let game_batch_size = 512;
+                let futures: Vec<_> = (0..game_batch_size).map(|_| Box::pin(async {
+                    self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap()
+                })).collect();
+
+                let self_play_metrics = join_all(futures).await;
+
+                for self_play_metric in self_play_metrics {
+                    self_play_persistance.write(&self_play_metric).unwrap();
                 }
 
-                println!("One");
-
-                for future in futures {
-                    future.await;
-                }
-
-                num_games += 1;
+                num_games += game_batch_size;
                 println!("Played a game: {}", num_games);
             }
 
