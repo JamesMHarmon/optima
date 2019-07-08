@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
@@ -16,16 +16,17 @@ use super::action::{Action};
 
 pub struct Model {
     name: String,
-    batching_model: Arc<BatchingModel>
+    batching_model: Arc<BatchingModel>,
+    alive: Arc<AtomicBool>
 }
 
 impl Model {
     pub fn new(name: String) -> Self {
         let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
         let batching_model_ref = batching_model.clone();
+        let alive = Arc::new(AtomicBool::new(true));
+        let alive_ref = alive.clone();
 
-        // @TODO: Add logic to destroy thread.
-        println!("Creating Thread");
         std::thread::spawn(move || {
             loop {
                 let num_analysed = batching_model_ref.run_predict();
@@ -33,12 +34,17 @@ impl Model {
                 if num_analysed == 0 {
                     std::thread::sleep(std::time::Duration::from_millis(1));
                 }
+
+                if !alive_ref.load(Ordering::SeqCst) {
+                    break;
+                }
             }
         });
 
         Self {
             name,
-            batching_model
+            batching_model,
+            alive
         }
     }
 }
@@ -96,6 +102,12 @@ impl GameAnalytics for Model {
             game_state.to_owned(),
             self.batching_model.clone()
         )
+    }
+}
+
+impl Drop for Model {
+    fn drop(&mut self) {
+        self.alive.store(false, Ordering::SeqCst);
     }
 }
 

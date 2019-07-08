@@ -1,4 +1,5 @@
 from keras.models import load_model
+from keras import backend as K 
 from keras.optimizers import Nadam
 from sklearn.model_selection import train_test_split
 from os import listdir
@@ -45,8 +46,8 @@ def get_latest(name):
     return onlynets[0][:-3]
 
 def train(source_model_name, target_model_name, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate, policy_loss_weight, value_loss_weight):
-    path = get_model_path(source_model_name)
-    model = load_model(path)
+    clear()
+    model = get_or_load_model(source_model_name)
 
     X = np.asarray(X)
     yv = np.asarray(yv)
@@ -75,8 +76,14 @@ def train(source_model_name, target_model_name, X, yv, yp, train_ratio, train_ba
           validation_data=(X_test, y_tests))
 
     save_model(target_model_name, model)
+    clear()
 
 ## PRIVATE...
+
+def clear():
+    global models
+    models = {}
+    K.clear_session()
 
 def save_model(name, model):
     models[name] = model
