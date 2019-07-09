@@ -52,21 +52,17 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
     let seedable_rng = rng::create_rng_from_uuid(uuid);
     let game_state: S = S::initial();
 
-    // @TODO: Add these back
-    let _cpuct = options.cpuct;
-    let _temperature = options.temperature;
-
     let mut mcts = MCTS::new(
         game_state,
         game_engine,
         analytics,
-        MCTSOptions::new(
+        MCTSOptions::<S,A,_,_,_>::new(
             Some(DirichletOptions {
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            2.0,
-            1.0,
+            |_,_| options.cpuct,
+            |_| options.temperature,
             seedable_rng,
         )
     );

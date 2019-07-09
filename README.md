@@ -1,3 +1,37 @@
+# Alpha Zero General
+
+## Features
+* **General** - Alpha Zero General exposes trait for any game to be able to plug into.
+* **Performant** - Alpha Zer
+* **Distributed**
+* **Multi-Player** - Most implementations of AZ only allow for two player games.
+
+## TODO:
+* Allow for multiple players
+* Reimpliment CPUCT and Temp functions
+* Add self play evaluation/tournament
+* Make learning distributed
+* Break into a workspace
+* HELP!: Convert from Keras to rust-tensorflow to remove python dependency
+* Add WASM support
+* Add better debug printing
+* Add better error handling
+* Add max moves
+* Document Code
+* Document READMEs
+* Add instructions on how to get it working
+* Dockerize
+
+## References
+
+* https://github.com/tensorflow/rust
+* https://www.groundai.com/project/hyper-parameter-sweep-on-alphazero-general/1
+
+
+
+* Create server client
+            
+            
             // https://github.com/evg-tyurin/alpha-nagibator/blob/master/MCTS.py
             // p = (1-e) * p + e * noise[i] // + 1
             // Checkers

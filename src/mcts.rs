@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use rand::{ Rng };
 use rand::prelude::Distribution;
 use rand::distributions::{Dirichlet,WeightedIndex};
@@ -16,24 +17,31 @@ pub struct DirichletOptions {
     pub epsilon: f64
 }
 
-pub struct MCTSOptions<R>
+pub struct MCTSOptions<S, A, C, T, R>
 where
+    S: GameState,
     R: Rng
 {
     dirichlet: Option<DirichletOptions>,
-    cpuct: f64,
-    temperature: f64,
-    rng: R
+    cpuct: C,
+    temperature: T,
+    rng: R,
+    _phantom_action: PhantomData<*const A>,
+    _phantom_state: PhantomData<*const S>
 }
 
-impl<R> MCTSOptions<R>
+impl<S, A, C, T, R> MCTSOptions<S, A, C, T, R>
 where
-    R: Rng
+    S: GameState,
+    A: Clone + Eq + Debug,
+    C: Fn(&S, &A) -> f64,
+    T: Fn(&S) -> f64,
+    R: Rng,
 {
     pub fn new(
         dirichlet: Option<DirichletOptions>,
-        cpuct: f64,
-        temperature: f64,
+        cpuct: C,
+        temperature: T,
         rng: R
     ) -> Self {
         MCTSOptions {
@@ -41,19 +49,23 @@ where
             cpuct,
             temperature,
             rng,
+            _phantom_action: PhantomData,
+            _phantom_state: PhantomData
         }
     }
 }
 
-pub struct MCTS<'a, S, A, E, M, R>
+pub struct MCTS<'a, S, A, E, M, C, T, R>
 where
     S: GameState,
     A: Clone + Eq + Debug,
     E: GameEngine,
     M: GameAnalytics,
+    C: Fn(&S, &A) -> f64,
+    T: Fn(&S) -> f64,
     R: Rng
 {
-    options: MCTSOptions<R>,
+    options: MCTSOptions<S, A, C, T, R>,
     game_engine: &'a E,
     analytics: &'a M,
     starting_game_state: Option<S>,
@@ -87,19 +99,21 @@ struct StateAnalysisValue {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, R> MCTS<'a, S, A, E, M, R>
+impl<'a, S, A, E, M, C, T, R> MCTS<'a, S, A, E, M, C, T, R>
 where
     S: GameState,
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + GameAnalytics<State=S,Action=A>,
+    C: Fn(&S, &A) -> f64,
+    T: Fn(&S) -> f64,
     R: Rng
 {
     pub fn new(
         game_state: S,
         game_engine: &'a E,
         analytics: &'a M,
-        options: MCTSOptions<R>
+        options: MCTSOptions<S, A, C, T, R>
     ) -> Self {
         MCTS {
             options,
@@ -112,20 +126,20 @@ where
 
     pub async fn search(&mut self, visits: usize) -> Result<(A, usize), &'static str> {
         let game_engine = &self.game_engine;
-        let cpuct = self.options.cpuct;
-        let temp = self.options.temperature;
+        let cpuct = &self.options.cpuct;
+        let temp = &self.options.temperature;
         let dirichlet = &self.options.dirichlet;
         let rng = &mut self.options.rng;
         let analytics = &mut self.analytics;
         let root = &mut self.root;
         let starting_game_state = &mut self.starting_game_state;
-        let mut root_node = MCTS::<S,A,E,M,R>::get_or_create_root_node(root, starting_game_state, analytics).await;
+        let mut root_node = MCTS::<S,A,E,M,C,T,R>::get_or_create_root_node(root, starting_game_state, analytics).await;
         let mut max_depth: usize = 0;
 
         Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
         while root_node.visits < visits {
-            let md = recurse_path_and_expand::<S,A,E,M,R>(root_node, game_engine, analytics, cpuct, temp, rng).await?;
+            let md = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node, game_engine, analytics, cpuct, temp, rng).await?;
 
             if md > max_depth {
                 max_depth = md;
@@ -142,12 +156,12 @@ where
         let analytics = &mut self.analytics;
         let starting_game_state = &mut self.starting_game_state;
         let game_engine = &self.game_engine;
-        let mut root_node = MCTS::<S,A,E,M,R>::get_or_create_root_node(&mut root, starting_game_state, analytics).await;
+        let mut root_node = MCTS::<S,A,E,M,C,T,R>::get_or_create_root_node(&mut root, starting_game_state, analytics).await;
 
         let mut node = Self::take_node_of_action(&mut root_node, &action)?;
 
         if node.is_none() {
-            node.replace(Self::expand_leaf(&root_node.game_state, &action, game_engine, analytics).await.0);
+            node.replace(MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, &action, game_engine, analytics).await.0);
         }
 
         self.root.replace(node.ok_or("Node should have been replaced but found None")?);
@@ -198,10 +212,10 @@ where
         Ok(matching_action.node.take())
     }
 
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: f64, temp: f64, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: &C, temp: &T, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, &'static str> {
         let mut pucts = Self::get_PUCT_for_nodes(nodes, Nsb, game_state, cpuct);
 
-        // let temp = temp(game_state);
+        let temp = temp(game_state);
         let chosen_puct_idx = if temp == 0.0 {
             Self::select_path_using_PUCT_max(&pucts, rng)
         } else {
@@ -233,13 +247,14 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, _game_state: &S, cpuct: f64) -> Vec<NodePUCT<'a, S, A>> {
+    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
+    {
         nodes.iter_mut().map(|child| {
             let child_node = &child.node;
             let Psa = child.policy_score;
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
-            // let cpuct = cpuct(&game_state, &child.action);
+            let cpuct = cpuct(game_state, &child.action);
             let root_Nsb = (Nsb as f64).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
 
@@ -256,7 +271,7 @@ where
 
     async fn expand_leaf(game_state: &'a S, action: &'a A, game_engine: &'a E, analytics: &'a M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(game_state, action);
-        MCTS::<S,A,E,M,R>::analyse_and_create_node(new_game_state, analytics).await
+        MCTS::<S,A,E,M,C,T,R>::analyse_and_create_node(new_game_state, analytics).await
     }
 
     async fn get_or_create_root_node(
@@ -264,14 +279,17 @@ where
         starting_game_state: &'a mut Option<S>,
         analytics: &'a M
     ) -> &'a mut MCTSNode<S, A> {
-        let starting_game_state = starting_game_state.take();
-
-        if root.is_none() {
-            root.replace(Self::analyse_and_create_node(
-                starting_game_state.expect("Tried to use the same starting game state twice"),
-                analytics
-            ).await.0);
+        if let Some(root_node) = root {
+            return root_node;
         }
+
+        let starting_game_state = starting_game_state.take().expect("Tried to use the same starting game state twice");
+        let root_node = MCTS::<S,A,E,M,C,T,R>::analyse_and_create_node(
+                starting_game_state,
+                analytics
+            ).await.0;
+
+        root.replace(root_node);
 
         root.as_mut().unwrap()
     }
@@ -295,7 +313,7 @@ where
                 child_node.policy_score
             }).collect();
 
-            let updated_policy_scores = MCTS::<S,A,E,M,R>::apply_dirichlet_noise(policy_scores, dirichlet, rng);
+            let updated_policy_scores = MCTS::<S,A,E,M,C,T,R>::apply_dirichlet_noise(policy_scores, dirichlet, rng);
 
             for (child, policy_score) in node.children.iter_mut().zip(updated_policy_scores.into_iter()) {
                 child.policy_score = policy_score;
@@ -337,12 +355,21 @@ impl<S, A> MCTSNode<S, A> {
 }
 
 #[allow(non_snake_case)]
-async fn recurse_path_and_expand<'a,S,A,E,M,R>(node: &'a mut MCTSNode<S, A>, game_engine: &'a E, analytics: &'a M, cpuct: f64, temp: f64, rng: &'a mut R) -> Result<usize, &'static str>
+async fn recurse_path_and_expand<'a,S,A,E,M,C,T,R>(
+    node: &'a mut MCTSNode<S, A>,
+    game_engine: &'a E,
+    analytics: &'a M,
+    cpuct: &'a C,
+    temp: &'a T,
+    rng: &'a mut R
+) -> Result<usize, &'static str>
 where
     S: GameState,
     A: Clone + Eq + Debug,
     E: GameEngine<State=S,Action=A>,
     M: GameAnalytics<State=S,Action=A>,
+    C: Fn(&S, &A) -> f64,
+    T: Fn(&S) -> f64,
     R: Rng
 {
     let mut depth = 0;
@@ -365,10 +392,10 @@ where
         }
 
         let game_state = &node.game_state;
-        let selected_child_node = MCTS::<S,A,E,M,R>::select_path_using_PUCT(children, visits, game_state, cpuct, temp, rng)?;
+        let selected_child_node = MCTS::<S,A,E,M,C,T,R>::select_path_using_PUCT(children, visits, game_state, cpuct, temp, rng)?;
 
         if selected_child_node.node.is_none() {
-            let (expanded_node, state_analysis) = MCTS::<S,A,E,M,R>::expand_leaf(
+            let (expanded_node, state_analysis) = MCTS::<S,A,E,M,C,T,R>::expand_leaf(
                 game_state,
                 &selected_child_node.action,
                 game_engine,
@@ -544,15 +571,15 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state.to_owned(), &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
         let mut mcts2 = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -574,8 +601,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -593,8 +620,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -614,8 +641,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -631,8 +658,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -660,8 +687,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -689,8 +716,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -718,8 +745,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -747,8 +774,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            0.1,
-            0.0,
+            |_,_| 0.1,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -776,8 +803,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
@@ -805,8 +832,8 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, &game_engine, &analytics, MCTSOptions::new(
             None,
-            1.0,
-            0.0,
+            |_,_| 1.0,
+            |_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
