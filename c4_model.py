@@ -1,6 +1,7 @@
 from keras.models import load_model
-from keras import backend as K 
 from keras.optimizers import Nadam
+from keras import backend as K 
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from os import listdir
 from os.path import isfile, join
@@ -47,7 +48,8 @@ def get_latest(name):
 
 def train(source_model_name, target_model_name, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate, policy_loss_weight, value_loss_weight):
     clear()
-    model = get_or_load_model(source_model_name)
+    path = get_model_path(source_model_name)
+    model = load_model(path)
 
     X = np.asarray(X)
     yv = np.asarray(yv)
@@ -76,7 +78,6 @@ def train(source_model_name, target_model_name, X, yv, yp, train_ratio, train_ba
           validation_data=(X_test, y_tests))
 
     save_model(target_model_name, model)
-    clear()
 
 ## PRIVATE...
 
@@ -86,20 +87,22 @@ def clear():
     K.clear_session()
 
 def save_model(name, model):
-    models[name] = model
     directory = get_model_directory(name)
     path = get_model_path(name)
-    
+
     if not os.path.exists(directory):
         os.makedirs(directory)
-    
+
     model.save(path)
 
 def get_or_load_model(name):
-    path = get_model_path(name)
-
     if name not in models:
-        models[name] = load_model(path)
+        clear()
+        path = get_model_path(name)
+        model = load_model(path)
+        model._make_predict_function()
+        tf.get_default_graph().finalize()
+        models[name] = model
 
     return models[name]
 

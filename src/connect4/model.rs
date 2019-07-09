@@ -82,7 +82,9 @@ impl model::Model for Model {
         py_options.set_item("policy_loss_weight", options.policy_loss_weight).unwrap();
         py_options.set_item("value_loss_weight", options.value_loss_weight).unwrap();
 
-        c4.call("train", (&self.name, target_name), Some(py_options)).unwrap();
+        c4.call("train", (&self.name, target_name), Some(py_options)).map_err(|e| {
+            e.print(py);
+        }).unwrap();
 
         Model::new(target_name.to_owned())
     }
@@ -270,7 +272,11 @@ fn predict(model_name: &str, model_input: Vec<Vec<Vec<Vec<f64>>>>) -> PyResult<V
         "predict",
         (model_name, model_input),
         None
-    )?.extract()?;
+    ).map_err(|e| {
+        let clone = e.clone_ref(py);
+        e.print(py);
+        clone
+    })?.extract()?;
 
     Ok(result)
 }
