@@ -1,5 +1,6 @@
 {
   "number_of_games_per_net": 32000,
+  "self_play_batch_size": 256,
   "moving_window_size": 500000,
   "train_ratio": 0.9,
   "train_batch_size": 512,

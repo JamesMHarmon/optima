@@ -57,37 +57,46 @@ impl model::Model for Model {
         &self.name
     }
 
-    #[allow(non_snake_case)]
     fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
     {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
+        let model = train(&self.name, target_name, sample_metrics, options);
 
-        let c4_model_module_name = "c4_model";
-        let c4 = py.import(c4_model_module_name).unwrap();
-
-        let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
-        let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
-
-        let py_options = PyDict::new(py);
-        py_options.set_item("X", X).unwrap();
-        py_options.set_item("yv", yv).unwrap();
-        py_options.set_item("yp", yp).unwrap();
-
-        py_options.set_item("train_ratio", options.train_ratio).unwrap();
-        py_options.set_item("train_batch_size", options.train_batch_size).unwrap();
-        py_options.set_item("epochs", options.epochs).unwrap();
-        py_options.set_item("learning_rate", options.learning_rate).unwrap();
-        py_options.set_item("policy_loss_weight", options.policy_loss_weight).unwrap();
-        py_options.set_item("value_loss_weight", options.value_loss_weight).unwrap();
-
-        c4.call("train", (&self.name, target_name), Some(py_options)).map_err(|e| {
+        model.map_err(|e| {
+            let gil = Python::acquire_gil();
+            let py = gil.python();
             e.print(py);
-        }).unwrap();
-
-        Model::new(target_name.to_owned())
+        }).expect("Failed to train model")
     }
+}
+
+#[allow(non_snake_case)]
+fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySample<GameState,Action>>, options: &TrainOptions) -> PyResult<Model>
+{
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+
+    let c4_model_module_name = "c4_model";
+    let c4 = py.import(c4_model_module_name)?;
+
+    let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
+    let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
+    let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
+
+    let py_options = PyDict::new(py);
+    py_options.set_item("X", X)?;
+    py_options.set_item("yv", yv)?;
+    py_options.set_item("yp", yp)?;
+
+    py_options.set_item("train_ratio", options.train_ratio)?;
+    py_options.set_item("train_batch_size", options.train_batch_size)?;
+    py_options.set_item("epochs", options.epochs)?;
+    py_options.set_item("learning_rate", options.learning_rate)?;
+    py_options.set_item("policy_loss_weight", options.policy_loss_weight)?;
+    py_options.set_item("value_loss_weight", options.value_loss_weight)?;
+
+    c4.call("train", (source_name, target_name), Some(py_options))?;
+
+    Ok(Model::new(target_name.to_owned()))
 }
 
 impl GameAnalytics for Model {

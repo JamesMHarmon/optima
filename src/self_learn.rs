@@ -34,6 +34,7 @@ where
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
+    pub self_play_batch_size: usize,
     pub moving_window_size: usize,
     pub train_ratio: f64,
     pub train_batch_size: usize,
@@ -107,6 +108,7 @@ where
     pub async fn learn(&mut self) -> Result<(), &'static str> {
         let options = &self.options;
         let number_of_games_per_net = options.number_of_games_per_net;
+        let self_play_batch_size = options.self_play_batch_size;
         let self_play_options = SelfPlayOptions {
             epsilon: options.epsilon,
             alpha: options.alpha,
@@ -126,8 +128,7 @@ where
             let mut num_games = self_play_persistance.read::<A>()?.len();
 
             while num_games < number_of_games_per_net {
-                let game_batch_size = 512;
-                let futures: Vec<_> = (0..game_batch_size).map(|_| Box::pin(async {
+                let futures: Vec<_> = (0..self_play_batch_size).map(|_| Box::pin(async {
                     self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap()
                 })).collect();
 
@@ -137,8 +138,7 @@ where
                     self_play_persistance.write(&self_play_metric).unwrap();
                 }
 
-                num_games += game_batch_size;
-                println!("Played a game: {}", num_games);
+                num_games += self_play_batch_size;
             }
 
             self.latest_model = Self::train_model(

@@ -28,6 +28,11 @@ subcommands:
                 takes_value: true
                 help: "[Default: 32,000] The number of games to self play until a new net is generated."
                 value_name: SIZE
+            - self_play_batch_size:
+                long: self_play_batch_size
+                takes_value: true
+                help: "[Default: 256] The number of games to play in parallel during self play."
+                value_name: SIZE
             - moving_window_size:
                 long: moving_window_size
                 takes_value: true
