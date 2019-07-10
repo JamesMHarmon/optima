@@ -2,14 +2,11 @@
 # https://towardsdatascience.com/understanding-residual-networks-9add4b664b03
 import numpy as np
 import keras
-import matplotlib.pyplot as plt
 from keras import backend as K
 from keras.models import Sequential, Model
 from keras.layers import Reshape, Dense, Conv2D, Flatten, LeakyReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
-from keras.utils.vis_utils import plot_model
-from keras.callbacks import EarlyStopping, ModelCheckpoint
 
 def Block(x, filters):
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(x)
