@@ -26,7 +26,12 @@
 
 * https://github.com/tensorflow/rust
 * https://www.groundai.com/project/hyper-parameter-sweep-on-alphazero-general/1
+* https://medium.com/oracledevs/lessons-from-alpha-zero-part-6-hyperparameter-tuning-b1cfcbe4ca9a
+* https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
+* http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html
 
+pb_c = math.log((parent.visit_count + config.pb_c_base + 1) /
+                  config.pb_c_base) + config.pb_c_init
 
 
 * Create server client

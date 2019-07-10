@@ -26,7 +26,7 @@ subcommands:
             - number_of_games_per_net:
                 long: number_of_games_per_net
                 takes_value: true
-                help: "[Default: 32,000] The number of games to self play until a new net is generated."
+                help: "[Default: 32,000] The number of games to self play until a new net is generated. AZ used 5,000"
                 value_name: SIZE
             - self_play_batch_size:
                 long: self_play_batch_size
@@ -36,7 +36,7 @@ subcommands:
             - moving_window_size:
                 long: moving_window_size
                 takes_value: true
-                help: "[Default: 500,000] How many games to go back and sample from when training a new net."
+                help: "[Default: 500,000] How many games to go back and sample from when training a new net. AZ used 1,000,000"
                 value_name: SIZE
             - train_ratio:
                 long: train_ratio
@@ -76,22 +76,22 @@ subcommands:
             - visits:
                 long: visits
                 takes_value: true
-                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take."
+                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800"
                 value_name: VISITS
             - cpuct:
                 long: cpuct
                 takes_value: true
-                help: "[Default: 4.0] The cpuct value within the MCTS algorithm."
+                help: "[Default: 4.0] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 2.5"
                 value_name: CPUCT
             - alpha:
                 long: alpha
                 takes_value: true
-                help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise."
+                help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.3"
                 value_name: alpha
             - epsilon:
                 long: epsilon
                 takes_value: true
-                help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise."
+                help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.25"
                 value_name: epsilon
             - number_of_filters:
                 long: number_of_filters
