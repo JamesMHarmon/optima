@@ -101,6 +101,7 @@ def get_or_load_model(name):
         path = get_model_path(name)
         model = load_model(path)
         model._make_predict_function()
+        K.manual_variable_initialization(True)
         tf.get_default_graph().finalize()
         models[name] = model
 
