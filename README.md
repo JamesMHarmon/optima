@@ -59,3 +59,12 @@
             // It’s hard to know how to optimally extrapolate, but a reasonable first guess looks to be choosing ɑ = 10/n
             // Since there are approximately four legal moves in a Connect Four position, this gives us ɑ=2.5. It’s true that this is greater than one while the rest are less, and yet this number seemed to do well in our testing. With a little playing around, we found that 1.75 did even better.
             // UPDATE: while early versions of our training did best with a=1.75, we ultimately settled on a=1.0 as the optimal value for our training.
+
+learning rates
+// - 0.1
+// - 0.01
+// - 0.001
+// - 0.0001
+
+
+until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashed with exit code $?.  Respawning.." >&2;     sleep 1; done

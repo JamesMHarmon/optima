@@ -1,7 +1,8 @@
-use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
+use std::time::{Duration,Instant};
 use chashmap::{CHashMap};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
@@ -28,11 +29,19 @@ impl Model {
         let alive_ref = alive.clone();
 
         std::thread::spawn(move || {
+            let mut last_report = Instant::now();
             loop {
                 let num_analysed = batching_model_ref.run_predict();
 
                 if num_analysed == 0 {
                     std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+
+                let elapsed_mills = last_report.elapsed().as_millis();
+                if elapsed_mills >= 60_000 {
+                    let num_nodes = batching_model_ref.poll_nodes();
+                    println!("NPS: {:.2}", num_nodes as f64 * 1000.0 / elapsed_mills as f64);
+                    last_report = Instant::now();
                 }
 
                 if !alive_ref.load(Ordering::SeqCst) {
@@ -125,7 +134,8 @@ impl Drop for Model {
 pub struct BatchingModel {
     model_name: String,
     states_to_analyse: CHashMap<GameState, Vec<Waker>>,
-    state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>
+    state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
+    nodes_analysed: AtomicUsize
 }
 
 impl BatchingModel {
@@ -136,7 +146,8 @@ impl BatchingModel {
         Self {
             model_name,
             states_to_analyse,
-            state_analysis_cache
+            state_analysis_cache,
+            nodes_analysed: AtomicUsize::new(0)
         }
     }
 
@@ -152,8 +163,6 @@ impl BatchingModel {
         let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
         let num_analysed = analysis.len();
 
-        println!("Analysed: {}", num_analysed);
-
         for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
             self.state_analysis_cache.insert(s.to_owned(), analysis);
             for w in wakers {
@@ -164,8 +173,13 @@ impl BatchingModel {
         num_analysed
     }
 
+    fn poll_nodes(&self) -> usize {
+        self.nodes_analysed.swap(0, Ordering::SeqCst)
+    }
+
     fn poll(&self, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
         if let Some(value) = game_state.is_terminal() {
+            self.nodes_analysed.fetch_add(1, Ordering::SeqCst);
             return Poll::Ready(GameStateAnalysis::new(
                 value,
                 Vec::new()
@@ -175,7 +189,10 @@ impl BatchingModel {
         let analysis = self.state_analysis_cache.get(game_state);
 
         match analysis {
-            Some(analysis) => Poll::Ready(analysis.to_owned()),
+            Some(analysis) => {
+                self.nodes_analysed.fetch_add(1, Ordering::SeqCst);
+                Poll::Ready(analysis.to_owned())
+            },
             None => {
                 self.register(game_state, waker.clone());
                 Poll::Pending

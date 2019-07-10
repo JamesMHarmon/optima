@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use rand::Rng;
+use std::time::{Duration,Instant};
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
@@ -116,6 +117,8 @@ where
             temperature: options.temperature,
             visits: options.visits
         };
+        let mut num_of_games_played = 0;
+        let starting_time = Instant::now();
 
         loop {
             let latest_model = &self.latest_model;
@@ -125,9 +128,9 @@ where
                 model_name.to_owned()
             )?;
 
-            let mut num_games = self_play_persistance.read::<A>()?.len();
+            let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
 
-            while num_games < number_of_games_per_net {
+            while num_games_this_net < number_of_games_per_net {
                 let futures: Vec<_> = (0..self_play_batch_size).map(|_| Box::pin(async {
                     self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap()
                 })).collect();
@@ -138,7 +141,9 @@ where
                     self_play_persistance.write(&self_play_metric).unwrap();
                 }
 
-                num_games += self_play_batch_size;
+                num_games_this_net += self_play_batch_size;
+                num_of_games_played += self_play_batch_size;
+                println!("Time Elapsed: {:.2}h, Number of Games Played: {}", starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64, num_of_games_played);
             }
 
             self.latest_model = Self::train_model(

@@ -37,6 +37,10 @@ impl ModelFactory {
         path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None)?;
         path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None)?;
 
+        path.call_method("append", ("C:/Users/james/Anaconda3/lib", ), None)?;
+        path.call_method("append", ("C:/Users/james/Anaconda3/lib/lib-dynload", ), None)?;
+        path.call_method("append", ("C:/Users/james/Anaconda3/lib/site-packages", ), None)?;
+
         Ok(())
     }
 }
