@@ -44,6 +44,11 @@ def get_latest(name):
     onlyfiles = [f for f in listdir(directory_path) if isfile(join(directory_path, f))]
     onlynets = [f for f in onlyfiles if f.startswith(name[:-5]) and f.endswith('.h5')]
     onlynets.sort(reverse=True)
+
+    if (len(onlynets) == 0):
+        print("No net with file name of \"" + name[:-5] + "XXXXX.h5\" was found!")
+        return
+
     return onlynets[0][:-3]
 
 def train(source_model_name, target_model_name, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate, policy_loss_weight, value_loss_weight):
