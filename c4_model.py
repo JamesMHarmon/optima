@@ -12,7 +12,7 @@ import math
 import model_sen
 
 # import os
-# os.environ["CUDA_VISIBLE_DEVICES"]="0";
+# os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 models = {}
 

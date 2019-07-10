@@ -152,13 +152,11 @@ impl BatchingModel {
     }
 
     fn run_predict(&self) -> usize {
-        let entries: Vec<_> = self.states_to_analyse.clone().into_iter().collect();
+        let entries: Vec<_> = self.states_to_analyse.clear().into_iter().collect();
 
         if entries.len() == 0 {
             return 0;
         }
-
-        self.states_to_analyse.clear();
 
         let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
         let num_analysed = analysis.len();
@@ -211,7 +209,11 @@ impl BatchingModel {
 
     fn predict(&self, game_states: Vec<&GameState>) -> Vec<GameStateAnalysis<Action>> {
         let input = game_states_to_input(&game_states);
-        let predictions = predict(&self.model_name, input).unwrap();
+        let predictions = predict(&self.model_name, input).map_err(|e| {
+            let gil = Python::acquire_gil();
+            let py = gil.python();
+            e.print(py);
+        }).expect("Failed to run predict");
 
         game_states.iter()
             .zip(predictions.into_iter())
@@ -298,11 +300,7 @@ fn predict(model_name: &str, model_input: Vec<Vec<Vec<Vec<f64>>>>) -> PyResult<V
         "predict",
         (model_name, model_input),
         None
-    ).map_err(|e| {
-        let clone = e.clone_ref(py);
-        e.print(py);
-        clone
-    })?.extract()?;
+    )?.extract()?;
 
     Ok(result)
 }
