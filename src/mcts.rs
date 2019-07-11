@@ -1,8 +1,9 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use rand::{ Rng };
+use rand::Rng;
 use rand::prelude::Distribution;
-use rand::distributions::{Dirichlet,WeightedIndex};
+use rand::distributions::WeightedIndex;
+use rand_distr::Dirichlet;
 
 use super::game_state::GameState;
 use super::engine::{GameEngine};
@@ -329,7 +330,9 @@ where
         }
 
         let e = dirichlet.epsilon;
-        let dirichlet_noise = Dirichlet::new_with_param(dirichlet.alpha, policy_scores.len()).sample(rng);
+        let dirichlet_noise = Dirichlet::new_with_size(dirichlet.alpha, policy_scores.len())
+            .expect("Error creating dirichlet distribution")
+            .sample(rng);
 
         dirichlet_noise.into_iter().zip(policy_scores).map(|(noise, policy_score)|
             (1.0 - e) * policy_score + e * noise
