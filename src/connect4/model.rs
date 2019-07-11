@@ -2,7 +2,7 @@ use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
-use std::time::{Duration,Instant};
+use std::time::Instant;
 use chashmap::{CHashMap};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};

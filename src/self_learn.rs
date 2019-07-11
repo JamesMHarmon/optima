@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use rand::Rng;
-use std::time::{Duration,Instant};
+use std::time::Instant;
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
@@ -16,9 +16,6 @@ use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
 use super::futures::join_all::join_all;
 
-// game/run/iteration/
-//                  ./games
-//                  ./nets
 pub struct SelfLearn<'a, S, A, E, M>
 where
     S: GameState,
