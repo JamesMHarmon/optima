@@ -71,7 +71,9 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         learning_rate: 0.001,
         policy_loss_weight: 1.0,
         value_loss_weight: 0.5,
-        temperature: 1.0,
+        temperature: 1.2,
+        temperature_max_actions: 30,
+        temperature_post_max_actions: 0.45,
         visits: 800,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
@@ -91,6 +93,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
     if let Some(policy_loss_weight) = matches.value_of("policy_loss_weight") { options.policy_loss_weight = policy_loss_weight.parse().map_err(|_| "Could not parse policy_loss_weight")? };
     if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse().map_err(|_| "Could not parse value_loss_weight")? };
     if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse().map_err(|_| "Could not parse temperature")? };
+    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse().map_err(|_| "Could not parse temperature_max_actions")? };
+    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse().map_err(|_| "Could not parse temperature_post_max_actions")? };
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse().map_err(|_| "Could not parse visits")? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse().map_err(|_| "Could not parse cpuct_base")? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse().map_err(|_| "Could not parse cpuct_init")? };

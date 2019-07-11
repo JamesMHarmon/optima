@@ -9,6 +9,8 @@
   "policy_loss_weight": 1.0,
   "value_loss_weight": 0.5,
   "temperature": 1.0,
+  "temperature_max_actions": 10,
+  "temperature_post_max_actions": 0.0,
   "visits": 800,
   "cpuct_base": 19652,
   "cpuct_init": 1.25,

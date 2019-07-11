@@ -41,6 +41,8 @@ pub struct SelfLearnOptions {
     pub policy_loss_weight: f64,
     pub value_loss_weight: f64,
     pub temperature: f64,
+    pub temperature_max_actions: usize,
+    pub temperature_post_max_actions: f64,
     pub visits: usize,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
@@ -114,6 +116,8 @@ where
             cpuct_base: options.cpuct_base,
             cpuct_init: options.cpuct_init,
             temperature: options.temperature,
+            temperature_max_actions: options.temperature_max_actions,
+            temperature_post_max_actions: options.temperature_post_max_actions,
             visits: options.visits
         };
         let mut num_of_games_played = 0;

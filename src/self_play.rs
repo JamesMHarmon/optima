@@ -26,6 +26,8 @@ pub struct SelfPlaySample<S, A> {
 #[derive(Debug)]
 pub struct SelfPlayOptions {
     pub temperature: f64,
+    pub temperature_max_actions: usize,
+    pub temperature_post_max_actions: f64,
     pub visits: usize,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
@@ -69,7 +71,7 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
                 epsilon: options.epsilon
             }),
             |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
-            |_,_| options.temperature,
+            |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             seedable_rng,
         )
     );

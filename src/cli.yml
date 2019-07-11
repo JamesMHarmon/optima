@@ -71,7 +71,17 @@ subcommands:
             - temperature:
                 long: temperature
                 takes_value: true
-                help: "[Default: 1.0] The temperature to use during self play games. The higher the temp, the more exploration."
+                help: "[Default: 1.0] The temperature to use during self play games before the temperature_max_actions threshold has been met. The higher the temp, the more exploration."
+                value_name: TEMP
+            - temperature_max_actions:
+                long: temperature_max_actions
+                takes_value: true
+                help: "[Default: 30] The number of actions in the game to be made before changing the temperature to temperature_post_max_actions."
+                value_name: NUM
+            - temperature_post_max_actions:
+                long: temperature_post_max_actions
+                takes_value: true
+                help: "[Default: 0.45] The temperature to use during self play games after the temperature_max_actions threshold has been met. The higher the temp, the more exploration."
                 value_name: TEMP
             - visits:
                 long: visits
