@@ -17,3 +17,4 @@ pub mod connect4;
 
 mod bits;
 mod futures;
+mod linked_list;

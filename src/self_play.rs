@@ -8,6 +8,7 @@ use super::rng;
 use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use super::node_metrics::{NodeMetrics};
 use super::engine::GameEngine;
+use super::linked_list::List;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfPlayMetrics<A> {
@@ -51,9 +52,11 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);
     let game_state: S = S::initial();
+    let actions = List::new();
 
     let mut mcts = MCTS::new(
         game_state,
+        actions,
         game_engine,
         analytics,
         MCTSOptions::<S,A,_,_,_>::new(
@@ -61,8 +64,8 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            |_,_| options.cpuct,
-            |_| options.temperature,
+            |_,_,_| options.cpuct,
+            |_,_| options.temperature,
             seedable_rng,
         )
     );
