@@ -8,7 +8,6 @@
 
 ## TODO:
 * Allow for multiple players
-* Reimpliment CPUCT and Temp functions
 * Add self play evaluation/tournament
 * Make learning distributed
 * Break into a workspace

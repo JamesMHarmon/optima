@@ -27,7 +27,8 @@ pub struct SelfPlaySample<S, A> {
 pub struct SelfPlayOptions {
     pub temperature: f64,
     pub visits: usize,
-    pub cpuct: f64,
+    pub cpuct_base: f64,
+    pub cpuct_init: f64,
     pub alpha: f64,
     pub epsilon: f64
 }
@@ -42,6 +43,7 @@ impl<A> SelfPlayMetrics<A> {
     }
 }
 
+#[allow(non_snake_case)]
 pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, options: &'a SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
@@ -53,6 +55,8 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
     let seedable_rng = rng::create_rng_from_uuid(uuid);
     let game_state: S = S::initial();
     let actions = List::new();
+    let cpuct_base = options.cpuct_base;
+    let cpuct_init = options.cpuct_init;
 
     let mut mcts = MCTS::new(
         game_state,
@@ -64,7 +68,7 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            |_,_,_| options.cpuct,
+            |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
             |_,_| options.temperature,
             seedable_rng,
         )

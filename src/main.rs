@@ -73,7 +73,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         value_loss_weight: 0.5,
         temperature: 1.0,
         visits: 800,
-        cpuct: 4.0,
+        cpuct_base: 19_652.0,
+        cpuct_init: 1.25,
         alpha: 0.3,
         epsilon: 0.25,
         number_of_filters: 64,
@@ -91,7 +92,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
     if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse().map_err(|_| "Could not parse value_loss_weight")? };
     if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse().map_err(|_| "Could not parse temperature")? };
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse().map_err(|_| "Could not parse visits")? };
-    if let Some(cpuct) = matches.value_of("cpuct") { options.cpuct = cpuct.parse().map_err(|_| "Could not parse cpuct")? };
+    if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse().map_err(|_| "Could not parse cpuct_base")? };
+    if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse().map_err(|_| "Could not parse cpuct_init")? };
     if let Some(alpha) = matches.value_of("alpha") { options.alpha = alpha.parse().map_err(|_| "Could not parse alpha")? };
     if let Some(epsilon) = matches.value_of("epsilon") { options.epsilon = epsilon.parse().map_err(|_| "Could not parse epsilon")? };
     if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse().map_err(|_| "Could not parse number_of_filters")? };

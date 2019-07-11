@@ -42,7 +42,8 @@ pub struct SelfLearnOptions {
     pub value_loss_weight: f64,
     pub temperature: f64,
     pub visits: usize,
-    pub cpuct: f64,
+    pub cpuct_base: f64,
+    pub cpuct_init: f64,
     pub alpha: f64,
     pub epsilon: f64,
     pub number_of_filters: usize,
@@ -110,7 +111,8 @@ where
         let self_play_options = SelfPlayOptions {
             epsilon: options.epsilon,
             alpha: options.alpha,
-            cpuct: options.cpuct,
+            cpuct_base: options.cpuct_base,
+            cpuct_init: options.cpuct_init,
             temperature: options.temperature,
             visits: options.visits
         };

@@ -78,21 +78,26 @@ subcommands:
                 takes_value: true
                 help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800"
                 value_name: VISITS
-            - cpuct:
-                long: cpuct
+            - cpuct_base:
+                long: cpuct_base
                 takes_value: true
-                help: "[Default: 4.0] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 2.5"
-                value_name: CPUCT
+                help: "[Default: 19,652] Adds a scaling factor for cpuct, the more visits that a node has, the more that exploration over exploitation will be favored. AZ used 19,652"
+                value_name: NUM
+            - cpuct_init:
+                long: cpuct_init
+                takes_value: true
+                help: "[Default: 1.25] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 1.25"
+                value_name: NUM
             - alpha:
                 long: alpha
                 takes_value: true
                 help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.3"
-                value_name: alpha
+                value_name: NUM
             - epsilon:
                 long: epsilon
                 takes_value: true
                 help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.25"
-                value_name: epsilon
+                value_name: NUM
             - number_of_filters:
                 long: number_of_filters
                 takes_value: true

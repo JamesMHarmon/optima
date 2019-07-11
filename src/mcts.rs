@@ -33,7 +33,7 @@ impl<S, A, C, T, R> MCTSOptions<S, A, C, T, R>
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    C: Fn(&S, &List<A>, &A) -> f64,
+    C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng,
 {
@@ -60,7 +60,7 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine,
     M: GameAnalytics,
-    C: Fn(&S, &List<A>, &A) -> f64,
+    C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
 {
@@ -105,7 +105,7 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + GameAnalytics<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A) -> f64,
+    C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
 {
@@ -259,7 +259,7 @@ where
             let Psa = child.policy_score;
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
-            let cpuct = cpuct(game_state, prior_actions, &child.action);
+            let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb);
             let root_Nsb = (Nsb as f64).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
 
@@ -381,7 +381,7 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine<State=S,Action=A>,
     M: GameAnalytics<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A) -> f64,
+    C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
 {
@@ -590,14 +590,14 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state.to_owned(), actions.to_owned(), &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
 
         let mut mcts2 = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -621,7 +621,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -641,7 +641,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -663,7 +663,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -681,7 +681,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -711,7 +711,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -741,7 +741,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -771,7 +771,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -801,7 +801,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 0.1,
+            |_,_,_,_| 0.1,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -831,7 +831,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
@@ -861,7 +861,7 @@ mod tests {
 
         let mut mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
             None,
-            |_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             rng::create_rng_from_uuid(uuid)
         ));
