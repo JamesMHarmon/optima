@@ -72,3 +72,28 @@ learning rates
 
 
 until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashed with exit code $?.  Respawning.." >&2;     sleep 1; done
+
+
+## Commands
+
+sudo docker run \
+    --runtime=nvidia \
+    -p 8501:8501 \
+    --mount type=bind,source=$(pwd)/export_model,target=/models/my_m \
+    -e MODEL_NAME=my_m \
+    --env-file ./env.list
+    -t \
+    tensorflow/serving:latest-gpu &
+
+https://github.com/tensorflow/serving/issues/1077
+
+sudo docker run --rm \
+    --runtime=nvidia -it \
+    -v $(pwd):/tmp tensorflow/tensorflow:latest-gpu \
+    /usr/local/bin/saved_model_cli convert \
+    --dir /tmp/export_model/1 \
+    --output_dir /tmp/export_model_trt/1 \
+    --tag_set serve \
+    tensorrt --precision_mode FP16 --max_batch_size 512
+
+Time Elapsed: 0.20h, Number of Games Played: 1024

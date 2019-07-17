@@ -1,9 +1,13 @@
+use std::collections::HashMap;
 use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
 use chashmap::{CHashMap};
+use reqwest::Client;
+use serde::{Serialize,Deserialize};
+use serde_json::json;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
 
@@ -158,7 +162,8 @@ impl BatchingModel {
             return 0;
         }
 
-        let analysis: Vec<_> = self.predict(entries.iter().map(|(s,_)| s).collect());
+        let game_states_to_predict = entries.iter().map(|(s,_)| s).collect();
+        let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
         for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
@@ -207,17 +212,25 @@ impl BatchingModel {
         );
     }
 
-    fn predict(&self, game_states: Vec<&GameState>) -> Vec<GameStateAnalysis<Action>> {
-        let input = game_states_to_input(&game_states);
-        let predictions = predict(&self.model_name, input).map_err(|e| {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-            e.print(py);
-        }).expect("Failed to run predict");
+    fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, &'static str> {
+        let body = game_states_to_request_body(&game_states);
 
-        game_states.iter()
-            .zip(predictions.into_iter())
-            .map(|(game_state, (value_score, policy_scores))| {
+        let request_url = "http://localhost:8501/v1/models/my_m:predict";
+        let mut response = Client::new()
+            .post(request_url)
+            .json(&body)
+            .send()
+            .map_err(|_| "Failed to make a http request to prediction")?;
+
+        let predictions: PredictionResults = response.json()
+            .map_err(|_| "Failed to deserialize predict http result")?;
+
+        let result = game_states.iter()
+            .zip(predictions.predictions.into_iter())
+            .map(|(game_state, result)| {
+                let value_score = result.get("value_head/Tanh:0").unwrap()[0];
+                let policy_scores = result.get("policy_head/Softmax:0").unwrap();
+
                 let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
                     .zip(policy_scores).enumerate()
                     .filter_map(|(i, (v, p))|
@@ -225,7 +238,7 @@ impl BatchingModel {
                         if *v {
                             Some(ActionWithPolicy::new(
                                 Action::DropPiece((i + 1) as u64),
-                                p
+                                *p
                             ))
                         } else {
                             None
@@ -237,7 +250,9 @@ impl BatchingModel {
                     value_score
                 }
             })
-            .collect()
+            .collect();
+
+        Ok(result)
     }
 }
 
@@ -264,8 +279,24 @@ impl Future for GameStateAnalysisFuture {
     }
 }
 
-fn game_states_to_input(game_states: &Vec<&GameState>) -> Vec<Vec<Vec<Vec<f64>>>> {
-    game_states.iter().map(|game_state| game_state_to_input(game_state)).collect()
+#[derive(Serialize)]
+struct RequestImage {
+    input_image: Vec<Vec<Vec<f64>>>
+}
+
+#[derive(Debug, Deserialize)]
+struct PredictionResults {
+    predictions: Vec<HashMap<String,Vec<f64>>>
+}
+
+fn game_states_to_request_body(game_states: &Vec<&GameState>) -> serde_json::value::Value {
+    let game_states: Vec<_> = game_states.iter().map(|game_state| RequestImage {
+        input_image: game_state_to_input(game_state)
+    }).collect();
+
+    json!({
+        "instances": game_states
+    })
 }
 
 fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
@@ -287,22 +318,6 @@ fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
 
             r
         })
-}
-
-fn predict(model_name: &str, model_input: Vec<Vec<Vec<Vec<f64>>>>) -> PyResult<Vec<(f64, Vec<f64>)>> {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
-    let c4_model_module_name = "c4_model";
-    let c4 = py.import(c4_model_module_name)?;
-
-    let result: Vec<(f64, Vec<f64>)> = c4.call(
-        "predict",
-        (model_name, model_input),
-        None
-    )?.extract()?;
-
-    Ok(result)
 }
 
 fn map_policy_to_vec_input(policy_metrics: &NodeMetrics<Action>) -> [f64; 7] {
