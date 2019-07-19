@@ -5,6 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
 use chashmap::{CHashMap};
+use chrono::{Utc};
 use reqwest::Client;
 use serde::{Serialize,Deserialize};
 use serde_json::json;
@@ -44,7 +45,9 @@ impl Model {
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if elapsed_mills >= 60_000 {
                     let num_nodes = batching_model_ref.poll_nodes();
-                    println!("NPS: {:.2}", num_nodes as f64 * 1000.0 / elapsed_mills as f64);
+                    let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
+                    let now = Utc::now().format("%H:%M:%S").to_string();
+                    println!("TIME: {}, NPS: {:.2}", now, nps);
                     last_report = Instant::now();
                 }
 
@@ -215,9 +218,9 @@ impl BatchingModel {
     fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, &'static str> {
         let body = game_states_to_request_body(&game_states);
 
-        let request_url = "http://localhost:8501/v1/models/my_m:predict";
+        let request_url = get_model_url(&self.model_name);
         let mut response = Client::new()
-            .post(request_url)
+            .post(&request_url)
             .json(&body)
             .send()
             .map_err(|_| "Failed to make a http request to prediction")?;
@@ -287,6 +290,15 @@ struct RequestImage {
 #[derive(Debug, Deserialize)]
 struct PredictionResults {
     predictions: Vec<HashMap<String,Vec<f64>>>
+}
+
+fn get_model_url(model_name: &str) -> String {
+    let split_name: Vec<_> = model_name.split('_').collect();
+    format!(
+        "http://localhost:8501/v1/models/{run_name}/versions/{version}:predict",
+        run_name = split_name[1],
+        version = split_name[2].parse::<usize>().unwrap()
+    )
 }
 
 fn game_states_to_request_body(game_states: &Vec<&GameState>) -> serde_json::value::Value {

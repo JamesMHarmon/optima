@@ -79,11 +79,11 @@ until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashe
 sudo docker run \
     --runtime=nvidia \
     -p 8501:8501 \
-    --mount type=bind,source=$(pwd)/export_model,target=/models/my_m \
-    -e MODEL_NAME=my_m \
-    --env-file ./env.list
+    --mount type=bind,source=$(pwd)/exported_models,target=/models \
+    --mount type=bind,source=$(pwd)/models.config,target=/models/models.config \
+    --env-file $(pwd)/env.list \
     -t \
-    tensorflow/serving:latest-gpu &
+    tensorflow/serving:latest-gpu --model_config_file=/models/models.config &
 
 https://github.com/tensorflow/serving/issues/1077
 
