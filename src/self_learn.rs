@@ -134,10 +134,12 @@ where
 
             {
                 let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
-                let mut num_games_to_play = number_of_games_per_net - num_games_this_net;
+                let mut num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
                 let mut self_play_metric_stream = FuturesUnordered::new();
 
-                for _ in 0..(std::cmp::min(num_games_to_play, self_play_batch_size) + 1) {
+                println!("To Play: {}", num_games_to_play);
+
+                for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
                     self_play_metric_stream.push(
                         self_play::self_play(self.game_engine, latest_model, &self_play_options)
                     );

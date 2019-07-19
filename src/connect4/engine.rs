@@ -78,6 +78,18 @@ impl GameState {
         None
     }
 
+    pub fn number_of_actions(&self) -> usize {
+        let mut all_pieces = self.p1_piece_board | self.p2_piece_board;
+        let mut num_of_set_bits = 0;
+
+        while all_pieces != 0 {
+            all_pieces = all_pieces & (all_pieces - 1);
+            num_of_set_bits += 1;
+        }
+
+        num_of_set_bits
+    }
+
     fn has_connected_4(&self) -> bool {
         let board = if self.p1_turn_to_move { self.p2_piece_board } else { self.p1_piece_board };
 
@@ -269,5 +281,39 @@ mod tests {
         state = state.drop_piece(5);
 
         assert_eq!(state.get_valid_actions().as_slice(), [true, true, false, false, false, true, true]);
+    }
+
+    #[test]
+    fn test_number_of_actions_none() {
+        let state: GameState = game_state::GameState::initial();
+
+        assert_eq!(state.number_of_actions(), 0);
+    }
+
+    #[test]
+    fn test_number_of_actions_one() {
+        let mut state: GameState = game_state::GameState::initial();
+        state = state.drop_piece(3);
+
+        assert_eq!(state.number_of_actions(), 1);
+    }
+
+    #[test]
+    fn test_number_of_actions_two() {
+        let mut state: GameState = game_state::GameState::initial();
+        state = state.drop_piece(3);
+        state = state.drop_piece(3);
+
+        assert_eq!(state.number_of_actions(), 2);
+    }
+
+    #[test]
+    fn test_number_of_actions_three() {
+        let mut state: GameState = game_state::GameState::initial();
+        state = state.drop_piece(3);
+        state = state.drop_piece(3);
+        state = state.drop_piece(4);
+
+        assert_eq!(state.number_of_actions(), 3);
     }
 }

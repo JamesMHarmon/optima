@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
+use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
@@ -11,6 +11,7 @@ use serde::{Serialize,Deserialize};
 use serde_json::json;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict};
+use crossbeam_queue::{SegQueue};
 
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
@@ -20,10 +21,13 @@ use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
 use super::action::{Action};
 
+const DEPTH_TO_CACHE: usize = 7;
+
 pub struct Model {
     name: String,
     batching_model: Arc<BatchingModel>,
-    alive: Arc<AtomicBool>
+    alive: Arc<AtomicBool>,
+    id_generator: AtomicUsize
 }
 
 impl Model {
@@ -31,7 +35,7 @@ impl Model {
         let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
         let alive = Arc::new(AtomicBool::new(true));
 
-        for _ in 0..3 {
+        for i in 0..3 {
             let batching_model_ref = batching_model.clone();
             let alive_ref = alive.clone();
             std::thread::spawn(move || {
@@ -44,8 +48,8 @@ impl Model {
                     }
 
                     let elapsed_mills = last_report.elapsed().as_millis();
-                    if elapsed_mills >= 60_000 {
-                        let num_nodes = batching_model_ref.poll_nodes();
+                    if i == 0 && elapsed_mills >= 5_000 {
+                        let num_nodes = batching_model_ref.take_num_nodes_analysed();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!("TIME: {}, NPS: {:.2}", now, nps);
@@ -62,7 +66,8 @@ impl Model {
         Self {
             name,
             batching_model,
-            alive
+            alive,
+            id_generator: AtomicUsize::new(0)
         }
     }
 }
@@ -129,6 +134,7 @@ impl GameAnalytics for Model {
     fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysisFuture {
         GameStateAnalysisFuture::new(
             game_state.to_owned(),
+            self.id_generator.fetch_add(1, Ordering::SeqCst),
             self.batching_model.clone()
         )
     }
@@ -142,79 +148,96 @@ impl Drop for Model {
 
 pub struct BatchingModel {
     model_name: String,
-    states_to_analyse: CHashMap<GameState, Vec<Waker>>,
+    states_to_analyse: SegQueue<(usize, GameState, Waker)>,
+    states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<Action>>>>,
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
-    nodes_analysed: AtomicUsize
+    num_nodes_analysed: AtomicUsize
 }
 
 impl BatchingModel {
     fn new(model_name: String) -> Self {
-        let states_to_analyse = CHashMap::with_capacity(512);
-        let state_analysis_cache = CHashMap::with_capacity(2_000_000);
+        let states_to_analyse = SegQueue::new();
+        let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(4_092)));
+        let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE);
+        let num_nodes_analysed = AtomicUsize::new(0);
 
         Self {
             model_name,
             states_to_analyse,
+            states_analysed,
             state_analysis_cache,
-            nodes_analysed: AtomicUsize::new(0)
+            num_nodes_analysed
         }
     }
 
     fn run_predict(&self) -> usize {
-        let entries: Vec<_> = self.states_to_analyse.clear().into_iter().collect();
+        let states_to_analyse_queue = &self.states_to_analyse;
 
-        if entries.len() == 0 {
+        let mut states_to_analyse: Vec<_> = Vec::with_capacity(1024);
+        while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
+            states_to_analyse.push(state_to_analyse);
+
+            if states_to_analyse.len() >= 1024 {
+                break;
+            }
+        }
+
+        if states_to_analyse.len() == 0 {
             return 0;
         }
 
-        let game_states_to_predict = entries.iter().map(|(s,_)| s).collect();
+        let game_states_to_predict = states_to_analyse.iter().map(|(_,s,_)| s).collect();
         let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
-        for ((s, wakers), analysis) in entries.into_iter().zip(analysis) {
-            self.state_analysis_cache.insert(s.to_owned(), analysis);
-            for w in wakers {
-                w.wake();
+        for ((id, s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
+            if s.number_of_actions() <= DEPTH_TO_CACHE {
+                self.state_analysis_cache.insert(s, analysis.to_owned());
             }
+
+            self.states_analysed.lock().unwrap().insert(id, analysis);
+            waker.wake();
         }
 
         num_analysed
     }
 
-    fn poll_nodes(&self) -> usize {
-        self.nodes_analysed.swap(0, Ordering::SeqCst)
+    fn take_num_nodes_analysed(&self) -> usize {
+        self.num_nodes_analysed.swap(0, Ordering::SeqCst)
     }
 
-    fn poll(&self, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
+    fn poll(&self, id: usize, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
         if let Some(value) = game_state.is_terminal() {
-            self.nodes_analysed.fetch_add(1, Ordering::SeqCst);
+            self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
             return Poll::Ready(GameStateAnalysis::new(
                 value,
                 Vec::new()
             ));
         }
+
+        if game_state.number_of_actions() <= DEPTH_TO_CACHE {
+            if let Some(analysis) = self.state_analysis_cache.get(game_state) {
+                self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+                return Poll::Ready(analysis.to_owned());
+            }
+        }
         
-        let analysis = self.state_analysis_cache.get(game_state);
+        let analysis = self.states_analysed.lock().unwrap().remove(&id);
 
         match analysis {
             Some(analysis) => {
-                self.nodes_analysed.fetch_add(1, Ordering::SeqCst);
-                Poll::Ready(analysis.to_owned())
+                self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+                Poll::Ready(analysis)
             },
             None => {
-                self.register(game_state, waker.clone());
+                self.states_to_analyse.push((
+                    id,
+                    game_state.to_owned(),
+                    waker.clone()
+                ));
                 Poll::Pending
             }
         }
-    }
-
-    fn register(&self, game_state: &GameState, waker: Waker) {
-        let w1 = waker.clone();
-        self.states_to_analyse.upsert(
-            game_state.to_owned(),
-            || vec!(w1),
-            |v| v.push(waker)
-        );
     }
 
     fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, &'static str> {
@@ -263,16 +286,18 @@ impl BatchingModel {
 
 pub struct GameStateAnalysisFuture {
     game_state: GameState,
+    id: usize,
     batching_model: Arc<BatchingModel>
 }
 
 impl GameStateAnalysisFuture {
     fn new(
         game_state: GameState,
+        id: usize,
         batching_model: Arc<BatchingModel>
     ) -> Self
     {
-        Self { game_state, batching_model }
+        Self { game_state, id, batching_model }
     }
 }
 
@@ -280,7 +305,7 @@ impl Future for GameStateAnalysisFuture {
     type Output = GameStateAnalysis<Action>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        (*self).batching_model.poll(&self.game_state, cx.waker())
+        (*self).batching_model.poll(self.id, &self.game_state, cx.waker())
     }
 }
 
