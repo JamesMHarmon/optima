@@ -7,6 +7,7 @@ use std::fs::{create_dir_all, OpenOptions};
 use std::path::{Path,PathBuf};
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
+use futures::stream::{FuturesUnordered,StreamExt};
 
 use super::analytics::GameAnalytics;
 use super::engine::GameEngine;
@@ -14,7 +15,6 @@ use super::game_state::GameState;
 use super::self_play::{self,SelfPlayOptions,SelfPlaySample};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
-use super::futures::join_all::join_all;
 
 pub struct SelfLearn<'a, S, A, E, M>
 where
@@ -120,6 +120,7 @@ where
             temperature_post_max_actions: options.temperature_post_max_actions,
             visits: options.visits
         };
+
         let mut num_of_games_played = 0;
         let starting_time = Instant::now();
 
@@ -131,22 +132,38 @@ where
                 model_name.to_owned()
             )?;
 
-            let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
+            {
+                let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
+                let mut num_games_to_play = number_of_games_per_net - num_games_this_net;
+                let mut self_play_metric_stream = FuturesUnordered::new();
 
-            while num_games_this_net < number_of_games_per_net {
-                let futures: Vec<_> = (0..self_play_batch_size).map(|_| Box::pin(async {
-                    self_play::self_play(self.game_engine, latest_model, &self_play_options).await.unwrap()
-                })).collect();
-
-                let self_play_metrics = join_all(futures).await;
-
-                for self_play_metric in self_play_metrics {
-                    self_play_persistance.write(&self_play_metric).unwrap();
+                for _ in 0..(std::cmp::min(num_games_to_play, self_play_batch_size) + 1) {
+                    self_play_metric_stream.push(
+                        self_play::self_play(self.game_engine, latest_model, &self_play_options)
+                    );
                 }
 
-                num_games_this_net += self_play_batch_size;
-                num_of_games_played += self_play_batch_size;
-                println!("Time Elapsed: {:.2}h, Number of Games Played: {}", starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64, num_of_games_played);
+                while let Some(self_play_metric) = self_play_metric_stream.next().await {
+                    let self_play_metric = self_play_metric.unwrap();
+                    self_play_persistance.write(&self_play_metric).unwrap();
+                    num_games_this_net += 1;
+                    num_of_games_played += 1;
+                    num_games_to_play -= 1;
+
+                    println!("Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, Number of Active Games: {}, GPM: {:.2}",
+                        starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
+                        num_of_games_played,
+                        num_games_to_play,
+                        self_play_metric_stream.len(),
+                        num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
+                    );
+
+                    if num_games_to_play - self_play_metric_stream.len() > 0 {
+                        self_play_metric_stream.push(
+                            self_play::self_play(self.game_engine, latest_model, &self_play_options)
+                        );
+                    }
+                }
             }
 
             self.latest_model = Self::train_model(

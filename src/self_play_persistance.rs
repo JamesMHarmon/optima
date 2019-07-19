@@ -63,8 +63,9 @@ impl SelfPlayPersistance
             Ok(file) => {
                 let buf = BufReader::new(file);
                 let games: Vec<SelfPlayMetrics<A>> = buf.lines()
-                    .filter_map(|l| l.ok())
-                    .map(|l| serde_json::from_str(&l).unwrap())
+                    .enumerate()
+                    .filter_map(|(i,l)| l.ok().map(|l| (i,l)))
+                    .map(|(i,l)| serde_json::from_str(&l).map_err(|_| format!("Failed to deserialize {:?} at line: {}", file_path, i)).unwrap())
                     .collect();
 
                 Ok(games)

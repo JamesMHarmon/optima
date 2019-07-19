@@ -29,33 +29,35 @@ pub struct Model {
 impl Model {
     pub fn new(name: String) -> Self {
         let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
-        let batching_model_ref = batching_model.clone();
         let alive = Arc::new(AtomicBool::new(true));
-        let alive_ref = alive.clone();
 
-        std::thread::spawn(move || {
-            let mut last_report = Instant::now();
-            loop {
-                let num_analysed = batching_model_ref.run_predict();
+        for _ in 0..3 {
+            let batching_model_ref = batching_model.clone();
+            let alive_ref = alive.clone();
+            std::thread::spawn(move || {
+                let mut last_report = Instant::now();
+                loop {
+                    let num_analysed = batching_model_ref.run_predict();
 
-                if num_analysed == 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    if num_analysed == 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+
+                    let elapsed_mills = last_report.elapsed().as_millis();
+                    if elapsed_mills >= 60_000 {
+                        let num_nodes = batching_model_ref.poll_nodes();
+                        let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
+                        let now = Utc::now().format("%H:%M:%S").to_string();
+                        println!("TIME: {}, NPS: {:.2}", now, nps);
+                        last_report = Instant::now();
+                    }
+
+                    if !alive_ref.load(Ordering::SeqCst) {
+                        break;
+                    }
                 }
-
-                let elapsed_mills = last_report.elapsed().as_millis();
-                if elapsed_mills >= 60_000 {
-                    let num_nodes = batching_model_ref.poll_nodes();
-                    let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
-                    let now = Utc::now().format("%H:%M:%S").to_string();
-                    println!("TIME: {}, NPS: {:.2}", now, nps);
-                    last_report = Instant::now();
-                }
-
-                if !alive_ref.load(Ordering::SeqCst) {
-                    break;
-                }
-            }
-        });
+            });
+        }
 
         Self {
             name,
