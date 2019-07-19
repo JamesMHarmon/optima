@@ -21,7 +21,7 @@ use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
 use super::action::{Action};
 
-const DEPTH_TO_CACHE: usize = 7;
+const DEPTH_TO_CACHE: usize = 10;
 
 pub struct Model {
     name: String,
@@ -49,10 +49,16 @@ impl Model {
 
                     let elapsed_mills = last_report.elapsed().as_millis();
                     if i == 0 && elapsed_mills >= 5_000 {
-                        let num_nodes = batching_model_ref.take_num_nodes_analysed();
+                        let (num_nodes_from_cache, num_nodes) = batching_model_ref.take_num_nodes_analysed();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
+                        let cache_hit_perc = num_nodes_from_cache as f64 / num_nodes as f64 * 100.0;
                         let now = Utc::now().format("%H:%M:%S").to_string();
-                        println!("TIME: {}, NPS: {:.2}", now, nps);
+                        println!(
+                            "TIME: {}, NPS: {:.2}, Cache Hits: {:.2}%",
+                            now,
+                            nps,
+                            cache_hit_perc
+                        );
                         last_report = Instant::now();
                     }
 
@@ -151,7 +157,8 @@ pub struct BatchingModel {
     states_to_analyse: SegQueue<(usize, GameState, Waker)>,
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<Action>>>>,
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
-    num_nodes_analysed: AtomicUsize
+    num_nodes_analysed: AtomicUsize,
+    num_nodes_from_cache: AtomicUsize
 }
 
 impl BatchingModel {
@@ -160,13 +167,15 @@ impl BatchingModel {
         let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(4_092)));
         let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE);
         let num_nodes_analysed = AtomicUsize::new(0);
+        let num_nodes_from_cache = AtomicUsize::new(0);
 
         Self {
             model_name,
             states_to_analyse,
             states_analysed,
             state_analysis_cache,
-            num_nodes_analysed
+            num_nodes_analysed,
+            num_nodes_from_cache
         }
     }
 
@@ -202,8 +211,11 @@ impl BatchingModel {
         num_analysed
     }
 
-    fn take_num_nodes_analysed(&self) -> usize {
-        self.num_nodes_analysed.swap(0, Ordering::SeqCst)
+    fn take_num_nodes_analysed(&self) -> (usize, usize) {
+        (    
+           self.num_nodes_from_cache.swap(0, Ordering::SeqCst),
+           self.num_nodes_analysed.swap(0, Ordering::SeqCst)
+        )
     }
 
     fn poll(&self, id: usize, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
@@ -214,13 +226,6 @@ impl BatchingModel {
                 Vec::new()
             ));
         }
-
-        if game_state.number_of_actions() <= DEPTH_TO_CACHE {
-            if let Some(analysis) = self.state_analysis_cache.get(game_state) {
-                self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
-                return Poll::Ready(analysis.to_owned());
-            }
-        }
         
         let analysis = self.states_analysed.lock().unwrap().remove(&id);
 
@@ -230,6 +235,14 @@ impl BatchingModel {
                 Poll::Ready(analysis)
             },
             None => {
+                if game_state.number_of_actions() <= DEPTH_TO_CACHE {
+                    if let Some(analysis) = self.state_analysis_cache.get(game_state) {
+                        self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+                        self.num_nodes_from_cache.fetch_add(1, Ordering::SeqCst);
+                        return Poll::Ready(analysis.to_owned());
+                    }
+                }
+
                 self.states_to_analyse.push((
                     id,
                     game_state.to_owned(),
