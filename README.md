@@ -79,7 +79,7 @@ until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashe
 sudo docker run \
     --runtime=nvidia \
     -p 8501:8501 \
-    --mount type=bind,source=$(pwd)/exported_models,target=/models \
+    --mount type=bind,source=$(pwd)/Connect4_runs/run-1,target=/models \
     --mount type=bind,source=$(pwd)/models.config,target=/models/models.config \
     --env-file $(pwd)/env.list \
     -t \

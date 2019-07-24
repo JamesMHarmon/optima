@@ -152,7 +152,8 @@ where
                     num_of_games_played += 1;
                     num_games_to_play -= 1;
 
-                    println!("Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, Number of Active Games: {}, GPM: {:.2}",
+                    println!(
+                        "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, Number of Active Games: {}, GPM: {:.2}",
                         starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
                         num_of_games_played,
                         num_games_to_play,

@@ -17,3 +17,5 @@ pub mod connect4;
 
 mod bits;
 mod linked_list;
+mod model_info;
+mod paths;

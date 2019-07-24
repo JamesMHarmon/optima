@@ -4,18 +4,18 @@ use std::task::{Context,Poll,Waker};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
+use std::fs::File;
 use chashmap::{CHashMap};
 use chrono::{Utc};
 use reqwest::Client;
 use serde::{Serialize,Deserialize};
 use serde_json::json;
-use pyo3::prelude::*;
-use pyo3::types::{PyDict};
 use crossbeam_queue::{SegQueue};
 
 use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
 use super::super::model::{self,TrainOptions};
+use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
@@ -52,11 +52,13 @@ impl Model {
                         let (num_nodes_from_cache, num_nodes) = batching_model_ref.take_num_nodes_analysed();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
                         let cache_hit_perc = num_nodes_from_cache as f64 / num_nodes as f64 * 100.0;
+                        let state_analysis_cache_len = batching_model_ref.state_analysis_cache_len();
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!(
-                            "TIME: {}, NPS: {:.2}, Cache Hits: {:.2}%",
+                            "TIME: {}, NPS: {:.2}, Cache Size: {}, Cache Hits: {:.2}%",
                             now,
                             nps,
+                            state_analysis_cache_len,
                             cache_hit_perc
                         );
                         last_report = Instant::now();
@@ -90,40 +92,41 @@ impl model::Model for Model {
     {
         let model = train(&self.name, target_name, sample_metrics, options);
 
-        model.map_err(|e| {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-            e.print(py);
-        }).expect("Failed to train model")
+        model.expect("Failed to train model")
     }
 }
 
 #[allow(non_snake_case)]
-fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySample<GameState,Action>>, options: &TrainOptions) -> PyResult<Model>
+fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySample<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
 {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
-    let c4_model_module_name = "c4_model";
-    let c4 = py.import(c4_model_module_name)?;
-
     let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
     let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
     let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
 
-    let py_options = PyDict::new(py);
-    py_options.set_item("X", X)?;
-    py_options.set_item("yv", yv)?;
-    py_options.set_item("yp", yp)?;
+    let json = json!({
+        "x": X,
+        "yv": yv,
+        "yp": yp
+    });
 
-    py_options.set_item("train_ratio", options.train_ratio)?;
-    py_options.set_item("train_batch_size", options.train_batch_size)?;
-    py_options.set_item("epochs", options.epochs)?;
-    py_options.set_item("learning_rate", options.learning_rate)?;
-    py_options.set_item("policy_loss_weight", options.policy_loss_weight)?;
-    py_options.set_item("value_loss_weight", options.value_loss_weight)?;
+    serde_json::to_writer(
+        &File::create("data.json").map_err(|_| "Could not create file for training data")?,
+        &json
+    ).map_err(|_| "Could not write to file with training data")?;
 
-    c4.call("train", (source_name, target_name), Some(py_options))?;
+    // let py_options = PyDict::new(py);
+    // py_options.set_item("X", X)?;
+    // py_options.set_item("yv", yv)?;
+    // py_options.set_item("yp", yp)?;
+
+    // py_options.set_item("train_ratio", options.train_ratio)?;
+    // py_options.set_item("train_batch_size", options.train_batch_size)?;
+    // py_options.set_item("epochs", options.epochs)?;
+    // py_options.set_item("learning_rate", options.learning_rate)?;
+    // py_options.set_item("policy_loss_weight", options.policy_loss_weight)?;
+    // py_options.set_item("value_loss_weight", options.value_loss_weight)?;
+
+    // c4.call("train", (source_name, target_name), Some(py_options))?;
 
     Ok(Model::new(target_name.to_owned()))
 }
@@ -218,6 +221,10 @@ impl BatchingModel {
         )
     }
 
+    fn state_analysis_cache_len(&self) -> usize {
+        self.state_analysis_cache.len()
+    }
+
     fn poll(&self, id: usize, game_state: &GameState, waker: &Waker) -> Poll<GameStateAnalysis<Action>> {
         if let Some(value) = game_state.is_terminal() {
             self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
@@ -257,6 +264,7 @@ impl BatchingModel {
         let body = game_states_to_request_body(&game_states);
 
         let request_url = get_model_url(&self.model_name);
+
         let mut response = Client::new()
             .post(&request_url)
             .json(&body)
@@ -333,11 +341,10 @@ struct PredictionResults {
 }
 
 fn get_model_url(model_name: &str) -> String {
-    let split_name: Vec<_> = model_name.split('_').collect();
+    let model_info = ModelInfo::from_model_name(model_name);
     format!(
-        "http://localhost:8501/v1/models/{run_name}/versions/{version}:predict",
-        run_name = split_name[1],
-        version = split_name[2].parse::<usize>().unwrap()
+        "http://localhost:8501/v1/models/exported_models/versions/{version}:predict",
+        version = model_info.get_run_num()
     )
 }
 

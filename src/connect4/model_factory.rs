@@ -1,47 +1,15 @@
-use std::env;
-
-use pyo3::prelude::*;
-use pyo3::types::{PyList,IntoPyDict};
+use std::fs;
 
 use super::model::{Model};
 use super::super::model;
+use super::super::model_info::{ModelInfo};
+use super::super::paths::Paths;
 
 pub struct ModelFactory {}
 
 impl ModelFactory {
     pub fn new() -> Self {
-        let result = Self::set_python_paths();
-
-        if let Err(e) = result {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-            e.print(py);
-        }
-
         Self {}
-    }
-
-    fn set_python_paths() -> PyResult<()> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-
-        let current_dir_result = env::current_dir().expect("Could not get environment path");
-        let env_path = current_dir_result.to_str().expect("Path not valid");
-        println!("Env Path: {}", env_path);
-
-        let sys = py.import("sys")?;
-        let path = sys.get("path")?.downcast_ref::<PyList>()?;
-
-        path.call_method("append", (env_path.to_owned(), ), None)?;
-        path.call_method("append", ("/anaconda3/lib/python3.6".to_owned(), ), None)?;
-        path.call_method("append", ("/anaconda3/lib/python3.6/lib-dynload".to_owned(), ), None)?;
-        path.call_method("append", ("/anaconda3/lib/python3.6/site-packages", ), None)?;
-
-        path.call_method("append", ("C:/Users/james/Anaconda3/lib", ), None)?;
-        path.call_method("append", ("C:/Users/james/Anaconda3/lib/lib-dynload", ), None)?;
-        path.call_method("append", ("C:/Users/james/Anaconda3/lib/site-packages", ), None)?;
-
-        Ok(())
     }
 }
 
@@ -49,48 +17,40 @@ impl model::ModelFactory for ModelFactory {
     type M = Model;
 
     fn create(&self, name: &str, num_filters: usize, num_blocks: usize) -> Model {
-        let model = create_model(name, num_filters, num_blocks);
-
-        model.map_err(|e| {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-            e.print(py);
-        }).expect("Failed to create model")
+        // @TODO: Replace with code to create the model.
+        get_latest(name).expect("Failed to get latest model")        
     }
 
     fn get_latest(&self, name: &str) -> Model {
-        let model = get_latest(name);
-
-        model.map_err(|e| {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-            e.print(py);
-        }).expect("Failed to get latest model")
+        get_latest(name).expect("Failed to get latest model")
     }
 }
 
-fn create_model(name: &str, num_filters: usize, num_blocks: usize) -> PyResult<Model> {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let c4 = py.import("c4_model")?;
+fn get_latest(name: &str) -> std::io::Result<Model> {
+    let model_info = ModelInfo::from_model_name(name);
+    let paths = Paths::new(&model_info);
 
-    let locals = [
-        ("num_filters", num_filters),
-        ("num_blocks", num_blocks)
-    ].into_py_dict(py);
+    let latest_run_num = fs::read_dir(paths.get_models_path())?
+        .map(|e| e.expect("Could not read model file").path())
+        .filter(|p| p.is_file())
+        .filter_map(|p| {
+            p.file_name().and_then(|p| p.to_str()).map(|s| s.to_owned())
+        })
+        .map(|n| {
+            let model_name_excluding_file_ext = &n[0..(n.len() - 3)];
+            ModelInfo::from_model_name(model_name_excluding_file_ext).get_run_num()
+        })
+        .max()
+        .expect("No models found");
 
-    locals.set_item("input_shape", (6, 7, 2))?;
+    let latest_model_name = ModelInfo::new(
+            model_info.get_game_name().to_owned(),
+            model_info.get_run_name().to_owned(),
+            latest_run_num
+        )
+        .get_model_name();
 
-    c4.call("create", (name,), Some(&locals))?;
+    println!("Getting latest model: {}", latest_model_name);
 
-    Ok(Model::new(name.to_owned()))
-}
-
-fn get_latest(name: &str) -> PyResult<Model> {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    let c4 = py.import("c4_model")?;
-    let name: String = c4.call("get_latest", (name,), None)?.extract()?;
-
-    Ok(Model::new(name))
+    Ok(Model::new(latest_model_name))
 }
