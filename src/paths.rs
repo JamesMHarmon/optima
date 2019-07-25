@@ -8,20 +8,21 @@ pub struct Paths<'a> {
 }
 
 impl<'a> Paths<'a> {
-    pub fn new(model_info: &'a ModelInfo) -> Paths {
+    pub fn from_model_info(model_info: &'a ModelInfo) -> Paths {
         Paths {
             model_info
         }
     }
 
-    pub fn get_base_path(&self) -> PathBuf {
-        let model_info = self.model_info;
-
+    pub fn get_base_game_path(&self) -> PathBuf {
         PathBuf::from(format!(
-            "./{}_runs/{}",
-            model_info.get_game_name(),
-            model_info.get_run_name()
+            "./{}_runs",
+            self.model_info.get_game_name()
         ))
+    }
+
+    pub fn get_base_path(&self) -> PathBuf {
+        self.get_base_game_path().join(self.model_info.get_run_name())
     }
 
     pub fn get_models_path(&self) -> PathBuf {

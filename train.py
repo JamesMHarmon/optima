@@ -6,35 +6,11 @@ import tensorflow as tf
 
 import c4_model as c4
 
-# Model name and path convention: ./{game}_runs/{run}/nets/{game}_{run}_{#####}.h5
-def get_model_path(name):
-    path = get_model_directory(name) / (name + '.h5')
-    return path
-
-def get_model_directory(name):
-    [game, run] = name.split('_')[:2]
-    path = Path(os.path.abspath(os.sep)) / (game + '_runs') / run / 'nets'
-    return path
-
-def save_model(name, model):
-    directory = get_model_directory(name)
-    path = get_model_path(name)
-
-    if not os.path.exists(str(directory)):
-        os.makedirs(str(directory))
-
-    model.save(str(path))
-
-def export(model_name):
+def export(model_path, export_model_path):
     c4.clear()
-    import_path = get_model_path(model_name)
-    [_, run_name, model_num] = model_name.split('_')[:3]
-    model_num = int(model_num)
-
     K.set_learning_phase(0)
 
-    model = tf.keras.models.load_model(str(import_path))
-    export_path = Path("./exported_models") / run_name / str(model_num)
+    model = tf.keras.models.load_model(model_path)
 
     # Fetch the Keras session and save the model
     # The signature definition is defined by the input and output tensors
@@ -42,14 +18,15 @@ def export(model_name):
     with tf.keras.backend.get_session() as sess:
         tf.saved_model.simple_save(
             sess,
-            str(export_path),
+            export_model_path,
             inputs={'input_image': model.input},
             outputs={t.name: t for t in model.outputs})
 
 if __name__== "__main__":
 
-    source_model_name   = os.environ['SOURCE_MODEL_NAME']
-    target_model_name   = os.environ['TARGET_MODEL_NAME']
+    source_model_path   = os.environ['SOURCE_MODEL_PATH']
+    target_model_path   = os.environ['TARGET_MODEL_PATH']
+    export_model_path   = os.environ['EXPORT_MODEL_PATH']
 
     data_path           = os.environ['DATA_PATH']
     train_ratio         = float(os.environ['TRAIN_RATIO'])
@@ -66,11 +43,10 @@ if __name__== "__main__":
         yp = data["yp"]
 
     c4.clear()
-    path = get_model_path(source_model_name)
-    model = c4.load_model(str(path))
+    model = c4.load_model(source_model_path)
 
     c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate, policy_loss_weight, value_loss_weight)
 
-    save_model(target_model_name, model)
+    model.save(target_model_path)
 
-    export(target_model_name)
+    export(target_model_path, export_model_path)

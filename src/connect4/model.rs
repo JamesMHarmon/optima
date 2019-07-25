@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
-use std::task::{Context,Poll,Waker};
+use std::fs::{self,File};
 use std::future::Future;
 use std::pin::Pin;
+use std::process::Command;
+use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
+use std::task::{Context,Poll,Waker};
 use std::time::Instant;
-use std::fs::File;
 use chashmap::{CHashMap};
 use chrono::{Utc};
 use reqwest::Client;
@@ -16,6 +17,7 @@ use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
 use super::super::bits::single_bit_index;
 use super::super::model::{self,TrainOptions};
 use super::super::model_info::ModelInfo;
+use super::super::paths::Paths;
 use super::super::node_metrics::NodeMetrics;
 use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
@@ -41,7 +43,7 @@ impl Model {
             std::thread::spawn(move || {
                 let mut last_report = Instant::now();
                 loop {
-                    let num_analysed = batching_model_ref.run_predict();
+                    let num_analysed = batching_model_ref.run_batch_predict();
 
                     if num_analysed == 0 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
@@ -99,6 +101,8 @@ impl model::Model for Model {
 #[allow(non_snake_case)]
 fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySample<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
 {
+    println!("Training from {} to {}", source_name, target_name);
+
     let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
     let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
     let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
@@ -109,24 +113,56 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
         "yp": yp
     });
 
+    let source_model_info = ModelInfo::from_model_name(source_name);
+    let target_model_info = ModelInfo::from_model_name(target_name);
+    let source_paths = Paths::from_model_info(&source_model_info);
+    let source_base_path = source_paths.get_base_path();
+    let train_data_path = source_base_path.join("training_data.json");
+
     serde_json::to_writer(
-        &File::create("data.json").map_err(|_| "Could not create file for training data")?,
+        &File::create(train_data_path.to_owned()).map_err(|_| "Could not create file for training data")?,
         &json
     ).map_err(|_| "Could not write to file with training data")?;
 
-    // let py_options = PyDict::new(py);
-    // py_options.set_item("X", X)?;
-    // py_options.set_item("yv", yv)?;
-    // py_options.set_item("yp", yp)?;
+    let docker_cmd = format!("docker run --rm \
+        --runtime=nvidia \
+        --mount type=bind,source=$(pwd)/{game_name}_runs,target=/{game_name}_runs \
+        -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
+        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
+        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
+        -e DATA_PATH=/{game_name}_runs/{run_name}/training_data.json \
+        -e TRAIN_RATIO={train_ratio} \
+        -e TRAIN_BATCH_SIZE={train_batch_size} \
+        -e EPOCHS={epochs} \
+        -e LEARNING_RATE={learning_rate} \
+        -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
+        -e VALUE_LOSS_WEIGHT={value_loss_weight} \
+        quoridor_engine/train:latest",
+        game_name = source_model_info.get_game_name(),
+        run_name = source_model_info.get_run_name(),
+        source_run_num = source_model_info.get_run_num(),
+        target_run_num = target_model_info.get_run_num(),
+        train_ratio = options.train_ratio,
+        train_batch_size = options.train_batch_size,
+        epochs = options.epochs,
+        learning_rate = options.learning_rate,
+        policy_loss_weight = options.policy_loss_weight,
+        value_loss_weight = options.value_loss_weight
+    );
 
-    // py_options.set_item("train_ratio", options.train_ratio)?;
-    // py_options.set_item("train_batch_size", options.train_batch_size)?;
-    // py_options.set_item("epochs", options.epochs)?;
-    // py_options.set_item("learning_rate", options.learning_rate)?;
-    // py_options.set_item("policy_loss_weight", options.policy_loss_weight)?;
-    // py_options.set_item("value_loss_weight", options.value_loss_weight)?;
+    println!("{}", docker_cmd);
 
-    // c4.call("train", (source_name, target_name), Some(py_options))?;
+    let result = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(docker_cmd)
+        .output()
+        .expect("Failed to run training");
+
+    println!("OUTPUT: {:?}", result);
+
+    fs::remove_file(train_data_path).expect("Failed to delete training data");
+
+    println!("Training process complete");
 
     Ok(Model::new(target_name.to_owned()))
 }
@@ -182,7 +218,7 @@ impl BatchingModel {
         }
     }
 
-    fn run_predict(&self) -> usize {
+    fn run_batch_predict(&self) -> usize {
         let states_to_analyse_queue = &self.states_to_analyse;
 
         let mut states_to_analyse: Vec<_> = Vec::with_capacity(1024);

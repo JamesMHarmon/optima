@@ -28,7 +28,7 @@ impl model::ModelFactory for ModelFactory {
 
 fn get_latest(name: &str) -> std::io::Result<Model> {
     let model_info = ModelInfo::from_model_name(name);
-    let paths = Paths::new(&model_info);
+    let paths = Paths::from_model_info(&model_info);
 
     let latest_run_num = fs::read_dir(paths.get_models_path())?
         .map(|e| e.expect("Could not read model file").path())
