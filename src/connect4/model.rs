@@ -137,6 +137,7 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
         -e VALUE_LOSS_WEIGHT={value_loss_weight} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
@@ -301,13 +302,28 @@ impl BatchingModel {
 
         let request_url = get_model_url(&self.model_name);
 
-        let mut response = Client::new()
-            .post(&request_url)
-            .json(&body)
-            .send()
-            .map_err(|_| "Failed to make a http request to prediction")?;
+        let mut response;
 
-        let predictions: PredictionResults = response.json()
+        loop {
+            response = Client::new()
+                .post(&request_url)
+                .json(&body)
+                .send();
+
+            match &response {
+                Err(_) => (),
+                Ok(response) if response.status().is_success() => break,
+                _ => ()
+            }
+
+            println!("Failed to make a http request to prediction: {}", &request_url);
+
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+
+        let predictions: PredictionResults = response
+            .map_err(|_| "Failed response in predict http result")?
+            .json()
             .map_err(|_| "Failed to deserialize predict http result")?;
 
         let result = game_states.iter()
