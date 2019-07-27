@@ -110,7 +110,7 @@ impl model::Model for Model {
     }
 }
 
-struct GameAnalyzer {
+pub struct GameAnalyzer {
     batching_model: Arc<BatchingModel>,
     id_generator: Arc<AtomicUsize>
 }

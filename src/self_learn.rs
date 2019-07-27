@@ -8,20 +8,23 @@ use std::path::{Path,PathBuf};
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
+use tokio::sync::mpsc;
+use futures::future::FutureExt;
 
-use super::analytics::GameAnalytics;
+use super::analytics::GameAnalyzer;
 use super::engine::GameEngine;
 use super::game_state::GameState;
-use super::self_play::{self,SelfPlayOptions,SelfPlaySample};
+use super::self_play::{self,SelfPlayOptions,SelfPlaySample,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
 
-pub struct SelfLearn<'a, S, A, E, M>
+pub struct SelfLearn<'a, S, A, E, M, T>
 where
     S: GameState,
     A: Clone + Eq + Serialize + Unpin,
     E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model + GameAnalytics<State=S,Action=A>
+    M: 'a + Model<Action=A,State=S,Analyzer=T>,
+    T: GameAnalyzer<Action=A,State=S> + Send
 {
     options: SelfLearnOptions,
     run_directory: PathBuf,
@@ -52,12 +55,13 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl<'a, S, A, E, M> SelfLearn<'a, S, A, E, M>
+impl<'a, S, A, E, M, T> SelfLearn<'a, S, A, E, M, T>
 where
     S: GameState,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
-    E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model<State=S,Action=A> + GameAnalytics<State=S,Action=A>
+    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+    E: 'a + GameEngine<State=S,Action=A> + Sync,
+    M: 'a + Model<State=S,Action=A,Analyzer=T>,
+    T: GameAnalyzer<Action=A,State=S> + Send
 {
     pub fn create<F>(
         game_name: String,
@@ -76,7 +80,7 @@ where
             return Err("run_name cannot contain any '_' characters");
         }
 
-        SelfLearn::<S,A,E,M>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        SelfLearn::<S,A,E,M,T>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_name = Self::get_model_name(&game_name, &run_name, 1);
 
         model_factory.create(&model_name, options.number_of_filters, options.number_of_residual_blocks);
@@ -110,18 +114,6 @@ where
         let options = &self.options;
         let number_of_games_per_net = options.number_of_games_per_net;
         let self_play_batch_size = options.self_play_batch_size;
-        let self_play_options = SelfPlayOptions {
-            epsilon: options.epsilon,
-            alpha: options.alpha,
-            cpuct_base: options.cpuct_base,
-            cpuct_init: options.cpuct_init,
-            temperature: options.temperature,
-            temperature_max_actions: options.temperature_max_actions,
-            temperature_post_max_actions: options.temperature_post_max_actions,
-            visits: options.visits
-        };
-
-        let mut num_of_games_played = 0;
         let starting_time = Instant::now();
 
         loop {
@@ -131,42 +123,60 @@ where
                 &self.run_directory,
                 model_name.to_owned()
             )?;
+            let (game_results_tx, mut game_results_rx) = tokio::sync::mpsc::unbounded_channel(); 
 
-            {
-                let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
-                let mut num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
-                let mut self_play_metric_stream = FuturesUnordered::new();
+            let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
+            let mut num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
+            let mut num_of_games_played: usize = 0;
 
-                println!("To Play: {}", num_games_to_play);
+            let game_engine = self.game_engine;
 
-                for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
-                    self_play_metric_stream.push(
-                        self_play::self_play(self.game_engine, latest_model, &self_play_options)
-                    );
+            crossbeam::scope(move |s| {
+                let parallelism: usize = 4;
+
+                for thread_num in 0..parallelism {
+                    let game_results_tx = game_results_tx.clone();
+                    let analyzer = latest_model.get_game_state_analyzer();
+                    let self_play_options = SelfPlayOptions {
+                        epsilon: options.epsilon,
+                        alpha: options.alpha,
+                        cpuct_base: options.cpuct_base,
+                        cpuct_init: options.cpuct_init,
+                        temperature: options.temperature,
+                        temperature_max_actions: options.temperature_max_actions,
+                        temperature_post_max_actions: options.temperature_post_max_actions,
+                        visits: options.visits
+                    };
+
+                    s.spawn(move |_| {
+                        println!("Running Thread: {}", thread_num);
+                        let f = Self::play_games(
+                            num_games_to_play,
+                            self_play_batch_size,
+                            game_results_tx,
+                            game_engine,
+                            analyzer,
+                            &self_play_options
+                        ).map(|_| ());
+
+                        tokio::runtime::current_thread::block_on_all(f);
+                    });
                 }
+            }).expect("");
 
-                while let Some(self_play_metric) = self_play_metric_stream.next().await {
-                    let self_play_metric = self_play_metric.unwrap();
-                    self_play_persistance.write(&self_play_metric).unwrap();
-                    num_games_this_net += 1;
-                    num_of_games_played += 1;
-                    num_games_to_play -= 1;
+            while let Some(self_play_metric) = game_results_rx.recv().await {
+                self_play_persistance.write(&self_play_metric).unwrap();
+                num_games_this_net += 1;
+                num_of_games_played += 1;
+                num_games_to_play -= 1;
 
-                    println!(
-                        "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, Number of Active Games: {}, GPM: {:.2}",
-                        starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
-                        num_of_games_played,
-                        num_games_to_play,
-                        self_play_metric_stream.len(),
-                        num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
-                    );
-
-                    if num_games_to_play - self_play_metric_stream.len() > 0 {
-                        self_play_metric_stream.push(
-                            self_play::self_play(self.game_engine, latest_model, &self_play_options)
-                        );
-                    }
-                }
+                println!(
+                    "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, GPM: {:.2}",
+                    starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
+                    num_of_games_played,
+                    num_games_to_play,
+                    num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
+                );
             }
 
             self.latest_model = Self::train_model(
@@ -176,6 +186,44 @@ where
                 options
             )?;
         }
+    }
+
+    async fn play_games(
+        num_games_to_play: usize,
+        self_play_batch_size: usize,
+        results_channel: mpsc::UnboundedSender<SelfPlayMetrics<A>>,
+        game_engine: &E,
+        analyzer: T,
+        self_play_options: &SelfPlayOptions
+    ) -> Result<(), &'static str> {
+        let mut results_channel = results_channel;
+        let mut num_games_to_play = num_games_to_play;
+        let mut num_of_games_played: usize = 0;
+        let mut self_play_metric_stream = FuturesUnordered::new();
+
+        println!("To Play: {}", num_games_to_play);
+
+        for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
+            self_play_metric_stream.push(
+                self_play::self_play(game_engine, &analyzer, &self_play_options)
+            );
+        }
+
+        while let Some(self_play_metric) = self_play_metric_stream.next().await {
+            let self_play_metric = self_play_metric.unwrap();
+            num_of_games_played += 1;
+            num_games_to_play -= 1;
+
+            results_channel.try_send(self_play_metric).expect("Failed to send game result");
+
+            if num_games_to_play - self_play_metric_stream.len() > 0 {
+                self_play_metric_stream.push(
+                    self_play::self_play(game_engine, &analyzer, &self_play_options)
+                );
+            }
+        }
+
+        Ok(())
     }
 
     fn train_model(model: &M, self_play_persistance: &SelfPlayPersistance, game_engine: &E, options: &SelfLearnOptions) -> Result<M, &'static str> {
@@ -251,7 +299,7 @@ where
     }
 
     fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
-        let run_directory = SelfLearn::<S,A,E,M>::get_run_directory(game_name, run_name);
+        let run_directory = SelfLearn::<S,A,E,M,T>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);

@@ -38,7 +38,7 @@ fn main() -> Result<(), &'static str> {
 fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'static str> {
     let model_factory = Connect4ModelFactory::new();
 
-    SelfLearn::<_,_,Connect4Engine,_>::create(
+    SelfLearn::<_,_,Connect4Engine,_,_>::create(
         C4_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,
