@@ -163,7 +163,7 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
         --runtime=nvidia \
         --mount type=bind,source=$(pwd)/{game_name}_runs,target=/{game_name}_runs \
         -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
-     GameAnalyzerMODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
+        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
         -e DATA_PATH=/{game_name}_runs/{run_name}/training_data.json \
         -e TRAIN_RATIO={train_ratio} \

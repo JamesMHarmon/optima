@@ -5,8 +5,6 @@ extern crate clap;
 extern crate quoridor;
 
 use clap::App;
-use tokio::runtime::current_thread;
-
 use quoridor::connect4::engine::{Engine as Connect4Engine};
 use quoridor::connect4::model_factory::{ModelFactory as Connect4ModelFactory};
 use quoridor::self_learn::{SelfLearn,SelfLearnOptions};
@@ -27,7 +25,7 @@ fn main() -> Result<(), &'static str> {
         // let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
 
-        let result = current_thread::block_on_all(run_connect4(run_name));
+        let result = run_connect4(run_name);
 
         return result;
     }
@@ -46,7 +44,7 @@ fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'s
     )
 }
 
-async fn run_connect4(run_name: &str) -> Result<(), &'static str> {
+fn run_connect4(run_name: &str) -> Result<(), &'static str> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
 
@@ -57,7 +55,9 @@ async fn run_connect4(run_name: &str) -> Result<(), &'static str> {
         &game_engine
     )?;
 
-    runner.learn().await
+    runner.learn()?;
+
+    Ok(())
 }
 
 fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptions, &'static str> {

@@ -5,10 +5,10 @@ use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
 use std::path::{Path,PathBuf};
+use std::sync::mpsc;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
-use tokio::sync::mpsc;
 use futures::future::FutureExt;
 
 use super::analytics::GameAnalyzer;
@@ -110,8 +110,9 @@ where
         })
     }
 
-    pub async fn learn(&mut self) -> Result<(), &'static str> {
+    pub fn learn(&mut self) -> Result<(), &'static str> {
         let options = &self.options;
+        let run_directory = &self.run_directory;
         let number_of_games_per_net = options.number_of_games_per_net;
         let self_play_batch_size = options.self_play_batch_size;
         let starting_time = Instant::now();
@@ -119,24 +120,27 @@ where
         loop {
             let latest_model = &self.latest_model;
             let model_name = latest_model.get_name();
-            let mut self_play_persistance = SelfPlayPersistance::new(
+            let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
+
+            let self_play_persistance = SelfPlayPersistance::new(
                 &self.run_directory,
                 model_name.to_owned()
             )?;
-            let (game_results_tx, mut game_results_rx) = tokio::sync::mpsc::unbounded_channel(); 
-
             let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
             let mut num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
-            let mut num_of_games_played: usize = 0;
 
             let game_engine = self.game_engine;
 
             crossbeam::scope(move |s| {
                 let parallelism: usize = 4;
+                let num_games_per_thread = num_games_to_play / parallelism;
+                let num_games_per_thread_remainder = num_games_to_play % parallelism;
 
                 for thread_num in 0..parallelism {
                     let game_results_tx = game_results_tx.clone();
                     let analyzer = latest_model.get_game_state_analyzer();
+                    let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
+
                     let self_play_options = SelfPlayOptions {
                         epsilon: options.epsilon,
                         alpha: options.alpha,
@@ -149,9 +153,9 @@ where
                     };
 
                     s.spawn(move |_| {
-                        println!("Running Thread: {}", thread_num);
+                        println!("Starting Thread: {}", thread_num);
                         let f = Self::play_games(
-                            num_games_to_play,
+                            num_games_to_play_this_thread,
                             self_play_batch_size,
                             game_results_tx,
                             game_engine,
@@ -162,22 +166,32 @@ where
                         tokio::runtime::current_thread::block_on_all(f);
                     });
                 }
+
+                s.spawn(move |_| -> Result<(), &'static str> {
+                    let mut num_of_games_played: usize = 0;
+                    let mut self_play_persistance = SelfPlayPersistance::new(
+                        run_directory,
+                        model_name.to_owned()
+                    )?;
+
+                    while let Ok(self_play_metric) = game_results_rx.recv() {
+                        self_play_persistance.write(&self_play_metric).unwrap();
+                        num_games_this_net += 1;
+                        num_of_games_played += 1;
+                        num_games_to_play -= 1;
+
+                        println!(
+                            "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, GPM: {:.2}",
+                            starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
+                            num_of_games_played,
+                            num_games_to_play,
+                            num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
+                        );
+                    }
+
+                    Ok(())
+                });
             }).map_err(|_| "Failed to spawn self play threads")?;
-
-            while let Some(self_play_metric) = game_results_rx.recv().await {
-                self_play_persistance.write(&self_play_metric).unwrap();
-                num_games_this_net += 1;
-                num_of_games_played += 1;
-                num_games_to_play -= 1;
-
-                println!(
-                    "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, GPM: {:.2}",
-                    starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
-                    num_of_games_played,
-                    num_games_to_play,
-                    num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
-                );
-            }
 
             self.latest_model = Self::train_model(
                 latest_model,
@@ -191,14 +205,12 @@ where
     async fn play_games(
         num_games_to_play: usize,
         self_play_batch_size: usize,
-        results_channel: mpsc::UnboundedSender<SelfPlayMetrics<A>>,
+        results_channel: mpsc::Sender<SelfPlayMetrics<A>>,
         game_engine: &E,
         analyzer: T,
         self_play_options: &SelfPlayOptions
     ) -> Result<(), &'static str> {
-        let mut results_channel = results_channel;
         let mut num_games_to_play = num_games_to_play;
-        let mut num_of_games_played: usize = 0;
         let mut self_play_metric_stream = FuturesUnordered::new();
 
         println!("To Play: {}", num_games_to_play);
@@ -211,10 +223,9 @@ where
 
         while let Some(self_play_metric) = self_play_metric_stream.next().await {
             let self_play_metric = self_play_metric.unwrap();
-            num_of_games_played += 1;
             num_games_to_play -= 1;
 
-            results_channel.try_send(self_play_metric).expect("Failed to send game result");
+            results_channel.send(self_play_metric).expect("Failed to send game result");
 
             if num_games_to_play - self_play_metric_stream.len() > 0 {
                 self_play_metric_stream.push(
