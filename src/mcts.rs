@@ -7,7 +7,7 @@ use rand_distr::Dirichlet;
 
 use super::game_state::GameState;
 use super::engine::{GameEngine};
-use super::analytics::{ActionWithPolicy,GameAnalytics};
+use super::analytics::{ActionWithPolicy,GameAnalyzer};
 use super::node_metrics::{NodeMetrics};
 use super::linked_list::{List};
 
@@ -59,7 +59,7 @@ where
     S: GameState,
     A: Clone + Eq + Debug,
     E: GameEngine,
-    M: GameAnalytics,
+    M: GameAnalyzer,
     C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
@@ -104,7 +104,7 @@ where
     S: GameState,
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + GameAnalytics<State=S,Action=A>,
+    M: 'a + GameAnalyzer<State=S,Action=A>,
     C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
@@ -380,7 +380,7 @@ where
     S: GameState,
     A: Clone + Eq + Debug,
     E: GameEngine<State=S,Action=A>,
-    M: GameAnalytics<State=S,Action=A>,
+    M: GameAnalyzer<State=S,Action=A>,
     C: Fn(&S, &List<A>, &A, usize) -> f64,
     T: Fn(&S, &List<A>) -> f64,
     R: Rng
@@ -545,7 +545,7 @@ mod tests {
         }
     }
 
-    impl GameAnalytics for CountingAnalytics {
+    impl GameAnalyzer for CountingAnalytics {
         type Action = CountingAction;
         type State = CountingGameState;
         type Future = CountingGameStateAnalysisFuture;

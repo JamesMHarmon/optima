@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 use super::game_state::GameState;
-use super::analytics::GameAnalytics;
+use super::analytics::GameAnalyzer;
 use super::rng;
 use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use super::node_metrics::{NodeMetrics};
@@ -51,7 +51,7 @@ pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, opt
     S: GameState,
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S, Action=A>,
-    M: 'a + GameAnalytics<State=S, Action=A>
+    M: 'a + GameAnalyzer<State=S, Action=A>
 {
     let uuid = Uuid::new_v4();
     let seedable_rng = rng::create_rng_from_uuid(uuid);

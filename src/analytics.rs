@@ -1,6 +1,6 @@
 use std::future::Future;
 
-pub trait GameAnalytics
+pub trait GameAnalyzer
 {
     type Future: Future<Output=GameStateAnalysis<Self::Action>>;
     type Action;

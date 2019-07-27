@@ -3,12 +3,12 @@ use std::pin::Pin;
 use std::task::Context;
 use std::future::Future;
 
-use super::super::analytics::{GameAnalytics,GameStateAnalysis};
+use super::super::analytics::{GameAnalyzer,GameStateAnalysis};
 use super::engine::{GameState};
 use super::action::{Action};
 use super::engine::Engine;
 
-impl GameAnalytics for Engine {
+impl GameAnalyzer for Engine {
     type Future = GameStateAnalysisFuture;
     type Action = Action;
     type State = GameState;

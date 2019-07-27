@@ -13,7 +13,7 @@ use serde::{Serialize,Deserialize};
 use serde_json::json;
 use crossbeam_queue::{SegQueue};
 
-use super::super::analytics::{ActionWithPolicy,GameAnalytics,GameStateAnalysis};
+use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use super::super::bits::single_bit_index;
 use super::super::model::{self,TrainOptions};
 use super::super::model_info::ModelInfo;
@@ -29,7 +29,7 @@ pub struct Model {
     name: String,
     batching_model: Arc<BatchingModel>,
     alive: Arc<AtomicBool>,
-    id_generator: AtomicUsize
+    id_generator: Arc<AtomicUsize>
 }
 
 impl Model {
@@ -80,7 +80,7 @@ impl Model {
             name,
             batching_model,
             alive,
-            id_generator: AtomicUsize::new(0)
+            id_generator: Arc::new(AtomicUsize::new(0))
         }
     }
 }
@@ -88,6 +88,7 @@ impl Model {
 impl model::Model for Model {
     type State = GameState;
     type Action = Action;
+    type Analyzer = GameAnalyzer;
 
     fn get_name(&self) -> &str {
         &self.name
@@ -98,6 +99,37 @@ impl model::Model for Model {
         let model = train(&self.name, target_name, sample_metrics, options);
 
         model.expect("Failed to train model")
+    }
+
+    fn get_game_state_analyzer(&self) -> Self::Analyzer
+    {
+        GameAnalyzer {
+            batching_model: self.batching_model.clone(),
+            id_generator: self.id_generator.clone()
+        }
+    }
+}
+
+struct GameAnalyzer {
+    batching_model: Arc<BatchingModel>,
+    id_generator: Arc<AtomicUsize>
+}
+
+impl analytics::GameAnalyzer for GameAnalyzer {
+    type State = GameState;
+    type Action = Action;
+    type Future = GameStateAnalysisFuture;
+
+    /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
+    /// If the evaluation is a draw then 0.0 will be returned.
+    /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
+    /// is terminal then the vector will be empty.
+    fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysisFuture {
+        GameStateAnalysisFuture::new(
+            game_state.to_owned(),
+            self.id_generator.fetch_add(1, Ordering::SeqCst),
+            self.batching_model.clone()
+        )
     }
 }
 
@@ -131,7 +163,7 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
         --runtime=nvidia \
         --mount type=bind,source=$(pwd)/{game_name}_runs,target=/{game_name}_runs \
         -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
-        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
+     GameAnalyzerMODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
         -e DATA_PATH=/{game_name}_runs/{run_name}/training_data.json \
         -e TRAIN_RATIO={train_ratio} \
@@ -169,24 +201,6 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
     println!("Training process complete");
 
     Ok(Model::new(target_name.to_owned()))
-}
-
-impl GameAnalytics for Model {
-    type Future = GameStateAnalysisFuture;
-    type Action = Action;
-    type State = GameState;
-
-    /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
-    /// If the evaluation is a draw then 0.0 will be returned.
-    /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
-    /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &GameState) -> GameStateAnalysisFuture {
-        GameStateAnalysisFuture::new(
-            game_state.to_owned(),
-            self.id_generator.fetch_add(1, Ordering::SeqCst),
-            self.batching_model.clone()
-        )
-    }
 }
 
 impl Drop for Model {
