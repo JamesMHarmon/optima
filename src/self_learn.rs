@@ -162,7 +162,7 @@ where
                         tokio::runtime::current_thread::block_on_all(f);
                     });
                 }
-            }).expect("");
+            }).map_err(|_| "Failed to spawn self play threads")?;
 
             while let Some(self_play_metric) = game_results_rx.recv().await {
                 self_play_persistance.write(&self_play_metric).unwrap();
