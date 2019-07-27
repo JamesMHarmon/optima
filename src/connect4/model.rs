@@ -52,14 +52,17 @@ impl Model {
                     let elapsed_mills = last_report.elapsed().as_millis();
                     if i == 0 && elapsed_mills >= 5_000 {
                         let (num_nodes_from_cache, num_nodes) = batching_model_ref.take_num_nodes_analysed();
+                        let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
                         let cache_hit_perc = num_nodes_from_cache as f64 / num_nodes as f64 * 100.0;
                         let state_analysis_cache_len = batching_model_ref.state_analysis_cache_len();
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!(
-                            "TIME: {}, NPS: {:.2}, Cache Size: {}, Cache Hits: {:.2}%",
+                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}, Cache Size: {}, Cache Hits: {:.2}%",
                             now,
                             nps,
+                            min_batch_size,
+                            max_batch_size,
                             state_analysis_cache_len,
                             cache_hit_perc
                         );
@@ -198,7 +201,9 @@ pub struct BatchingModel {
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<Action>>>>,
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
     num_nodes_analysed: AtomicUsize,
-    num_nodes_from_cache: AtomicUsize
+    num_nodes_from_cache: AtomicUsize,
+    min_batch_size: AtomicUsize,
+    max_batch_size: AtomicUsize
 }
 
 impl BatchingModel {
@@ -208,6 +213,8 @@ impl BatchingModel {
         let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE);
         let num_nodes_analysed = AtomicUsize::new(0);
         let num_nodes_from_cache = AtomicUsize::new(0);
+        let min_batch_size = AtomicUsize::new(std::usize::MAX);
+        let max_batch_size = AtomicUsize::new(0);
 
         Self {
             model_name,
@@ -215,7 +222,9 @@ impl BatchingModel {
             states_analysed,
             state_analysis_cache,
             num_nodes_analysed,
-            num_nodes_from_cache
+            num_nodes_from_cache,
+            min_batch_size,
+            max_batch_size
         }
     }
 
@@ -231,7 +240,11 @@ impl BatchingModel {
             }
         }
 
-        if states_to_analyse.len() == 0 {
+        let states_to_analyse_len = states_to_analyse.len();
+        self.min_batch_size.fetch_min(states_to_analyse_len, Ordering::SeqCst);
+        self.max_batch_size.fetch_max(states_to_analyse_len, Ordering::SeqCst);
+
+        if states_to_analyse_len == 0 {
             return 0;
         }
 
@@ -255,6 +268,13 @@ impl BatchingModel {
         (    
            self.num_nodes_from_cache.swap(0, Ordering::SeqCst),
            self.num_nodes_analysed.swap(0, Ordering::SeqCst)
+        )
+    }
+
+    fn take_min_max_batch_size(&self) -> (usize, usize) {
+        (
+            self.min_batch_size.swap(std::usize::MAX, Ordering::SeqCst),
+            self.max_batch_size.swap(0, Ordering::SeqCst)
         )
     }
 

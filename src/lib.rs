@@ -1,4 +1,5 @@
 #![feature(async_await)]
+#![feature(atomic_min_max)]
 
 pub mod engine;
 pub mod mcts;
