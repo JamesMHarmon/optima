@@ -15,6 +15,7 @@ use crossbeam_queue::{SegQueue};
 
 use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use super::super::bits::single_bit_index;
+use super::super::contants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,DEPTH_TO_CACHE};
 use super::super::model::{self,TrainOptions};
 use super::super::model_info::ModelInfo;
 use super::super::paths::Paths;
@@ -22,8 +23,6 @@ use super::super::node_metrics::NodeMetrics;
 use super::super::self_play::SelfPlaySample;
 use super::engine::{GameState};
 use super::action::{Action};
-
-const DEPTH_TO_CACHE: usize = 10;
 
 pub struct Model {
     name: String,
@@ -37,7 +36,7 @@ impl Model {
         let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
         let alive = Arc::new(AtomicBool::new(true));
 
-        for i in 0..3 {
+        for i in 0..ANALYSIS_REQUEST_THREADS {
             let batching_model_ref = batching_model.clone();
             let alive_ref = alive.clone();
             std::thread::spawn(move || {
@@ -245,11 +244,11 @@ impl BatchingModel {
     fn run_batch_predict(&self) -> usize {
         let states_to_analyse_queue = &self.states_to_analyse;
 
-        let mut states_to_analyse: Vec<_> = Vec::with_capacity(1024);
+        let mut states_to_analyse: Vec<_> = Vec::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE);
         while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
             states_to_analyse.push(state_to_analyse);
 
-            if states_to_analyse.len() >= 1024 {
+            if states_to_analyse.len() >= ANALYSIS_REQUEST_BATCH_SIZE {
                 break;
             }
         }

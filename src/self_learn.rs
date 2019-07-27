@@ -17,6 +17,7 @@ use super::game_state::GameState;
 use super::self_play::{self,SelfPlayOptions,SelfPlaySample,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
+use super::contants::SELF_PLAY_PARALLELISM;
 
 pub struct SelfLearn<'a, S, A, E, M, T>
 where
@@ -132,11 +133,10 @@ where
             let game_engine = self.game_engine;
 
             crossbeam::scope(move |s| {
-                let parallelism: usize = 4;
-                let num_games_per_thread = num_games_to_play / parallelism;
-                let num_games_per_thread_remainder = num_games_to_play % parallelism;
+                let num_games_per_thread = num_games_to_play / SELF_PLAY_PARALLELISM;
+                let num_games_per_thread_remainder = num_games_to_play % SELF_PLAY_PARALLELISM;
 
-                for thread_num in 0..parallelism {
+                for thread_num in 0..SELF_PLAY_PARALLELISM {
                     let game_results_tx = game_results_tx.clone();
                     let analyzer = latest_model.get_game_state_analyzer();
                     let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
