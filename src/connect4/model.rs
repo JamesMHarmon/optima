@@ -50,19 +50,21 @@ impl Model {
 
                     let elapsed_mills = last_report.elapsed().as_millis();
                     if i == 0 && elapsed_mills >= 5_000 {
-                        let (num_nodes_from_cache, num_nodes) = batching_model_ref.take_num_nodes_analysed();
+                        let (num_nodes_from_cache, num_nodes_cache_miss, num_nodes) = batching_model_ref.take_num_nodes_analysed();
                         let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
-                        let cache_hit_perc = num_nodes_from_cache as f64 / num_nodes as f64 * 100.0;
+                        let cache_hit_perc = num_nodes_from_cache as f64 / (num_nodes_from_cache as f64 + num_nodes_cache_miss as f64) * 100.0;
+                        let cache_coverage_perc = (num_nodes_from_cache as f64 + num_nodes_cache_miss as f64) / num_nodes as f64 * 100.0;
                         let state_analysis_cache_len = batching_model_ref.state_analysis_cache_len();
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!(
-                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}, Cache Size: {}, Cache Hits: {:.2}%",
+                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}, Cache Size: {}, Cache Coverage: {:.2}%, Cache Hits: {:.2}%",
                             now,
                             nps,
                             min_batch_size,
                             max_batch_size,
                             state_analysis_cache_len,
+                            cache_coverage_perc,
                             cache_hit_perc
                         );
                         last_report = Instant::now();
@@ -215,6 +217,7 @@ pub struct BatchingModel {
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
     num_nodes_analysed: AtomicUsize,
     num_nodes_from_cache: AtomicUsize,
+    num_nodes_cache_miss: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize
 }
@@ -226,6 +229,7 @@ impl BatchingModel {
         let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE);
         let num_nodes_analysed = AtomicUsize::new(0);
         let num_nodes_from_cache = AtomicUsize::new(0);
+        let num_nodes_cache_miss = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
 
@@ -236,6 +240,7 @@ impl BatchingModel {
             state_analysis_cache,
             num_nodes_analysed,
             num_nodes_from_cache,
+            num_nodes_cache_miss,
             min_batch_size,
             max_batch_size
         }
@@ -277,9 +282,10 @@ impl BatchingModel {
         num_analysed
     }
 
-    fn take_num_nodes_analysed(&self) -> (usize, usize) {
+    fn take_num_nodes_analysed(&self) -> (usize, usize, usize) {
         (    
            self.num_nodes_from_cache.swap(0, Ordering::SeqCst),
+           self.num_nodes_cache_miss.swap(0, Ordering::SeqCst),
            self.num_nodes_analysed.swap(0, Ordering::SeqCst)
         )
     }
@@ -317,6 +323,8 @@ impl BatchingModel {
                         self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
                         self.num_nodes_from_cache.fetch_add(1, Ordering::SeqCst);
                         return Poll::Ready(analysis.to_owned());
+                    } else {
+                        self.num_nodes_cache_miss.fetch_add(1, Ordering::SeqCst);
                     }
                 }
 
