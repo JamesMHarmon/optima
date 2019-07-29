@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::{self,File};
 use std::future::Future;
 use std::pin::Pin;
-use std::process::Command;
+use std::process::{Command,Stdio};
 use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::time::Instant;
@@ -189,11 +189,15 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySamp
 
     println!("{}", docker_cmd);
 
-    let result = Command::new("/bin/bash")
+    let mut cmd = Command::new("/bin/bash")
         .arg("-c")
         .arg(docker_cmd)
-        .output()
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
         .expect("Failed to run training");
+
+    let result = cmd.wait();
 
     println!("OUTPUT: {:?}", result);
 
