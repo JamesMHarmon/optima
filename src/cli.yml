@@ -36,8 +36,13 @@ subcommands:
             - moving_window_size:
                 long: moving_window_size
                 takes_value: true
-                help: "[Default: 500,000] How many games to go back and sample from when training a new net. AZ used 1,000,000"
+                help: "[Default: 500,000] How many games to go back and sample from when training a new net. AZ used 1,000,000."
                 value_name: SIZE
+            - position_sample_percentage:
+                long: position_sample_percentage
+                takes_value: true
+                help: "[Default: 0.7] What percentage of positions to be sampled from each game. AZ training_steps 700e3 / window 1e6 = 0.70% of positions were used per training run."
+                value_name: PERCENTAGE
             - train_ratio:
                 long: train_ratio
                 takes_value: true
@@ -51,12 +56,12 @@ subcommands:
             - epochs:
                 long: epochs
                 takes_value: true
-                help: "[Default: 2] The number of epochs to use when training a net."
+                help: "[Default: 1] The number of epochs to use when training a net."
                 value_name: EPOCHS
             - learning_rate:
                 long: learning_rate
                 takes_value: true
-                help: "[Default: 0.001] The learning rate to use when training a net."
+                help: "[Default: 0.2] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4"
                 value_name: RATE
             - policy_loss_weight:
                 long: policy_loss_weight

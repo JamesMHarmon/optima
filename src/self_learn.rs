@@ -1,11 +1,11 @@
 use std::fmt::Debug;
-use rand::Rng;
 use std::time::Instant;
 use std::io::Write;
 use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
 use std::path::{Path,PathBuf};
 use std::sync::mpsc;
+use rand::seq::IteratorRandom;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
@@ -38,6 +38,7 @@ pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
     pub self_play_batch_size: usize,
     pub moving_window_size: usize,
+    pub position_sample_percentage: f64,
     pub train_ratio: f64,
     pub train_batch_size: usize,
     pub epochs: usize,
@@ -241,30 +242,47 @@ where
         let source_model_name = &model.get_name();
         let new_model_name = Self::increment_model_name(source_model_name);
         let metric_iter = self_play_persistance.read_all_reverse_iter::<A>()?;
-        let mut rng = rand::thread_rng();
 
-        let sample_metrics: Vec<SelfPlaySample<S, A>> = metric_iter
+        println!("Loading positions for training...");
+
+        let positions_metrics: Vec<_> = metric_iter
             .take(options.moving_window_size)
-            .map(|m| {
+            .flat_map(|m| {
                 let score = m.score();
-                let mut analysis = m.take_analysis();
-                let l = analysis.len();
-                let i = rng.gen_range(0, l);
-                let sample_is_p1 = i % 2 == 0;
-                let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
-                let game_state = analysis.iter().take(i + 1).fold(S::initial(), |s,m| game_engine.take_action(&s, &m.0));
+                let analysis = m.take_analysis();
 
-                SelfPlaySample {
-                    game_state,
-                    score,
-                    policy: analysis.remove(i).1
-                }
-            })
-            .collect();
+                let (_, positions_metrics) = analysis.into_iter().enumerate().fold(
+                    (S::initial(), Vec::new()),
+                    |(prev_game_state,mut samples), (i, (action, metrics))| {
+                        let sample_is_p1 = i % 2 == 0;
+                        let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
+                        let game_state = game_engine.take_action(&prev_game_state, &action);
+
+                        samples.push(SelfPlaySample {
+                            game_state: game_state.clone(),
+                            score,
+                            policy: metrics
+                        });
+
+                        (game_state, samples)
+                    }
+                );
+
+                positions_metrics
+            }).collect();
+
+
+        let num_samples = ((positions_metrics.len() as f64) * options.position_sample_percentage) as usize;
+        println!("Sampling {}% for a total of {} training positions.", options.position_sample_percentage * 100.0, num_samples);
+        let mut rng = rand::thread_rng();
+        let positions_metrics = positions_metrics.into_iter().choose_multiple(
+            &mut rng,
+            num_samples
+        );
 
         Ok(model.train(
             &new_model_name,
-            &sample_metrics,
+            &positions_metrics,
             &TrainOptions {
                 train_ratio: options.train_ratio,
                 train_batch_size: options.train_batch_size,
