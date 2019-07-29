@@ -17,6 +17,7 @@ use super::game_state::GameState;
 use super::self_play::{self,SelfPlayOptions,SelfPlaySample,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::model::{Model, ModelFactory,TrainOptions};
+use super::model_info::ModelInfo;
 use super::contants::SELF_PLAY_PARALLELISM;
 
 pub struct SelfLearn<'a, S, A, E, M, T>
@@ -38,6 +39,7 @@ pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
     pub self_play_batch_size: usize,
     pub moving_window_size: usize,
+    pub max_moving_window_percentage: f64,
     pub position_sample_percentage: f64,
     pub train_ratio: f64,
     pub train_batch_size: usize,
@@ -245,8 +247,13 @@ where
 
         println!("Loading positions for training...");
 
+        let num_runs = ModelInfo::from_model_name(source_model_name).get_run_num();
+        let num_games_since_beginning = num_runs * options.number_of_games_per_net;
+        let num_max_moving_window_percentage_games = (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
+        let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
+
         let positions_metrics: Vec<_> = metric_iter
-            .take(options.moving_window_size)
+            .take(num_games)
             .flat_map(|m| {
                 let score = m.score();
                 let analysis = m.take_analysis();
@@ -271,9 +278,11 @@ where
                 positions_metrics
             }).collect();
 
+        let num_positions = positions_metrics.len();
+        let position_sample_percentage = options.position_sample_percentage;
+        let num_samples = ((num_positions as f64) * position_sample_percentage) as usize;
+        println!("Sampling {}% for a total of {} training positions.", position_sample_percentage * 100.0, num_samples);
 
-        let num_samples = ((positions_metrics.len() as f64) * options.position_sample_percentage) as usize;
-        println!("Sampling {}% for a total of {} training positions.", options.position_sample_percentage * 100.0, num_samples);
         let mut rng = rand::thread_rng();
         let positions_metrics = positions_metrics.into_iter().choose_multiple(
             &mut rng,

@@ -65,6 +65,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         number_of_games_per_net: 32_000,
         self_play_batch_size: 256,
         moving_window_size: 500_000,
+        max_moving_window_percentage: 0.5,
         position_sample_percentage: 0.7,
         train_ratio: 0.9,
         train_batch_size: 512,
@@ -87,6 +88,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
     if let Some(number_of_games_per_net) = matches.value_of("number_of_games_per_net") { options.number_of_games_per_net = number_of_games_per_net.parse().map_err(|_| "Could not parse number_of_games_per_net")? };
     if let Some(self_play_batch_size) = matches.value_of("self_play_batch_size") { options.self_play_batch_size = self_play_batch_size.parse().map_err(|_| "Could not parse self_play_batch_size")? };
     if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse().map_err(|_| "Could not parse moving_window_size")? };
+    if let Some(max_moving_window_percentage) = matches.value_of("max_moving_window_percentage") { options.max_moving_window_percentage = max_moving_window_percentage.parse().map_err(|_| "Could not parse max_moving_window_percentage")? };
     if let Some(position_sample_percentage) = matches.value_of("position_sample_percentage") { options.position_sample_percentage = position_sample_percentage.parse().map_err(|_| "Could not parse position_sample_percentage")? };
     if let Some(train_ratio) = matches.value_of("train_ratio") { options.train_ratio = train_ratio.parse().map_err(|_| "Could not parse train_ratio")? };
     if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse().map_err(|_| "Could not parse train_batch_size")? };
