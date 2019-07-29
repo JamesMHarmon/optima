@@ -225,8 +225,8 @@ pub struct BatchingModel {
 impl BatchingModel {
     fn new(model_name: String) -> Self {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(4_092)));
-        let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE);
+        let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS)));
+        let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE + 1);
         let num_nodes_analysed = AtomicUsize::new(0);
         let num_nodes_from_cache = AtomicUsize::new(0);
         let num_nodes_cache_miss = AtomicUsize::new(0);
@@ -395,6 +395,15 @@ impl BatchingModel {
             .collect();
 
         Ok(result)
+    }
+}
+
+impl Drop for BatchingModel {
+    fn drop(&mut self) {
+        println!("Dropping BatchingModel: {}", self.model_name);
+        println!("states_to_analyse length: {}", self.states_to_analyse.len());
+        println!("states_analysed length: {}", self.states_analysed.lock().unwrap().len());
+        println!("state_analysis_cache length: {}", self.state_analysis_cache.len());
     }
 }
 
