@@ -246,9 +246,16 @@ where
     fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64, rng: &mut R) -> Result<usize, &'static str> {
         let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
 
-        let weighted_index = WeightedIndex::new(puct_scores).map_err(|_| "Invalid puct scores")?;
+        let weighted_index = WeightedIndex::new(puct_scores);
 
-        let chosen_idx = weighted_index.sample(rng);
+        let chosen_idx = match weighted_index {
+            Err(_) => {
+                println!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
+                rng.gen_range(0, pucts.len())
+            },
+            Ok(weighted_index) => weighted_index.sample(rng)
+        };
+
         Ok(chosen_idx)
     }
 

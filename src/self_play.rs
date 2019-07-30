@@ -17,6 +17,7 @@ pub struct SelfPlayMetrics<A> {
     score: f64
 }
 
+#[derive(Debug)]
 pub struct SelfPlaySample<S, A> {
     pub game_state: S,
     pub score: f64,

@@ -122,6 +122,7 @@ where
         let starting_time = Instant::now();
 
         loop {
+            let starting_run_time = Instant::now();
             let latest_model = &self.latest_model;
             let model_name = latest_model.get_name();
             let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
@@ -188,7 +189,7 @@ where
                             starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
                             num_of_games_played,
                             num_games_to_play,
-                            num_of_games_played as f64 / starting_time.elapsed().as_secs() as f64 * 60 as f64
+                            num_of_games_played as f64 / starting_run_time.elapsed().as_secs() as f64 * 60 as f64
                         );
                     }
 
