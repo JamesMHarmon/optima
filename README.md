@@ -20,6 +20,9 @@
 * Document READMEs
 * Add instructions on how to get it working
 * Dockerize
+* Mask policy head
+* Create multi-threaded MCTS
+
 
 ## References
 
