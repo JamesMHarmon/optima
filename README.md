@@ -82,9 +82,9 @@ until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashe
 sudo docker run --rm \
     --runtime=nvidia \
     -p 8501:8501 \
-    --mount type=bind,source=$(pwd)/Connect4_runs/run-1,target=/models \
-    --mount type=bind,source=$(pwd)/Connect4_runs/run-1/models.config,target=/models/models.config \
-    --env-file $(pwd)/Connect4_runs/run-1/env.list \
+    --mount type=bind,source=$(pwd)/Connect4_runs/run-2,target=/models \
+    --mount type=bind,source=$(pwd)/Connect4_runs/run-2/models.config,target=/models/models.config \
+    --env-file $(pwd)/Connect4_runs/run-2/env.list \
     -t \
     tensorflow/serving:latest-gpu --model_config_file=/models/models.config
 
@@ -100,3 +100,7 @@ sudo docker run --rm \
     tensorrt --precision_mode FP16 --max_batch_size 512
 
 Time Elapsed: 0.20h, Number of Games Played: 1024
+
+curl -d '{"instances": [[[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]]]}'     -X POST http://localhost:8501/v1/models/exported_models/versions/2:predict
+
+
