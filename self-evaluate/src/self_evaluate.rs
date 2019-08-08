@@ -140,21 +140,20 @@ where
         game_engine: &E,
         analyzer_1: &T,
         analyzer_2: &T
-    ) {
+    ) -> Result<f64, &'static str> {
         let uuid = Uuid::new_v4();
         let seedable_rng = rng::create_rng_from_uuid(uuid);
-        let game_state: S = S::initial();
-        let actions = List::new();
         let cpuct_base: f64 = 19_652.0;
         let cpuct_init: f64 = 1.25;
         let temperature_max_actions: usize = 16;
         let temperature: f64 = 0.45;
         let temperature_post_max_actions: f64 = 0.0;
         let visits: usize = 800;
+        let p1_last_to_move = false;
 
         let mut mcts_1 = MCTS::new(
-            game_state,
-            actions,
+            S::initial(),
+            List::new(),
             game_engine,
             analyzer_1,
             MCTSOptions::<S,A,_,_,_>::new(
@@ -166,8 +165,8 @@ where
         );
 
         let mut mcts_2 = MCTS::new(
-            game_state,
-            actions,
+            S::initial(),
+            List::new(),
             game_engine,
             analyzer_2,
             MCTSOptions::<S,A,_,_,_>::new(
@@ -181,7 +180,7 @@ where
         let mut state: S = S::initial();
 
         while game_engine.is_terminal_state(&state) == None {
-            let search_result = if true {
+            let search_result = if !p1_last_to_move {
                 mcts_1.search(visits).await?
             } else {
                 mcts_2.search(visits).await?
@@ -193,14 +192,14 @@ where
             mcts_2.advance_to_action(action.to_owned()).await?;
 
             state = game_engine.take_action(&state, &action);
+
+            p1_last_to_move = !p1_last_to_move;
         };
 
         let final_score = game_engine.is_terminal_state(&state).ok_or("Expected a terminal state")?;
-        let p1_last_to_move = self_play_metrics.analysis.len() % 2 == 1;
         let final_score_p1 = if p1_last_to_move { final_score * -1.0 } else { final_score };
-        self_play_metrics.score = final_score_p1;
 
-        Ok(self_play_metrics)
+        Ok(final_score_p1)
     }
 
     fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {
