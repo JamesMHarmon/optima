@@ -1,0 +1,21 @@
+[package]
+name = "self-evaluate"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+connect4 = { path = "../connect4" }
+engine = { path = "../engine" }
+common = { path = "../common" }
+model = { path = "../model" }
+mcts = { path = "../mcts" }
+
+crossbeam="0.7.1"
+rand="0.7.0"
+uuid={version="0.7",features=["v4"]}
+serde={version="1.0.95",features=["derive"]}
+serde_json="1.0"
+futures-preview = "=0.3.0-alpha.17"
+tokio-current-thread = { git = "https://github.com/tokio-rs/tokio" }

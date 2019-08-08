@@ -1195,6 +1195,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "self-evaluate"
+version = "0.1.0"
+dependencies = [
+ "common 0.1.0",
+ "connect4 0.1.0",
+ "crossbeam 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "engine 0.1.0",
+ "futures-preview 0.3.0-alpha.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mcts 0.1.0",
+ "model 0.1.0",
+ "rand 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.98 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio-current-thread 0.2.0 (git+https://github.com/tokio-rs/tokio)",
+ "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "self-learn"
 version = "0.1.0"
 dependencies = [
