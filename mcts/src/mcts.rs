@@ -699,11 +699,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 400.91999999999973,
+            W: 400.9499999999998,
             children_visits: vec!(
-                (CountingAction::Increment, 316),
-                (CountingAction::Decrement, 178),
-                (CountingAction::Stay, 305)
+                (CountingAction::Increment, 312),
+                (CountingAction::Decrement, 181),
+                (CountingAction::Stay, 306)
             )
         });
     }
@@ -729,7 +729,7 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 100,
-            W: 50.03999999999999,
+            W: 50.04000000000002,
             children_visits: vec!(
                 (CountingAction::Increment, 33),
                 (CountingAction::Decrement, 27),
@@ -819,11 +819,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 8000,
-            W: 6875.169999999976,
+            W: 6870.909999999993,
             children_visits: vec!(
-                (CountingAction::Increment, 6462),
-                (CountingAction::Decrement, 728),
-                (CountingAction::Stay, 809)
+                (CountingAction::Increment, 6456),
+                (CountingAction::Decrement, 718),
+                (CountingAction::Stay, 825)
             )
         });
     }
@@ -849,11 +849,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 8.999999999999986,
+            W: 8.87999999999999,
             children_visits: vec!(
                 (CountingAction::Increment, 182),
-                (CountingAction::Decrement, 314),
-                (CountingAction::Stay, 303)
+                (CountingAction::Decrement, 312),
+                (CountingAction::Stay, 305)
             )
         });
     }
@@ -879,10 +879,10 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 784.5800000000062,
+            W: 784.690000000006,
             children_visits: vec!(
-                (CountingAction::Increment, 314),
-                (CountingAction::Decrement, 180),
+                (CountingAction::Increment, 316),
+                (CountingAction::Decrement, 178),
                 (CountingAction::Stay, 305)
             )
         });
