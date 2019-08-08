@@ -66,7 +66,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         self_play_batch_size: 256,
         moving_window_size: 500_000,
         max_moving_window_percentage: 0.5,
-        position_sample_percentage: 0.7,
+        position_sample_percentage: 0.0512,
         train_ratio: 0.9,
         train_batch_size: 512,
         epochs: 1,

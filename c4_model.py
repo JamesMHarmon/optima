@@ -1,5 +1,5 @@
 from keras.models import load_model
-from keras.optimizers import Nadam
+from keras.optimizers import SGD
 from keras import backend as K 
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
@@ -38,7 +38,7 @@ def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight }
 
     model.compile(
-        optimizer=Nadam(lr=learning_rate),
+        optimizer=SGD(lr=learning_rate, momentum=0.9),
         loss=loss_funcs,
         loss_weights=loss_weights)
 
