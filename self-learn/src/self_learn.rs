@@ -11,14 +11,16 @@ use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
 
-use super::analytics::GameAnalyzer;
-use super::engine::GameEngine;
-use super::game_state::GameState;
-use super::self_play::{self,SelfPlayOptions,SelfPlaySample,SelfPlayMetrics};
+use model::analytics::GameAnalyzer;
+use engine::engine::GameEngine;
+use engine::game_state::GameState;
+use model::model::{Model, ModelFactory,TrainOptions};
+use model::model_info::ModelInfo;
+use model::position_metrics::PositionMetrics;
+
+use super::self_play::{self,SelfPlayOptions,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
-use super::model::{Model, ModelFactory,TrainOptions};
-use super::model_info::ModelInfo;
-use super::contants::SELF_PLAY_PARALLELISM;
+use super::constants::SELF_PLAY_PARALLELISM;
 
 pub struct SelfLearn<'a, S, A, E, M, T>
 where
@@ -167,7 +169,7 @@ where
                             &self_play_options
                         ).map(|_| ());
 
-                        tokio::runtime::current_thread::block_on_all(f);
+                        tokio_current_thread::block_on_all(f);
                     });
                 }
 
@@ -266,7 +268,7 @@ where
                         let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
                         let game_state = game_engine.take_action(&prev_game_state, &action);
 
-                        samples.push(SelfPlaySample {
+                        samples.push(PositionMetrics {
                             game_state: game_state.clone(),
                             score,
                             policy: metrics

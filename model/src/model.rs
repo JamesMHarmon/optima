@@ -1,5 +1,6 @@
-use super::self_play::SelfPlaySample;
-use super::game_state::GameState;
+use engine::game_state::GameState;
+
+use super::position_metrics::PositionMetrics;
 use super::analytics::GameAnalyzer;
 
 pub trait Model {
@@ -8,7 +9,7 @@ pub trait Model {
     type Action;
 
     fn get_name(&self) -> &str;
-    fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Self;
+    fn train(&self, target_name: &str, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Self;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 

@@ -1,5 +1,5 @@
-use super::super::engine::GameEngine;
-use super::super::game_state;
+use engine::engine::GameEngine;
+use engine::game_state;
 use super::action::Action;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;

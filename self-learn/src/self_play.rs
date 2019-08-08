@@ -2,26 +2,19 @@ use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-use super::game_state::GameState;
-use super::analytics::GameAnalyzer;
-use super::rng;
-use super::mcts::{DirichletOptions,MCTS,MCTSOptions};
-use super::node_metrics::{NodeMetrics};
-use super::engine::GameEngine;
-use super::linked_list::List;
+use common::rng;
+use common::linked_list::List;
+use engine::engine::GameEngine;
+use engine::game_state::GameState;
+use mcts::mcts::{DirichletOptions,MCTS,MCTSOptions};
+use model::analytics::GameAnalyzer;
+use model::node_metrics::NodeMetrics;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfPlayMetrics<A> {
     guid: String,
     analysis: Vec<(A, NodeMetrics<A>)>,
     score: f64
-}
-
-#[derive(Debug)]
-pub struct SelfPlaySample<S, A> {
-    pub game_state: S,
-    pub score: f64,
-    pub policy: NodeMetrics<A>
 }
 
 #[derive(Debug)]

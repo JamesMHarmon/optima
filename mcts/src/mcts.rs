@@ -5,11 +5,11 @@ use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
 use rand_distr::Dirichlet;
 
-use super::game_state::GameState;
-use super::engine::{GameEngine};
-use super::analytics::{ActionWithPolicy,GameAnalyzer};
-use super::node_metrics::{NodeMetrics};
-use super::linked_list::{List};
+use engine::game_state::GameState;
+use engine::engine::{GameEngine};
+use model::analytics::{ActionWithPolicy,GameAnalyzer};
+use model::node_metrics::{NodeMetrics};
+use common::linked_list::{List};
 
 pub struct DirichletOptions {
     pub alpha: f64,
@@ -452,15 +452,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread;
+    use tokio_current_thread;
     use std::task::{Context,Poll};
     use std::pin::Pin;
     use std::future::Future;
     use uuid::Uuid;
     use super::*;
-    use super::super::rng;
-    use super::super::game_state::{GameState};
-    use super::super::analytics::{GameStateAnalysis};
+    use common::rng;
+    use engine::game_state::{GameState};
+    use model::analytics::{GameStateAnalysis};
 
     #[derive(Hash, PartialEq, Eq, Clone, Debug)]
     struct CountingGameState {
@@ -609,8 +609,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
-        current_thread::block_on_all(mcts2.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts2.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics();
         let metrics2 = mcts.get_root_node_metrics();
@@ -633,7 +633,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
@@ -653,9 +653,9 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
 
-        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -675,7 +675,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
     }
 
     #[test]
@@ -693,7 +693,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -723,7 +723,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(100)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(100)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -753,7 +753,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(1)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(1)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -783,7 +783,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(2)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(2)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -813,7 +813,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(8000)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(8000)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -843,7 +843,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -873,7 +873,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
