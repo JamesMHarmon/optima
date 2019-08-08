@@ -1,0 +1,9 @@
+[package]
+name = "engine"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+name="engine"

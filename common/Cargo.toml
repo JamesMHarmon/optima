@@ -1,0 +1,13 @@
+[package]
+name = "common"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+name="common"
+
+[dependencies]
+rand="0.7.0"
+uuid={version="0.7",features=["v4"]}

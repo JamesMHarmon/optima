@@ -2,12 +2,11 @@
 
 #[macro_use]
 extern crate clap;
-extern crate quoridor;
 
 use clap::App;
-use quoridor::connect4::engine::{Engine as Connect4Engine};
-use quoridor::connect4::model_factory::{ModelFactory as Connect4ModelFactory};
-use quoridor::self_learn::{SelfLearn,SelfLearnOptions};
+use connect4::engine::{Engine as Connect4Engine};
+use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
+use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 
 const C4_NAME: &str = "Connect4";
 

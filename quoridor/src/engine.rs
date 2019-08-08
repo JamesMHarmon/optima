@@ -1,5 +1,5 @@
 use super::action::{Action,ValidActions};
-use super::super::engine::{GameEngine};
+use engine::{GameEngine};
 
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
 const RIGHT_COLUMN_MASK: u128 =                                 0b__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;

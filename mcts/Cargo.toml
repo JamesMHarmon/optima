@@ -1,0 +1,19 @@
+[package]
+name = "mcts"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+name="mcts"
+
+[dependencies]
+rand="0.7.0"
+rand_distr="0.2.1"
+tokio-current-thread={git="https://github.com/tokio-rs/tokio"}
+uuid={version="0.7",features=["v4"]}
+
+engine = { path = "../engine" }
+common = { path = "../common" }
+model = { path = "../model" }

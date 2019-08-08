@@ -13,14 +13,15 @@ use serde::{Serialize,Deserialize};
 use serde_json::json;
 use crossbeam_queue::{SegQueue};
 
-use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
-use super::super::bits::single_bit_index;
-use super::super::contants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,DEPTH_TO_CACHE};
-use super::super::model::{self,TrainOptions};
-use super::super::model_info::ModelInfo;
-use super::super::paths::Paths;
-use super::super::node_metrics::NodeMetrics;
-use super::super::self_play::SelfPlaySample;
+use model::analytics::{self,ActionWithPolicy,GameStateAnalysis};
+use common::bits::single_bit_index;
+use model::model::TrainOptions;
+use model::model_info::ModelInfo;
+use model::node_metrics::NodeMetrics;
+use model::position_metrics::PositionMetrics;
+
+use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,DEPTH_TO_CACHE};
+use super::paths::Paths;
 use super::engine::{GameState};
 use super::action::{Action};
 
@@ -86,7 +87,7 @@ impl Model {
     }
 }
 
-impl model::Model for Model {
+impl model::model::Model for Model {
     type State = GameState;
     type Action = Action;
     type Analyzer = GameAnalyzer;
@@ -95,7 +96,7 @@ impl model::Model for Model {
         &self.name
     }
 
-    fn train(&self, target_name: &str, sample_metrics: &Vec<SelfPlaySample<Self::State, Self::Action>>, options: &TrainOptions) -> Model
+    fn train(&self, target_name: &str, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Model
     {
         let model = train(&self.name, target_name, sample_metrics, options);
 
@@ -135,7 +136,7 @@ impl analytics::GameAnalyzer for GameAnalyzer {
 }
 
 #[allow(non_snake_case)]
-fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<SelfPlaySample<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
+fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<PositionMetrics<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
 {
     println!("Training from {} to {}", source_name, target_name);
 

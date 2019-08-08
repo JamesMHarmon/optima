@@ -5,11 +5,11 @@ use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
 use rand_distr::Dirichlet;
 
-use super::game_state::GameState;
-use super::engine::{GameEngine};
-use super::analytics::{ActionWithPolicy,GameAnalyzer};
-use super::node_metrics::{NodeMetrics};
-use super::linked_list::{List};
+use engine::game_state::GameState;
+use engine::engine::{GameEngine};
+use model::analytics::{ActionWithPolicy,GameAnalyzer};
+use model::node_metrics::{NodeMetrics};
+use common::linked_list::{List};
 
 pub struct DirichletOptions {
     pub alpha: f64,
@@ -452,15 +452,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread;
+    use tokio_current_thread;
     use std::task::{Context,Poll};
     use std::pin::Pin;
     use std::future::Future;
     use uuid::Uuid;
     use super::*;
-    use super::super::rng;
-    use super::super::game_state::{GameState};
-    use super::super::analytics::{GameStateAnalysis};
+    use common::rng;
+    use engine::game_state::{GameState};
+    use model::analytics::{GameStateAnalysis};
 
     #[derive(Hash, PartialEq, Eq, Clone, Debug)]
     struct CountingGameState {
@@ -609,8 +609,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
-        current_thread::block_on_all(mcts2.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts2.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics();
         let metrics2 = mcts.get_root_node_metrics();
@@ -633,7 +633,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
@@ -653,9 +653,9 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
 
-        let (action, _) = current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -675,7 +675,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
     }
 
     #[test]
@@ -693,17 +693,17 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 400.91999999999973,
+            W: 400.9499999999998,
             children_visits: vec!(
-                (CountingAction::Increment, 316),
-                (CountingAction::Decrement, 178),
-                (CountingAction::Stay, 305)
+                (CountingAction::Increment, 312),
+                (CountingAction::Decrement, 181),
+                (CountingAction::Stay, 306)
             )
         });
     }
@@ -723,13 +723,13 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(100)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(100)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_eq!(metrics, NodeMetrics {
             visits: 100,
-            W: 50.03999999999999,
+            W: 50.04000000000002,
             children_visits: vec!(
                 (CountingAction::Increment, 33),
                 (CountingAction::Decrement, 27),
@@ -753,7 +753,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(1)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(1)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -783,7 +783,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(2)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(2)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -813,17 +813,17 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(8000)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(8000)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_eq!(metrics, NodeMetrics {
             visits: 8000,
-            W: 6875.169999999976,
+            W: 6870.909999999993,
             children_visits: vec!(
-                (CountingAction::Increment, 6462),
-                (CountingAction::Decrement, 728),
-                (CountingAction::Stay, 809)
+                (CountingAction::Increment, 6456),
+                (CountingAction::Decrement, 718),
+                (CountingAction::Stay, 825)
             )
         });
     }
@@ -843,17 +843,17 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 8.999999999999986,
+            W: 8.87999999999999,
             children_visits: vec!(
                 (CountingAction::Increment, 182),
-                (CountingAction::Decrement, 314),
-                (CountingAction::Stay, 303)
+                (CountingAction::Decrement, 312),
+                (CountingAction::Stay, 305)
             )
         });
     }
@@ -873,16 +873,16 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        current_thread::block_on_all(mcts.search(800)).unwrap();
+        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 784.5800000000062,
+            W: 784.690000000006,
             children_visits: vec!(
-                (CountingAction::Increment, 314),
-                (CountingAction::Decrement, 180),
+                (CountingAction::Increment, 316),
+                (CountingAction::Decrement, 178),
                 (CountingAction::Stay, 305)
             )
         });

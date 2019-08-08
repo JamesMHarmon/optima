@@ -1,9 +1,9 @@
 use std::fs;
 
 use super::model::{Model};
-use super::super::model;
-use super::super::model_info::{ModelInfo};
-use super::super::paths::Paths;
+use super::paths::Paths;
+
+use model::model_info::ModelInfo;
 
 pub struct ModelFactory {}
 
@@ -13,7 +13,7 @@ impl ModelFactory {
     }
 }
 
-impl model::ModelFactory for ModelFactory {
+impl model::model::ModelFactory for ModelFactory {
     type M = Model;
 
     fn create(&self, name: &str, num_filters: usize, num_blocks: usize) -> Model {

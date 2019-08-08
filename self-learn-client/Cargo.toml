@@ -1,0 +1,14 @@
+[package]
+name = "self-learn-client"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+self-learn = { path = "../self-learn" }
+connect4 = { path = "../connect4" }
+
+uuid={version="0.7",features=["v4"]}
+serde={version="1.0.95",features=["derive"]}
+clap={version="2.33",features=["yaml"]}
