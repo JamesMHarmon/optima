@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::fmt::Debug;
 use std::time::Instant;
 use std::sync::mpsc;
@@ -16,6 +17,9 @@ use engine::game_state::GameState;
 use model::model::{Model,ModelFactory};
 use model::model_info::{ModelInfo};
 
+use super::self_evaluate_persistance::SelfEvaluatePersistance;
+use super::constants::SELF_EVALUATE_PARALLELISM;
+
 #[derive(Debug)]
 pub struct SelfEvaluateOptions {
     pub temperature: f64,
@@ -28,8 +32,8 @@ pub struct SelfEvaluateOptions {
 
 pub struct SelfEvaluate {}
 
-#[derive(Debug)]
-pub struct MatchResult<A> {
+#[derive(Debug,Serialize)]
+pub struct GameResult<A> {
     guid: String,
     p1_model_num: usize,
     p2_model_num: usize,
@@ -37,15 +41,23 @@ pub struct MatchResult<A> {
     score: f64
 }
 
+#[derive(Debug,Serialize)]
+pub struct MatchResult {
+    p1_model_num: usize,
+    p2_model_num: usize,
+    p1_score: f64,
+    p2_score: f64,
+    num_games_played: usize
+}
+
 impl SelfEvaluate
 {
     pub fn evaluate<S, A, E, M, T, F>(
-        game_name: &str,
-        run_name: &str,
+        model_1_info: &ModelInfo,
+        model_2_info: &ModelInfo,
         model_factory: F,
         game_engine: &E,
         num_games_to_play: usize,
-        parallelism: usize,
         options: &SelfEvaluateOptions
     ) -> Result<(), &'static str> 
     where
@@ -56,13 +68,11 @@ impl SelfEvaluate
         T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
-        // let run_directory = Self::get_run_directory(&game_name, &run_name);
-
-        let model_1_info = &ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 1);
-        let model_2_info = &ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 2);
-
         let model_1 = model_factory.get(model_1_info);
         let model_2 = model_factory.get(model_2_info);
+
+        let p1_model_num = model_1_info.get_run_num();
+        let p2_model_num = model_2_info.get_run_num();
 
         let starting_time = Instant::now();
 
@@ -70,18 +80,21 @@ impl SelfEvaluate
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
         crossbeam::scope(move |s| {
-            for thread_num in 0..parallelism {
+            let num_games_per_thread = num_games_to_play / SELF_EVALUATE_PARALLELISM;
+            let num_games_per_thread_remainder = num_games_to_play % SELF_EVALUATE_PARALLELISM;
+
+            for thread_num in 0..SELF_EVALUATE_PARALLELISM {
                 let game_results_tx = game_results_tx.clone();
 
-                // @TODO: UPDATE
                 let analyzer_1 = model_1.get_game_state_analyzer();
                 let analyzer_2 = model_2.get_game_state_analyzer();
+                let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
 
                 s.spawn(move |_| {
                     println!("Starting Thread: {}", thread_num);
 
                     let f = Self::play_games(
-                        num_games_to_play,
+                        num_games_to_play_this_thread,
                         game_results_tx,
                         game_engine,
                         (model_1_info, &analyzer_1),
@@ -95,11 +108,20 @@ impl SelfEvaluate
 
             s.spawn(move |_| -> Result<(), &'static str> {
                 let mut num_of_games_played: usize = 0;
+                let mut p1_score: f64 = 0.0;
+                let mut p2_score: f64 = 0.0;
+                let mut presistance = SelfEvaluatePersistance::new(
+                    &get_run_directory(model_1_info.get_game_name(), model_1_info.get_run_name()),
+                    model_1_info,
+                    model_2_info
+                )?;
 
-                while let Ok(match_result) = game_results_rx.recv() {
+                while let Ok(game_result) = game_results_rx.recv() {
                     num_of_games_played += 1;
+                    p1_score += game_result.score;
+                    p2_score += 1.0 - game_result.score;
 
-                    println!("{:?}", match_result);
+                    println!("{:?}", game_result);
 
                     println!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
@@ -107,7 +129,17 @@ impl SelfEvaluate
                         num_of_games_played,
                         num_of_games_played as f64 / starting_run_time.elapsed().as_secs() as f64 * 60 as f64
                     );
+
+                    presistance.write_game(&game_result)?;
                 }
+
+                presistance.write_match(&MatchResult {
+                    num_games_played: num_of_games_played,
+                    p1_model_num,
+                    p2_model_num,
+                    p1_score,
+                    p2_score
+                })?;
 
                 Ok(())
             });
@@ -118,7 +150,7 @@ impl SelfEvaluate
 
     async fn play_games<S, A, E, T>(
         num_games_to_play: usize,
-        results_channel: mpsc::Sender<MatchResult<A>>,
+        results_channel: mpsc::Sender<GameResult<A>>,
         game_engine: &E,
         model_1: (&ModelInfo, &T),
         model_2: (&ModelInfo, &T),
@@ -130,7 +162,7 @@ impl SelfEvaluate
         E: GameEngine<State=S,Action=A> + Sync,
         T: GameAnalyzer<Action=A,State=S> + Send
     {
-        let mut match_result_stream = FuturesUnordered::new();
+        let mut game_result_stream = FuturesUnordered::new();
 
         for i in 0..num_games_to_play {
             let (p1, p2) = if i % 2 == 0 {
@@ -139,15 +171,15 @@ impl SelfEvaluate
                 (model_2, model_1)
             };
 
-            match_result_stream.push(
+            game_result_stream.push(
                 Self::play_game(game_engine, p1, p2, options)
             );
         }
 
-        while let Some(match_result) = match_result_stream.next().await {
-            let match_result = match_result.unwrap();
+        while let Some(game_result) = game_result_stream.next().await {
+            let game_result = game_result.unwrap();
 
-            results_channel.send(match_result).expect("Failed to send match result");
+            results_channel.send(game_result).expect("Failed to send game result");
         }
 
         Ok(())
@@ -159,7 +191,7 @@ impl SelfEvaluate
         model_1: (&ModelInfo, &T),
         model_2: (&ModelInfo, &T),
         options: &SelfEvaluateOptions
-    ) -> Result<MatchResult<A>, &'static str>
+    ) -> Result<GameResult<A>, &'static str>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -226,7 +258,7 @@ impl SelfEvaluate
         let final_score = game_engine.is_terminal_state(&state).ok_or("Expected a terminal state")?;
         let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
 
-        Ok(MatchResult {
+        Ok(GameResult {
             guid: uuid.to_string(),
             p1_model_num: model_1.0.get_run_num(),
             p2_model_num: model_2.0.get_run_num(),
@@ -234,4 +266,8 @@ impl SelfEvaluate
             score
         })
     }
+}
+
+fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
+    PathBuf::from(format!("./{}_runs/{}", game_name, run_name))
 }

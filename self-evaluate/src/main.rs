@@ -1,9 +1,12 @@
 #![feature(async_await)]
 
 mod self_evaluate;
+mod self_evaluate_persistance;
+mod constants;
 
 use connect4::engine::{Engine as Connect4Engine};
 use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
+use model::model_info::ModelInfo;
 
 use self_evaluate::SelfEvaluateOptions;
 
@@ -23,13 +26,15 @@ fn main() -> Result<(), &'static str> {
         visits: 800
     };
 
+    let model_1_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 1);
+    let model_2_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 2);
+
     self_evaluate::SelfEvaluate::evaluate(
-        game_name,
-        run_name,
+        &model_1_info,
+        &model_2_info,
         model_factory,
         &game_engine,
         1000,
-        3,
         &options,
     )
 }

@@ -14,7 +14,6 @@ use model::model::Model;
 use super::self_learn::SelfLearnOptions;
 use super::self_play_persistance::{SelfPlayPersistance};
 
-
 pub fn train_model<S, A, E, M, T>(
     model: &M,
     self_play_persistance: &SelfPlayPersistance,
