@@ -26,15 +26,19 @@ fn main() -> Result<(), &'static str> {
         visits: 800
     };
 
-    let model_1_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 1);
-    let model_2_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 2);
+    for model_num in 1..100 {
+        let model_1_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num);
+        let model_2_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num + 1);
 
-    self_evaluate::SelfEvaluate::evaluate(
-        &model_1_info,
-        &model_2_info,
-        model_factory,
-        &game_engine,
-        1000,
-        &options,
-    )
+        self_evaluate::SelfEvaluate::evaluate(
+            &model_1_info,
+            &model_2_info,
+            &model_factory,
+            &game_engine,
+            1000,
+            &options,
+        )?;
+    }
+
+    Ok(())
 }

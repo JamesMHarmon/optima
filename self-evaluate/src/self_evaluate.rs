@@ -55,7 +55,7 @@ impl SelfEvaluate
     pub fn evaluate<S, A, E, M, T, F>(
         model_1_info: &ModelInfo,
         model_2_info: &ModelInfo,
-        model_factory: F,
+        model_factory: &F,
         game_engine: &E,
         num_games_to_play: usize,
         options: &SelfEvaluateOptions
@@ -68,8 +68,8 @@ impl SelfEvaluate
         T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
-        let model_1 = model_factory.get(model_1_info);
-        let model_2 = model_factory.get(model_2_info);
+        let model_1 = &model_factory.get(model_1_info);
+        let model_2 = &model_factory.get(model_2_info);
 
         let p1_model_num = model_1_info.get_run_num();
         let p2_model_num = model_2_info.get_run_num();
@@ -177,9 +177,9 @@ impl SelfEvaluate
         }
 
         while let Some(game_result) = game_result_stream.next().await {
-            let game_result = game_result.unwrap();
+            let game_result = game_result?;
 
-            results_channel.send(game_result).expect("Failed to send game result");
+            results_channel.send(game_result).map_err(|_| "Failed to send game result")?;
         }
 
         Ok(())
