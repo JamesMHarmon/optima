@@ -5,7 +5,6 @@ use std::io::Read;
 use std::fs::{create_dir_all, OpenOptions};
 use std::path::{Path,PathBuf};
 use std::sync::mpsc;
-use rand::seq::IteratorRandom;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
@@ -14,13 +13,13 @@ use futures::future::FutureExt;
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
-use model::model::{Model, ModelFactory,TrainOptions};
+use model::model::{Model, ModelFactory};
 use model::model_info::ModelInfo;
-use model::position_metrics::PositionMetrics;
 
 use super::self_play::{self,SelfPlayOptions,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::constants::SELF_PLAY_PARALLELISM;
+use super::train;
 
 pub struct SelfLearn<'a, S, A, E, M, T>
 where
@@ -87,9 +86,9 @@ where
         }
 
         SelfLearn::<S,A,E,M,T>::initialize_directories_and_files(&game_name, &run_name, &options)?;
-        let model_name = Self::get_model_name(&game_name, &run_name, 1);
+        let model_info = ModelInfo::new(game_name, run_name, 1);
 
-        model_factory.create(&model_name, options.number_of_filters, options.number_of_residual_blocks);
+        model_factory.create(&model_info, options.number_of_filters, options.number_of_residual_blocks);
 
         Ok(())
     }
@@ -105,8 +104,8 @@ where
     {
         let run_directory = Self::get_run_directory(&game_name, &run_name);
         let options = Self::get_config(&run_directory)?;
-        let a_name = Self::get_model_name(&game_name, &run_name, 1);
-        let latest_model = model_factory.get_latest(&a_name);
+        let model_info = ModelInfo::new(game_name, run_name, 1);
+        let latest_model = model_factory.get_latest(&model_info);
 
         Ok(Self {
             options,
@@ -126,7 +125,7 @@ where
         loop {
             let starting_run_time = Instant::now();
             let latest_model = &self.latest_model;
-            let model_name = latest_model.get_name();
+            let model_name = latest_model.get_model_info().get_model_name();
             let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
             let self_play_persistance = SelfPlayPersistance::new(
@@ -177,7 +176,7 @@ where
                     let mut num_of_games_played: usize = 0;
                     let mut self_play_persistance = SelfPlayPersistance::new(
                         run_directory,
-                        model_name.to_owned()
+                        model_name
                     )?;
 
                     while let Ok(self_play_metric) = game_results_rx.recv() {
@@ -199,7 +198,7 @@ where
                 });
             }).map_err(|_| "Failed to spawn self play threads")?;
 
-            self.latest_model = Self::train_model(
+            self.latest_model = train::train_model::<S,A,E,M,T>(
                 latest_model,
                 &self_play_persistance,
                 &self.game_engine,
@@ -241,81 +240,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn train_model(model: &M, self_play_persistance: &SelfPlayPersistance, game_engine: &E, options: &SelfLearnOptions) -> Result<M, &'static str> {
-        let source_model_name = &model.get_name();
-        let new_model_name = Self::increment_model_name(source_model_name);
-        let metric_iter = self_play_persistance.read_all_reverse_iter::<A>()?;
-
-        println!("Loading positions for training...");
-
-        let num_runs = ModelInfo::from_model_name(source_model_name).get_run_num();
-        let num_games_since_beginning = num_runs * options.number_of_games_per_net;
-        let num_max_moving_window_percentage_games = (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
-        let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
-
-        let positions_metrics: Vec<_> = metric_iter
-            .take(num_games)
-            .flat_map(|m| {
-                let score = m.score();
-                let analysis = m.take_analysis();
-
-                let (_, positions_metrics) = analysis.into_iter().enumerate().fold(
-                    (S::initial(), Vec::new()),
-                    |(prev_game_state,mut samples), (i, (action, metrics))| {
-                        let sample_is_p1 = i % 2 == 0;
-                        let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
-                        let game_state = game_engine.take_action(&prev_game_state, &action);
-
-                        samples.push(PositionMetrics {
-                            game_state: game_state.clone(),
-                            score,
-                            policy: metrics
-                        });
-
-                        (game_state, samples)
-                    }
-                );
-
-                positions_metrics
-            }).collect();
-
-        let num_positions = positions_metrics.len();
-        let position_sample_percentage = options.position_sample_percentage;
-        let num_samples = ((num_positions as f64) * position_sample_percentage) as usize;
-        println!("Sampling {}% for a total of {} training positions.", position_sample_percentage * 100.0, num_samples);
-
-        let mut rng = rand::thread_rng();
-        let positions_metrics = positions_metrics.into_iter().choose_multiple(
-            &mut rng,
-            num_samples
-        );
-
-        Ok(model.train(
-            &new_model_name,
-            &positions_metrics,
-            &TrainOptions {
-                train_ratio: options.train_ratio,
-                train_batch_size: options.train_batch_size,
-                epochs: options.epochs,
-                learning_rate: options.learning_rate,
-                policy_loss_weight: options.policy_loss_weight,
-                value_loss_weight: options.value_loss_weight
-            }
-        ))
-    }
-
-    fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {
-        format!("{}_{}_{:0>5}", game_name, run_name, model_number)
-    }
-
-    fn increment_model_name(name: &str) -> String {
-        let len = name.len();
-        let head = &name[0..len-5];
-        let tail = &name[len-5..];
-        let count = tail.parse::<usize>().expect("Could not parse num from name");
-        format!("{}{:0>5}", head, count + 1)
     }
 
     fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {

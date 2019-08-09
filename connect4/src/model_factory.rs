@@ -16,19 +16,22 @@ impl ModelFactory {
 impl model::model::ModelFactory for ModelFactory {
     type M = Model;
 
-    fn create(&self, name: &str, num_filters: usize, num_blocks: usize) -> Model {
+    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Model {
         // @TODO: Replace with code to create the model.
-        get_latest(name).expect("Failed to get latest model")        
+        get_latest(model_info).expect("Failed to get latest model")        
     }
 
-    fn get_latest(&self, name: &str) -> Model {
-        get_latest(name).expect("Failed to get latest model")
+    fn get(&self, model_info: &ModelInfo) -> Model {
+        Model::new(model_info.clone())
+    }
+
+    fn get_latest(&self, model_info: &ModelInfo) -> Model {
+        get_latest(model_info).expect("Failed to get latest model")
     }
 }
 
-fn get_latest(name: &str) -> std::io::Result<Model> {
-    let model_info = ModelInfo::from_model_name(name);
-    let paths = Paths::from_model_info(&model_info);
+fn get_latest(model_info: &ModelInfo) -> std::io::Result<Model> {
+    let paths = Paths::from_model_info(model_info);
 
     let latest_run_num = fs::read_dir(paths.get_models_path())?
         .map(|e| e.expect("Could not read model file").path())
@@ -43,14 +46,13 @@ fn get_latest(name: &str) -> std::io::Result<Model> {
         .max()
         .expect("No models found");
 
-    let latest_model_name = ModelInfo::new(
-            model_info.get_game_name().to_owned(),
-            model_info.get_run_name().to_owned(),
-            latest_run_num
-        )
-        .get_model_name();
+    let latest_model_info = ModelInfo::new(
+        model_info.get_game_name().to_owned(),
+        model_info.get_run_name().to_owned(),
+        latest_run_num
+    );
 
-    println!("Getting latest model: {}", latest_model_name);
+    println!("Getting latest model: {}", latest_model_info.get_model_name());
 
-    Ok(Model::new(latest_model_name))
+    Ok(Model::new(latest_model_info))
 }

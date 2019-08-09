@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct ModelInfo {
     game_name: String,
     run_name: String,
@@ -42,6 +43,14 @@ impl ModelInfo {
             self.run_name,
             self.run_num
         )
+    }
+
+    pub fn get_next_model_info(&self) -> ModelInfo {
+        ModelInfo {
+            game_name: self.game_name.to_owned(),
+            run_name: self.run_name.to_owned(),
+            run_num: self.run_num + 1
+        }
     }
 }
 

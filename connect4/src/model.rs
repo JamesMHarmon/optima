@@ -26,15 +26,15 @@ use super::engine::{GameState};
 use super::action::{Action};
 
 pub struct Model {
-    name: String,
+    model_info: ModelInfo,
     batching_model: Arc<BatchingModel>,
     alive: Arc<AtomicBool>,
     id_generator: Arc<AtomicUsize>
 }
 
 impl Model {
-    pub fn new(name: String) -> Self {
-        let batching_model = Arc::new(BatchingModel::new(name.to_owned()));
+    pub fn new(model_info: ModelInfo) -> Self {
+        let batching_model = Arc::new(BatchingModel::new(model_info.clone()));
         let alive = Arc::new(AtomicBool::new(true));
 
         for i in 0..ANALYSIS_REQUEST_THREADS {
@@ -79,7 +79,7 @@ impl Model {
         }
 
         Self {
-            name,
+            model_info,
             batching_model,
             alive,
             id_generator: Arc::new(AtomicUsize::new(0))
@@ -92,13 +92,13 @@ impl model::model::Model for Model {
     type Action = Action;
     type Analyzer = GameAnalyzer;
 
-    fn get_name(&self) -> &str {
-        &self.name
+    fn get_model_info(&self) -> &ModelInfo {
+        &self.model_info
     }
 
-    fn train(&self, target_name: &str, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Model
+    fn train(&self, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Model
     {
-        let model = train(&self.name, target_name, sample_metrics, options);
+        let model = train(&self.model_info, target_model_info, sample_metrics, options);
 
         model.expect("Failed to train model")
     }
@@ -136,9 +136,9 @@ impl analytics::GameAnalyzer for GameAnalyzer {
 }
 
 #[allow(non_snake_case)]
-fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<PositionMetrics<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
+fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
 {
-    println!("Training from {} to {}", source_name, target_name);
+    println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
     let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
     let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
@@ -150,8 +150,6 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<PositionMetr
         "yp": yp
     });
 
-    let source_model_info = ModelInfo::from_model_name(source_name);
-    let target_model_info = ModelInfo::from_model_name(target_name);
     let source_paths = Paths::from_model_info(&source_model_info);
     let source_base_path = source_paths.get_base_path();
     let train_data_path = source_base_path.join("training_data.json");
@@ -206,7 +204,7 @@ fn train(source_name: &str, target_name: &str, sample_metrics: &Vec<PositionMetr
 
     println!("Training process complete");
 
-    Ok(Model::new(target_name.to_owned()))
+    Ok(Model::new(target_model_info))
 }
 
 impl Drop for Model {
@@ -216,7 +214,7 @@ impl Drop for Model {
 }
 
 pub struct BatchingModel {
-    model_name: String,
+    model_info: ModelInfo,
     states_to_analyse: SegQueue<(usize, GameState, Waker)>,
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<Action>>>>,
     state_analysis_cache: CHashMap<GameState, GameStateAnalysis<Action>>,
@@ -228,7 +226,7 @@ pub struct BatchingModel {
 }
 
 impl BatchingModel {
-    fn new(model_name: String) -> Self {
+    fn new(model_info: ModelInfo) -> Self {
         let states_to_analyse = SegQueue::new();
         let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS)));
         let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE + 1);
@@ -239,7 +237,7 @@ impl BatchingModel {
         let max_batch_size = AtomicUsize::new(0);
 
         Self {
-            model_name,
+            model_info,
             states_to_analyse,
             states_analysed,
             state_analysis_cache,
@@ -346,7 +344,7 @@ impl BatchingModel {
     fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, &'static str> {
         let body = game_states_to_request_body(&game_states);
 
-        let request_url = get_model_url(&self.model_name);
+        let request_url = get_model_url(&self.model_info.get_model_name());
 
         let mut response;
 
@@ -405,7 +403,7 @@ impl BatchingModel {
 
 impl Drop for BatchingModel {
     fn drop(&mut self) {
-        println!("Dropping BatchingModel: {}", self.model_name);
+        println!("Dropping BatchingModel: {}", self.model_info.get_model_name());
         println!("states_to_analyse length: {}", self.states_to_analyse.len());
         println!("states_analysed length: {}", self.states_analysed.lock().unwrap().len());
         println!("state_analysis_cache length: {}", self.state_analysis_cache.len());

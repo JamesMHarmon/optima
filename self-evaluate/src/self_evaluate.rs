@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::time::Instant;
-use std::path::{PathBuf};
 use std::sync::mpsc;
 use serde::{Serialize};
 use serde::de::DeserializeOwned;
@@ -14,66 +13,69 @@ use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
-use model::model::{Model, ModelFactory};
+use model::model::{Model,ModelFactory};
+use model::model_info::{ModelInfo};
 
-pub struct SelfEvaluate<'a, S, A, E, M, T>
-where
-    S: GameState,
-    A: Clone + Eq + Serialize + Unpin,
-    E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model<Action=A,State=S,Analyzer=T>,
-    T: GameAnalyzer<Action=A,State=S> + Send
-{
-    run_directory: PathBuf,
-    latest_model: M,
-    game_engine: &'a E
+#[derive(Debug)]
+pub struct SelfEvaluateOptions {
+    pub temperature: f64,
+    pub temperature_max_actions: usize,
+    pub temperature_post_max_actions: f64,
+    pub visits: usize,
+    pub cpuct_base: f64,
+    pub cpuct_init: f64
 }
 
-impl<'a, S, A, E, M, T> SelfEvaluate<'a, S, A, E, M, T>
-where
-    S: GameState,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-    E: 'a + GameEngine<State=S,Action=A> + Sync,
-    M: 'a + Model<State=S,Action=A,Analyzer=T>,
-    T: GameAnalyzer<Action=A,State=S> + Send
+pub struct SelfEvaluate {}
+
+#[derive(Debug)]
+pub struct MatchResult<A> {
+    guid: String,
+    p1_model_num: usize,
+    p2_model_num: usize,
+    actions: Vec<A>,
+    score: f64
+}
+
+impl SelfEvaluate
 {
-    pub fn evaluate<F>(
-        game_name: String,
-        run_name: String,
+    pub fn evaluate<S, A, E, M, T, F>(
+        game_name: &str,
+        run_name: &str,
         model_factory: F,
-        game_engine: &'a E
-    ) -> Result<Self, &'static str> 
+        game_engine: &E,
+        num_games_to_play: usize,
+        parallelism: usize,
+        options: &SelfEvaluateOptions
+    ) -> Result<(), &'static str> 
     where
+        S: GameState,
+        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+        E: GameEngine<State=S,Action=A> + Sync,
+        M: Model<State=S,Action=A,Analyzer=T>,
+        T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
-        let run_directory = Self::get_run_directory(&game_name, &run_name);
-        let a_name = Self::get_model_name(&game_name, &run_name, 1);
-        let latest_model = model_factory.get_latest(&a_name);
+        // let run_directory = Self::get_run_directory(&game_name, &run_name);
 
-        Ok(Self {
-            run_directory,
-            latest_model,
-            game_engine
-        })
-    }
+        let model_1_info = &ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 1);
+        let model_2_info = &ModelInfo::new(game_name.to_owned(), run_name.to_owned(), 2);
 
-    pub fn learn(&mut self) -> Result<(), &'static str> {
-        let run_directory = &self.run_directory;
+        let model_1 = model_factory.get(model_1_info);
+        let model_2 = model_factory.get(model_2_info);
+
         let starting_time = Instant::now();
 
         let starting_run_time = Instant::now();
-        let latest_model = &self.latest_model;
-        let model_name = latest_model.get_name();
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
-        let mut num_games_to_play = 1000;
-
-        let game_engine = self.game_engine;
-
         crossbeam::scope(move |s| {
-            for thread_num in 0..3 {
+            for thread_num in 0..parallelism {
                 let game_results_tx = game_results_tx.clone();
-                let analyzer = latest_model.get_game_state_analyzer();
+
+                // @TODO: UPDATE
+                let analyzer_1 = model_1.get_game_state_analyzer();
+                let analyzer_2 = model_2.get_game_state_analyzer();
 
                 s.spawn(move |_| {
                     println!("Starting Thread: {}", thread_num);
@@ -82,8 +84,9 @@ where
                         num_games_to_play,
                         game_results_tx,
                         game_engine,
-                        analyzer,
-                        analyzer
+                        (model_1_info, &analyzer_1),
+                        (model_2_info, &analyzer_2),
+                        options
                     ).map(|_| ());
 
                     tokio_current_thread::block_on_all(f);
@@ -93,9 +96,10 @@ where
             s.spawn(move |_| -> Result<(), &'static str> {
                 let mut num_of_games_played: usize = 0;
 
-                while let Ok(self_play_metric) = game_results_rx.recv() {
+                while let Ok(match_result) = game_results_rx.recv() {
                     num_of_games_played += 1;
-                    num_games_to_play -= 1;
+
+                    println!("{:?}", match_result);
 
                     println!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
@@ -112,18 +116,31 @@ where
         Ok(())
     }
 
-    async fn play_games(
+    async fn play_games<S, A, E, T>(
         num_games_to_play: usize,
-        results_channel: mpsc::Sender<SelfPlayMetrics<A>>,
+        results_channel: mpsc::Sender<MatchResult<A>>,
         game_engine: &E,
-        analyzer_1: T,
-        analyzer_2: T
-    ) -> Result<(), &'static str> {
+        model_1: (&ModelInfo, &T),
+        model_2: (&ModelInfo, &T),
+        options: &SelfEvaluateOptions
+    ) -> Result<(), &'static str>
+    where
+        S: GameState,
+        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+        E: GameEngine<State=S,Action=A> + Sync,
+        T: GameAnalyzer<Action=A,State=S> + Send
+    {
         let mut match_result_stream = FuturesUnordered::new();
 
-        for _ in 0..num_games_to_play {
+        for i in 0..num_games_to_play {
+            let (p1, p2) = if i % 2 == 0 {
+                (model_1, model_2)
+            } else {
+                (model_2, model_1)
+            };
+
             match_result_stream.push(
-                Self::play_game(game_engine, &analyzer_1, &analyzer_2)
+                Self::play_game(game_engine, p1, p2, options)
             );
         }
 
@@ -136,31 +153,38 @@ where
         Ok(())
     }
 
-    async fn play_game(
+    #[allow(non_snake_case)]
+    async fn play_game<S, A, E, T>(
         game_engine: &E,
-        analyzer_1: &T,
-        analyzer_2: &T
-    ) -> Result<f64, &'static str> {
+        model_1: (&ModelInfo, &T),
+        model_2: (&ModelInfo, &T),
+        options: &SelfEvaluateOptions
+    ) -> Result<MatchResult<A>, &'static str>
+    where
+        S: GameState,
+        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+        E: GameEngine<State=S,Action=A> + Sync,
+        T: GameAnalyzer<Action=A,State=S> + Send
+    {
         let uuid = Uuid::new_v4();
-        let seedable_rng = rng::create_rng_from_uuid(uuid);
-        let cpuct_base: f64 = 19_652.0;
-        let cpuct_init: f64 = 1.25;
-        let temperature_max_actions: usize = 16;
-        let temperature: f64 = 0.45;
-        let temperature_post_max_actions: f64 = 0.0;
-        let visits: usize = 800;
-        let p1_last_to_move = false;
+        let cpuct_base = options.cpuct_base;
+        let cpuct_init = options.cpuct_init;
+        let temperature_max_actions = options.temperature_max_actions;
+        let temperature = options.temperature;
+        let temperature_post_max_actions = options.temperature_post_max_actions;
+        let visits = options.visits;
+        let mut p1_last_to_move = false;
 
         let mut mcts_1 = MCTS::new(
             S::initial(),
             List::new(),
             game_engine,
-            analyzer_1,
+            model_1.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
                 |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
-                seedable_rng,
+                rng::create_rng_from_uuid(uuid),
             )
         );
 
@@ -168,15 +192,16 @@ where
             S::initial(),
             List::new(),
             game_engine,
-            analyzer_2,
+            model_2.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
                 |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
-                seedable_rng,
+                rng::create_rng_from_uuid(uuid),
             )
         );
 
+        let mut actions: Vec<A> = Vec::new();
         let mut state: S = S::initial();
 
         while game_engine.is_terminal_state(&state) == None {
@@ -193,20 +218,20 @@ where
 
             state = game_engine.take_action(&state, &action);
 
+            actions.push(action);
+
             p1_last_to_move = !p1_last_to_move;
         };
 
         let final_score = game_engine.is_terminal_state(&state).ok_or("Expected a terminal state")?;
-        let final_score_p1 = if p1_last_to_move { final_score * -1.0 } else { final_score };
+        let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
 
-        Ok(final_score_p1)
-    }
-
-    fn get_model_name(game_name: &str, run_name: &str, model_number: usize) -> String {
-        format!("{}_{}_{:0>5}", game_name, run_name, model_number)
-    }
-
-    fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
-        PathBuf::from(format!("./{}_runs/{}", game_name, run_name))
+        Ok(MatchResult {
+            guid: uuid.to_string(),
+            p1_model_num: model_1.0.get_run_num(),
+            p2_model_num: model_2.0.get_run_num(),
+            actions,
+            score
+        })
     }
 }

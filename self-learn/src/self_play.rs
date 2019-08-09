@@ -40,7 +40,11 @@ impl<A> SelfPlayMetrics<A> {
 }
 
 #[allow(non_snake_case)]
-pub async fn self_play<'a, S, A, E, M>(game_engine: &'a E, analytics: &'a M, options: &'a SelfPlayOptions) -> Result<SelfPlayMetrics<A>, &'static str>
+pub async fn self_play<'a, S, A, E, M>(
+    game_engine: &'a E,
+    analytics: &'a M,
+    options: &'a SelfPlayOptions
+) -> Result<SelfPlayMetrics<A>, &'static str>
     where
     S: GameState,
     A: Clone + Eq + Debug,
