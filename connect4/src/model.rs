@@ -478,7 +478,15 @@ fn game_state_to_input(game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
 
             let column_vec = r.last_mut().unwrap();
 
-            column_vec.push(vec!(*p1, *p2));
+            // The input is normalized by listing the player to move first. This is different than having
+            // black first and then red. So on red's turn, red will be listed first, then black.
+            let (c1, c2) = if game_state.p1_turn_to_move {
+                (*p1, *p2)
+            } else {
+                (*p2, *p1)
+            };
+
+            column_vec.push(vec!(c1, c2));
 
             r
         })

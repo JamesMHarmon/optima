@@ -47,7 +47,7 @@ pub struct MatchResult {
     p2_model_num: usize,
     p1_score: f64,
     p2_score: f64,
-    num_games_played: usize
+    num_of_games_played: usize
 }
 
 impl SelfEvaluate
@@ -118,8 +118,10 @@ impl SelfEvaluate
 
                 while let Ok(game_result) = game_results_rx.recv() {
                     num_of_games_played += 1;
-                    p1_score += game_result.score;
-                    p2_score += 1.0 - game_result.score;
+
+                    let normalized_score = (game_result.score + 1.0) / 2.0;
+                    p1_score += normalized_score;
+                    p2_score += 1.0 - normalized_score;
 
                     println!("{:?}", game_result);
 
@@ -134,7 +136,7 @@ impl SelfEvaluate
                 }
 
                 presistance.write_match(&MatchResult {
-                    num_games_played: num_of_games_played,
+                    num_of_games_played,
                     p1_model_num,
                     p2_model_num,
                     p1_score,
