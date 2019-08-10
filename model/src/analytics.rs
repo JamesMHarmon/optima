@@ -9,7 +9,7 @@ pub trait GameAnalyzer
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct GameStateAnalysis<A> {
     pub policy_scores: Vec<ActionWithPolicy<A>>,
     pub value_score: f64
@@ -24,7 +24,7 @@ impl<A> GameStateAnalysis<A> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct ActionWithPolicy<A> {
     pub action: A,
     pub policy_score: f64,

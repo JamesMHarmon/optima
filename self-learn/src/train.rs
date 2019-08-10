@@ -52,7 +52,7 @@ where
                     let game_state = game_engine.take_action(&prev_game_state, &action);
 
                     samples.push(PositionMetrics {
-                        game_state: game_state.clone(),
+                        game_state: prev_game_state,
                         score,
                         policy: metrics
                     });
