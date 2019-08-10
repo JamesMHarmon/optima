@@ -67,12 +67,12 @@ impl GameState {
     pub fn is_terminal(&self) -> Option<f64> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
-        if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
-            return Some(0.0);
-        }
-
         if self.has_connected_4() {
             return Some(-1.0);
+        }
+
+        if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
+            return Some(0.0);
         }
 
         None
