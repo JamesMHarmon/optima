@@ -120,8 +120,14 @@ impl SelfEvaluate
                     num_of_games_played += 1;
 
                     let normalized_score = (game_result.score + 1.0) / 2.0;
-                    p1_score += normalized_score;
-                    p2_score += 1.0 - normalized_score;
+
+                    if p1_model_num == game_result.p1_model_num {
+                        p1_score += normalized_score;
+                        p2_score += 1.0 - normalized_score;
+                    } else {
+                        p2_score += normalized_score;
+                        p1_score += 1.0 - normalized_score;
+                    }
 
                     println!("{:?}", game_result);
 
