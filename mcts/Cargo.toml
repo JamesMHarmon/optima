@@ -11,7 +11,7 @@ name="mcts"
 [dependencies]
 rand="0.7.0"
 rand_distr="0.2.1"
-tokio-current-thread={git="https://github.com/tokio-rs/tokio"}
+tokio = "=0.2.0-alpha.1"
 uuid={version="0.7",features=["v4"]}
 
 engine = { path = "../engine" }

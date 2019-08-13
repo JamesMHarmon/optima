@@ -452,7 +452,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio_current_thread;
     use std::task::{Context,Poll};
     use std::pin::Pin;
     use std::future::Future;
@@ -587,8 +586,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_mcts_is_deterministic() {
+    #[tokio::test]
+    async fn test_mcts_is_deterministic() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -609,8 +608,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
-        tokio_current_thread::block_on_all(mcts2.search(800)).unwrap();
+        mcts.search(800).await.unwrap();
+        mcts2.search(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics();
         let metrics2 = mcts.get_root_node_metrics();
@@ -618,8 +617,8 @@ mod tests {
         assert_eq!(metrics, metrics2);
     }
 
-    #[test]
-    fn test_mcts_chooses_best_p1_move() {
+    #[tokio::test]
+    async fn test_mcts_chooses_best_p1_move() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -633,13 +632,13 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = mcts.search(800).await.unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
 
-    #[test]
-    fn test_mcts_chooses_best_p2_move() {
+    #[tokio::test]
+    async fn test_mcts_chooses_best_p2_move() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -653,15 +652,15 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
-        let (action, _) = tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        let (action, _) = mcts.search(800).await.unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
 
-    #[test]
-    fn test_mcts_advance_to_next_works_without_search() {
+    #[tokio::test]
+    async fn test_mcts_advance_to_next_works_without_search() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -675,11 +674,11 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.advance_to_action(CountingAction::Increment)).unwrap();
+        mcts.advance_to_action(CountingAction::Increment).await.unwrap();
     }
 
-    #[test]
-    fn test_mcts_metrics_returns_accurate_results() {
+    #[tokio::test]
+    async fn test_mcts_metrics_returns_accurate_results() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -693,7 +692,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        mcts.search(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -708,8 +707,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_weights_policy_initially() {
+    #[tokio::test]
+    async fn test_mcts_weights_policy_initially() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -723,7 +722,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(100)).unwrap();
+        mcts.search(100).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -738,8 +737,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_works_with_single_node() {
+    #[tokio::test]
+    async fn test_mcts_works_with_single_node() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -753,7 +752,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(1)).unwrap();
+        mcts.search(1).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -768,8 +767,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_works_with_two_nodes() {
+    #[tokio::test]
+    async fn test_mcts_works_with_two_nodes() {
         let game_state = CountingGameState::initial();
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -783,7 +782,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(2)).unwrap();
+        mcts.search(2).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -798,8 +797,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_works_from_provided_non_initial_game_state() {
+    #[tokio::test]
+    async fn test_mcts_works_from_provided_non_initial_game_state() {
         let game_state = CountingGameState::from_starting_count(true, 95);
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -813,7 +812,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(8000)).unwrap();
+        mcts.search(8000).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -828,8 +827,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_correctly_handles_terminal_nodes_1() {
+    #[tokio::test]
+    async fn test_mcts_correctly_handles_terminal_nodes_1() {
         let game_state = CountingGameState::from_starting_count(false, 99);
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -843,7 +842,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        mcts.search(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
@@ -858,8 +857,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_mcts_correctly_handles_terminal_nodes_2() {
+    #[tokio::test]
+    async fn test_mcts_correctly_handles_terminal_nodes_2() {
         let game_state = CountingGameState::from_starting_count(true, 98);
         let actions = List::new();
         let game_engine = CountingGameEngine::new();
@@ -873,7 +872,7 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        tokio_current_thread::block_on_all(mcts.search(800)).unwrap();
+        mcts.search(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
 
