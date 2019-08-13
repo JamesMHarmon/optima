@@ -91,7 +91,7 @@ impl SelfEvaluate
                 let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
 
                 s.spawn(move |_| {
-                    println!("Starting Thread: {}", thread_num);
+                    println!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
 
                     let f = Self::play_games(
                         num_games_to_play_this_thread,

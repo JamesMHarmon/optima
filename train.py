@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from keras import backend as K 
 import tensorflow as tf
+from keras.callbacks import TensorBoard
 
 import c4_model as c4
 
@@ -27,15 +28,17 @@ if __name__== "__main__":
     source_model_path   = os.environ['SOURCE_MODEL_PATH']
     target_model_path   = os.environ['TARGET_MODEL_PATH']
     export_model_path   = os.environ['EXPORT_MODEL_PATH']
+    tensor_board_path   = os.environ['TENSOR_BOARD_PATH']
 
     data_path           = os.environ['DATA_PATH']
     train_ratio         = float(os.environ['TRAIN_RATIO'])
     train_batch_size    = int(os.environ['TRAIN_BATCH_SIZE'])
     epochs              = int(os.environ['EPOCHS'])
+    initial_epoch       = int(os.environ['INITIAL_EPOCH'])
     learning_rate       = float(os.environ['LEARNING_RATE'])
     policy_loss_weight  = float(os.environ['POLICY_LOSS_WEIGHT'])
     value_loss_weight   = float(os.environ['VALUE_LOSS_WEIGHT'])
-
+    
     with open(data_path, "r") as read_file:
         data = json.load(read_file)
         X = data["x"]
@@ -45,7 +48,10 @@ if __name__== "__main__":
     c4.clear()
     model = c4.load_model(source_model_path)
 
-    c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, learning_rate, policy_loss_weight, value_loss_weight)
+    tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
+    callbacks = [tensor_board]
+
+    c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
 
     model.save(target_model_path)
 

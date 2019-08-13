@@ -165,6 +165,8 @@ fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_met
         -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
         -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
+        -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
+        -e INITIAL_EPOCH={initial_epoch} \
         -e DATA_PATH=/{game_name}_runs/{run_name}/training_data.json \
         -e TRAIN_RATIO={train_ratio} \
         -e TRAIN_BATCH_SIZE={train_batch_size} \
@@ -180,7 +182,8 @@ fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_met
         target_run_num = target_model_info.get_run_num(),
         train_ratio = options.train_ratio,
         train_batch_size = options.train_batch_size,
-        epochs = options.epochs,
+        epochs = (source_model_info.get_run_num() - 1) + options.epochs,
+        initial_epoch = (source_model_info.get_run_num() - 1),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight
