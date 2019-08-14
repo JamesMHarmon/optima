@@ -8,10 +8,7 @@
 
 ## TODO:
 * Allow for multiple players
-* Add self play evaluation/tournament
 * Make learning distributed
-* Break into a workspace
-* HELP!: Convert from Keras to rust-tensorflow to remove python dependency
 * Add WASM support
 * Add better debug printing
 * Add better error handling
@@ -19,7 +16,7 @@
 * Document Code
 * Document READMEs
 * Add instructions on how to get it working
-* Dockerize
+* Convert reqwest http calls to use std::futures
 * Mask policy head
 * Create multi-threaded MCTS
 

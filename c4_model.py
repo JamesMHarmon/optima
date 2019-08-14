@@ -50,7 +50,5 @@ def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch
           validation_data=(X_test, y_tests),
           callbacks=callbacks)
 
-## PRIVATE...
-
 def clear():
     K.clear_session()
