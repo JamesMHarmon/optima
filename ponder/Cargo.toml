@@ -1,11 +1,12 @@
 [package]
-name = "self-learn"
+name = "ponder"
 version = "0.1.0"
 authors = ["James Harmon <JamesMHarmon@gmail.com>"]
 edition = "2018"
 publish = false
 
 [dependencies]
+connect4 = { path = "../connect4" }
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }

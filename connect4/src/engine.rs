@@ -1,6 +1,9 @@
+use std::fmt::{self,Display,Formatter};
 use engine::engine::GameEngine;
 use engine::game_state;
+
 use super::action::Action;
+use super::board::map_board_to_arr;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 
@@ -117,6 +120,31 @@ impl GameState {
     }
 }
 
+impl Display for GameState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let p1_board = map_board_to_arr(self.p1_piece_board);
+        let p2_board = map_board_to_arr(self.p2_piece_board);
+
+        writeln!(f, "")?;
+        writeln!(f, "-----------------------------")?;
+
+        for y in 0..6 {
+            for x in 0..7 {
+                if x == 0 { write!(f, "|")?; }
+                let idx = y * 7 + x;
+                let p = if p1_board[idx] != 0.0 { "X" } else if p2_board[idx] != 0.0 { "O" } else { " " };
+                write!(f, " {} |", p)?;
+            }
+            writeln!(f, "")?;
+            if y != 5 { writeln!(f, "|---------------------------|")?; }
+        }
+
+        writeln!(f, "-----------------------------")?;
+
+        Ok(())
+    }
+}
+
 pub struct Engine {}
 
 impl Engine {
@@ -135,6 +163,16 @@ impl GameEngine for Engine {
 
     fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
         game_state.is_terminal()
+    }
+
+    fn parse_input(&self, input: &str) -> Result<Action, &'static str> {
+        let column_num = input.parse().map_err(|_| "Could not parse input")?;
+
+        if column_num > 7 {
+            return Err("Column number must be between 1 and 7");
+        }
+
+        Ok(Action::DropPiece(column_num))
     }
 }
 

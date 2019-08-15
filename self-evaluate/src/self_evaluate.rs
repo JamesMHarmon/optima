@@ -47,6 +47,8 @@ pub struct MatchResult {
     p2_model_num: usize,
     p1_score: f64,
     p2_score: f64,
+    total_score_as_p1: f64,
+    total_score_as_p2: f64,
     num_of_games_played: usize
 }
 
@@ -110,6 +112,9 @@ impl SelfEvaluate
                 let mut num_of_games_played: usize = 0;
                 let mut p1_score: f64 = 0.0;
                 let mut p2_score: f64 = 0.0;
+                let mut total_score_as_p1: f64 = 0.0;
+                let mut total_score_as_p2: f64 = 0.0;
+
                 let mut presistance = SelfEvaluatePersistance::new(
                     &get_run_directory(model_1_info.get_game_name(), model_1_info.get_run_name()),
                     model_1_info,
@@ -129,6 +134,9 @@ impl SelfEvaluate
                         p1_score += 1.0 - normalized_score;
                     }
 
+                    total_score_as_p1 += normalized_score;
+                    total_score_as_p2 += 1.0 - normalized_score;
+
                     println!("{:?}", game_result);
 
                     println!(
@@ -146,7 +154,9 @@ impl SelfEvaluate
                     p1_model_num,
                     p2_model_num,
                     p1_score,
-                    p2_score
+                    p2_score,
+                    total_score_as_p1,
+                    total_score_as_p2
                 })?;
 
                 Ok(())

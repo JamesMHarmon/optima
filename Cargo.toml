@@ -5,6 +5,7 @@ members = [
     "engine",
     "model",
     "mcts",
+    "ponder",
     "self-evaluate",
     "self-learn",
     "self-learn-client",
