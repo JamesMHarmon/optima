@@ -1,6 +1,7 @@
 use std::fmt::{self,Display,Formatter};
 use engine::engine::GameEngine;
 use engine::game_state;
+use failure::{Error,format_err};
 
 use super::action::Action;
 use super::board::map_board_to_arr;
@@ -165,11 +166,11 @@ impl GameEngine for Engine {
         game_state.is_terminal()
     }
 
-    fn parse_input(&self, input: &str) -> Result<Action, &'static str> {
-        let column_num = input.parse().map_err(|_| "Could not parse input")?;
+    fn parse_input(&self, input: &str) -> Result<Action,Error> {
+        let column_num = input.parse()?;
 
         if column_num > 7 {
-            return Err("Column number must be between 1 and 7");
+            return Err(format_err!("Column number must be between 1 and 7"));
         }
 
         Ok(Action::DropPiece(column_num))

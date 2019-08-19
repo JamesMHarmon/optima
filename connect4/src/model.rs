@@ -12,6 +12,7 @@ use reqwest::Client;
 use serde::{Serialize,Deserialize};
 use serde_json::json;
 use crossbeam_queue::{SegQueue};
+use failure::Error;
 
 use model::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use model::model::TrainOptions;
@@ -138,7 +139,7 @@ impl analytics::GameAnalyzer for GameAnalyzer {
 }
 
 #[allow(non_snake_case)]
-fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<GameState,Action>>, options: &TrainOptions) -> Result<Model, &'static str>
+fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<GameState,Action>>, options: &TrainOptions) -> Result<Model, Error>
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
@@ -157,9 +158,9 @@ fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_met
     let train_data_path = source_base_path.join("training_data.json");
 
     serde_json::to_writer(
-        &File::create(train_data_path.to_owned()).map_err(|_| "Could not create file for training data")?,
+        &File::create(train_data_path.to_owned())?,
         &json
-    ).map_err(|_| "Could not write to file with training data")?;
+    )?;
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
@@ -346,7 +347,7 @@ impl BatchingModel {
         }
     }
 
-    fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, &'static str> {
+    fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, Error> {
         let body = game_states_to_request_body(&game_states);
 
         let request_url = get_model_url(&self.model_info.get_model_name());
@@ -370,10 +371,7 @@ impl BatchingModel {
             std::thread::sleep(std::time::Duration::from_secs(10));
         }
 
-        let predictions: PredictionResults = response
-            .map_err(|_| "Failed response in predict http result")?
-            .json()
-            .map_err(|_| "Failed to deserialize predict http result")?;
+        let predictions: PredictionResults = response?.json()?;
 
         let result = game_states.iter()
             .zip(predictions.predictions.into_iter())

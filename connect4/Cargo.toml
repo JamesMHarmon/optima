@@ -13,6 +13,7 @@ common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
 
+failure="0.1"
 chashmap="2.2.2"
 chrono="0.4.7"
 reqwest="0.9.18"
