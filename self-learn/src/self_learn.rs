@@ -9,6 +9,7 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
+use failure::{Error,format_err};
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -20,6 +21,7 @@ use super::self_play::{self,SelfPlayOptions,SelfPlayMetrics};
 use super::self_play_persistance::{SelfPlayPersistance};
 use super::constants::SELF_PLAY_PARALLELISM;
 use super::train;
+
 
 pub struct SelfLearn<'a, S, A, E, M, T>
 where
@@ -73,16 +75,16 @@ where
         run_name: String,
         model_factory: &F,
         options: &SelfLearnOptions
-    ) -> Result<(), &'static str>
+    ) -> Result<(), Error>
     where
         F: ModelFactory<M=M>
     {
         if game_name.contains("_") {
-            return Err("game_name cannot contain any '_' characters");
+            return Err(format_err!("game_name cannot contain any '_' characters"));
         }
 
         if run_name.contains("_") {
-            return Err("run_name cannot contain any '_' characters");
+            return Err(format_err!("run_name cannot contain any '_' characters"));
         }
 
         SelfLearn::<S,A,E,M,T>::initialize_directories_and_files(&game_name, &run_name, &options)?;
@@ -98,7 +100,7 @@ where
         run_name: String,
         model_factory: F,
         game_engine: &'a E
-    ) -> Result<Self, &'static str> 
+    ) -> Result<Self, Error> 
     where
         F: ModelFactory<M=M>
     {
@@ -115,7 +117,7 @@ where
         })
     }
 
-    pub fn learn(&mut self) -> Result<(), &'static str> {
+    pub fn learn(&mut self) -> Result<(), Error> {
         let options = &self.options;
         let run_directory = &self.run_directory;
         let number_of_games_per_net = options.number_of_games_per_net;
@@ -132,6 +134,7 @@ where
                 &self.run_directory,
                 model_name.to_owned()
             )?;
+
             let mut num_games_this_net = self_play_persistance.read::<A>()?.len();
             let mut num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
 
@@ -172,7 +175,7 @@ where
                     });
                 }
 
-                s.spawn(move |_| -> Result<(), &'static str> {
+                s.spawn(move |_| -> Result<(), Error> {
                     let mut num_of_games_played: usize = 0;
                     let mut self_play_persistance = SelfPlayPersistance::new(
                         run_directory,
@@ -196,7 +199,7 @@ where
 
                     Ok(())
                 });
-            }).map_err(|_| "Failed to spawn self play threads")?;
+            }).unwrap();
 
             self.latest_model = train::train_model::<S,A,E,M,T>(
                 latest_model,
@@ -214,7 +217,7 @@ where
         game_engine: &E,
         analyzer: T,
         self_play_options: &SelfPlayOptions
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), Error> {
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();
 
@@ -250,7 +253,7 @@ where
         run_directory.join("config.json")
     }
 
-    fn get_config(run_directory: &Path) -> Result<SelfLearnOptions, &'static str> {
+    fn get_config(run_directory: &Path) -> Result<SelfLearnOptions, Error> {
         let config_path = Self::get_config_path(run_directory);
         let mut file = OpenOptions::new()
             .read(true)
@@ -263,14 +266,14 @@ where
         Ok(options)
     }
 
-    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, &'static str> {
+    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, Error> {
         let run_directory = SelfLearn::<S,A,E,M,T>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);
 
         if config_path.exists() {
-            return Err("Run already exists");
+            return Err(format_err!("Run already exists"));
         }
 
         println!("{:?}", run_directory);

@@ -1283,6 +1283,7 @@ dependencies = [
  "common 0.1.0",
  "crossbeam 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "engine 0.1.0",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-preview 0.3.0-alpha.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "mcts 0.1.0",
  "model 0.1.0",
@@ -1300,6 +1301,7 @@ version = "0.1.0"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "connect4 0.1.0",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "self-learn 0.1.0",
  "serde 1.0.98 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",

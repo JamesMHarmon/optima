@@ -8,9 +8,11 @@ use connect4::engine::{Engine as Connect4Engine};
 use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 
+use failure::Error;
+
 const C4_NAME: &str = "Connect4";
 
-fn main() -> Result<(), &'static str> {
+fn main() -> Result<(), Error> {
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
@@ -32,7 +34,7 @@ fn main() -> Result<(), &'static str> {
     Ok(())
 }
 
-fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'static str> {
+fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), Error> {
     let model_factory = Connect4ModelFactory::new();
 
     SelfLearn::<_,_,Connect4Engine,_,_>::create(
@@ -43,7 +45,7 @@ fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), &'s
     )
 }
 
-fn run_connect4(run_name: &str) -> Result<(), &'static str> {
+fn run_connect4(run_name: &str) -> Result<(), Error> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
 
@@ -59,7 +61,7 @@ fn run_connect4(run_name: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptions, &'static str> {
+fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptions, Error> {
     let mut options = SelfLearnOptions {
         number_of_games_per_net: 32_000,
         self_play_batch_size: 256,
@@ -84,27 +86,27 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<SelfLearnOptio
         number_of_residual_blocks: 5
     };
 
-    if let Some(number_of_games_per_net) = matches.value_of("number_of_games_per_net") { options.number_of_games_per_net = number_of_games_per_net.parse().map_err(|_| "Could not parse number_of_games_per_net")? };
-    if let Some(self_play_batch_size) = matches.value_of("self_play_batch_size") { options.self_play_batch_size = self_play_batch_size.parse().map_err(|_| "Could not parse self_play_batch_size")? };
-    if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse().map_err(|_| "Could not parse moving_window_size")? };
-    if let Some(max_moving_window_percentage) = matches.value_of("max_moving_window_percentage") { options.max_moving_window_percentage = max_moving_window_percentage.parse().map_err(|_| "Could not parse max_moving_window_percentage")? };
-    if let Some(position_sample_percentage) = matches.value_of("position_sample_percentage") { options.position_sample_percentage = position_sample_percentage.parse().map_err(|_| "Could not parse position_sample_percentage")? };
-    if let Some(train_ratio) = matches.value_of("train_ratio") { options.train_ratio = train_ratio.parse().map_err(|_| "Could not parse train_ratio")? };
-    if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse().map_err(|_| "Could not parse train_batch_size")? };
-    if let Some(epochs) = matches.value_of("epochs") { options.epochs = epochs.parse().map_err(|_| "Could not parse epochs")? };
-    if let Some(learning_rate) = matches.value_of("learning_rate") { options.learning_rate = learning_rate.parse().map_err(|_| "Could not parse learning_rate")? };
-    if let Some(policy_loss_weight) = matches.value_of("policy_loss_weight") { options.policy_loss_weight = policy_loss_weight.parse().map_err(|_| "Could not parse policy_loss_weight")? };
-    if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse().map_err(|_| "Could not parse value_loss_weight")? };
-    if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse().map_err(|_| "Could not parse temperature")? };
-    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse().map_err(|_| "Could not parse temperature_max_actions")? };
-    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse().map_err(|_| "Could not parse temperature_post_max_actions")? };
-    if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse().map_err(|_| "Could not parse visits")? };
-    if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse().map_err(|_| "Could not parse cpuct_base")? };
-    if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse().map_err(|_| "Could not parse cpuct_init")? };
-    if let Some(alpha) = matches.value_of("alpha") { options.alpha = alpha.parse().map_err(|_| "Could not parse alpha")? };
-    if let Some(epsilon) = matches.value_of("epsilon") { options.epsilon = epsilon.parse().map_err(|_| "Could not parse epsilon")? };
-    if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse().map_err(|_| "Could not parse number_of_filters")? };
-    if let Some(number_of_residual_blocks) = matches.value_of("number_of_residual_blocks") { options.number_of_residual_blocks = number_of_residual_blocks.parse().map_err(|_| "Could not parse number_of_residual_blocks")? };
+    if let Some(number_of_games_per_net) = matches.value_of("number_of_games_per_net") { options.number_of_games_per_net = number_of_games_per_net.parse()? };
+    if let Some(self_play_batch_size) = matches.value_of("self_play_batch_size") { options.self_play_batch_size = self_play_batch_size.parse()? };
+    if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse()? };
+    if let Some(max_moving_window_percentage) = matches.value_of("max_moving_window_percentage") { options.max_moving_window_percentage = max_moving_window_percentage.parse()? };
+    if let Some(position_sample_percentage) = matches.value_of("position_sample_percentage") { options.position_sample_percentage = position_sample_percentage.parse()? };
+    if let Some(train_ratio) = matches.value_of("train_ratio") { options.train_ratio = train_ratio.parse()? };
+    if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse()? };
+    if let Some(epochs) = matches.value_of("epochs") { options.epochs = epochs.parse()? };
+    if let Some(learning_rate) = matches.value_of("learning_rate") { options.learning_rate = learning_rate.parse()? };
+    if let Some(policy_loss_weight) = matches.value_of("policy_loss_weight") { options.policy_loss_weight = policy_loss_weight.parse()? };
+    if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse()? };
+    if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse()? };
+    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse()? };
+    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
+    if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
+    if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
+    if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
+    if let Some(alpha) = matches.value_of("alpha") { options.alpha = alpha.parse()? };
+    if let Some(epsilon) = matches.value_of("epsilon") { options.epsilon = epsilon.parse()? };
+    if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse()? };
+    if let Some(number_of_residual_blocks) = matches.value_of("number_of_residual_blocks") { options.number_of_residual_blocks = number_of_residual_blocks.parse()? };
 
     Ok(options)
 }

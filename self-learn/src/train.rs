@@ -5,6 +5,7 @@ use rand::seq::IteratorRandom;
 use std::fmt::Debug;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use failure::Error;
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -19,7 +20,7 @@ pub fn train_model<S, A, E, M, T>(
     self_play_persistance: &SelfPlayPersistance,
     game_engine: &E,
     options: &SelfLearnOptions
-) -> Result<M, &'static str>
+) -> Result<M, Error>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,

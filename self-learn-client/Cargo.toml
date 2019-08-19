@@ -9,6 +9,7 @@ publish = false
 self-learn = { path = "../self-learn" }
 connect4 = { path = "../connect4" }
 
+failure="0.1"
 uuid={version="0.7",features=["v4"]}
 serde={version="1.0.95",features=["derive"]}
 clap={version="2.33",features=["yaml"]}
