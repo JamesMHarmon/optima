@@ -6,11 +6,12 @@ use model::model::ModelFactory;
 use connect4::engine::{Engine as Connect4Engine};
 use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
 use model::model_info::ModelInfo;
+use failure::Error;
 
 use ponder::PonderOptions;
 
 #[tokio::main]
-async fn main() -> Result<(), &'static str> {
+async fn main() -> Result<(), Error> {
     let game_name = "Connect4";
     let run_name = "run-1";
 

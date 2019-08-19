@@ -7,6 +7,7 @@ use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
 use uuid::Uuid;
+use failure::{Error,format_err};
 
 use common::linked_list::List;
 use common::rng;
@@ -61,7 +62,7 @@ impl SelfEvaluate
         game_engine: &E,
         num_games_to_play: usize,
         options: &SelfEvaluateOptions
-    ) -> Result<(), &'static str> 
+    ) -> Result<(), Error> 
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -108,7 +109,7 @@ impl SelfEvaluate
                 });
             }
 
-            s.spawn(move |_| -> Result<(), &'static str> {
+            s.spawn(move |_| -> Result<(), Error> {
                 let mut num_of_games_played: usize = 0;
                 let mut p1_score: f64 = 0.0;
                 let mut p2_score: f64 = 0.0;
@@ -161,7 +162,7 @@ impl SelfEvaluate
 
                 Ok(())
             });
-        }).map_err(|_| "Failed to spawn self play threads")?;
+        }).unwrap();
 
         Ok(())
     }
@@ -173,7 +174,7 @@ impl SelfEvaluate
         model_1: (&ModelInfo, &T),
         model_2: (&ModelInfo, &T),
         options: &SelfEvaluateOptions
-    ) -> Result<(), &'static str>
+    ) -> Result<(), Error>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -197,7 +198,7 @@ impl SelfEvaluate
         while let Some(game_result) = game_result_stream.next().await {
             let game_result = game_result?;
 
-            results_channel.send(game_result).map_err(|_| "Failed to send game result")?;
+            results_channel.send(game_result).map_err(|_| format_err!("Failed to send game_result"))?;
         }
 
         Ok(())
@@ -209,7 +210,7 @@ impl SelfEvaluate
         model_1: (&ModelInfo, &T),
         model_2: (&ModelInfo, &T),
         options: &SelfEvaluateOptions
-    ) -> Result<GameResult<A>, &'static str>
+    ) -> Result<GameResult<A>, Error>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -273,7 +274,7 @@ impl SelfEvaluate
             p1_last_to_move = !p1_last_to_move;
         };
 
-        let final_score = game_engine.is_terminal_state(&state).ok_or("Expected a terminal state")?;
+        let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
         let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
 
         Ok(GameResult {

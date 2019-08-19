@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
+use failure::{Error,format_err};
 
 use common::rng;
 use common::linked_list::List;
@@ -44,7 +45,7 @@ pub async fn self_play<'a, S, A, E, M>(
     game_engine: &'a E,
     analytics: &'a M,
     options: &'a SelfPlayOptions
-) -> Result<SelfPlayMetrics<A>, &'static str>
+) -> Result<SelfPlayMetrics<A>, Error>
     where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -91,7 +92,7 @@ pub async fn self_play<'a, S, A, E, M>(
         self_play_metrics.analysis.push((action, metrics));
     };
 
-    let final_score = game_engine.is_terminal_state(&state).ok_or("Expected a terminal state")?;
+    let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
     let p1_last_to_move = self_play_metrics.analysis.len() % 2 == 1;
     let final_score_p1 = if p1_last_to_move { final_score * -1.0 } else { final_score };
     self_play_metrics.score = final_score_p1;

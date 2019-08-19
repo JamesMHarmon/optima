@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use serde::{Serialize};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
+use failure::Error;
 
 use common::linked_list::List;
 use common::rng;
@@ -28,7 +29,7 @@ impl Ponder
         model: &M,
         game_engine: &E,
         options: &PonderOptions
-    ) -> Result<(), &'static str> 
+    ) -> Result<(), Error> 
     where
         S: GameState + Display,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
@@ -62,7 +63,7 @@ impl Ponder
             println!("Input action or Enter to ponder");
             let reader = std::io::stdin();
             let mut input = String::new();
-            reader.read_line(&mut input).ok().expect("Failed to read line");
+            reader.read_line(&mut input)?;
             let input = input.trim();
             println!("Read: {}", input);
 

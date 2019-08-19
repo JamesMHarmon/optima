@@ -3,6 +3,7 @@ use serde::{Serialize};
 use std::fs;
 use std::io::Write;
 use std::fs::{File,OpenOptions};
+use failure::Error;
 
 use model::model_info::ModelInfo;
 use super::self_evaluate::{GameResult,MatchResult};
@@ -15,7 +16,7 @@ pub struct SelfEvaluatePersistance
 
 impl SelfEvaluatePersistance
 {
-    pub fn new(run_directory: &Path, model_info_1: &ModelInfo, model_info_2: &ModelInfo) -> Result<Self, &'static str> {
+    pub fn new(run_directory: &Path, model_info_1: &ModelInfo, model_info_2: &ModelInfo) -> Result<Self, Error> {
         let evaluations_dir = run_directory.join("evaluations");
 
         let game_file_path = get_game_file_path(
@@ -26,19 +27,17 @@ impl SelfEvaluatePersistance
 
         let match_file_path = get_match_file_path(&evaluations_dir);
 
-        fs::create_dir_all(&evaluations_dir).map_err(|_| "Couldn't create games dir")?;
+        fs::create_dir_all(&evaluations_dir)?;
 
         let game_file = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(game_file_path)
-            .map_err(|_| "Couldn't open or create the game_file file")?;
+            .open(game_file_path)?;
         
         let match_file = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(match_file_path)
-            .map_err(|_| "Couldn't open or create the match_file file")?;
+            .open(match_file_path)?;
 
         Ok(Self {
             game_file,
@@ -46,20 +45,18 @@ impl SelfEvaluatePersistance
         })
     }
 
-    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<(), &'static str> {
-        let serialized = serde_json::to_string(game_result)
-            .map_err(|_| "Failed to serialize results")?;
+    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<(), Error> {
+        let serialized = serde_json::to_string(game_result)?;
 
-        writeln!(self.game_file, "{}", serialized).map_err(|_| "Failed to write to game_result file")?;
+        writeln!(self.game_file, "{}", serialized)?;
 
         Ok(())
     }
 
-    pub fn write_match(&mut self, match_result: &MatchResult) -> Result<(), &'static str> {
-        let serialized = serde_json::to_string(match_result)
-            .map_err(|_| "Failed to serialize results")?;
+    pub fn write_match(&mut self, match_result: &MatchResult) -> Result<(), Error> {
+        let serialized = serde_json::to_string(match_result)?;
 
-        writeln!(self.match_file, "{}", serialized).map_err(|_| "Failed to write to match_result file")?;
+        writeln!(self.match_file, "{}", serialized)?;
 
         Ok(())
     }
