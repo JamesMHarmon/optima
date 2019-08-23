@@ -8,11 +8,11 @@ use std::task::{Context,Poll,Waker};
 use std::time::Instant;
 use chashmap::{CHashMap};
 use chrono::{Utc};
+use crossbeam_queue::{SegQueue};
+use failure::Error;
 use reqwest::Client;
 use serde::{Serialize,Deserialize};
 use serde_json::json;
-use crossbeam_queue::{SegQueue};
-use failure::Error;
 
 use model::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use model::model::TrainOptions;
@@ -199,14 +199,13 @@ fn train(source_model_info: &ModelInfo, target_model_info: ModelInfo, sample_met
         .arg(docker_cmd)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to run training");
+        .spawn()?;
 
     let result = cmd.wait();
 
     println!("OUTPUT: {:?}", result);
 
-    fs::remove_file(train_data_path).expect("Failed to delete training data");
+    fs::remove_file(train_data_path)?;
 
     println!("Training process complete");
 
@@ -350,7 +349,7 @@ impl BatchingModel {
     fn predict(&self, game_states: Vec<&GameState>) -> Result<Vec<GameStateAnalysis<Action>>, Error> {
         let body = game_states_to_request_body(&game_states);
 
-        let request_url = get_model_url(&self.model_info.get_model_name());
+        let request_url = get_model_url(&self.model_info);
 
         let mut response;
 
@@ -448,8 +447,7 @@ struct PredictionResults {
     predictions: Vec<HashMap<String,Vec<f64>>>
 }
 
-fn get_model_url(model_name: &str) -> String {
-    let model_info = ModelInfo::from_model_name(model_name);
+fn get_model_url(model_info: &ModelInfo) -> String {
     format!(
         "http://localhost:8501/v1/models/exported_models/versions/{version}:predict",
         version = model_info.get_run_num()
