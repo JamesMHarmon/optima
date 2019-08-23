@@ -1,3 +1,5 @@
+#![feature(atomic_min_max)]
+
 pub mod analytics;
 pub mod model;
 pub mod model_info;
