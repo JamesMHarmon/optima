@@ -11,4 +11,11 @@ name="model"
 [dependencies]
 engine = { path = "../engine" }
 
+failure="0.1"
+chashmap="2.2.2"
+chrono="0.4.7"
+reqwest="0.9.18"
+crossbeam="0.7.1"
 serde={version="1.0.95",features=["derive"]}
+crossbeam-queue = "0.1"
+serde_json="1.0"
