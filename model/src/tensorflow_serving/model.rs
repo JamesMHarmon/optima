@@ -25,19 +25,28 @@ use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
 
-pub struct Model<S,A> {
+pub struct Model<S,A,Fs,Fp>
+{
     model_info: ModelInfo,
     batching_model: Arc<BatchingModel<S,A>>,
     alive: Arc<AtomicBool>,
-    id_generator: Arc<AtomicUsize>
+    id_generator: Arc<AtomicUsize>,
+    game_state_to_input_mapper: Fs,
+    policy_to_input_mapper: Fp
 }
 
-impl<S,A> Model<S,A> 
+impl<S,A,Fs,Fp> Model<S,A,Fs,Fp>
 where
     S: Clone + PartialEq + Hash + Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static
+    A: Clone + Send + Sync + 'static,
+    Fs: Fn(&S) -> Vec<Vec<Vec<f64>>>,
+    Fp: Fn(&NodeMetrics<A>) -> Vec<f64>
 {
-    pub fn new(model_info: ModelInfo) -> Self {
+    pub fn new(
+        model_info: ModelInfo,
+        game_state_to_input_mapper: Fs,
+        policy_to_input_mapper: Fp
+    ) -> Self {
         let batching_model = Arc::new(BatchingModel::new(model_info.clone()));
         let alive = Arc::new(AtomicBool::new(true));
 
@@ -88,12 +97,14 @@ where
             model_info,
             batching_model,
             alive,
-            id_generator: Arc::new(AtomicUsize::new(0))
+            id_generator: Arc::new(AtomicUsize::new(0)),
+            game_state_to_input_mapper,
+            policy_to_input_mapper
         }
     }
 }
 
-impl<S,A> ModelTrait for Model<S,A>
+impl<S,A,Fs,Fp> ModelTrait for Model<S,A,Fs,Fp>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static
@@ -106,11 +117,13 @@ where
         &self.model_info
     }
 
-    fn train(&self, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Model<S,A>
+    fn train(
+        &self,
+        target_model_info: &ModelInfo,
+        sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>,
+        options: &TrainOptions) -> Result<(), Error>
     {
-        let model = train(&self.model_info, target_model_info, sample_metrics, options);
-
-        model.expect("Failed to train model")
+        train(&self.model_info, target_model_info, sample_metrics, options)
     }
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer
@@ -152,10 +165,10 @@ where
 #[allow(non_snake_case)]
 fn train<S,A>(
     source_model_info: &ModelInfo,
-    target_model_info: ModelInfo,
+    target_model_info: &ModelInfo,
     sample_metrics: &Vec<PositionMetrics<S,A>>,
     options: &TrainOptions
-) -> Result<Model<S,A>, Error>
+) -> Result<(), Error>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static
@@ -164,7 +177,7 @@ where
 
     let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
     let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-    let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy).to_vec()).collect();
+    let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy)).collect();
 
     let json = json!({
         "x": X,
@@ -228,10 +241,10 @@ where
 
     println!("Training process complete");
 
-    Ok(Model::new(target_model_info))
+    Ok(())
 }
 
-impl<S,A> Drop for Model<S,A> {
+impl<S,A,Fs,Fp> Drop for Model<S,A,Fs,Fp> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
@@ -520,12 +533,12 @@ fn game_state_to_input<S>(game_state: &S) -> Vec<Vec<Vec<f64>>> {
         })
 }
 
-fn map_policy_to_vec_input(policy_metrics: &NodeMetrics<Action>) -> [f64; 7] {
+fn map_policy_to_vec_input(policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
     let total_visits = policy_metrics.visits as f64 - 1.0;
     let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
         match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
         r
     });
 
-    result
+    result.to_vec()
 }

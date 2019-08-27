@@ -1,4 +1,5 @@
 use engine::game_state::GameState;
+use failure::Error;
 
 use super::model_info::ModelInfo;
 use super::position_metrics::PositionMetrics;
@@ -10,7 +11,7 @@ pub trait Model {
     type Action;
 
     fn get_model_info(&self) -> &ModelInfo;
-    fn train(&self, target_model_info: ModelInfo, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Self;
+    fn train(&self, target_model_info: &ModelInfo, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Result<(), Error>;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 
