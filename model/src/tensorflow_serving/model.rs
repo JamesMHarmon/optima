@@ -25,29 +25,32 @@ use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
 
-pub struct Model<S,A,Fs,Fp>
+pub struct Model<S,A,Fs,Fp,Fc>
 {
     model_info: ModelInfo,
-    batching_model: Arc<BatchingModel<S,A>>,
+    batching_model: Arc<BatchingModel<S,A,Fc>>,
     alive: Arc<AtomicBool>,
     id_generator: Arc<AtomicUsize>,
     game_state_to_input_mapper: Fs,
     policy_to_input_mapper: Fp
 }
 
-impl<S,A,Fs,Fp> Model<S,A,Fs,Fp>
+impl<S,A,Fs,Fp,Fc> Model<S,A,Fs,Fp,Fc>
 where
     S: Clone + PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     Fs: Fn(&S) -> Vec<Vec<Vec<f64>>>,
-    Fp: Fn(&NodeMetrics<A>) -> Vec<f64>
+    Fp: Fn(&NodeMetrics<A>) -> Vec<f64>,
+    Fc: Fn(&S) -> bool + Send + Sync + 'static
 {
     pub fn new(
         model_info: ModelInfo,
         game_state_to_input_mapper: Fs,
-        policy_to_input_mapper: Fp
-    ) -> Self {
-        let batching_model = Arc::new(BatchingModel::new(model_info.clone()));
+        policy_to_input_mapper: Fp,
+        should_cache: Fc
+    ) -> Self
+    {
+        let batching_model = Arc::new(BatchingModel::new(model_info.clone(), should_cache));
         let alive = Arc::new(AtomicBool::new(true));
 
         for i in 0..ANALYSIS_REQUEST_THREADS {
@@ -104,14 +107,15 @@ where
     }
 }
 
-impl<S,A,Fs,Fp> ModelTrait for Model<S,A,Fs,Fp>
+impl<S,A,Fs,Fp,Fc> ModelTrait for Model<S,A,Fs,Fp,Fc>
 where
     S: GameState + Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static
+    A: Clone + Send + Sync + 'static,
+    Fc: Send + Sync
 {
     type State = S;
     type Action = A;
-    type Analyzer = GameAnalyzer<S,A>;
+    type Analyzer = GameAnalyzer<S,A,Fc>;
 
     fn get_model_info(&self) -> &ModelInfo {
         &self.model_info
@@ -135,25 +139,25 @@ where
     }
 }
 
-pub struct GameAnalyzer<S,A> {
-    batching_model: Arc<BatchingModel<S,A>>,
+pub struct GameAnalyzer<S,A,Fc> {
+    batching_model: Arc<BatchingModel<S,A,Fc>>,
     id_generator: Arc<AtomicUsize>
 }
 
-impl<S,A> analytics::GameAnalyzer for GameAnalyzer<S,A>
+impl<S,A,Fc> analytics::GameAnalyzer for GameAnalyzer<S,A,Fc>
 where
     S: Clone + PartialEq + Hash,
     A: Clone
 {
     type State = S;
     type Action = A;
-    type Future = GameStateAnalysisFuture<S,A>;
+    type Future = GameStateAnalysisFuture<S,A,Fc>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,A> {
+    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,A,Fc> {
         GameStateAnalysisFuture::new(
             game_state.to_owned(),
             self.id_generator.fetch_add(1, Ordering::SeqCst),
@@ -244,13 +248,13 @@ where
     Ok(())
 }
 
-impl<S,A,Fs,Fp> Drop for Model<S,A,Fs,Fp> {
+impl<S,A,Fs,Fp,Fc> Drop for Model<S,A,Fs,Fp,Fc> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
 }
 
-pub struct BatchingModel<S,A> {
+pub struct BatchingModel<S,A,Fc> {
     model_info: ModelInfo,
     states_to_analyse: SegQueue<(usize, S, Waker)>,
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<A>>>>,
@@ -259,15 +263,18 @@ pub struct BatchingModel<S,A> {
     num_nodes_from_cache: AtomicUsize,
     num_nodes_cache_miss: AtomicUsize,
     min_batch_size: AtomicUsize,
-    max_batch_size: AtomicUsize
+    max_batch_size: AtomicUsize,
+    should_cache: Fc
 }
 
-impl<S,A> BatchingModel<S,A>
+impl<S,A,Fc> BatchingModel<S,A,Fc>
 where
     S: Clone + PartialEq + Hash,
-    A: Clone
+    A: Clone,
+    Fc: Fn(&S) -> bool
 {
-    fn new(model_info: ModelInfo) -> Self {
+    fn new(model_info: ModelInfo, should_cache: Fc) -> Self
+    {
         let states_to_analyse = SegQueue::new();
         let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS)));
         let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE + 1);
@@ -286,12 +293,14 @@ where
             num_nodes_from_cache,
             num_nodes_cache_miss,
             min_batch_size,
-            max_batch_size
+            max_batch_size,
+            should_cache
         }
     }
 
     fn run_batch_predict(&self) -> usize {
         let states_to_analyse_queue = &self.states_to_analyse;
+        let should_cache = self.should_cache; 
 
         let mut states_to_analyse: Vec<_> = Vec::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE);
         while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
@@ -315,7 +324,7 @@ where
         let num_analysed = analysis.len();
 
         for ((id, s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            if s.number_of_actions() <= DEPTH_TO_CACHE {
+            if should_cache(&s) {
                 self.state_analysis_cache.insert(s, analysis.clone());
             }
 
@@ -353,7 +362,7 @@ where
                 Vec::new()
             ));
         }
-        
+
         let analysis = self.states_analysed.lock().unwrap().remove(&id);
 
         match analysis {
@@ -362,7 +371,8 @@ where
                 Poll::Ready(analysis)
             },
             None => {
-                if game_state.number_of_actions() <= DEPTH_TO_CACHE {
+                let should_cache = self.should_cache;
+                if should_cache(game_state) {
                     if let Some(analysis) = self.state_analysis_cache.get(game_state) {
                         self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
                         self.num_nodes_from_cache.fetch_add(1, Ordering::SeqCst);
@@ -377,6 +387,7 @@ where
                     game_state.clone(),
                     waker.clone()
                 ));
+
                 Poll::Pending
             }
         }
@@ -439,7 +450,7 @@ where
     }
 }
 
-impl<S,A> Drop for BatchingModel<S,A> {
+impl<S,A,Fc> Drop for BatchingModel<S,A,Fc> {
     fn drop(&mut self) {
         println!("Dropping BatchingModel: {}", self.model_info.get_model_name());
         println!("states_to_analyse length: {}", self.states_to_analyse.len());
@@ -448,27 +459,28 @@ impl<S,A> Drop for BatchingModel<S,A> {
     }
 }
 
-pub struct GameStateAnalysisFuture<S,A> {
+pub struct GameStateAnalysisFuture<S,A,Fc> {
     game_state: S,
     id: usize,
-    batching_model: Arc<BatchingModel<S,A>>
+    batching_model: Arc<BatchingModel<S,A,Fc>>
 }
 
-impl<S,A> GameStateAnalysisFuture<S,A> {
+impl<S,A,Fc> GameStateAnalysisFuture<S,A,Fc> {
     fn new(
         game_state: S,
         id: usize,
-        batching_model: Arc<BatchingModel<S,A>>
+        batching_model: Arc<BatchingModel<S,A,Fc>>
     ) -> Self
     {
         Self { game_state, id, batching_model }
     }
 }
 
-impl<S,A> Future for GameStateAnalysisFuture<S,A>
+impl<S,A,Fc> Future for GameStateAnalysisFuture<S,A,Fc>
 where
     S: Clone + PartialEq + Hash,
-    A: Clone
+    A: Clone,
+    Fc: Fn(&S) -> bool
 {
     type Output = GameStateAnalysis<A>;
 
