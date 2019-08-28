@@ -26,7 +26,7 @@ use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
 
-pub struct Model<S,A,E,Fs,Fp,Fa,Fc>
+pub struct TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
 {
     model_info: ModelInfo,
     batching_model: Arc<BatchingModel<S,A,E,Fa,Fc>>,
@@ -36,7 +36,7 @@ pub struct Model<S,A,E,Fs,Fp,Fa,Fc>
     policy_to_input_mapper: Fp
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> Model<S,A,E,Fs,Fp,Fa,Fc>
+impl<S,A,E,Fs,Fp,Fa,Fc> TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
 where
     S: Clone + PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
@@ -112,7 +112,7 @@ where
     }
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> ModelTrait for Model<S,A,E,Fs,Fp,Fa,Fc>
+impl<S,A,E,Fs,Fp,Fa,Fc> ModelTrait for TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
@@ -258,7 +258,7 @@ where
     Ok(())
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> Drop for Model<S,A,E,Fs,Fp,Fa,Fc> {
+impl<S,A,E,Fs,Fp,Fa,Fc> Drop for TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
@@ -523,58 +523,4 @@ fn game_states_to_request_body<S>(game_states: &Vec<&S>) -> serde_json::value::V
     json!({
         "instances": game_states
     })
-}
-
-fn game_state_to_input<S>(game_state: &S) -> Vec<Vec<Vec<f64>>> {
-    let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
-
-    map_board_to_arr(game_state.p1_piece_board).iter()
-        .zip(map_board_to_arr(game_state.p2_piece_board).iter())
-        .enumerate()
-        .fold(result, |mut r, (i, (p1, p2))| {
-            let column_idx = i % 7;
-            
-            if column_idx == 0 {
-                r.push(Vec::with_capacity(7))
-            }
-
-            let column_vec = r.last_mut().unwrap();
-
-            // The input is normalized by listing the player to move first. This is different than having
-            // black first and then red. So on red's turn, red will be listed first, then black.
-            let (c1, c2) = if game_state.p1_turn_to_move {
-                (*p1, *p2)
-            } else {
-                (*p2, *p1)
-            };
-
-            column_vec.push(vec!(c1, c2));
-
-            r
-        })
-}
-
-fn map_policy_to_vec_input(policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
-    let total_visits = policy_metrics.visits as f64 - 1.0;
-    let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
-        match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
-        r
-    });
-
-    result.to_vec()
-}
-
-fn map(policy_scores: Vec<f64>) -> Vec<ActionWithPolicy<A>> {
-    let valid_actions_with_policies: Vec<ActionWithPolicy<A>> = valid_actions.iter()
-        .map(|a|
-        {
-            if *v {
-                Some(ActionWithPolicy::new(
-                    A::DropPiece((i + 1) as u64),
-                    *p
-                ))
-            } else {
-                None
-            }
-        }).collect();
 }
