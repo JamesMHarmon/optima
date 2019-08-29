@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub enum Action {
     MovePawn(u128),
     PlaceHorizontalWall(u128),

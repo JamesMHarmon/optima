@@ -1,5 +1,6 @@
 use super::action::{Action,ValidActions};
-use engine::{GameEngine};
+use engine::engine::GameEngine;
+use engine::game_state;
 
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
 const RIGHT_COLUMN_MASK: u128 =                                 0b__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;
@@ -16,7 +17,7 @@ const HORIZONTAL_WALL_RIGHT_EDGE_TOUCHING_BOARD_MASK: u128 =    0b__000000000__0
 const VERTICAL_WALL_TOP_EDGE_TOUCHING_BOARD_MASK: u128 =        0b__000000000__011111111__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000__011111111;
 
-#[derive(Debug)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_pawn_board: u128,
@@ -34,18 +35,6 @@ struct PathingResult {
 }
 
 impl GameState {
-    pub fn new() -> Self {
-        Self {
-            p1_turn_to_move: true,
-            p1_pawn_board: P1_STARTING_POS_MASK,
-            p2_pawn_board: P2_STARTING_POS_MASK,
-            p1_num_walls_placed: 0,
-            p2_num_walls_placed: 0,
-            vertical_wall_placement_board: 0,
-            horizontal_wall_placement_board: 0
-        }
-    }
-
     pub fn take_action(&self, action: Action) -> Self {
         match action {
             Action::MovePawn(board) => self.move_pawn(board),
@@ -363,13 +352,32 @@ impl GameState {
     }
 }
 
+impl game_state::GameState for GameState {
+    fn initial() -> Self {
+        GameState {
+            p1_turn_to_move: true,
+            p1_pawn_board: P1_STARTING_POS_MASK,
+            p2_pawn_board: P2_STARTING_POS_MASK,
+            p1_num_walls_placed: 0,
+            p2_num_walls_placed: 0,
+            vertical_wall_placement_board: 0,
+            horizontal_wall_placement_board: 0
+        }
+    }
+}
+
 pub struct Engine {}
+
+impl Engine {
+    pub fn new() -> Self { Self {} }
+}
 
 impl GameEngine for Engine {
     type Action = Action;
     type State = GameState;
 
-    fn take_action(&self, game_state: &GameState, _: &Action) -> GameState {
+    fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
+        // @TODO: Add take action
         game_state.take_action(Action::MovePawn(1))
     }
 

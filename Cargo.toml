@@ -11,5 +11,5 @@ members = [
     "self-learn-client",
 
     "connect4",
-    # "quoridor"
+    "quoridor"
 ]
