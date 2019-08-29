@@ -7,7 +7,7 @@ mod constants;
 use failure::Error;
 
 use connect4::engine::{Engine as Connect4Engine};
-use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
+use connect4::model::{ModelFactory as Connect4ModelFactory};
 use model::model_info::ModelInfo;
 
 use self_evaluate::SelfEvaluateOptions;

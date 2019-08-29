@@ -75,7 +75,8 @@ impl Ponder
                 continue;
             }
 
-            let action = game_engine.parse_input(&input);
+            // let action = game_engine.parse_input(&input);
+            let action = Err("");
 
             match action {
                 Ok(action) => {

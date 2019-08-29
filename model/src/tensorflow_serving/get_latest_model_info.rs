@@ -3,7 +3,7 @@ use std::fs;
 use super::paths::Paths;
 use super::super::model_info::ModelInfo;
 
-fn get_latest_model_info(model_info: &ModelInfo) -> std::io::Result<ModelInfo> {
+pub fn get_latest_model_info(model_info: &ModelInfo) -> std::io::Result<ModelInfo> {
     let paths = Paths::from_model_info(model_info);
 
     let latest_run_num = fs::read_dir(paths.get_models_path())?

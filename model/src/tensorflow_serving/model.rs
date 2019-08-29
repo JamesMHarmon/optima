@@ -7,7 +7,6 @@ use std::process::{Command,Stdio};
 use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::time::Instant;
-use chashmap::{CHashMap};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
@@ -18,7 +17,7 @@ use serde_json::json;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
 
-use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,DEPTH_TO_CACHE};
+use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS};
 use super::paths::Paths;
 use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use super::super::model::{Model as ModelTrait,TrainOptions};
@@ -26,36 +25,36 @@ use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
 
-pub struct TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
+pub struct TensorflowServingModel<S,A,E,Map>
 {
     model_info: ModelInfo,
-    batching_model: Arc<BatchingModel<S,A,E,Fa,Fc>>,
+    batching_model: Arc<BatchingModel<S,A,E,Map>>,
     alive: Arc<AtomicBool>,
     id_generator: Arc<AtomicUsize>,
-    game_state_to_input_mapper: Fs,
-    policy_to_input_mapper: Fp
+    mapper: Arc<Map>
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
+pub trait Mapper<S,A> {
+    fn game_state_to_input(&self, game_state: &S) -> Vec<Vec<Vec<f64>>>;
+    fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f64>;
+    fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<A>>;
+}
+
+impl<S,A,E,Map> TensorflowServingModel<S,A,E,Map>
 where
     S: Clone + PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Fs: Fn(&S) -> Vec<Vec<Vec<f64>>>,
-    Fp: Fn(&NodeMetrics<A>) -> Vec<f64>,
-    Fa: Fn(&Vec<f64>) -> Vec<ActionWithPolicy<A>> + Send + Sync + 'static,
-    Fc: Fn(&S) -> bool + Send + Sync + 'static
+    Map: Mapper<S,A> + Send + Sync + 'static
 {
     pub fn new(
         model_info: ModelInfo,
         engine: E,
-        game_state_to_input_mapper: Fs,
-        policy_to_input_mapper: Fp,
-        policy_to_actions_mapper: Fa,
-        should_cache: Fc
+        mapper: Map
     ) -> Self
     {
-        let batching_model = Arc::new(BatchingModel::new(model_info.clone(), engine, policy_to_actions_mapper, should_cache));
+        let mapper = Arc::new(mapper);
+        let batching_model = Arc::new(BatchingModel::new(model_info.clone(), engine, mapper.clone()));
         let alive = Arc::new(AtomicBool::new(true));
 
         for i in 0..ANALYSIS_REQUEST_THREADS {
@@ -72,22 +71,16 @@ where
 
                     let elapsed_mills = last_report.elapsed().as_millis();
                     if i == 0 && elapsed_mills >= 5_000 {
-                        let (num_nodes_from_cache, num_nodes_cache_miss, num_nodes) = batching_model_ref.take_num_nodes_analysed();
+                        let num_nodes = batching_model_ref.take_num_nodes_analysed();
                         let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
                         let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
-                        let cache_hit_perc = num_nodes_from_cache as f64 / (num_nodes_from_cache as f64 + num_nodes_cache_miss as f64) * 100.0;
-                        let cache_coverage_perc = (num_nodes_from_cache as f64 + num_nodes_cache_miss as f64) / num_nodes as f64 * 100.0;
-                        let state_analysis_cache_len = batching_model_ref.state_analysis_cache_len();
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!(
-                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}, Cache Size: {}, Cache Coverage: {:.2}%, Cache Hits: {:.2}%",
+                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
                             now,
                             nps,
                             min_batch_size,
-                            max_batch_size,
-                            state_analysis_cache_len,
-                            cache_coverage_perc,
-                            cache_hit_perc
+                            max_batch_size
                         );
                         last_report = Instant::now();
                     }
@@ -106,23 +99,21 @@ where
             batching_model,
             alive,
             id_generator: Arc::new(AtomicUsize::new(0)),
-            game_state_to_input_mapper,
-            policy_to_input_mapper
+            mapper
         }
     }
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> ModelTrait for TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc>
+impl<S,A,E,Map> ModelTrait for TensorflowServingModel<S,A,E,Map>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Fa: Fn(&Vec<f64>) -> Vec<ActionWithPolicy<A>> + Send + Sync,
-    Fc: Fn(&S) -> bool + Send + Sync
+    Map: Mapper<S,A> + Send + Sync + 'static
 {
     type State = S;
     type Action = A;
-    type Analyzer = GameAnalyzer<S,A,E,Fa,Fc>;
+    type Analyzer = GameAnalyzer<S,A,E,Map>;
 
     fn get_model_info(&self) -> &ModelInfo {
         &self.model_info
@@ -134,7 +125,9 @@ where
         sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>,
         options: &TrainOptions) -> Result<(), Error>
     {
-        train(&self.model_info, target_model_info, sample_metrics, options)
+        let mapper = &*self.mapper;
+
+        train(&self.model_info, target_model_info, sample_metrics, mapper, options)
     }
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer
@@ -146,28 +139,27 @@ where
     }
 }
 
-pub struct GameAnalyzer<S,A,E,Fa,Fc> {
-    batching_model: Arc<BatchingModel<S,A,E,Fa,Fc>>,
+pub struct GameAnalyzer<S,A,E,Map> {
+    batching_model: Arc<BatchingModel<S,A,E,Map>>,
     id_generator: Arc<AtomicUsize>
 }
 
-impl<S,A,E,Fa,Fc> analytics::GameAnalyzer for GameAnalyzer<S,A,E,Fa,Fc>
+impl<S,A,E,Map> analytics::GameAnalyzer for GameAnalyzer<S,A,E,Map>
 where
     S: Clone + PartialEq + Hash,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Fa: Fn(&Vec<f64>) -> Vec<ActionWithPolicy<A>>,
-    Fc: Fn(&S) -> bool
+    Map: Mapper<S,A>
 {
     type State = S;
     type Action = A;
-    type Future = GameStateAnalysisFuture<S,A,E,Fa,Fc>;
+    type Future = GameStateAnalysisFuture<S,A,E,Map>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,A,E,Fa,Fc> {
+    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,A,E,Map> {
         GameStateAnalysisFuture::new(
             game_state.to_owned(),
             self.id_generator.fetch_add(1, Ordering::SeqCst),
@@ -177,21 +169,23 @@ where
 }
 
 #[allow(non_snake_case)]
-fn train<S,A>(
+fn train<S,A,Map>(
     source_model_info: &ModelInfo,
     target_model_info: &ModelInfo,
     sample_metrics: &Vec<PositionMetrics<S,A>>,
+    mapper: &Map,
     options: &TrainOptions
 ) -> Result<(), Error>
 where
     S: GameState + Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static
+    A: Clone + Send + Sync + 'static,
+    Map: Mapper<S,A>
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
-    let X: Vec<_> = sample_metrics.iter().map(|v| game_state_to_input(&v.game_state)).collect();
+    let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
     let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-    let yp: Vec<_> = sample_metrics.iter().map(|v| map_policy_to_vec_input(&v.policy)).collect();
+    let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
 
     let json = json!({
         "x": X,
@@ -258,43 +252,35 @@ where
     Ok(())
 }
 
-impl<S,A,E,Fs,Fp,Fa,Fc> Drop for TensorflowServingModel<S,A,E,Fs,Fp,Fa,Fc> {
+impl<S,A,E,Map> Drop for TensorflowServingModel<S,A,E,Map> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
 }
 
-pub struct BatchingModel<S,A,E,Fa,Fc> {
+pub struct BatchingModel<S,A,E,Map> {
     model_info: ModelInfo,
     states_to_analyse: SegQueue<(usize, S, Waker)>,
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<A>>>>,
-    state_analysis_cache: CHashMap<S, GameStateAnalysis<A>>,
     num_nodes_analysed: AtomicUsize,
-    num_nodes_from_cache: AtomicUsize,
-    num_nodes_cache_miss: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
     engine: E,
-    policy_to_actions_mapper: Fa,
-    should_cache: Fc
+    mapper: Arc<Map>
 }
 
-impl<S,A,E,Fa,Fc> BatchingModel<S,A,E,Fa,Fc>
+impl<S,A,E,Map> BatchingModel<S,A,E,Map>
 where
     S: Clone + PartialEq + Hash,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Fa: Fn(&Vec<f64>) -> Vec<ActionWithPolicy<A>>,
-    Fc: Fn(&S) -> bool
+    Map: Mapper<S,A>
 {
-    fn new(model_info: ModelInfo, engine: E, policy_to_actions_mapper: Fa, should_cache: Fc) -> Self
+    fn new(model_info: ModelInfo, engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
         let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS)));
-        let state_analysis_cache = CHashMap::with_capacity(7 * DEPTH_TO_CACHE + 1);
         let num_nodes_analysed = AtomicUsize::new(0);
-        let num_nodes_from_cache = AtomicUsize::new(0);
-        let num_nodes_cache_miss = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
 
@@ -302,21 +288,16 @@ where
             model_info,
             states_to_analyse,
             states_analysed,
-            state_analysis_cache,
             num_nodes_analysed,
-            num_nodes_from_cache,
-            num_nodes_cache_miss,
             min_batch_size,
             max_batch_size,
             engine,
-            policy_to_actions_mapper,
-            should_cache
+            mapper
         }
     }
 
     fn run_batch_predict(&self) -> usize {
         let states_to_analyse_queue = &self.states_to_analyse;
-        let should_cache = self.should_cache; 
 
         let mut states_to_analyse: Vec<_> = Vec::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE);
         while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
@@ -339,11 +320,7 @@ where
         let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
-        for ((id, s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            if should_cache(&s) {
-                self.state_analysis_cache.insert(s, analysis.clone());
-            }
-
+        for ((id, _s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
             self.states_analysed.lock().unwrap().insert(id, analysis);
             waker.wake();
         }
@@ -351,10 +328,8 @@ where
         num_analysed
     }
 
-    fn take_num_nodes_analysed(&self) -> (usize, usize, usize) {
+    fn take_num_nodes_analysed(&self) -> usize {
         (
-           self.num_nodes_from_cache.swap(0, Ordering::SeqCst),
-           self.num_nodes_cache_miss.swap(0, Ordering::SeqCst),
            self.num_nodes_analysed.swap(0, Ordering::SeqCst)
         )
     }
@@ -364,10 +339,6 @@ where
             self.min_batch_size.swap(std::usize::MAX, Ordering::SeqCst),
             self.max_batch_size.swap(0, Ordering::SeqCst)
         )
-    }
-
-    fn state_analysis_cache_len(&self) -> usize {
-        self.state_analysis_cache.len()
     }
 
     fn poll(&self, id: usize, game_state: &S, waker: &Waker) -> Poll<GameStateAnalysis<A>> {
@@ -389,17 +360,6 @@ where
                 Poll::Ready(analysis)
             },
             None => {
-                let should_cache = self.should_cache;
-                if should_cache(game_state) {
-                    if let Some(analysis) = self.state_analysis_cache.get(game_state) {
-                        self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
-                        self.num_nodes_from_cache.fetch_add(1, Ordering::SeqCst);
-                        return Poll::Ready(analysis.clone());
-                    } else {
-                        self.num_nodes_cache_miss.fetch_add(1, Ordering::SeqCst);
-                    }
-                }
-
                 self.states_to_analyse.push((
                     id,
                     game_state.clone(),
@@ -412,7 +372,7 @@ where
     }
 
     fn predict(&self, game_states: Vec<&S>) -> Result<Vec<GameStateAnalysis<A>>, Error> {
-        let body = game_states_to_request_body(&game_states);
+        let body = game_states_to_request_body(&game_states, &*self.mapper);
 
         let request_url = get_model_url(&self.model_info);
 
@@ -443,8 +403,7 @@ where
                 let value_score = result.get("value_head/Tanh:0").unwrap()[0];
                 let policy_scores = result.get("policy_head/Softmax:0").unwrap();
 
-                let policy_to_actions_mapper = self.policy_to_actions_mapper;
-                let valid_actions_with_policies = policy_to_actions_mapper(policy_scores);
+                let valid_actions_with_policies = self.mapper.policy_to_valid_actions(game_state, policy_scores);
 
                 GameStateAnalysis {
                     policy_scores: valid_actions_with_policies,
@@ -457,39 +416,37 @@ where
     }
 }
 
-impl<S,A,E,Fa,Fc> Drop for BatchingModel<S,A,E,Fa,Fc> {
+impl<S,A,E,Map> Drop for BatchingModel<S,A,E,Map> {
     fn drop(&mut self) {
         println!("Dropping BatchingModel: {}", self.model_info.get_model_name());
         println!("states_to_analyse length: {}", self.states_to_analyse.len());
         println!("states_analysed length: {}", self.states_analysed.lock().unwrap().len());
-        println!("state_analysis_cache length: {}", self.state_analysis_cache.len());
     }
 }
 
-pub struct GameStateAnalysisFuture<S,A,E,Fa,Fc> {
+pub struct GameStateAnalysisFuture<S,A,E,Map> {
     game_state: S,
     id: usize,
-    batching_model: Arc<BatchingModel<S,A,E,Fa,Fc>>
+    batching_model: Arc<BatchingModel<S,A,E,Map>>
 }
 
-impl<S,A,E,Fa,Fc> GameStateAnalysisFuture<S,A,E,Fa,Fc> {
+impl<S,A,E,Map> GameStateAnalysisFuture<S,A,E,Map> {
     fn new(
         game_state: S,
         id: usize,
-        batching_model: Arc<BatchingModel<S,A,E,Fa,Fc>>
+        batching_model: Arc<BatchingModel<S,A,E,Map>>
     ) -> Self
     {
         Self { game_state, id, batching_model }
     }
 }
 
-impl<S,A,E,Fa,Fc> Future for GameStateAnalysisFuture<S,A,E,Fa,Fc>
+impl<S,A,E,Map> Future for GameStateAnalysisFuture<S,A,E,Map>
 where
     S: Clone + PartialEq + Hash,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Fa: Fn(&Vec<f64>) -> Vec<ActionWithPolicy<A>>,
-    Fc: Fn(&S) -> bool
+    Map: Mapper<S,A>
 {
     type Output = GameStateAnalysis<A>;
 
@@ -515,9 +472,12 @@ fn get_model_url(model_info: &ModelInfo) -> String {
     )
 }
 
-fn game_states_to_request_body<S>(game_states: &Vec<&S>) -> serde_json::value::Value {
+fn game_states_to_request_body<S,A,Map>(game_states: &Vec<&S>, mapper: &Map) -> serde_json::value::Value
+where
+    Map: Mapper<S,A>
+{
     let game_states: Vec<_> = game_states.iter().map(|game_state| RequestImage {
-        input_image: game_state_to_input(game_state)
+        input_image: mapper.game_state_to_input(game_state)
     }).collect();
 
     json!({

@@ -98,7 +98,7 @@ where
     pub fn from<F>(
         game_name: String,
         run_name: String,
-        model_factory: F,
+        model_factory: &F,
         game_engine: &'a E
     ) -> Result<Self, Error> 
     where
@@ -117,7 +117,10 @@ where
         })
     }
 
-    pub fn learn(&mut self) -> Result<(), Error> {
+    pub fn learn<F>(&mut self, model_factory: &F) -> Result<(), Error>
+    where
+        F: ModelFactory<M=M>
+    {
         let options = &self.options;
         let run_directory = &self.run_directory;
         let number_of_games_per_net = options.number_of_games_per_net;
@@ -201,12 +204,14 @@ where
                 });
             }).unwrap();
 
-            self.latest_model = train::train_model::<S,A,E,M,T>(
+            let new_model_info = train::train_model::<S,A,E,M,T>(
                 latest_model,
                 &self_play_persistance,
                 &self.game_engine,
                 options
             )?;
+
+            self.latest_model = model_factory.get(&new_model_info);
         }
     }
 

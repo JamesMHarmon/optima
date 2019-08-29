@@ -5,7 +5,7 @@ extern crate clap;
 
 use clap::App;
 use connect4::engine::{Engine as Connect4Engine};
-use connect4::model_factory::{ModelFactory as Connect4ModelFactory};
+use connect4::model::{ModelFactory as Connect4ModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 
 use failure::Error;
@@ -52,11 +52,11 @@ fn run_connect4(run_name: &str) -> Result<(), Error> {
     let mut runner = SelfLearn::from(
         C4_NAME.to_owned(),
         run_name.to_owned(),
-        model_factory,
+        &model_factory,
         &game_engine
     )?;
 
-    runner.learn()?;
+    runner.learn(&model_factory)?;
 
     Ok(())
 }

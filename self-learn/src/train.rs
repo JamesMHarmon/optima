@@ -1,3 +1,4 @@
+use model::model_info::ModelInfo;
 use model::position_metrics::PositionMetrics;
 use model::model::TrainOptions;
 use rand::seq::IteratorRandom;
@@ -20,7 +21,7 @@ pub fn train_model<S, A, E, M, T>(
     self_play_persistance: &SelfPlayPersistance,
     game_engine: &E,
     options: &SelfLearnOptions
-) -> Result<M, Error>
+) -> Result<ModelInfo, Error>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -76,8 +77,8 @@ where
         num_samples
     );
 
-    Ok(model.train(
-        new_model_info,
+    model.train(
+        &new_model_info,
         &positions_metrics,
         &TrainOptions {
             train_ratio: options.train_ratio,
@@ -87,5 +88,7 @@ where
             policy_loss_weight: options.policy_loss_weight,
             value_loss_weight: options.value_loss_weight
         }
-    ))
+    ).map(|_| {
+        new_model_info
+    })
 }
