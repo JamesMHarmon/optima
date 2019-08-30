@@ -35,11 +35,11 @@ struct PathingResult {
 }
 
 impl GameState {
-    pub fn take_action(&self, action: Action) -> Self {
+    pub fn take_action(&self, action: &Action) -> Self {
         match action {
-            Action::MovePawn(board) => self.move_pawn(board),
-            Action::PlaceHorizontalWall(board) => self.place_horizontal_wall(board),
-            Action::PlaceVerticalWall(board) => self.place_vertical_wall(board)
+            Action::MovePawn(coord) => self.move_pawn(coord.as_bit_board()),
+            Action::PlaceHorizontalWall(coord) => self.place_horizontal_wall(coord.as_bit_board()),
+            Action::PlaceVerticalWall(coord) => self.place_vertical_wall(coord.as_bit_board())
         }
     }
 
@@ -377,8 +377,7 @@ impl GameEngine for Engine {
     type State = GameState;
 
     fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
-        // @TODO: Add take action
-        game_state.take_action(Action::MovePawn(1))
+        game_state.take_action(action)
     }
 
     fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {

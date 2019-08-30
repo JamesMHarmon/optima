@@ -1,6 +1,7 @@
 use common::bits::single_bit_index;
 
-pub fn map_board_to_arr(mut board: u64) -> [f64; 42] {
+pub fn map_board_to_arr(board: u64) -> [f64; 42] {
+    let mut board = board;
     let mut result:[f64; 42] = [0.0; 42];
     while board != 0 {
         let board_without_first_bit = board & (board - 1);
@@ -25,7 +26,7 @@ pub fn map_board_to_arr(mut board: u64) -> [f64; 42] {
 /// 01  08  15  22  29  36  43
 /// 00  07  14  21  28  35  42
 ///
-/// To the vector form which start in the top left and goes left to right with no skipped bits.
+/// To the vector form which start in the top left and goes left to right.
 /// To:
 /// 00  01  02  03  04  05  06
 /// 07  08  09  10  11  12  13

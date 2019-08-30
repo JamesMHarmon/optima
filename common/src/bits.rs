@@ -1,4 +1,5 @@
-pub fn single_bit_index(mut bit: u128) -> usize {
+pub fn single_bit_index(bit: u128) -> usize {
+    let mut bit = bit;
     let mut n = 0;
 
     if bit >> 64 != 0 {

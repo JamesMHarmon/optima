@@ -1,121 +1,136 @@
-use model::analytics::ActionWithPolicy;
-use model::node_metrics::NodeMetrics;
-use model::model_info::ModelInfo;
-use model::tensorflow_serving::model::TensorflowServingModel;
-use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
-use super::action::Action;
-use super::engine::Engine;
-use super::engine::GameState;
-use super::board::map_board_to_arr;
+// use model::analytics::ActionWithPolicy;
+// use model::node_metrics::NodeMetrics;
+// use model::model_info::ModelInfo;
+// use model::tensorflow_serving::model::TensorflowServingModel;
+// use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
+// use super::action::Action;
+// use super::engine::Engine;
+// use super::engine::GameState;
+// use super::board::{map_pawn_board_to_arr,map_pawn_board_to_arr_invert,map_wall_board_to_arr,map_wall_board_to_arr_invert};
 
-pub struct ModelFactory {}
+// use itertools::izip;
 
-impl ModelFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+// pub struct ModelFactory {}
 
-pub struct Mapper {}
+// impl ModelFactory {
+//     pub fn new() -> Self {
+//         Self {}
+//     }
+// }
 
-impl Mapper {
-    fn new() -> Self {
-        Self {}
-    }
-}
+// pub struct Mapper {}
 
-impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
-        let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
+// impl Mapper {
+//     fn new() -> Self {
+//         Self {}
+//     }
+// }
 
-        map_board_to_arr(game_state.p1_piece_board).iter()
-            .zip(map_board_to_arr(game_state.p2_piece_board).iter())
-            .enumerate()
-            .fold(result, |mut r, (i, (p1, p2))| {
-                let column_idx = i % 7;
-                
-                if column_idx == 0 {
-                    r.push(Vec::with_capacity(7))
-                }
+// impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
+//     fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
+//         let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
 
-                let column_vec = r.last_mut().unwrap();
+//         let GameState {
+//             p1_turn_to_move,
+//             p1_pawn_board,
+//             p2_pawn_board,
+//             vertical_wall_placement_board,
+//             horizontal_wall_placement_board,
+//             p1_num_walls_placed,
+//             p2_num_walls_placed
+//          } = game_state;
 
-                // The input is normalized by listing the player to move first. This is different than having
-                // black first and then red. So on red's turn, red will be listed first, then black.
-                let (c1, c2) = if game_state.p1_turn_to_move {
-                    (*p1, *p2)
-                } else {
-                    (*p2, *p1)
-                };
+//         let p1_pawn_board_vec = if *p1_turn_to_move { map_pawn_board_to_arr(*p1_pawn_board) } else { map_pawn_board_to_arr_invert(*p2_pawn_board) };
+//         let p2_pawn_board_vec = if *p1_turn_to_move { map_pawn_board_to_arr(*p2_pawn_board) } else { map_pawn_board_to_arr_invert(*p1_pawn_board) };
+//         let vertical_wall_placement_board = if *p1_turn_to_move { map_wall_board_to_arr(*vertical_wall_placement_board) } else { map_wall_board_to_arr_invert(*vertical_wall_placement_board) };
+//         let horizontal_wall_placement_board = if *p1_turn_to_move { map_wall_board_to_arr(*horizontal_wall_placement_board) } else { map_wall_board_to_arr_invert(*horizontal_wall_placement_board) };
+//         let p1_walls_placed = if *p1_turn_to_move { p1_num_walls_placed } else { p2_num_walls_placed };
+//         let p2_walls_placed = if *p1_turn_to_move { p2_num_walls_placed } else { p1_num_walls_placed };
 
-                column_vec.push(vec!(c1, c2));
+//         izip!(
+//             p1_pawn_board_vec.iter(),
+//             p2_pawn_board_vec.iter(),
+//             vertical_wall_placement_board.iter(),
+//             horizontal_wall_placement_board.iter()
+//         )
+//         .enumerate()
+//         .fold(result, |mut r, (i, (p1, p2, vw, hw))| {
+//             let column_idx = i % 9;
 
-                r
-            })
-    }
+//             if column_idx == 0 {
+//                 r.push(Vec::with_capacity(9))
+//             }
 
-    fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
-        let total_visits = policy_metrics.visits as f64 - 1.0;
-        let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
-            match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
-            r
-        });
+//             let column_vec = r.last_mut().unwrap();
 
-        result.to_vec()
-    }
+//             column_vec.push(vec!(*p1, *p2, *vw, *hw));
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
-         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
-            .zip(policy_scores).enumerate()
-            .filter_map(|(i, (v, p))|
-            {
-                if *v {
-                    Some(ActionWithPolicy::new(
-                        Action::DropPiece((i + 1) as u64),
-                        *p
-                    ))
-                } else {
-                    None
-                }
-            }).collect();
+//             r
+//         })
+//     }
 
-        valid_actions_with_policies
-    }
-}
+//     fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
+//         let total_visits = policy_metrics.visits as f64 - 1.0;
+//         let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
+//             match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
+//             r
+//         });
 
-impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
+//         result.to_vec()
+//     }
 
-    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        // @TODO: Replace with code to create the model.
-        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-        let mapper = Mapper::new();
+//     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
+//          let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
+//             .zip(policy_scores).enumerate()
+//             .filter_map(|(i, (v, p))|
+//             {
+//                 if *v {
+//                     Some(ActionWithPolicy::new(
+//                         Action::DropPiece((i + 1) as u64),
+//                         *p
+//                     ))
+//                 } else {
+//                     None
+//                 }
+//             }).collect();
 
-        TensorflowServingModel::new(
-            latest_model_info,
-            Engine::new(),
-            mapper
-        )     
-    }
+//         valid_actions_with_policies
+//     }
+// }
 
-    fn get(&self, model_info: &ModelInfo) -> Self::M {
-        let mapper = Mapper::new();
+// impl model::model::ModelFactory for ModelFactory {
+//     type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
 
-        TensorflowServingModel::new(
-            model_info.clone(),
-            Engine::new(),
-            mapper
-        )
-    }
+//     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
+//         // @TODO: Replace with code to create the model.
+//         let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
+//         let mapper = Mapper::new();
 
-    fn get_latest(&self, model_info: &ModelInfo) -> Self::M {
-        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-        let mapper = Mapper::new();
+//         TensorflowServingModel::new(
+//             latest_model_info,
+//             Engine::new(),
+//             mapper
+//         )     
+//     }
 
-        TensorflowServingModel::new(
-            latest_model_info,
-            Engine::new(),
-            mapper
-        )
-    }
-}
+//     fn get(&self, model_info: &ModelInfo) -> Self::M {
+//         let mapper = Mapper::new();
+
+//         TensorflowServingModel::new(
+//             model_info.clone(),
+//             Engine::new(),
+//             mapper
+//         )
+//     }
+
+//     fn get_latest(&self, model_info: &ModelInfo) -> Self::M {
+//         let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
+//         let mapper = Mapper::new();
+
+//         TensorflowServingModel::new(
+//             latest_model_info,
+//             Engine::new(),
+//             mapper
+//         )
+//     }
+// }
