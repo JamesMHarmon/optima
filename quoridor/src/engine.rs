@@ -1,4 +1,5 @@
-use super::action::{Action,ValidActions};
+use super::action::Coordinate;
+use super::action::{Action};
 use engine::engine::GameEngine;
 use engine::game_state;
 
@@ -43,12 +44,25 @@ impl GameState {
         }
     }
 
-    pub fn get_valid_actions(&self) -> ValidActions {
-        ValidActions {
-            horizontal_wall_placement: self.get_valid_horizontal_wall_placement(),
-            vertical_wall_placement: self.get_valid_vertical_wall_placement(),
-            pawn_moves: self.get_valid_pawn_moves()
-        }
+    pub fn get_valid_pawn_move_actions(&self) -> Vec<Action> {
+        Self::map_bit_board_to_coordinates(self.get_valid_pawn_moves())
+            .into_iter()
+            .map(|coord| Action::MovePawn(coord))
+            .collect()
+    }
+
+    pub fn get_valid_horizontal_wall_actions(&self) -> Vec<Action> {
+        Self::map_bit_board_to_coordinates(self.get_valid_horizontal_wall_placement())
+            .into_iter()
+            .map(|coord| Action::PlaceHorizontalWall(coord))
+            .collect()
+    }
+
+    pub fn get_valid_vertical_wall_actions(&self) -> Vec<Action> {
+        Self::map_bit_board_to_coordinates(self.get_valid_vertical_wall_placement())
+            .into_iter()
+            .map(|coord| Action::PlaceVerticalWall(coord))
+            .collect()
     }
 
     pub fn is_terminal(&self) -> Option<f64> {
@@ -350,6 +364,22 @@ impl GameState {
 
         (top_edge_touching & middle_touching) | (top_edge_touching & bottom_edge_touching) | (middle_touching & bottom_edge_touching)
     }
+
+    fn map_bit_board_to_coordinates(board: u128) -> Vec<Coordinate> {
+        let mut board = board;
+        let mut coordinates = Vec::new();
+
+        while board != 0 {
+            let board_without_first_bit = board & (board - 1);
+            let removed_bit = board_without_first_bit ^ board;
+            let coordinate = Coordinate::from_bit_board(removed_bit);
+            coordinates.push(coordinate);
+
+            board = board_without_first_bit;
+        }
+
+        coordinates
+    }
 }
 
 impl game_state::GameState for GameState {
@@ -382,5 +412,291 @@ impl GameEngine for Engine {
 
     fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
         game_state.is_terminal()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GameState;
+    use super::super::action::{Action,Coordinate};
+    use engine::game_state::{GameState as GameStateTrait};
+
+    fn intersects(actions: &Vec<Action>, exclusions: &Vec<Action>) -> bool {
+        actions.iter().any(|a| exclusions.iter().any(|a2| a == a2))
+    }
+
+    #[test]
+    fn test_get_valid_pawn_move_actions_p1() {
+        let game_state = GameState::initial();
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('f', 1)),
+            Action::MovePawn(Coordinate::new('d', 1)),
+            Action::MovePawn(Coordinate::new('e', 2))
+        ));
+    }
+
+    #[test]
+    fn test_get_valid_pawn_move_actions_p2() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('e', 8)),
+            Action::MovePawn(Coordinate::new('f', 9)),
+            Action::MovePawn(Coordinate::new('d', 9))
+        ));
+    }
+
+    #[test]
+    fn test_get_valid_pawn_move_actions_vertical_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d',1)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('e', 2))
+        ));
+    }
+
+    #[test]
+    fn test_get_valid_pawn_move_actions_vertical_wall_top() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d',1)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('e', 1)),
+            Action::MovePawn(Coordinate::new('e', 3))
+        ));
+    }
+
+    #[test]
+    fn test_get_valid_pawn_move_actions_horizontal_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d',8)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('f', 1)),
+            Action::MovePawn(Coordinate::new('d', 1))
+        ));
+
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('f', 9)),
+            Action::MovePawn(Coordinate::new('d', 9))
+        ));
+
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('g', 1)),
+            Action::MovePawn(Coordinate::new('e', 1))
+        ));
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_initial() {
+        let game_state = GameState::initial();
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+
+        let mut cols = ['a','b','c','d','e','f','g','h'];
+        let rows = [1,2,3,4,5,6,7,8];
+        cols.reverse();
+
+        let mut actions = Vec::new();
+
+        for row in rows.into_iter() {
+            for col in cols.into_iter() {
+                actions.push(Action::PlaceHorizontalWall(Coordinate::new(*col, *row)));
+            }
+        }
+
+        assert_eq!(valid_actions.len(), actions.len());
+        assert_eq!(valid_actions, actions);
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_on_horizontal_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d',1)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 1))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_on_vertical_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',5)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('e', 5))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_blocking_path() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 2))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_blocking_path_other_player() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 2))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_blocking_path_vert_horz() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_horizontal_wall_actions_blocking_path_edge() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('b',3)));
+
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceHorizontalWall(Coordinate::new('a', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('a', 3)),
+            Action::PlaceHorizontalWall(Coordinate::new('a', 4)),
+            Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('b', 3)),
+            Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
+            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
+            Action::PlaceHorizontalWall(Coordinate::new('f', 2)),
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_vertical_wall_actions_initial() {
+        let game_state = GameState::initial();
+        let valid_actions = game_state.get_valid_vertical_wall_actions();
+
+        let mut cols = ['a','b','c','d','e','f','g','h'];
+        let rows = [1,2,3,4,5,6,7,8];
+        cols.reverse();
+
+        let mut actions = Vec::new();
+
+        for row in rows.into_iter() {
+            for col in cols.into_iter() {
+                actions.push(Action::PlaceVerticalWall(Coordinate::new(*col, *row)));
+            }
+        }
+
+        assert_eq!(valid_actions.len(), actions.len());
+        assert_eq!(valid_actions, actions);
+    }
+
+    #[test]
+    fn test_get_valid_vertical_wall_actions_on_vertical_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',5)));
+
+        let valid_actions = game_state.get_valid_vertical_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceVerticalWall(Coordinate::new('e', 4)),
+            Action::PlaceVerticalWall(Coordinate::new('e', 5)),
+            Action::PlaceVerticalWall(Coordinate::new('e', 6))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_vertical_wall_actions_on_horizontal_wall() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',5)));
+
+        let valid_actions = game_state.get_valid_vertical_wall_actions();
+        let excludes_actions = vec!(
+            Action::PlaceVerticalWall(Coordinate::new('e', 5))
+        );
+        let intersects = intersects(&valid_actions, &excludes_actions);
+
+        assert_eq!(intersects, false);
+        assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 }
