@@ -2,8 +2,8 @@ use common::bits::single_bit_index;
 
 #[derive(Clone,Debug,PartialEq)]
 pub struct Coordinate {
-    column: char,
-    row: usize
+    pub column: char,
+    pub row: usize
 }
 
 impl Coordinate {

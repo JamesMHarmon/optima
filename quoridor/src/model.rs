@@ -1,136 +1,331 @@
-// use model::analytics::ActionWithPolicy;
-// use model::node_metrics::NodeMetrics;
-// use model::model_info::ModelInfo;
-// use model::tensorflow_serving::model::TensorflowServingModel;
-// use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
-// use super::action::Action;
-// use super::engine::Engine;
-// use super::engine::GameState;
-// use super::board::{map_pawn_board_to_arr,map_pawn_board_to_arr_invert,map_wall_board_to_arr,map_wall_board_to_arr_invert};
+use model::analytics::ActionWithPolicy;
+use model::node_metrics::NodeMetrics;
+use model::model_info::ModelInfo;
+use model::tensorflow_serving::model::TensorflowServingModel;
+use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
+use super::action::{Action,Coordinate};
+use super::engine::Engine;
+use super::engine::GameState;
+use super::board::{map_board_to_arr_invertable,BoardType};
 
-// use itertools::izip;
+use itertools::izip;
 
-// pub struct ModelFactory {}
+pub struct ModelFactory {}
 
-// impl ModelFactory {
-//     pub fn new() -> Self {
-//         Self {}
-//     }
-// }
+impl ModelFactory {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
-// pub struct Mapper {}
+pub struct Mapper {}
 
-// impl Mapper {
-//     fn new() -> Self {
-//         Self {}
-//     }
-// }
+impl Mapper {
+    fn new() -> Self {
+        Self {}
+    }
+}
 
-// impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
-//     fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
-//         let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
+impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
+    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
+        let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
 
-//         let GameState {
-//             p1_turn_to_move,
-//             p1_pawn_board,
-//             p2_pawn_board,
-//             vertical_wall_placement_board,
-//             horizontal_wall_placement_board,
-//             p1_num_walls_placed,
-//             p2_num_walls_placed
-//          } = game_state;
+        let GameState {
+            p1_turn_to_move,
+            p1_pawn_board,
+            p2_pawn_board,
+            vertical_wall_placement_board,
+            horizontal_wall_placement_board,
+            p1_num_walls_placed,
+            p2_num_walls_placed,
+            ..
+        } = game_state;
 
-//         let p1_pawn_board_vec = if *p1_turn_to_move { map_pawn_board_to_arr(*p1_pawn_board) } else { map_pawn_board_to_arr_invert(*p2_pawn_board) };
-//         let p2_pawn_board_vec = if *p1_turn_to_move { map_pawn_board_to_arr(*p2_pawn_board) } else { map_pawn_board_to_arr_invert(*p1_pawn_board) };
-//         let vertical_wall_placement_board = if *p1_turn_to_move { map_wall_board_to_arr(*vertical_wall_placement_board) } else { map_wall_board_to_arr_invert(*vertical_wall_placement_board) };
-//         let horizontal_wall_placement_board = if *p1_turn_to_move { map_wall_board_to_arr(*horizontal_wall_placement_board) } else { map_wall_board_to_arr_invert(*horizontal_wall_placement_board) };
-//         let p1_walls_placed = if *p1_turn_to_move { p1_num_walls_placed } else { p2_num_walls_placed };
-//         let p2_walls_placed = if *p1_turn_to_move { p2_num_walls_placed } else { p1_num_walls_placed };
+        let curr_player_pawn_board = if *p1_turn_to_move { *p1_pawn_board } else { *p2_pawn_board };
+        let oppo_player_pawn_board = if *p1_turn_to_move { *p2_pawn_board } else { *p1_pawn_board };
 
-//         izip!(
-//             p1_pawn_board_vec.iter(),
-//             p2_pawn_board_vec.iter(),
-//             vertical_wall_placement_board.iter(),
-//             horizontal_wall_placement_board.iter()
-//         )
-//         .enumerate()
-//         .fold(result, |mut r, (i, (p1, p2, vw, hw))| {
-//             let column_idx = i % 9;
+        let invert = !*p1_turn_to_move;
 
-//             if column_idx == 0 {
-//                 r.push(Vec::with_capacity(9))
-//             }
+        let curr_pawn_board_vec = map_board_to_arr_invertable(curr_player_pawn_board, BoardType::Pawn, invert);
+        let oppo_pawn_board_vec = map_board_to_arr_invertable(oppo_player_pawn_board, BoardType::Pawn, invert);
+        let vertical_wall_vec = map_board_to_arr_invertable(*vertical_wall_placement_board, BoardType::VerticalWall, invert);
+        let horizontal_wall_vec = map_board_to_arr_invertable(*horizontal_wall_placement_board, BoardType::VerticalWall, invert);
 
-//             let column_vec = r.last_mut().unwrap();
+        let curr_num_walls_placed = if *p1_turn_to_move { p1_num_walls_placed } else { p2_num_walls_placed };
+        let oppo_num_walls_placed = if *p1_turn_to_move { p2_num_walls_placed } else { p1_num_walls_placed };
+        let curr_num_walls_placed_norm = (*curr_num_walls_placed as f64) / 10.0;
+        let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f64) / 10.0;
 
-//             column_vec.push(vec!(*p1, *p2, *vw, *hw));
+        izip!(
+            curr_pawn_board_vec.iter(),
+            oppo_pawn_board_vec.iter(),
+            vertical_wall_vec.iter(),
+            horizontal_wall_vec.iter()
+        )
+        .enumerate()
+        .fold(result, |mut r, (i, (curr_pawn, oppo_pawn, vw, hw))| {
+            let column_idx = i % 9;
 
-//             r
-//         })
-//     }
+            if column_idx == 0 {
+                r.push(Vec::with_capacity(9))
+            }
 
-//     fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
-//         let total_visits = policy_metrics.visits as f64 - 1.0;
-//         let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
-//             match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
-//             r
-//         });
+            let column_vec = r.last_mut().unwrap();
 
-//         result.to_vec()
-//     }
+            column_vec.push(vec!(*curr_pawn, *oppo_pawn, *vw, *hw, curr_num_walls_placed_norm, oppo_num_walls_placed_norm));
 
-//     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
-//          let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
-//             .zip(policy_scores).enumerate()
-//             .filter_map(|(i, (v, p))|
-//             {
-//                 if *v {
-//                     Some(ActionWithPolicy::new(
-//                         Action::DropPiece((i + 1) as u64),
-//                         *p
-//                     ))
-//                 } else {
-//                     None
-//                 }
-//             }).collect();
+            r
+        })
+    }
 
-//         valid_actions_with_policies
-//     }
-// }
+    fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
+        // let total_visits = policy_metrics.visits as f64 - 1.0;
+        // let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
+        //     match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
+        //     r
+        // });
 
-// impl model::model::ModelFactory for ModelFactory {
-//     type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
+        // result.to_vec()
 
-//     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-//         // @TODO: Replace with code to create the model.
-//         let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-//         let mapper = Mapper::new();
+        panic!("Not Implemented")
+    }
 
-//         TensorflowServingModel::new(
-//             latest_model_info,
-//             Engine::new(),
-//             mapper
-//         )     
-//     }
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
+        let valid_pawn_moves = game_state.get_valid_pawn_move_actions().into_iter();
+        let valid_vert_walls = game_state.get_valid_vertical_wall_actions().into_iter();
+        let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions().into_iter();
+        let actions = valid_pawn_moves.chain(valid_vert_walls).chain(valid_horiz_walls);
 
-//     fn get(&self, model_info: &ModelInfo) -> Self::M {
-//         let mapper = Mapper::new();
+        let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
+            .map(|a|
+            {
+                let p_idx = map_action_to_input_idx(&a);
+                let p = policy_scores[p_idx];
 
-//         TensorflowServingModel::new(
-//             model_info.clone(),
-//             Engine::new(),
-//             mapper
-//         )
-//     }
+                ActionWithPolicy::new(
+                    a,
+                    p
+                )
+            }).collect();
 
-//     fn get_latest(&self, model_info: &ModelInfo) -> Self::M {
-//         let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-//         let mapper = Mapper::new();
+        valid_actions_with_policies
+    }
+}
 
-//         TensorflowServingModel::new(
-//             latest_model_info,
-//             Engine::new(),
-//             mapper
-//         )
-//     }
-// }
+fn map_action_to_input_idx(action: &Action) -> usize {
+    let len_moves_inputs = 81;
+    let len_wall_inputs = 64;
+
+    match action {
+        Action::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(coord),
+        Action::PlaceVerticalWall(coord) => map_coord_to_input_idx_eight_by_eight(coord) + len_moves_inputs,
+        Action::PlaceHorizontalWall(coord) => map_coord_to_input_idx_eight_by_eight(coord) + len_moves_inputs + len_wall_inputs
+    }
+}
+
+fn map_coord_to_input_idx_nine_by_nine(coord: &Coordinate) -> usize {
+    let col = match coord.column {
+        'a' => 0,
+        'b' => 1,
+        'c' => 2,
+        'd' => 3,
+        'e' => 4,
+        'f' => 5,
+        'g' => 6,
+        'h' => 7,
+         _  => 8
+    };
+
+    col + ((9 - coord.row) * 9)
+}
+
+fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
+    let col = match coord.column {
+        'a' => 0,
+        'b' => 1,
+        'c' => 2,
+        'd' => 3,
+        'e' => 4,
+        'f' => 5,
+        'g' => 6,
+         _  => 7
+    };
+
+    col + ((8 - coord.row) * 8)
+}
+
+impl model::model::ModelFactory for ModelFactory {
+    type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
+
+    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
+        // @TODO: Replace with code to create the model.
+        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
+        let mapper = Mapper::new();
+
+        TensorflowServingModel::new(
+            latest_model_info,
+            Engine::new(),
+            mapper
+        )     
+    }
+
+    fn get(&self, model_info: &ModelInfo) -> Self::M {
+        let mapper = Mapper::new();
+
+        TensorflowServingModel::new(
+            model_info.clone(),
+            Engine::new(),
+            mapper
+        )
+    }
+
+    fn get_latest(&self, model_info: &ModelInfo) -> Self::M {
+        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
+        let mapper = Mapper::new();
+
+        TensorflowServingModel::new(
+            latest_model_info,
+            Engine::new(),
+            mapper
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_coord_to_input_idx_nine_by_nine_a1() {
+        let coord = Coordinate::new('a', 1);
+        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+
+        assert_eq!(72, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_nine_by_nine_a9() {
+        let coord = Coordinate::new('a', 9);
+        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+
+        assert_eq!(0, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_nine_by_nine_i1() {
+        let coord = Coordinate::new('i', 1);
+        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+
+        assert_eq!(80, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_nine_by_nine_i9() {
+        let coord = Coordinate::new('i', 9);
+        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+
+        assert_eq!(8, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_nine_by_nine_e5() {
+        let coord = Coordinate::new('e', 5);
+        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+
+        assert_eq!(40, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_eight_by_eight_a1() {
+        let coord = Coordinate::new('a', 1);
+        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+
+        assert_eq!(56, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_eight_by_eight_a8() {
+        let coord = Coordinate::new('a', 8);
+        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+
+        assert_eq!(0, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_eight_by_eight_h1() {
+        let coord = Coordinate::new('h', 1);
+        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+
+        assert_eq!(63, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_eight_by_eight_h8() {
+        let coord = Coordinate::new('h', 8);
+        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+
+        assert_eq!(7, idx);
+    }
+
+    #[test]
+    fn test_map_coord_to_input_idx_eight_by_eight_e5() {
+        let coord = Coordinate::new('e', 5);
+        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+
+        assert_eq!(28, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_pawn_a9() {
+        let coord = Coordinate::new('a', 9);
+        let action = Action::MovePawn(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(0, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_pawn_i1() {
+        let coord = Coordinate::new('i', 1);
+        let action = Action::MovePawn(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(80, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_vertical_wall_a8() {
+        let coord = Coordinate::new('a', 8);
+        let action = Action::PlaceVerticalWall(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(81, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_vertical_wall_h1() {
+        let coord = Coordinate::new('h', 1);
+        let action = Action::PlaceVerticalWall(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(144, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_horizontal_wall_a8() {
+        let coord = Coordinate::new('a', 8);
+        let action = Action::PlaceHorizontalWall(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(145, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_input_idx_horizontal_wall_h1() {
+        let coord = Coordinate::new('h', 1);
+        let action = Action::PlaceHorizontalWall(coord);
+        let idx = map_action_to_input_idx(&action);
+
+        assert_eq!(208, idx);
+    }
+}

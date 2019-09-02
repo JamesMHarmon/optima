@@ -1,3 +1,4 @@
+use super::constants::MAX_NUMBER_OF_MOVES;
 use super::action::Coordinate;
 use super::action::{Action};
 use engine::engine::GameEngine;
@@ -20,6 +21,7 @@ const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__0
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct GameState {
+    pub num_moves: usize,
     pub p1_turn_to_move: bool,
     pub p1_pawn_board: u128,
     pub p2_pawn_board: u128,
@@ -69,10 +71,12 @@ impl GameState {
         let pawn_board = if self.p1_turn_to_move { self.p2_pawn_board } else { self.p1_pawn_board };
         let objective_mask = if self.p1_turn_to_move { P2_OBJECTIVE_MASK } else { P1_OBJECTIVE_MASK };
 
-        // @TODO: Flip depending on the active player?
         if pawn_board & objective_mask != 0 {
-            Some(1.0)
-        } else {
+            Some(-1.0)
+        } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
+            Some(-1.0)
+        }
+        else {
             None
         }
     }
@@ -81,6 +85,7 @@ impl GameState {
         let p1_turn_to_move = self.p1_turn_to_move;
 
         Self {
+            num_moves: self.num_moves + 1,
             p1_turn_to_move: !p1_turn_to_move,
             p1_pawn_board: if p1_turn_to_move { pawn_board } else { self.p1_pawn_board },
             p2_pawn_board: if !p1_turn_to_move { pawn_board } else { self.p2_pawn_board },
@@ -92,6 +97,7 @@ impl GameState {
         let p1_turn_to_move = self.p1_turn_to_move;
 
         Self {
+            num_moves: self.num_moves + 1,
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
@@ -104,6 +110,7 @@ impl GameState {
         let p1_turn_to_move = self.p1_turn_to_move;
 
         Self {
+            num_moves: self.num_moves + 1,
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
@@ -385,6 +392,7 @@ impl GameState {
 impl game_state::GameState for GameState {
     fn initial() -> Self {
         GameState {
+            num_moves: 0,
             p1_turn_to_move: true,
             p1_pawn_board: P1_STARTING_POS_MASK,
             p2_pawn_board: P2_STARTING_POS_MASK,
@@ -777,5 +785,58 @@ mod tests {
 
         let valid_vertical_actions = game_state.get_valid_vertical_wall_actions();
         assert_eq!(valid_vertical_actions.len(), 0);
+    }
+
+    #[test]
+    fn test_is_terminal_p1() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
+
+        let is_terminal = game_state.is_terminal();
+        assert_eq!(is_terminal, None);
+
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',1)));
+
+        let is_terminal = game_state.is_terminal();
+        assert_eq!(is_terminal, Some(-1.0));
+    }
+
+    #[test]
+    fn test_is_terminal_p2() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
+
+        let is_terminal = game_state.is_terminal();
+        assert_eq!(is_terminal, None);
+
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+
+        let is_terminal = game_state.is_terminal();
+        assert_eq!(is_terminal, Some(-1.0));
     }
 }

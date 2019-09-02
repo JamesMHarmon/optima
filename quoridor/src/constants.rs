@@ -1,0 +1,1 @@
+pub const MAX_NUMBER_OF_MOVES: usize = 200;
