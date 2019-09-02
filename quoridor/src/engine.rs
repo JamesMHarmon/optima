@@ -507,6 +507,48 @@ mod tests {
     }
 
     #[test]
+    fn test_get_valid_pawn_move_actions_blocked() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
+
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('e',4)),
+            Action::MovePawn(Coordinate::new('f',6)),
+            Action::MovePawn(Coordinate::new('d',6)),
+            Action::MovePawn(Coordinate::new('e',7))
+        ));
+
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',4)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',1)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('f',5)),
+            Action::MovePawn(Coordinate::new('d',5)),
+            Action::MovePawn(Coordinate::new('f',6)),
+            Action::MovePawn(Coordinate::new('d',6)),
+            Action::MovePawn(Coordinate::new('e',7))
+        ));
+
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',6)));
+        let valid_actions = game_state.get_valid_pawn_move_actions();
+
+        assert_eq!(valid_actions, vec!(
+            Action::MovePawn(Coordinate::new('f',5)),
+            Action::MovePawn(Coordinate::new('d',5)),
+            Action::MovePawn(Coordinate::new('f',6)),
+            Action::MovePawn(Coordinate::new('d',6))
+        ));
+    }
+
+    #[test]
     fn test_get_valid_horizontal_wall_actions_initial() {
         let game_state = GameState::initial();
         let valid_actions = game_state.get_valid_horizontal_wall_actions();
@@ -698,5 +740,42 @@ mod tests {
 
         assert_eq!(intersects, false);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
+    }
+
+    #[test]
+    fn test_get_valid_wall_actions_on_all_walls_placed() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g',1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g',2)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
+
+        // 9 walls placed
+        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        assert_eq!(valid_actions.len(), 46);
+
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',3)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
+
+        // 10 walls placed so we shouldn't be able to place anymore, horizontal or vertical
+        let valid_horizontal_actions = game_state.get_valid_horizontal_wall_actions();
+        assert_eq!(valid_horizontal_actions.len(), 0);
+
+        let valid_vertical_actions = game_state.get_valid_vertical_wall_actions();
+        assert_eq!(valid_vertical_actions.len(), 0);
     }
 }
