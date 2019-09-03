@@ -6,29 +6,42 @@ extern crate clap;
 use clap::App;
 use connect4::engine::{Engine as Connect4Engine};
 use connect4::model::{ModelFactory as Connect4ModelFactory};
+use quoridor::engine::{Engine as QuoridorEngine};
+use quoridor::model::{ModelFactory as QuoridorModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 
 use failure::Error;
 
 const C4_NAME: &str = "Connect4";
+const QUORIDOR_NAME: &str = "Quoridor";
 
 fn main() -> Result<(), Error> {
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
     if let Some(matches) = matches.subcommand_matches("init") {
-        // let game_name = matches.value_of("game").unwrap();
+        let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
         let options = get_options_from_matches(matches)?;
 
-        return create_connect4(run_name, &options);
+        if game_name == C4_NAME {
+            return create_connect4(run_name, &options);
+        } else if game_name == QUORIDOR_NAME {
+            return create_quoridor(run_name, &options);
+        } else {
+            panic!("Game name not recognized");
+        }
     } else if let Some(matches) = matches.subcommand_matches("run") {
-        // let game_name = matches.value_of("game").unwrap();
+        let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
 
-        let result = run_connect4(run_name);
-
-        return result;
+        if game_name == C4_NAME {
+            return run_connect4(run_name);
+        } else if game_name == QUORIDOR_NAME {
+            return run_quoridor(run_name);
+        } else {
+            panic!("Game name not recognized");
+        }
     }
 
     Ok(())
@@ -51,6 +64,33 @@ fn run_connect4(run_name: &str) -> Result<(), Error> {
 
     let mut runner = SelfLearn::from(
         C4_NAME.to_owned(),
+        run_name.to_owned(),
+        &model_factory,
+        &game_engine
+    )?;
+
+    runner.learn(&model_factory)?;
+
+    Ok(())
+}
+
+fn create_quoridor(run_name: &str, options: &SelfLearnOptions) -> Result<(), Error> {
+    let model_factory = QuoridorModelFactory::new();
+
+    SelfLearn::<_,_,QuoridorEngine,_,_>::create(
+        QUORIDOR_NAME.to_owned(),
+        run_name.to_owned(),
+        &model_factory,
+        options
+    )
+}
+
+fn run_quoridor(run_name: &str) -> Result<(), Error> {
+    let model_factory = QuoridorModelFactory::new();
+    let game_engine = QuoridorEngine::new();
+
+    let mut runner = SelfLearn::from(
+        QUORIDOR_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,
         &game_engine

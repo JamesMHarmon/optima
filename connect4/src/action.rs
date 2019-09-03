@@ -8,10 +8,6 @@ pub enum Action {
     DropPiece(u64)
 }
 
-#[derive(Debug)]
-pub struct ValidActions(u64);
-
-
 impl Serialize for Action
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -33,7 +29,7 @@ impl<'de> Visitor<'de> for ActionVisitor
     type Value = Action;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("Action")
+        formatter.write_str("Expecting an integer from 1-7 that represents the column that a piece was dropped.")
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>

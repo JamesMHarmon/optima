@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 self-learn = { path = "../self-learn" }
 connect4 = { path = "../connect4" }
+quoridor = { path = "../quoridor" }
 
 failure="0.1"
 uuid={version="0.7",features=["v4"]}

@@ -102,6 +102,22 @@ where
             mapper
         }
     }
+
+    pub fn create(
+        model_info: &ModelInfo,
+        num_filters: usize,
+        num_blocks: usize,
+        (input_h, input_w, input_c): (usize, usize, usize),
+        output_size: usize
+     ) -> Result<(), Error> {
+        create(
+            model_info,
+            num_filters,
+            num_blocks,
+            (input_h, input_w, input_c),
+            output_size
+        )
+    }
 }
 
 impl<S,A,E,Map> ModelTrait for TensorflowServingModel<S,A,E,Map>
@@ -248,6 +264,65 @@ where
     fs::remove_file(train_data_path)?;
 
     println!("Training process complete");
+
+    Ok(())
+}
+
+#[allow(non_snake_case)]
+fn create(
+    model_info: &ModelInfo,
+    num_filters: usize,
+    num_blocks: usize,
+    (input_h, input_w, input_c): (usize, usize, usize),
+    output_size: usize
+) -> Result<(), Error>
+{
+    let game_name = model_info.get_game_name();
+    let run_name = model_info.get_run_name();
+
+    fs::create_dir_all(format!(
+        "./{game_name}_runs/{run_name}/models",
+        game_name = game_name,
+        run_name = run_name
+    ))?;
+
+    let docker_cmd = format!("docker run --rm \
+        --runtime=nvidia \
+        --mount type=bind,source=$(pwd)/{game_name}_runs,target=/{game_name}_runs \
+        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_00001.h5 \
+        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/1 \
+        -e INPUT_H={input_h} \
+        -e INPUT_W={input_w} \
+        -e INPUT_C={input_c} \
+        -e OUTPUT_SIZE={output_size} \
+        -e NUM_FILTERS={num_filters} \
+        -e NUM_BLOCKS={num_blocks} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
+        quoridor_engine/create:latest",
+        game_name = game_name,
+        run_name = run_name,
+        input_h = input_h,
+        input_w = input_w,
+        input_c = input_c,
+        output_size = output_size,
+        num_filters = num_filters,
+        num_blocks = num_blocks,
+    );
+
+    println!("{}", docker_cmd);
+
+    let mut cmd = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(docker_cmd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let result = cmd.wait();
+
+    println!("OUTPUT: {:?}", result);
+
+    println!("Model creation process complete");
 
     Ok(())
 }

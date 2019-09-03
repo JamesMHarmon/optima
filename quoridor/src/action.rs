@@ -1,6 +1,10 @@
+use serde::de::Error;
+use std::fmt;
+use serde::ser::{Serialize,Serializer};
+use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
 use common::bits::single_bit_index;
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone,Debug,Eq,PartialEq)]
 pub struct Coordinate {
     pub column: char,
     pub row: usize
@@ -48,7 +52,63 @@ impl Coordinate {
     }
 }
 
-#[derive(Clone,Debug,PartialEq)]
+impl Serialize for Action
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let coordinate = match self {
+            Action::MovePawn(coord) => format!("{}{}", coord.column, coord.row),
+            Action::PlaceVerticalWall(coord) => format!("{}{}v", coord.column, coord.row),
+            Action::PlaceHorizontalWall(coord) => format!("{}{}h", coord.column, coord.row)
+        };
+
+        serializer.serialize_str(&coordinate)
+    }
+}
+
+struct ActionVisitor {}
+
+impl ActionVisitor {
+    fn new() -> Self { Self {} }
+}
+
+impl<'de> Visitor<'de> for ActionVisitor
+{
+    type Value = Action;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("Expecting a string with a letter representing the column then a number representing the row. Optionally followed by a 'v' or 'h' for a wall.")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        let chars: Vec<char> = v.chars().collect();
+        let coordinate = Coordinate::new(chars[0],chars[1] as usize);
+
+        match chars.get(3) {
+            None => Ok(Action::MovePawn(coordinate)),
+            Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
+            Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
+            Some(v) => Err(DeserializeError::invalid_value(Unexpected::Char(*v),&self))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Action
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_u64(ActionVisitor::new())
+    }
+}
+
+#[derive(Clone,Debug,Eq,PartialEq)]
 pub enum Action {
     MovePawn(Coordinate),
     PlaceHorizontalWall(Coordinate),

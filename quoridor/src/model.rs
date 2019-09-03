@@ -4,6 +4,7 @@ use model::model_info::ModelInfo;
 use model::tensorflow_serving::model::TensorflowServingModel;
 use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
 use super::action::{Action,Coordinate};
+use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -79,15 +80,15 @@ impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
     }
 
     fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
-        // let total_visits = policy_metrics.visits as f64 - 1.0;
-        // let result:[f64; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
-        //     match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f64 / total_visits };
-        //     r
-        // });
+        let total_visits = policy_metrics.visits as f64 - 1.0;
+        let result:[f64; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
+            let input_idx = map_action_to_input_idx(&p.0);
 
-        // result.to_vec()
+            r[input_idx] = p.1 as f64 / total_visits;
+            r
+        });
 
-        panic!("Not Implemented")
+        result.to_vec()
     }
 
     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
@@ -158,15 +159,15 @@ impl model::model::ModelFactory for ModelFactory {
     type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        // @TODO: Replace with code to create the model.
-        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-        let mapper = Mapper::new();
+        TensorflowServingModel::<GameState,Action,Engine,Mapper>::create(
+            model_info,
+            num_filters,
+            num_blocks,
+            (INPUT_H, INPUT_W, INPUT_C),
+            OUTPUT_SIZE
+        ).unwrap();
 
-        TensorflowServingModel::new(
-            latest_model_info,
-            Engine::new(),
-            mapper
-        )     
+        self.get(model_info)
     }
 
     fn get(&self, model_info: &ModelInfo) -> Self::M {

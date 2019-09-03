@@ -12,14 +12,15 @@ import keras
 import math
 import model_sen
 
-def create(name, num_filters, num_blocks, input_shape):
+def create(num_filters, num_blocks, input_shape, output_size):
     model = model_sen.create_model(
         num_filters,
         num_blocks,
-        input_shape
+        input_shape,
+        output_size
     )
     
-    save_model(name, model)
+    return model
 
 def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks):
     X = np.asarray(X)

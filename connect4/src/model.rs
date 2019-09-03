@@ -3,6 +3,7 @@ use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
 use model::tensorflow_serving::model::TensorflowServingModel;
 use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
+use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
 use super::engine::GameState;
@@ -87,15 +88,15 @@ impl model::model::ModelFactory for ModelFactory {
     type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        // @TODO: Replace with code to create the model.
-        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-        let mapper = Mapper::new();
+        TensorflowServingModel::<GameState,Action,Engine,Mapper>::create(
+            model_info,
+            num_filters,
+            num_blocks,
+            (INPUT_H, INPUT_W, INPUT_C),
+            OUTPUT_SIZE
+        ).unwrap();
 
-        TensorflowServingModel::new(
-            latest_model_info,
-            Engine::new(),
-            mapper
-        )     
+        self.get(model_info)    
     }
 
     fn get(&self, model_info: &ModelInfo) -> Self::M {
