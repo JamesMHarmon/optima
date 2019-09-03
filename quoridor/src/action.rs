@@ -87,9 +87,11 @@ impl<'de> Visitor<'de> for ActionVisitor
         E: Error,
     {
         let chars: Vec<char> = v.chars().collect();
-        let coordinate = Coordinate::new(chars[0],chars[1] as usize);
+        let row = chars[0];
+        let col = chars[1].to_digit(10).ok_or_else(|| DeserializeError::invalid_value(Unexpected::Char(chars[1]), &self))?;
+        let coordinate = Coordinate::new(row, col as usize);
 
-        match chars.get(3) {
+        match chars.get(2) {
             None => Ok(Action::MovePawn(coordinate)),
             Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
             Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
@@ -104,7 +106,7 @@ impl<'de> Deserialize<'de> for Action
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_u64(ActionVisitor::new())
+        deserializer.deserialize_str(ActionVisitor::new())
     }
 }
 
@@ -231,5 +233,74 @@ mod tests {
 
             assert_eq!(orig_coordinate, coordinate);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use serde_json::json;
+    use super::*;
+
+    #[test]
+    fn test_action_pawn_move_ser_json() {
+        let action = Action::MovePawn(Coordinate::new('a', 1));
+        let serialized_action_as_json = json!(action);
+
+        assert_eq!(
+            serialized_action_as_json,
+            "a1"
+        );
+    }
+
+    #[test]
+    fn test_action_vertical_wall_ser_json() {
+        let action = Action::PlaceVerticalWall(Coordinate::new('a', 1));
+        let serialized_action_as_json = json!(action);
+
+        assert_eq!(
+            serialized_action_as_json,
+            "a1v"
+        );
+    }
+
+    #[test]
+    fn test_action_horizontal_wall_ser_json() {
+        let action = Action::PlaceHorizontalWall(Coordinate::new('a', 1));
+        let serialized_action_as_json = json!(action);
+
+        assert_eq!(
+            serialized_action_as_json,
+            "a1h"
+        );
+    }
+
+    #[test]
+    fn test_action_deser_pawn_move() {
+        let json = "\"i9\"";
+
+        assert_eq!(
+            serde_json::from_str::<Action>(&json).unwrap(),
+            Action::MovePawn(Coordinate::new('i', 9)),
+        );
+    }
+
+    #[test]
+    fn test_action_deser_horizontal_wall() {
+        let json = "\"b6h\"";
+
+        assert_eq!(
+            serde_json::from_str::<Action>(&json).unwrap(),
+            Action::PlaceHorizontalWall(Coordinate::new('b', 6)),
+        );
+    }
+
+    #[test]
+    fn test_action_deser_vertical_wall() {
+        let json = "\"d1v\"";
+
+        assert_eq!(
+            serde_json::from_str::<Action>(&json).unwrap(),
+            Action::PlaceVerticalWall(Coordinate::new('d', 1)),
+        );
     }
 }
