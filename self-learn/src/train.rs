@@ -64,7 +64,8 @@ where
             );
 
             positions_metrics
-        }).collect();
+        })
+        .collect();
 
     let num_positions = positions_metrics.len();
     let position_sample_percentage = options.position_sample_percentage;

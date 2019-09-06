@@ -10,9 +10,10 @@ use std::time::Instant;
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
-use reqwest::Client;
-use serde::{Serialize,Deserialize};
+use itertools::izip;
 use serde_json::json;
+use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
+
 
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
@@ -25,7 +26,11 @@ use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
 
-pub struct TensorflowServingModel<S,A,E,Map>
+#[cfg_attr(feature="tensorflow_system_alloc", global_allocator)]
+#[cfg(feature="tensorflow_system_alloc")]
+static ALLOCATOR: std::alloc::System = std::alloc::System;
+
+pub struct TensorflowModel<S,A,E,Map>
 {
     model_info: ModelInfo,
     batching_model: Arc<BatchingModel<S,A,E,Map>>,
@@ -40,7 +45,7 @@ pub trait Mapper<S,A> {
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<A>>;
 }
 
-impl<S,A,E,Map> TensorflowServingModel<S,A,E,Map>
+impl<S,A,E,Map> TensorflowModel<S,A,E,Map>
 where
     S: Clone + PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
@@ -120,7 +125,7 @@ where
     }
 }
 
-impl<S,A,E,Map> ModelTrait for TensorflowServingModel<S,A,E,Map>
+impl<S,A,E,Map> ModelTrait for TensorflowModel<S,A,E,Map>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
@@ -153,6 +158,13 @@ where
             id_generator: self.id_generator.clone()
         }
     }
+}
+
+pub struct SessionAndOps {
+    session: Session,
+    op_input: Operation,
+    op_value_head: Operation,
+    op_policy_head: Operation
 }
 
 pub struct GameAnalyzer<S,A,E,Map> {
@@ -327,21 +339,21 @@ fn create(
     Ok(())
 }
 
-impl<S,A,E,Map> Drop for TensorflowServingModel<S,A,E,Map> {
+impl<S,A,E,Map> Drop for TensorflowModel<S,A,E,Map> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
 }
 
 pub struct BatchingModel<S,A,E,Map> {
-    model_info: ModelInfo,
     states_to_analyse: SegQueue<(usize, S, Waker)>,
     states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<A>>>>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
     engine: E,
-    mapper: Arc<Map>
+    mapper: Arc<Map>,
+    session: Mutex<SessionAndOps>
 }
 
 impl<S,A,E,Map> BatchingModel<S,A,E,Map>
@@ -359,15 +371,44 @@ where
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
 
+        let mut graph = Graph::new();
+
+        let exported_model_path = format!(
+            "{game_name}_runs/{run_name}/exported_models/{run_num}",
+            game_name = model_info.get_game_name(),
+            run_name = model_info.get_run_name(),
+            run_num = model_info.get_run_num(),
+        );
+
+        let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
+
+        println!("{:?}", exported_model_path);
+
+        let session = Session::from_saved_model(
+            &SessionOptions::new(),
+            &["serve"],
+            &mut graph,
+            exported_model_path
+        ).unwrap();
+
+        let op_input = graph.operation_by_name_required("input_1").unwrap();
+        let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
+        let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
+
         Self {
-            model_info,
             states_to_analyse,
             states_analysed,
             num_nodes_analysed,
             min_batch_size,
             max_batch_size,
             engine,
-            mapper
+            mapper,
+            session: Mutex::new(SessionAndOps {
+                session,
+                op_input,
+                op_value_head,
+                op_policy_head
+            })
         }
     }
 
@@ -447,47 +488,58 @@ where
     }
 
     fn predict(&self, game_states: Vec<&S>) -> Result<Vec<GameStateAnalysis<A>>, Error> {
-        let body = game_states_to_request_body(&game_states, &*self.mapper);
+        let mapper = &*self.mapper;
 
-        let request_url = get_model_url(&self.model_info);
+        let inputs: Vec<_> = game_states.iter().map(|game_state| mapper.game_state_to_input(game_state)).collect();
 
-        let mut response;
+        let batch_size = inputs.len();
+        let height = inputs[0].len();
+        let width = inputs[0][0].len();
+        let channels = inputs[0][0][0].len();
+        let input_dimensions = [batch_size as u64, height as u64, width as u64, channels as u64];
+        let flattened_inputs: Vec<f32> = inputs.into_iter().flatten().flatten().flatten().map(|v| v as f32).collect();
+        let mut value_head_outputs = Vec::with_capacity(batch_size);
+        let mut policy_head_outputs = Vec::with_capacity(batch_size);
+        let policy_dimension;
 
-        loop {
-            response = Client::new()
-                .post(&request_url)
-                .json(&body)
-                .send();
+        {
+            let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
+            let session = self.session.lock().unwrap();
 
-            match &response {
-                Err(_) => (),
-                Ok(response) if response.status().is_success() => break,
-                _ => ()
-            }
+            let mut output_step = SessionRunArgs::new();
+            output_step.add_feed(&session.op_input, 0, &input_tensor);
+            let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
+            let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
 
-            println!("Failed to make a http request to prediction: {}", &request_url);
+            session.session.run(&mut output_step).unwrap();
 
-            std::thread::sleep(std::time::Duration::from_secs(10));
+            let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
+            let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
+
+            policy_dimension = policy_head_output.dims()[1];
+
+            value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
+            policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
         }
-
-        let predictions: PredictionResults = response?.json()?;
-
-        let result = game_states.iter()
-            .zip(predictions.predictions.into_iter())
-            .map(|(game_state, result)| {
-                let value_score = result.get("value_head/Tanh:0").unwrap()[0];
-                let policy_scores = result.get("policy_head/Softmax:0").unwrap();
-
-                let valid_actions_with_policies = self.mapper.policy_to_valid_actions(game_state, policy_scores);
+        
+        let analysis_results = izip!(
+            game_states.into_iter(),
+            value_head_outputs.into_iter(),
+            policy_head_outputs.chunks_exact(policy_dimension as usize).into_iter()
+        ).map(|(game_state, value_score, policy_scores)| {
+                let valid_actions_with_policies = self.mapper.policy_to_valid_actions(
+                    game_state,
+                    &policy_scores.into_iter().map(|v| *v as f64).collect()
+                );
 
                 GameStateAnalysis {
                     policy_scores: valid_actions_with_policies,
-                    value_score
+                    value_score: value_score as f64
                 }
             })
             .collect();
 
-        Ok(result)
+        Ok(analysis_results)
     }
 }
 
@@ -522,32 +574,3 @@ where
     }
 }
 
-#[derive(Serialize)]
-struct RequestImage {
-    input_image: Vec<Vec<Vec<f64>>>
-}
-
-#[derive(Debug, Deserialize)]
-struct PredictionResults {
-    predictions: Vec<HashMap<String,Vec<f64>>>
-}
-
-fn get_model_url(model_info: &ModelInfo) -> String {
-    format!(
-        "http://localhost:8501/v1/models/exported_models/versions/{version}:predict",
-        version = model_info.get_run_num()
-    )
-}
-
-fn game_states_to_request_body<S,A,Map>(game_states: &Vec<&S>, mapper: &Map) -> serde_json::value::Value
-where
-    Map: Mapper<S,A>
-{
-    let game_states: Vec<_> = game_states.iter().map(|game_state| RequestImage {
-        input_image: mapper.game_state_to_input(game_state)
-    }).collect();
-
-    json!({
-        "instances": game_states
-    })
-}
