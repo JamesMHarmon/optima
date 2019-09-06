@@ -1,8 +1,8 @@
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
-use model::tensorflow_serving::model::TensorflowServingModel;
-use model::tensorflow_serving::get_latest_model_info::get_latest_model_info;
+use model::tensorflow::model::TensorflowModel;
+use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use super::action::{Action,Coordinate};
 use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::engine::Engine;
@@ -27,7 +27,7 @@ impl Mapper {
     }
 }
 
-impl model::tensorflow_serving::model::Mapper<GameState,Action> for Mapper {
+impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
         let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
 
@@ -156,10 +156,10 @@ fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowServingModel<GameState,Action,Engine,Mapper>;
+    type M = TensorflowModel<GameState,Action,Engine,Mapper>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        TensorflowServingModel::<GameState,Action,Engine,Mapper>::create(
+        TensorflowModel::<GameState,Action,Engine,Mapper>::create(
             model_info,
             num_filters,
             num_blocks,
@@ -173,7 +173,7 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowServingModel::new(
+        TensorflowModel::new(
             model_info.clone(),
             Engine::new(),
             mapper
@@ -184,7 +184,7 @@ impl model::model::ModelFactory for ModelFactory {
         let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
         let mapper = Mapper::new();
 
-        TensorflowServingModel::new(
+        TensorflowModel::new(
             latest_model_info,
             Engine::new(),
             mapper
