@@ -6,18 +6,18 @@ mod constants;
 
 use failure::Error;
 
-use connect4::engine::{Engine as Connect4Engine};
-use connect4::model::{ModelFactory as Connect4ModelFactory};
+use quoridor::engine::{Engine as QuoridorEngine};
+use quoridor::model::{ModelFactory as QuoridorModelFactory};
 use model::model_info::ModelInfo;
 
 use self_evaluate::SelfEvaluateOptions;
 
 fn main() -> Result<(), Error> {
-    let game_name = "Connect4";
+    let game_name = "Quoridor";
     let run_name = "run-1";
 
-    let model_factory = Connect4ModelFactory::new();
-    let game_engine = Connect4Engine::new();
+    let model_factory = QuoridorModelFactory::new();
+    let game_engine = QuoridorEngine::new();
 
     let options = SelfEvaluateOptions {
         cpuct_base: 19_652.0,
@@ -28,7 +28,7 @@ fn main() -> Result<(), Error> {
         visits: 800
     };
 
-    for model_num in 1..100 {
+    for model_num in 1..5 {
         let model_1_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num);
         let model_2_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num + 1);
 

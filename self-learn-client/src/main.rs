@@ -50,7 +50,7 @@ fn main() -> Result<(), Error> {
 fn create_connect4(run_name: &str, options: &SelfLearnOptions) -> Result<(), Error> {
     let model_factory = Connect4ModelFactory::new();
 
-    SelfLearn::<_,_,Connect4Engine,_,_>::create(
+    SelfLearn::<_,_,Connect4Engine>::create(
         C4_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,
@@ -65,7 +65,6 @@ fn run_connect4(run_name: &str) -> Result<(), Error> {
     let mut runner = SelfLearn::from(
         C4_NAME.to_owned(),
         run_name.to_owned(),
-        &model_factory,
         &game_engine
     )?;
 
@@ -77,7 +76,7 @@ fn run_connect4(run_name: &str) -> Result<(), Error> {
 fn create_quoridor(run_name: &str, options: &SelfLearnOptions) -> Result<(), Error> {
     let model_factory = QuoridorModelFactory::new();
 
-    SelfLearn::<_,_,QuoridorEngine,_,_>::create(
+    SelfLearn::<_,_,QuoridorEngine>::create(
         QUORIDOR_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,
@@ -92,7 +91,6 @@ fn run_quoridor(run_name: &str) -> Result<(), Error> {
     let mut runner = SelfLearn::from(
         QUORIDOR_NAME.to_owned(),
         run_name.to_owned(),
-        &model_factory,
         &game_engine
     )?;
 

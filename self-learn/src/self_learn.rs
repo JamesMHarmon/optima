@@ -23,18 +23,16 @@ use super::constants::SELF_PLAY_PARALLELISM;
 use super::train;
 
 
-pub struct SelfLearn<'a, S, A, E, M, T>
+pub struct SelfLearn<'a, S, A, E>
 where
     S: GameState,
     A: Clone + Eq + Serialize + Unpin,
-    E: 'a + GameEngine<State=S,Action=A>,
-    M: 'a + Model<Action=A,State=S,Analyzer=T>,
-    T: GameAnalyzer<Action=A,State=S> + Send
+    E: 'a + GameEngine<State=S,Action=A>
 {
     options: SelfLearnOptions,
     run_directory: PathBuf,
-    latest_model: M,
-    game_engine: &'a E
+    game_engine: &'a E,
+    model_info: ModelInfo
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -62,21 +60,21 @@ pub struct SelfLearnOptions {
     pub number_of_residual_blocks: usize
 }
 
-impl<'a, S, A, E, M, T> SelfLearn<'a, S, A, E, M, T>
+impl<'a,S,A,E> SelfLearn<'a,S,A,E>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-    E: 'a + GameEngine<State=S,Action=A> + Sync,
-    M: 'a + Model<State=S,Action=A,Analyzer=T>,
-    T: GameAnalyzer<Action=A,State=S> + Send
+    E: 'a + GameEngine<State=S,Action=A> + Sync
 {
-    pub fn create<F>(
+    pub fn create<M,T,F>(
         game_name: String,
         run_name: String,
         model_factory: &F,
         options: &SelfLearnOptions
     ) -> Result<(), Error>
     where
+        M: Model<Action=A,State=S,Analyzer=T>,
+        T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
         if game_name.contains("_") {
@@ -87,7 +85,7 @@ where
             return Err(format_err!("run_name cannot contain any '_' characters"));
         }
 
-        SelfLearn::<S,A,E,M,T>::initialize_directories_and_files(&game_name, &run_name, &options)?;
+        SelfLearn::<S,A,E>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
         model_factory.create(&model_info, options.number_of_filters, options.number_of_residual_blocks);
@@ -95,30 +93,28 @@ where
         Ok(())
     }
 
-    pub fn from<F>(
+    pub fn from(
         game_name: String,
         run_name: String,
-        model_factory: &F,
         game_engine: &'a E
-    ) -> Result<Self, Error> 
-    where
-        F: ModelFactory<M=M>
+    ) -> Result<Self, Error>
     {
         let run_directory = Self::get_run_directory(&game_name, &run_name);
         let options = Self::get_config(&run_directory)?;
         let model_info = ModelInfo::new(game_name, run_name, 1);
-        let latest_model = model_factory.get_latest(&model_info);
 
         Ok(Self {
             options,
             run_directory,
-            latest_model,
-            game_engine
+            game_engine,
+            model_info
         })
     }
 
-    pub fn learn<F>(&mut self, model_factory: &F) -> Result<(), Error>
+    pub fn learn<M,T,F>(&mut self, model_factory: &F) -> Result<(), Error>
     where
+        M: Model<Action=A,State=S,Analyzer=T>,
+        T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
         let options = &self.options;
@@ -129,7 +125,7 @@ where
 
         loop {
             let starting_run_time = Instant::now();
-            let latest_model = &self.latest_model;
+            let latest_model = &model_factory.get_latest(&self.model_info);
             let model_name = latest_model.get_model_info().get_model_name();
             let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
@@ -204,25 +200,26 @@ where
                 });
             }).unwrap();
 
-            let new_model_info = train::train_model::<S,A,E,M,T>(
+            train::train_model::<S,A,E,M,T>(
                 latest_model,
                 &self_play_persistance,
                 &self.game_engine,
                 options
             )?;
-
-            self.latest_model = model_factory.get(&new_model_info);
         }
     }
 
-    async fn play_games(
+    async fn play_games<T>(
         num_games_to_play: usize,
         self_play_batch_size: usize,
         results_channel: mpsc::Sender<SelfPlayMetrics<A>>,
         game_engine: &E,
         analyzer: T,
         self_play_options: &SelfPlayOptions
-    ) -> Result<(), Error> {
+    ) -> Result<(), Error>
+    where
+        T: GameAnalyzer<Action=A,State=S> + Send,
+    {
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();
 
@@ -272,7 +269,7 @@ where
     }
 
     fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, Error> {
-        let run_directory = SelfLearn::<S,A,E,M,T>::get_run_directory(game_name, run_name);
+        let run_directory = SelfLearn::<S,A,E>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
         let config_path = Self::get_config_path(&run_directory);
