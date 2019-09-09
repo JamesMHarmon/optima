@@ -15,7 +15,7 @@ use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
-use model::model::{Model,ModelFactory};
+use model::model::{Model};
 use model::model_info::{ModelInfo};
 
 use super::self_evaluate_persistance::SelfEvaluatePersistance;
@@ -55,10 +55,9 @@ pub struct MatchResult {
 
 impl SelfEvaluate
 {
-    pub fn evaluate<S, A, E, M, T, F>(
-        model_1_info: &ModelInfo,
-        model_2_info: &ModelInfo,
-        model_factory: &F,
+    pub fn evaluate<S,A,E,M,T>(
+        model_1: &M,
+        model_2: &M,
         game_engine: &E,
         num_games_to_play: usize,
         options: &SelfEvaluateOptions
@@ -68,11 +67,10 @@ impl SelfEvaluate
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State=S,Action=A> + Sync,
         M: Model<State=S,Action=A,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send,
-        F: ModelFactory<M=M>
+        T: GameAnalyzer<Action=A,State=S> + Send
     {
-        let model_1 = &model_factory.get(model_1_info);
-        let model_2 = &model_factory.get(model_2_info);
+        let model_1_info = model_1.get_model_info();
+        let model_2_info = model_2.get_model_info();
 
         let p1_model_num = model_1_info.get_run_num();
         let p2_model_num = model_2_info.get_run_num();

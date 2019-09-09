@@ -10,6 +10,7 @@ engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
 mcts = { path = "../mcts" }
+self-evaluate = { path = "../self-evaluate" }
 
 failure="0.1"
 crossbeam="0.7"

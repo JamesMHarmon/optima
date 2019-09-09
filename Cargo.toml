@@ -7,6 +7,7 @@ members = [
     "mcts",
     "ponder",
     "self-evaluate",
+    "self-evaluate-client",
     "self-learn",
     "self-learn-client",
 

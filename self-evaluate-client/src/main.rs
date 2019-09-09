@@ -1,16 +1,13 @@
 #![feature(async_await)]
 
-mod self_evaluate;
-mod self_evaluate_persistance;
-mod constants;
-
+use model::model::ModelFactory;
 use failure::Error;
 
 use quoridor::engine::{Engine as QuoridorEngine};
 use quoridor::model::{ModelFactory as QuoridorModelFactory};
 use model::model_info::ModelInfo;
 
-use self_evaluate::SelfEvaluateOptions;
+use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
 
 fn main() -> Result<(), Error> {
     let game_name = "Quoridor";
@@ -32,10 +29,12 @@ fn main() -> Result<(), Error> {
         let model_1_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num);
         let model_2_info = ModelInfo::new(game_name.to_owned(), run_name.to_owned(), model_num + 1);
 
-        self_evaluate::SelfEvaluate::evaluate(
-            &model_1_info,
-            &model_2_info,
-            &model_factory,
+        let model_1 = model_factory.get(&model_1_info);
+        let model_2 = model_factory.get(&model_2_info);
+
+        SelfEvaluate::evaluate(
+            &model_1,
+            &model_2,
             &game_engine,
             1000,
             &options,
