@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::fmt::Debug;
 use std::time::Instant;
 use std::sync::mpsc;
-use serde::{Serialize};
-use serde::de::DeserializeOwned;
+use serde::{Deserialize,Serialize};
+use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
 use uuid::Uuid;
@@ -21,8 +21,9 @@ use model::model_info::{ModelInfo};
 use super::self_evaluate_persistance::SelfEvaluatePersistance;
 use super::constants::SELF_EVALUATE_PARALLELISM;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SelfEvaluateOptions {
+    pub num_games: usize,
     pub temperature: f64,
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f64,
@@ -59,7 +60,6 @@ impl SelfEvaluate
         model_1: &M,
         model_2: &M,
         game_engine: &E,
-        num_games_to_play: usize,
         options: &SelfEvaluateOptions
     ) -> Result<(), Error> 
     where
@@ -79,6 +79,8 @@ impl SelfEvaluate
 
         let starting_run_time = Instant::now();
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
+
+        let num_games_to_play = options.num_games;
 
         crossbeam::scope(move |s| {
             let num_games_per_thread = num_games_to_play / SELF_EVALUATE_PARALLELISM;

@@ -30,10 +30,23 @@ where
     A: Clone + Eq + Serialize + Unpin,
     E: 'a + GameEngine<State=S,Action=A>
 {
-    options: SelfLearnOptions,
+    options: Options,
     run_directory: PathBuf,
     game_engine: &'a E,
     model_info: ModelInfo
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Options {
+    pub self_learn: SelfLearnOptions,
+    pub self_evaluate: SelfEvaluateOptions,
+    pub model: ModelOptions
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ModelOptions {
+    pub number_of_filters: usize,
+    pub number_of_residual_blocks: usize
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,9 +69,7 @@ pub struct SelfLearnOptions {
     pub cpuct_base: f64,
     pub cpuct_init: f64,
     pub alpha: f64,
-    pub epsilon: f64,
-    pub number_of_filters: usize,
-    pub number_of_residual_blocks: usize
+    pub epsilon: f64
 }
 
 impl<'a,S,A,E> SelfLearn<'a,S,A,E>
@@ -71,7 +82,7 @@ where
         game_name: String,
         run_name: String,
         model_factory: &F,
-        options: &SelfLearnOptions
+        options: &Options
     ) -> Result<(), Error>
     where
         M: Model<Action=A,State=S,Analyzer=T>,
@@ -89,7 +100,8 @@ where
         SelfLearn::<S,A,E>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
-        model_factory.create(&model_info, options.number_of_filters, options.number_of_residual_blocks);
+        let model_options = &options.model;
+        model_factory.create(&model_info, model_options.number_of_filters, model_options.number_of_residual_blocks);
 
         Ok(())
     }
@@ -119,6 +131,8 @@ where
         F: ModelFactory<M=M>
     {
         let options = &self.options;
+        let self_learn_options = &options.self_learn;
+        let self_evaluate_options = &options.self_evaluate;
         let run_directory = &self.run_directory;
         let game_engine = self.game_engine;
 
@@ -131,7 +145,7 @@ where
             )?;
 
             let num_games_this_net = self_play_persistance.read::<A>()?.len();
-            let number_of_games_per_net = options.number_of_games_per_net;
+            let number_of_games_per_net = self_learn_options.number_of_games_per_net;
             let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
 
             Self::play_self(
@@ -139,14 +153,14 @@ where
                 game_engine,
                 num_games_to_play,
                 &mut self_play_persistance,
-                options
+                self_learn_options
             )?;
 
             let new_model_info = train::train_model::<S,A,E,M,T>(
                 &latest_model,
                 &self_play_persistance,
                 game_engine,
-                options
+                self_learn_options
             )?;
 
             let new_model = model_factory.get(&new_model_info);
@@ -154,15 +168,7 @@ where
                 &latest_model,
                 &new_model,
                 game_engine,
-                1000,
-                &SelfEvaluateOptions {
-                    cpuct_base: 19_652.0,
-                    cpuct_init: 1.25,
-                    temperature_max_actions: 16,
-                    temperature: 0.45,
-                    temperature_post_max_actions: 0.0,
-                    visits: 800
-                }
+                self_evaluate_options
             )?;
 
             drop(latest_model);
@@ -292,7 +298,7 @@ where
         run_directory.join("config.json")
     }
 
-    fn get_config(run_directory: &Path) -> Result<SelfLearnOptions, Error> {
+    fn get_config(run_directory: &Path) -> Result<Options, Error> {
         let config_path = Self::get_config_path(run_directory);
         let mut file = OpenOptions::new()
             .read(true)
@@ -301,11 +307,11 @@ where
 
         let mut config_file_contents = String::new();
         file.read_to_string(&mut config_file_contents).expect("Failed to read config file");
-        let options: SelfLearnOptions = serde_json::from_str(&config_file_contents).expect("Failed to parse config file");
+        let options: Options = serde_json::from_str(&config_file_contents).expect("Failed to parse config file");
         Ok(options)
     }
 
-    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &SelfLearnOptions) -> Result<PathBuf, Error> {
+    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &Options) -> Result<PathBuf, Error> {
         let run_directory = SelfLearn::<S,A,E>::get_run_directory(game_name, run_name);
         create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
