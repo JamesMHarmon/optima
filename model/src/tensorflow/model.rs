@@ -347,7 +347,7 @@ impl<S,A,E,Map> Drop for TensorflowModel<S,A,E,Map> {
 
 pub struct BatchingModel<S,A,E,Map> {
     states_to_analyse: SegQueue<(usize, S, Waker)>,
-    states_analysed: Arc<Mutex<HashMap<usize, GameStateAnalysis<A>>>>,
+    states_analysed: Mutex<HashMap<usize, GameStateAnalysis<A>>>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -366,7 +366,7 @@ where
     fn new(model_info: ModelInfo, engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = Arc::new(Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS)));
+        let states_analysed = Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS));
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
