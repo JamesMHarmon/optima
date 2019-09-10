@@ -110,7 +110,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         train_ratio: 0.9,
         train_batch_size: 512,
         epochs: 1,
-        learning_rate: 0.2,
+        learning_rate: 0.1,
         policy_loss_weight: 1.0,
         value_loss_weight: 0.5,
         temperature: 1.2,

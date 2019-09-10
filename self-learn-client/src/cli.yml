@@ -66,7 +66,7 @@ subcommands:
             - learning_rate:
                 long: learning_rate
                 takes_value: true
-                help: "[Default: 0.2] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4"
+                help: "[Default: 0.1] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4"
                 value_name: RATE
             - policy_loss_weight:
                 long: policy_loss_weight
