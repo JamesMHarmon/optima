@@ -21,7 +21,7 @@ pub trait ModelFactory
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M;
     fn get(&self, model_info: &ModelInfo) -> Self::M;
-    fn get_latest(&self, model_info: &ModelInfo) -> Self::M;
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo,Error>;
 }
 
 pub struct TrainOptions {

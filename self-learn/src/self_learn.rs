@@ -135,10 +135,11 @@ where
         let self_evaluate_options = &options.self_evaluate;
         let run_directory = &self.run_directory;
         let game_engine = self.game_engine;
+        let mut latest_model_info = model_factory.get_latest(&self.model_info)?;
 
         loop {
-            let latest_model = model_factory.get_latest(&self.model_info);
-            let model_name = latest_model.get_model_info().get_model_name();
+            let latest_model = model_factory.get(&latest_model_info);
+            let model_name = latest_model_info.get_model_name();
             let mut self_play_persistance = SelfPlayPersistance::new(
                 run_directory,
                 model_name
@@ -170,6 +171,8 @@ where
                 game_engine,
                 self_evaluate_options
             )?;
+
+            latest_model_info = new_model_info;
 
             drop(latest_model);
             drop(self_play_persistance);

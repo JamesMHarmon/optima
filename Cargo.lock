@@ -1402,17 +1402,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "self-evaluate-client"
-version = "0.1.0"
-dependencies = [
- "connect4 0.1.0",
- "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "model 0.1.0",
- "quoridor 0.1.0",
- "self-evaluate 0.1.0",
-]
-
-[[package]]
 name = "self-learn"
 version = "0.1.0"
 dependencies = [

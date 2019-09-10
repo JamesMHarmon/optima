@@ -9,6 +9,7 @@ use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
 
+use failure::Error;
 use itertools::izip;
 
 pub struct ModelFactory {}
@@ -180,15 +181,8 @@ impl model::model::ModelFactory for ModelFactory {
         )
     }
 
-    fn get_latest(&self, model_info: &ModelInfo) -> Self::M {
-        let latest_model_info = get_latest_model_info(model_info).expect("Failed to get latest model");
-        let mapper = Mapper::new();
-
-        TensorflowModel::new(
-            latest_model_info,
-            Engine::new(),
-            mapper
-        )
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {
+        Ok(get_latest_model_info(model_info)?)
     }
 }
 
