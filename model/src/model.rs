@@ -11,7 +11,7 @@ pub trait Model {
     type Action;
 
     fn get_model_info(&self) -> &ModelInfo;
-    fn train(&self, target_model_info: &ModelInfo, sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>, options: &TrainOptions) -> Result<(), Error>;
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error>;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 

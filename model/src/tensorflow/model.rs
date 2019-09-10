@@ -10,7 +10,7 @@ use std::time::Instant;
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
-use itertools::izip;
+use itertools::{izip,Itertools};
 use serde_json::json;
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 
@@ -140,11 +140,14 @@ where
         &self.model_info
     }
 
-    fn train(
+    fn train<I>(
         &self,
         target_model_info: &ModelInfo,
-        sample_metrics: &Vec<PositionMetrics<Self::State, Self::Action>>,
-        options: &TrainOptions) -> Result<(), Error>
+        sample_metrics: I,
+        options: &TrainOptions
+    ) -> Result<(), Error>
+    where
+        I: Iterator<Item=PositionMetrics<S,A>>
     {
         let mapper = &*self.mapper;
 
@@ -197,38 +200,56 @@ where
 }
 
 #[allow(non_snake_case)]
-fn train<S,A,Map>(
+fn train<S,A,I,Map>(
     source_model_info: &ModelInfo,
     target_model_info: &ModelInfo,
-    sample_metrics: &Vec<PositionMetrics<S,A>>,
+    sample_metrics: I,
     mapper: &Map,
     options: &TrainOptions
 ) -> Result<(), Error>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
+    I: Iterator<Item=PositionMetrics<S,A>>,
     Map: Mapper<S,A>
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
+    
+    let mut train_data_file_names = vec!();
 
-    let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
-    let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-    let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
+    for (i, sample_metrics) in sample_metrics.chunks(200_000).into_iter().enumerate() {
+        let sample_metrics: Vec<_> = sample_metrics.collect();
+        let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
+        let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
 
-    let json = json!({
-        "x": X,
-        "yv": yv,
-        "yp": yp
-    });
+        let json = json!({
+            "x": X,
+            "yv": yv,
+            "yp": yp
+        });
 
-    let source_paths = Paths::from_model_info(&source_model_info);
-    let source_base_path = source_paths.get_base_path();
-    let train_data_path = source_base_path.join("training_data.json");
+        let source_paths = Paths::from_model_info(&source_model_info);
+        let source_base_path = source_paths.get_base_path();
+        let train_data_file_name = format!("training_data_{}.json", i);
+        let train_data_path = source_base_path.join(&train_data_file_name);
 
-    serde_json::to_writer(
-        &File::create(train_data_path.to_owned())?,
-        &json
-    )?;
+        println!("Writing data to {:?}", &train_data_path);
+
+        serde_json::to_writer(
+            &File::create(train_data_path.to_owned())?,
+            &json
+        )?;
+
+        train_data_file_names.push(train_data_file_name);
+    }
+
+    let train_data_paths = train_data_file_names.iter().map(|file_name| format!(
+        "/{game_name}_runs/{run_name}/{file_name}",
+        game_name = source_model_info.get_game_name(),
+        run_name = source_model_info.get_run_name(),
+        file_name = file_name
+    ));
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
@@ -238,7 +259,7 @@ where
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
         -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
         -e INITIAL_EPOCH={initial_epoch} \
-        -e DATA_PATH=/{game_name}_runs/{run_name}/training_data.json \
+        -e DATA_PATHS={train_data_paths} \
         -e TRAIN_RATIO={train_ratio} \
         -e TRAIN_BATCH_SIZE={train_batch_size} \
         -e EPOCHS={epochs} \
@@ -255,6 +276,7 @@ where
         train_batch_size = options.train_batch_size,
         epochs = (source_model_info.get_run_num() - 1) + options.epochs,
         initial_epoch = (source_model_info.get_run_num() - 1),
+        train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight
@@ -273,7 +295,9 @@ where
 
     println!("OUTPUT: {:?}", result);
 
-    fs::remove_file(train_data_path)?;
+    for path in train_data_file_names {
+        fs::remove_file(path)?;
+    }
 
     println!("Training process complete");
 

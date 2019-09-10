@@ -80,7 +80,7 @@ where
 
     model.train(
         &new_model_info,
-        &positions_metrics,
+        positions_metrics.into_iter(),
         &TrainOptions {
             train_ratio: options.train_ratio,
             train_batch_size: options.train_batch_size,
