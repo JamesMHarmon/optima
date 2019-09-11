@@ -39,14 +39,19 @@ where
     let num_games_since_beginning = run_num * options.number_of_games_per_net;
     let num_max_moving_window_percentage_games = (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
     let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
+    let position_sample_percentage = options.position_sample_percentage;
+    let mut rng = rand::thread_rng();
 
-    let positions_metrics: Vec<_> = metric_iter
+    let positions_metrics = metric_iter
         .take(num_games)
         .flat_map(|m| {
             let score = m.score();
             let analysis = m.take_analysis();
 
-            let (_, positions_metrics) = analysis.into_iter().enumerate().fold(
+            let num_positions = analysis.len();
+            let num_samples = ((num_positions as f64) * position_sample_percentage) as usize;
+            let samples = analysis.into_iter().choose_multiple(&mut rng, num_samples);
+            let (_, positions_metrics) = samples.into_iter().enumerate().fold(
                 (S::initial(), Vec::new()),
                 |(prev_game_state,mut samples), (i, (action, metrics))| {
                     let sample_is_p1 = i % 2 == 0;
@@ -64,23 +69,11 @@ where
             );
 
             positions_metrics
-        })
-        .collect();
-
-    let num_positions = positions_metrics.len();
-    let position_sample_percentage = options.position_sample_percentage;
-    let num_samples = ((num_positions as f64) * position_sample_percentage) as usize;
-    println!("Sampling {}% for a total of {} training positions.", position_sample_percentage * 100.0, num_samples);
-
-    let mut rng = rand::thread_rng();
-    let positions_metrics = positions_metrics.into_iter().choose_multiple(
-        &mut rng,
-        num_samples
-    );
+        });
 
     model.train(
         &new_model_info,
-        positions_metrics.into_iter(),
+        positions_metrics,
         &TrainOptions {
             train_ratio: options.train_ratio,
             train_batch_size: options.train_batch_size,

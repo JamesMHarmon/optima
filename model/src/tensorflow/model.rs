@@ -214,10 +214,13 @@ where
     Map: Mapper<S,A>
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
-    
+
+    let source_paths = Paths::from_model_info(&source_model_info);
+    let source_base_path = source_paths.get_base_path();
+
     let mut train_data_file_names = vec!();
 
-    for (i, sample_metrics) in sample_metrics.chunks(200_000).into_iter().enumerate() {
+    for (i, sample_metrics) in sample_metrics.chunks(100_000).into_iter().enumerate() {
         let sample_metrics: Vec<_> = sample_metrics.collect();
         let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
@@ -229,15 +232,13 @@ where
             "yp": yp
         });
 
-        let source_paths = Paths::from_model_info(&source_model_info);
-        let source_base_path = source_paths.get_base_path();
         let train_data_file_name = format!("training_data_{}.json", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
 
         println!("Writing data to {:?}", &train_data_path);
 
         serde_json::to_writer(
-            &File::create(train_data_path.to_owned())?,
+            &File::create(train_data_path)?,
             &json
         )?;
 
@@ -295,7 +296,8 @@ where
 
     println!("OUTPUT: {:?}", result);
 
-    for path in train_data_file_names {
+    for file_name in train_data_file_names {
+        let path = source_base_path.join(file_name);
         fs::remove_file(path)?;
     }
 
