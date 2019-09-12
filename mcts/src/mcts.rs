@@ -251,7 +251,7 @@ where
 
         let chosen_idx = match weighted_index {
             Err(_) => {
-                // Invalid puct scores. Most likely all are 0. Move will be randomly selected.
+                println!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
                 rng.gen_range(0, pucts.len())
             },
             Ok(weighted_index) => weighted_index.sample(rng)

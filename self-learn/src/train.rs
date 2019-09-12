@@ -36,8 +36,9 @@ where
     println!("Loading positions for training...");
 
     let run_num = source_model_info.get_run_num();
-    let num_games_since_beginning = run_num * options.number_of_games_per_net;
-    let num_max_moving_window_percentage_games = (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
+    let number_of_games_per_net = options.number_of_games_per_net;
+    let num_games_since_beginning = run_num * number_of_games_per_net;
+    let num_max_moving_window_percentage_games = number_of_games_per_net + (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
     let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
     let position_sample_percentage = options.position_sample_percentage;
     let mut rng = rand::thread_rng();

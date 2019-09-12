@@ -41,7 +41,7 @@ subcommands:
             - max_moving_window_percentage:
                 long: max_moving_window_percentage
                 takes_value: true
-                help: "[Default: 0.5] Applies a maximum amount of games within the window in relation to all of the games played. This allows for the window to have a smaller size in the beginning to expidite learning. A value of 1 would have no affect."
+                help: "[Default: 0.5] Applies a maximum amount of games within the window in relation to all of the games played. This allows for the window to have a smaller size in the beginning to expedite learning. A value of 1 would have no affect."
                 value_name: PERCENTAGE
             - position_sample_percentage:
                 long: position_sample_percentage
