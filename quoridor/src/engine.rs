@@ -74,7 +74,7 @@ impl GameState {
         if pawn_board & objective_mask != 0 {
             Some(-1.0)
         } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
-            Some(-1.0)
+            Some(0.0)
         }
         else {
             None
