@@ -1,9 +1,11 @@
+use model::analysis_cache::cache;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
+use model::analysis_cache::AnalysisCacheModel;
 use model::tensorflow::model::TensorflowModel;
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
-use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
+use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
 use super::engine::GameState;
@@ -87,7 +89,7 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState,Action,Engine,Mapper>;
+    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Engine,Mapper>>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
         TensorflowModel::<GameState,Action,Engine,Mapper>::create(
@@ -104,14 +106,26 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowModel::new(
-            model_info.clone(),
-            Engine::new(),
-            mapper
+        cache(
+            TensorflowModel::new(
+                model_info.clone(),
+                Engine::new(),
+                mapper
+            )
         )
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo,Error> {
         Ok(get_latest_model_info(model_info)?)
+    }
+}
+
+pub struct ShouldCache {}
+
+impl model::analysis_cache::ShouldCache for ShouldCache {
+    type State = GameState;
+
+    fn should_cache(game_state: &GameState) -> bool {
+        game_state.number_of_actions() <= ACTIONS_TO_CACHE
     }
 }

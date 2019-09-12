@@ -4,7 +4,7 @@ use model::model_info::ModelInfo;
 use model::tensorflow::model::TensorflowModel;
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use super::action::{Action,Coordinate};
-use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
+use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -183,6 +183,16 @@ impl model::model::ModelFactory for ModelFactory {
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {
         Ok(get_latest_model_info(model_info)?)
+    }
+}
+
+pub struct ShouldCache {}
+
+impl model::analysis_cache::ShouldCache for ShouldCache {
+    type State = GameState;
+
+    fn should_cache(game_state: &GameState) -> bool {
+        game_state.p1_num_walls_placed + game_state.p2_num_walls_placed <= MAX_WALLS_PLACED_TO_CACHE
     }
 }
 
