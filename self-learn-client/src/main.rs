@@ -119,6 +119,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         visits: 800,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
+        cpuct_root_scaling: 2.0,
         alpha: 0.3,
         epsilon: 0.25
     };
@@ -140,6 +141,7 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
     if let Some(visits) = matches.value_of("visits") { self_learn_options.visits = visits.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { self_learn_options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { self_learn_options.cpuct_init = cpuct_init.parse()? };
+    if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { self_learn_options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
     if let Some(alpha) = matches.value_of("alpha") { self_learn_options.alpha = alpha.parse()? };
     if let Some(epsilon) = matches.value_of("epsilon") { self_learn_options.epsilon = epsilon.parse()? };
 
@@ -158,7 +160,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
         visits: self_learn_options.visits,
         cpuct_base: self_learn_options.cpuct_base,
-        cpuct_init: self_learn_options.cpuct_init
+        cpuct_init: self_learn_options.cpuct_init,
+        cpuct_root_scaling: self_learn_options.cpuct_root_scaling
     };
 
     Ok(Options {

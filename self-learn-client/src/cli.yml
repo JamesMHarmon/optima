@@ -26,7 +26,7 @@ subcommands:
             - number_of_games_per_net:
                 long: number_of_games_per_net
                 takes_value: true
-                help: "[Default: 32,000] The number of games to self play until a new net is generated. AZ used 5,000"
+                help: "[Default: 32,000] The number of games to self play until a new net is generated. AZ used 5,000."
                 value_name: SIZE
             - self_play_batch_size:
                 long: self_play_batch_size
@@ -66,7 +66,7 @@ subcommands:
             - learning_rate:
                 long: learning_rate
                 takes_value: true
-                help: "[Default: 0.1] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4"
+                help: "[Default: 0.1] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4."
                 value_name: RATE
             - policy_loss_weight:
                 long: policy_loss_weight
@@ -96,27 +96,32 @@ subcommands:
             - visits:
                 long: visits
                 takes_value: true
-                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800"
+                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800."
                 value_name: VISITS
             - cpuct_base:
                 long: cpuct_base
                 takes_value: true
-                help: "[Default: 19,652] Adds a scaling factor for cpuct, the more visits that a node has, the more that exploration over exploitation will be favored. AZ used 19,652"
+                help: "[Default: 19,652] Adds a scaling factor for cpuct, the more visits that a node has, the more that exploration over exploitation will be favored. AZ used 19,652."
                 value_name: NUM
             - cpuct_init:
                 long: cpuct_init
                 takes_value: true
-                help: "[Default: 1.25] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 1.25"
+                help: "[Default: 1.25] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 1.25."
+                value_name: NUM
+            - cpuct_root_scaling:
+                long: cpuct_root_scaling
+                takes_value: true
+                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM
             - alpha:
                 long: alpha
                 takes_value: true
-                help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.3"
+                help: "[Default: 0.3] The alpha value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.3."
                 value_name: NUM
             - epsilon:
                 long: epsilon
                 takes_value: true
-                help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.25"
+                help: "[Default: 0.25] The epsilon value within the MCTS algorithm specific to Dirichlet noise. AZ used 0.25."
                 value_name: NUM
             - number_of_filters:
                 long: number_of_filters

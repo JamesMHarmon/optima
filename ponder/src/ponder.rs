@@ -17,7 +17,8 @@ use model::model::Model;
 pub struct PonderOptions {
     pub visits: usize,
     pub cpuct_base: f64,
-    pub cpuct_init: f64
+    pub cpuct_init: f64,
+    pub cpuct_root_scaling: f64
 }
 
 pub struct Ponder {}
@@ -40,6 +41,7 @@ impl Ponder
         let uuid = Uuid::new_v4();
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
+        let cpuct_root_scaling = options.cpuct_root_scaling;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
 
@@ -50,7 +52,7 @@ impl Ponder
             &analyzer,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
-                |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
+                |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,_| 0.0,
                 rng::create_rng_from_uuid(uuid),
             )

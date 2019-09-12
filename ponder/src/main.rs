@@ -29,6 +29,7 @@ async fn main() -> Result<(), Error> {
     let options = PonderOptions {
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
+        cpuct_root_scaling: 2.0,
         visits: 800
     };
 

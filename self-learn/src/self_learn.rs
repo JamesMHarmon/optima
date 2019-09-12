@@ -68,6 +68,7 @@ pub struct SelfLearnOptions {
     pub visits: usize,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
+    pub cpuct_root_scaling: f64,
     pub alpha: f64,
     pub epsilon: f64
 }
@@ -210,6 +211,7 @@ where
                     alpha: options.alpha,
                     cpuct_base: options.cpuct_base,
                     cpuct_init: options.cpuct_init,
+                    cpuct_root_scaling: options.cpuct_root_scaling,
                     temperature: options.temperature,
                     temperature_max_actions: options.temperature_max_actions,
                     temperature_post_max_actions: options.temperature_post_max_actions,

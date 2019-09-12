@@ -26,6 +26,7 @@ pub struct SelfPlayOptions {
     pub visits: usize,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
+    pub cpuct_root_scaling: f64,
     pub alpha: f64,
     pub epsilon: f64
 }
@@ -58,6 +59,7 @@ pub async fn self_play<'a, S, A, E, M>(
     let actions = List::new();
     let cpuct_base = options.cpuct_base;
     let cpuct_init = options.cpuct_init;
+    let cpuct_root_scaling = options.cpuct_root_scaling;
 
     let mut mcts = MCTS::new(
         game_state,
@@ -69,7 +71,7 @@ pub async fn self_play<'a, S, A, E, M>(
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
-            |_,_,_,Nsb| ((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init,
+            |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
             |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             seedable_rng,
         )
