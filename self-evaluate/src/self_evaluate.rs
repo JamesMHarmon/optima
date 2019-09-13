@@ -235,6 +235,8 @@ impl SelfEvaluate
             model_1.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
+                0.0,
+                1.0,
                 |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),
@@ -248,6 +250,8 @@ impl SelfEvaluate
             model_2.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
+                0.0,
+                1.0,
                 |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),

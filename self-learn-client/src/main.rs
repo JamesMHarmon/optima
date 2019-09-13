@@ -117,6 +117,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
         visits: 800,
+        fpu: 0.0,
+        fpu_root: 1.0,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
         cpuct_root_scaling: 2.0,
@@ -139,6 +141,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
     if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { self_learn_options.temperature_max_actions = temperature_max_actions.parse()? };
     if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { self_learn_options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
     if let Some(visits) = matches.value_of("visits") { self_learn_options.visits = visits.parse()? };
+    if let Some(fpu) = matches.value_of("fpu") { self_learn_options.fpu = fpu.parse()? };
+    if let Some(fpu_root) = matches.value_of("fpu_root") { self_learn_options.fpu_root = fpu_root.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { self_learn_options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { self_learn_options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { self_learn_options.cpuct_root_scaling = cpuct_root_scaling.parse()? };

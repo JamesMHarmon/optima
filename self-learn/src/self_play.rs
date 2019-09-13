@@ -24,6 +24,8 @@ pub struct SelfPlayOptions {
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f64,
     pub visits: usize,
+    pub fpu: f64,
+    pub fpu_root: f64,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
     pub cpuct_root_scaling: f64,
@@ -71,6 +73,8 @@ pub async fn self_play<'a, S, A, E, M>(
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
+            0.0,
+            1.0,
             |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
             |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             seedable_rng,

@@ -98,6 +98,16 @@ subcommands:
                 takes_value: true
                 help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800."
                 value_name: VISITS
+            - fpu:
+                long: fpu
+                takes_value: true
+                help: "[Default: 0.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
+            - fpu_root:
+                long: fpu_root
+                takes_value: true
+                help: "[Default: 1.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
             - cpuct_base:
                 long: cpuct_base
                 takes_value: true

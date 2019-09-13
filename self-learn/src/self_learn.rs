@@ -66,6 +66,8 @@ pub struct SelfLearnOptions {
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f64,
     pub visits: usize,
+    pub fpu: f64,
+    pub fpu_root: f64,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
     pub cpuct_root_scaling: f64,
@@ -209,6 +211,8 @@ where
                 let self_play_options = SelfPlayOptions {
                     epsilon: options.epsilon,
                     alpha: options.alpha,
+                    fpu: options.fpu,
+                    fpu_root: options.fpu_root,
                     cpuct_base: options.cpuct_base,
                     cpuct_init: options.cpuct_init,
                     cpuct_root_scaling: options.cpuct_root_scaling,
