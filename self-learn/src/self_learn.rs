@@ -10,6 +10,7 @@ use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
 use failure::{Error,format_err};
+use tokio_executor::current_thread;
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -233,7 +234,7 @@ where
                         &self_play_options
                     ).map(|_| ());
 
-                    tokio_current_thread::block_on_all(f);
+                    current_thread::block_on_all(f);
                 });
             }
 

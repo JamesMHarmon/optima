@@ -8,6 +8,7 @@ use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
 use uuid::Uuid;
 use failure::{Error,format_err};
+use tokio_executor::current_thread;
 
 use common::linked_list::List;
 use common::rng;
@@ -106,7 +107,7 @@ impl SelfEvaluate
                         options
                     ).map(|_| ());
 
-                    tokio_current_thread::block_on_all(f);
+                    current_thread::block_on_all(f);
                 });
             }
 
