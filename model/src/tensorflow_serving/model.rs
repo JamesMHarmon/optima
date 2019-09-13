@@ -18,7 +18,7 @@ use serde_json::json;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
 
-use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS};
+use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,TRAIN_DATA_CHUNK_SIZE};
 use super::paths::Paths;
 use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
 use super::super::model::{Model as ModelTrait,TrainOptions};
@@ -206,7 +206,7 @@ where
     
     let mut train_data_file_names = vec!();
 
-    for (i, sample_metrics) in sample_metrics.chunks(200_000).into_iter().enumerate() {
+    for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
         let sample_metrics: Vec<_> = sample_metrics.collect();
         let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
