@@ -1,5 +1,4 @@
 #![feature(atomic_min_max)]
-#![feature(async_await)]
 
 pub mod analytics;
 pub mod model;

@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 mod ponder;
 
 use model::model::ModelFactory;
