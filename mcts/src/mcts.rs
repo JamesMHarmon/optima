@@ -77,6 +77,7 @@ where
 #[derive(Debug)]
 struct MCTSNode<S, A> {
     visits: usize,
+    value_score: f64,
     W: f64,
     game_state: S,
     actions: List<A>,
@@ -165,9 +166,13 @@ where
 
         let mut node = Self::take_node_of_action(&mut root_node, &action)?;
 
-        if node.is_none() {
-            let prior_actions = &root_node.actions;
-            node.replace(MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await.0);
+        match &mut node {
+            // If the node was cleared then the visits may still be 1. This should be incremented to 1 if that is the case.
+            Some(node) => if node.visits == 0 { node.visits = 1 },
+            None => {
+                let prior_actions = &root_node.actions;
+                node.replace(MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await.0);
+            }
         }
 
         self.root.replace(node.ok_or(format_err!("Node should have been replaced but found None"))?);
@@ -186,6 +191,24 @@ where
                 n.node.as_ref().map_or(0, |n| n.visits)
             )).collect()
         })
+    }
+
+    pub fn clear_visits(&mut self) {
+        if let Some(current_root) = &mut self.root {
+            Self::clear_nodes_recursive(current_root);
+            current_root.visits = 1;
+        }
+    }
+
+    fn clear_nodes_recursive(node: &mut MCTSNode<S, A>) {
+        node.visits = 0;
+        node.W = node.value_score;
+
+        for child in &mut node.children {
+            if let Some(child_node) = &mut child.node {
+                Self::clear_nodes_recursive(child_node);
+            }
+        }
     }
 
     fn get_most_visited_action(current_root: &MCTSNode<S, A>, rng: &mut R) -> Result<A, Error> {
@@ -236,7 +259,7 @@ where
         let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
             .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
             .collect();
-
+    
         match max_nodes.len() {
             0 => Err(format_err!("No candidate moves available")),
             1 => Ok(max_nodes.remove(0)),
@@ -263,7 +286,15 @@ where
     fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
     {
         nodes.iter_mut().map(|child| {
-            let child_node = &child.node;
+            let mut child_node = &child.node;
+
+            // If the child nodes visits is 0, then it has been cleared and should have it's cpuct be calculated as if it is a leaf.
+            if let Some(node) = child_node {
+                if node.visits == 0 {
+                    child_node = &None;
+                }
+            }
+
             let Psa = child.policy_score;
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
@@ -302,10 +333,10 @@ where
         let starting_actions = starting_actions.take().expect("Tried to use the same starting actions twice");
 
         let root_node = MCTS::<S,A,E,M,C,T,R>::analyse_and_create_node(
-                starting_game_state,
-                starting_actions,
-                analytics
-            ).await.0;
+            starting_game_state,
+            starting_actions,
+            analytics
+        ).await.0;
 
         root.replace(root_node);
 
@@ -361,6 +392,7 @@ impl<S, A> MCTSNode<S, A> {
     pub fn new(game_state: S, actions: List<A>, value_score: f64, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
             visits: 1,
+            value_score,
             W: value_score,
             game_state,
             actions,
@@ -399,16 +431,15 @@ where
     let value_score: f64;
 
     loop {
-        let W = node.W;
-        let visits = node.visits;
         depth += 1;
+        let visits = node.visits;
         node.visits += 1;
         Ws_to_update.push(&mut node.W);
 
         // If the node is a terminal node.
         let children = &mut node.children;
         if children.len() == 0 {
-            value_score = W / visits as f64;
+            value_score = node.value_score as f64;
             break;
         }
 
@@ -425,6 +456,17 @@ where
             temp,
             rng
         )?;
+
+        // If the node exists but visits is 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
+        if let Some(node) = &mut selected_child_node.node {
+            if node.visits == 0 {
+                node.visits = 1;
+                // Flip the score in this case because we are going one node deeper and that viewpoint is from
+                // the next player and not the current node's player
+                value_score = 1.0 - node.value_score;
+                break;
+            }
+        }
 
         if selected_child_node.node.is_none() {
             let action = &selected_child_node.action;
@@ -896,5 +938,44 @@ mod tests {
                 (CountingAction::Stay, 305)
             )
         });
+    }
+
+    #[tokio::test]
+    async fn test_mcts_clear_nodes_results_in_same_outcome() {
+        let game_state = CountingGameState::initial();
+        let actions = List::new();
+        let game_engine = CountingGameEngine::new();
+        let analytics = CountingAnalytics::new();
+        let uuid = Uuid::parse_str("f555a572-67eb-45fe-83a8-ec90eda83b55").unwrap();
+        let search_num_visits = 3;
+
+        let mut non_clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analytics, MCTSOptions::new(
+            None,
+            |_,_,_,_,_| 1.0,
+            |_,_| 0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
+
+        let (action, _) = non_clear_mcts.search(search_num_visits).await.unwrap();
+        non_clear_mcts.advance_to_action(action).await.unwrap();
+        non_clear_mcts.search(search_num_visits).await.unwrap();
+
+        let non_clear_metrics = non_clear_mcts.get_root_node_metrics().unwrap();
+
+        let mut clear_mcts = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
+            None,
+            |_,_,_,_,_| 1.0,
+            |_,_| 0.0,
+            rng::create_rng_from_uuid(uuid)
+        ));
+
+        let (action, _) = clear_mcts.search(search_num_visits).await.unwrap();
+        clear_mcts.advance_to_action(action).await.unwrap();
+        clear_mcts.clear_visits();
+        clear_mcts.search(search_num_visits).await.unwrap();
+
+        let clear_metrics = clear_mcts.get_root_node_metrics().unwrap();
+
+        assert_eq!(non_clear_metrics, clear_metrics);
     }
 }

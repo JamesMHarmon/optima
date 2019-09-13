@@ -90,6 +90,7 @@ pub async fn self_play<'a, S, A, E, M>(
         let metrics = mcts.get_root_node_metrics()?;
 
         mcts.advance_to_action(action.to_owned()).await?;
+        mcts.clear_visits();
         state = game_engine.take_action(&state, &action);
         self_play_metrics.analysis.push((action, metrics));
     };
