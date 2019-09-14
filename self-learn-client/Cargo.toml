@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 self-learn = { path = "../self-learn" }
 self-evaluate = { path = "../self-evaluate" }
+model = { path = "../model" }
 connect4 = { path = "../connect4" }
 quoridor = { path = "../quoridor" }
 

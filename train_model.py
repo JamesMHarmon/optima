@@ -42,19 +42,34 @@ if __name__== "__main__":
     print(data_paths)
     c4.clear()
     
-    for i, path in enumerate(data_paths):
+    i = 0
+    X = []
+    yv = []
+    yp = []
+    first_run = True
+    while i < len(data_paths):
+        path = data_paths[i]
         with open(path, "r") as read_file:
+            print("Loading Data: " + path)
             data = json.load(read_file)
-            X = data["x"]
-            yv = data["yv"]
-            yp = data["yp"]
+            X = X + data["x"]
+            yv = yv + data["yv"]
+            yp = yp + data["yp"]
 
-        model = c4.load_model(source_model_path)
+        if ((i + 1) % 10 == 0 or i == len(data_paths) - 1):
+            model = c4.load_model(source_model_path)
 
-        tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
-        callbacks = [tensor_board] if i == 0 else []
+            tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
+            callbacks = [tensor_board] if first_run else []
 
-        c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
+            c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
+
+            X = []
+            yv = []
+            yp = []
+            first_run = False
+
+        i += 1
 
     model.save(target_model_path)
 

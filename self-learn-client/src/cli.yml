@@ -160,3 +160,32 @@ subcommands:
                 takes_value: true
                 value_name: RUN NAME
                 help: Name of the run, cannot contain '_'.
+    - evaluate:
+        about: Pits two models against each other.
+        args:
+            - game:
+                required: true
+                short: g
+                long: game
+                takes_value: true
+                value_name: GAME NAME
+                help: Name of the game to run.
+            - run:
+                required: true
+                short: r
+                long: run
+                takes_value: true
+                value_name: RUN NAME
+                help: Name of the run, cannot contain '_'.
+            - model_1:
+                takes_value: true
+                value_name: MODEL 1
+                help: "[Default: Second Most Latest Model] The number of the model that is the p1 challenger."
+            - model_2:
+                takes_value: true
+                value_name: MODEL 2
+                help: "[Default: Latest Model] The number of the model that is the p2 challenger."
+            - num_games:
+                takes_value: true
+                value_name: NUM GAMES
+                help: "[Default: 1,000] The number of the model that is the p2 challenger."

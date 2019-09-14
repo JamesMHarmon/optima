@@ -1442,6 +1442,7 @@ dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "connect4 0.1.0",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "model 0.1.0",
  "quoridor 0.1.0",
  "self-evaluate 0.1.0",
  "self-learn 0.1.0",

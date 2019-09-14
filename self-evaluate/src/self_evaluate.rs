@@ -29,6 +29,8 @@ pub struct SelfEvaluateOptions {
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f64,
     pub visits: usize,
+    pub fpu: f64,
+    pub fpu_root: f64,
     pub cpuct_base: f64,
     pub cpuct_init: f64,
     pub cpuct_root_scaling: f64
@@ -220,6 +222,8 @@ impl SelfEvaluate
         T: GameAnalyzer<Action=A,State=S> + Send
     {
         let uuid = Uuid::new_v4();
+        let fpu = options.fpu;
+        let fpu_root = options.fpu_root;
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
@@ -236,8 +240,8 @@ impl SelfEvaluate
             model_1.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
-                0.0,
-                1.0,
+                fpu,
+                fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),
@@ -251,8 +255,8 @@ impl SelfEvaluate
             model_2.1,
             MCTSOptions::<S,A,_,_,_>::new(
                 None,
-                0.0,
-                1.0,
+                fpu,
+                fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),

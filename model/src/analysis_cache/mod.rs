@@ -1,3 +1,4 @@
+use std::pin::Pin;
 use std::sync::Arc;
 use chashmap::CHashMap;
 use std::hash::Hash;
@@ -53,7 +54,7 @@ where
     C: ShouldCache<State=M::State> + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone + Send + Sync,
-    <<M as Model>::Analyzer as GameAnalyzer>::Future: Unpin + 'static
+    <<M as Model>::Analyzer as GameAnalyzer>::Future: Send + 'static
 {
     type State = M::State;
     type Analyzer = AnalysisCacheAnalyzer<C,M::Analyzer>;
@@ -94,13 +95,13 @@ impl<C,Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<C,Analyzer>
 where
     Analyzer: GameAnalyzer,
     C: ShouldCache<State=Analyzer::State> + Send,
-    Analyzer::Future: Unpin + 'static,
+    Analyzer::Future: Send + 'static,
     Analyzer::State: Clone + PartialEq + Hash + Send + Sync + 'static,
     Analyzer::Action: Clone + Send + Sync + 'static
 {
     type State = Analyzer::State;
     type Action = Analyzer::Action;
-    type Future = Box<dyn Future<Output=GameStateAnalysis<Self::Action>> + Unpin + 'static>;
+    type Future = Pin<Box<dyn Future<Output=GameStateAnalysis<Self::Action>> + Send>>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let should_cache = C::should_cache(&game_state);
@@ -109,18 +110,18 @@ where
         if should_cache {
             if let Some(analysis) = cache.get(&game_state) {
                 let analysis = analysis.clone();
-                return Box::new(futures::future::ready(analysis));
+                return futures::future::ready(analysis).boxed();
             }
         }
 
         let cache = cache.clone();
         let game_state = game_state.clone();
-        Box::new(Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
+        Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
             if should_cache {
                 cache.insert(game_state, analysis.clone());
             }
 
             analysis
-        }))
+        }).boxed()
     }
 }

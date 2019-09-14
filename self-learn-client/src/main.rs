@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate clap;
 
+use model::model::ModelFactory;
+use model::model_info::ModelInfo;
 use clap::App;
 use connect4::engine::{Engine as Connect4Engine};
 use connect4::model::{ModelFactory as Connect4ModelFactory};
@@ -21,7 +23,7 @@ fn main() -> Result<(), Error> {
     if let Some(matches) = matches.subcommand_matches("init") {
         let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
-        let options = get_options_from_matches(matches)?;
+        let options = get_init_options_from_matches(matches)?;
 
         if game_name == C4_NAME {
             return create_connect4(run_name, &options);
@@ -38,6 +40,20 @@ fn main() -> Result<(), Error> {
             return run_connect4(run_name);
         } else if game_name == QUORIDOR_NAME {
             return run_quoridor(run_name);
+        } else {
+            panic!("Game name not recognized");
+        }
+    } else if let Some(matches) = matches.subcommand_matches("evaluate") {
+        let (model_1_num, model_2_num, options) = get_evaluate_options_from_matches(matches)?;
+        let game_name = matches.value_of("game").unwrap();
+        let run_name = matches.value_of("run").unwrap();
+        let model_1_num: Option<usize> = model_1_num.map(|v| v.parse().expect("Model number not a valid int"));
+        let model_2_num: Option<usize> = model_2_num.map(|v| v.parse().expect("Model number not a valid int"));
+
+        if game_name == C4_NAME {
+            return evaluate_connect4(run_name, model_1_num, model_2_num, &options);
+        } else if game_name == QUORIDOR_NAME {
+            return evaluate_quoridor(run_name, model_1_num, model_2_num, &options);
         } else {
             panic!("Game name not recognized");
         }
@@ -72,6 +88,31 @@ fn run_connect4(run_name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+    let model_factory = Connect4ModelFactory::new();
+    let game_engine = Connect4Engine::new();
+    let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), 1);
+    let latest_model_num = model_factory.get_latest(&model_info)?;
+
+    let model_1_num = model_1_num.unwrap_or_else(|| latest_model_num.get_run_num());
+    let model_2_num = model_2_num.unwrap_or_else(|| latest_model_num.get_run_num() - 1);
+
+    let model_1_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), model_1_num);
+    let model_2_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), model_2_num);
+
+    let model_1 = model_factory.get(&model_1_info);
+    let model_2 = model_factory.get(&model_2_info);
+
+    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+        &model_1,
+        &model_2,
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
 fn create_quoridor(run_name: &str, options: &Options) -> Result<(), Error> {
     let model_factory = QuoridorModelFactory::new();
 
@@ -98,7 +139,32 @@ fn run_quoridor(run_name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error> {
+fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+    let model_factory = QuoridorModelFactory::new();
+    let game_engine = QuoridorEngine::new();
+    let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), 1);
+    let latest_model_num = model_factory.get_latest(&model_info)?;
+
+    let model_1_num = model_1_num.unwrap_or_else(|| latest_model_num.get_run_num() - 1);
+    let model_2_num = model_2_num.unwrap_or_else(|| latest_model_num.get_run_num());
+
+    let model_1_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), model_1_num);
+    let model_2_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), model_2_num);
+
+    let model_1 = model_factory.get(&model_1_info);
+    let model_2 = model_factory.get(&model_2_info);
+
+    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+        &model_1,
+        &model_2,
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
+fn get_init_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error> {
     let mut self_learn_options = SelfLearnOptions {
         number_of_games_per_net: 32_000,
         self_play_batch_size: 256,
@@ -161,6 +227,8 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         temperature_max_actions: self_learn_options.temperature_max_actions,
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
         visits: self_learn_options.visits,
+        fpu: self_learn_options.fpu,
+        fpu_root: self_learn_options.fpu_root,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling
@@ -171,4 +239,32 @@ fn get_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, Error
         self_evaluate: self_evaluate_options,
         model: model_options
     })
+}
+
+fn get_evaluate_options_from_matches(matches: &clap::ArgMatches) -> Result<(Option<String>, Option<String>, SelfEvaluateOptions), Error> {
+    let mut self_learn_options = SelfEvaluateOptions {
+        temperature: 1.2,
+        temperature_max_actions: 30,
+        temperature_post_max_actions: 0.45,
+        visits: 800,
+        fpu: 0.0,
+        fpu_root: 1.0,
+        cpuct_base: 19_652.0,
+        cpuct_init: 1.25,
+        cpuct_root_scaling: 2.0,
+        num_games: 1_000
+    };
+
+    if let Some(temperature) = matches.value_of("temperature") { self_learn_options.temperature = temperature.parse()? };
+    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { self_learn_options.temperature_max_actions = temperature_max_actions.parse()? };
+    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { self_learn_options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
+    if let Some(visits) = matches.value_of("visits") { self_learn_options.visits = visits.parse()? };
+    if let Some(fpu) = matches.value_of("fpu") { self_learn_options.fpu = fpu.parse()? };
+    if let Some(fpu_root) = matches.value_of("fpu_root") { self_learn_options.fpu_root = fpu_root.parse()? };
+    if let Some(cpuct_base) = matches.value_of("cpuct_base") { self_learn_options.cpuct_base = cpuct_base.parse()? };
+    if let Some(cpuct_init) = matches.value_of("cpuct_init") { self_learn_options.cpuct_init = cpuct_init.parse()? };
+    if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { self_learn_options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
+    if let Some(num_games) = matches.value_of("num_games") { self_learn_options.num_games = num_games.parse()? };
+
+    Ok((matches.value_of("model_1").map(|s| s.to_owned()), matches.value_of("model_2").map(|s| s.to_owned()), self_learn_options))
 }
