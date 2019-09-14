@@ -48,7 +48,7 @@ where
 impl<C,M> Model for AnalysisCacheModel<C,M>
 where
     M: Model,
-    M::State: Send + Sync,
+    M::State: Send + Sync + 'static,
     M::Action: Clone + Send + Sync + 'static,
     C: ShouldCache<State=M::State> + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash + Send + Sync,
@@ -95,31 +95,42 @@ where
     Analyzer: GameAnalyzer,
     C: ShouldCache<State=Analyzer::State> + Send,
     Analyzer::Future: Unpin + 'static,
-    Analyzer::State: Clone + PartialEq + Hash + Send + Sync,
+    Analyzer::State: Clone + PartialEq + Hash + Send + Sync + 'static,
     Analyzer::Action: Clone + Send + Sync + 'static
 {
     type State = Analyzer::State;
     type Action = Analyzer::Action;
-    type Future = Box<dyn Future<Output=GameStateAnalysis<Self::Action>> + Unpin>;
+    type Future = Box<dyn Future<Output=GameStateAnalysis<Self::Action>> + Unpin + 'static>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let should_cache = C::should_cache(&game_state);
-        let cache = &*self.cache;
+        let cache = &self.cache;
 
         if should_cache {
             if let Some(analysis) = cache.get(&game_state) {
                 let analysis = analysis.clone();
-                let fut = (async { analysis }).boxed();
-                return Box::new(fut);
+                return Box::new(futures::future::ready(analysis));
             }
         }
 
-        Box::new(Analyzer::get_state_analysis(&self.analyzer, game_state).map(move |analysis| {
+        let cache = cache.clone();
+        let game_state = game_state.clone();
+        Box::new(Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
             if should_cache {
-                // cache.insert(game_state.clone(), analysis);
+                cache.insert(game_state, analysis.clone());
             }
 
             analysis
         }))
+
+        // Box::new((async {
+        //     let analysis = Analyzer::get_state_analysis(&self.analyzer, &game_state).await;
+
+        //     if should_cache {
+        //         cache.insert(game_state, analysis.clone());
+        //     }
+
+        //     analysis
+        // }).boxed())
     }
 }

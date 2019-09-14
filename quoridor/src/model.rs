@@ -1,3 +1,4 @@
+use model::analysis_cache::{cache,AnalysisCacheModel};
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
@@ -157,7 +158,7 @@ fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState,Action,Engine,Mapper>;
+    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Engine,Mapper>>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
         TensorflowModel::<GameState,Action,Engine,Mapper>::create(
@@ -174,10 +175,12 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowModel::new(
-            model_info.clone(),
-            Engine::new(),
-            mapper
+        cache(
+            TensorflowModel::new(
+                model_info.clone(),
+                Engine::new(),
+                mapper
+            )
         )
     }
 

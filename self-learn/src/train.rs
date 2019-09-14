@@ -24,7 +24,7 @@ pub fn train_model<S, A, E, M, T>(
 ) -> Result<ModelInfo, Error>
 where
     S: GameState,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Send,
     E: GameEngine<State=S,Action=A> + Sync,
     M: Model<State=S,Action=A,Analyzer=T>,
     T: GameAnalyzer<Action=A,State=S> + Send
