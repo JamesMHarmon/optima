@@ -122,15 +122,5 @@ where
 
             analysis
         }))
-
-        // Box::new((async {
-        //     let analysis = Analyzer::get_state_analysis(&self.analyzer, &game_state).await;
-
-        //     if should_cache {
-        //         cache.insert(game_state, analysis.clone());
-        //     }
-
-        //     analysis
-        // }).boxed())
     }
 }
