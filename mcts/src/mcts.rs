@@ -165,27 +165,11 @@ where
     }
 
     pub async fn advance_to_action(&mut self, action: A) -> Result<(), Error> {
-        let mut root = self.root.take();
-        let analytics = &mut self.analytics;
-        let starting_game_state = &mut self.starting_game_state;
-        let starting_actions = &mut self.starting_actions;
-        let game_engine = &self.game_engine;
-        let mut root_node = MCTS::<S,A,E,M,C,T,R>::get_or_create_root_node(&mut root, starting_game_state, starting_actions, analytics).await;
+        self.advance_to_action_clearable(action, true).await
+    }
 
-        let mut node = Self::take_node_of_action(&mut root_node, &action)?;
-
-        match &mut node {
-            // If the node was cleared then the visits may still be 1. This should be incremented to 1 if that is the case.
-            Some(node) => if node.visits == 0 { node.visits = 1 },
-            None => {
-                let prior_actions = &root_node.actions;
-                node.replace(MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await.0);
-            }
-        }
-
-        self.root.replace(node.ok_or(format_err!("Node should have been replaced but found None"))?);
-
-        Ok(())
+    pub async fn advance_to_action_retain(&mut self, action: A) -> Result<(), Error> {
+        self.advance_to_action_clearable(action, false).await
     }
 
     pub fn get_root_node_metrics(&self) -> Result<NodeMetrics<A>, Error> {
@@ -201,20 +185,42 @@ where
         })
     }
 
-    pub fn clear_visits(&mut self) {
-        if let Some(current_root) = &mut self.root {
-            Self::clear_nodes_recursive(current_root);
-            current_root.visits = 1;
-        }
-    }
+    async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<(), Error> {
+        let mut root = self.root.take();
+        let analytics = &mut self.analytics;
+        let starting_game_state = &mut self.starting_game_state;
+        let starting_actions = &mut self.starting_actions;
+        let game_engine = &self.game_engine;
+        let mut root_node = MCTS::<S,A,E,M,C,T,R>::get_or_create_root_node(&mut root, starting_game_state, starting_actions, analytics).await;
 
-    fn clear_nodes_recursive(node: &mut MCTSNode<S, A>) {
+        let node = Self::take_node_of_action(&mut root_node, &action)?;
+        let node = match node {
+            Some(mut node) => {
+                if clear { Self::clear_node_visits(&mut node); }
+                // If the node was cleared then the visits may still be 1. This should be incremented to 1 if that is the case.
+                // This condition can occur even if clear is false.
+                if node.visits == 0 { node.visits = 1 };
+                node
+            },
+            None => {
+                let prior_actions = &root_node.actions;
+                let (node, _) = MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await;
+                node
+            }
+        };
+
+        self.root.replace(node);
+
+        Ok(())
+    } 
+
+    fn clear_node_visits(node: &mut MCTSNode<S, A>) {
         node.visits = 0;
         node.W = node.value_score;
 
         for child in &mut node.children {
             if let Some(child_node) = &mut child.node {
-                Self::clear_nodes_recursive(child_node);
+                Self::clear_node_visits(child_node);
             }
         }
     }
@@ -997,7 +1003,7 @@ mod tests {
         ));
 
         let (action, _) = non_clear_mcts.search(search_num_visits).await.unwrap();
-        non_clear_mcts.advance_to_action(action).await.unwrap();
+        non_clear_mcts.advance_to_action_retain(action).await.unwrap();
         non_clear_mcts.search(search_num_visits).await.unwrap();
 
         let non_clear_metrics = non_clear_mcts.get_root_node_metrics().unwrap();
@@ -1013,7 +1019,6 @@ mod tests {
 
         let (action, _) = clear_mcts.search(search_num_visits).await.unwrap();
         clear_mcts.advance_to_action(action).await.unwrap();
-        clear_mcts.clear_visits();
         clear_mcts.search(search_num_visits).await.unwrap();
 
         let clear_metrics = clear_mcts.get_root_node_metrics().unwrap();

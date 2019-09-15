@@ -129,3 +129,5 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 GPU vs CPU
 Change train.Dockerfile to use cpu
 change flag when running docker to not use environment = nvidia.
+
+Update Display to show shorthand moves "f4"

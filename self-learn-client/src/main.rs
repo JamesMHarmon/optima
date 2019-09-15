@@ -94,8 +94,8 @@ fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), 1);
     let latest_model_num = model_factory.get_latest(&model_info)?;
 
-    let model_1_num = model_1_num.unwrap_or_else(|| latest_model_num.get_run_num());
-    let model_2_num = model_2_num.unwrap_or_else(|| latest_model_num.get_run_num() - 1);
+    let model_1_num = model_1_num.unwrap_or_else(|| latest_model_num.get_run_num() - 1);
+    let model_2_num = model_2_num.unwrap_or_else(|| latest_model_num.get_run_num());
 
     let model_1_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), model_1_num);
     let model_2_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), model_2_num);
