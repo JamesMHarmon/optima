@@ -48,6 +48,11 @@ subcommands:
                 takes_value: true
                 help: "[Default: 0.0512] What percentage of positions to be sampled from each game. AZ - 2,048 * 1000 / 500,000 / 80 = 0.0512 \"mini-batch size of 2,048. Each mini-batch of data is sampled uniformly at random from all positions of the most recent 500,000 games of self-play. Neural network parameters are optimized by stochastic gradient descent with momentum and learning rate annealing, using the loss in equation (1). The learning rate is annealed according to the standard schedule in Extended Data Table 3. The momentum parameter is set to 0.9. The cross-entropy and MSE losses are weighted equally (this is reasonable because rewards are unit scaled, and the L2 regularization parameter is set to c=10. The optimization process produces a new checkpoint every 1,000 training steps. This checkpoint is evaluated by the evaluator and it may be used for generating the next batch of self-play games, as we explain next.\""
                 value_name: PERCENTAGE
+            - exclude_drawn_games:
+                long: exclude_drawn_games
+                takes_value: true
+                help: "[Default: false] Should games that are scored as 0.0 be excluded from the training set? This is to exclude games from training from non-drawable games. For example quoridor has a max limit of 200 moves during training."
+                value_name: EXCLUDE
             - train_ratio:
                 long: train_ratio
                 takes_value: true

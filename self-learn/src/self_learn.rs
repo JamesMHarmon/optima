@@ -57,6 +57,7 @@ pub struct SelfLearnOptions {
     pub moving_window_size: usize,
     pub max_moving_window_percentage: f64,
     pub position_sample_percentage: f64,
+    pub exclude_drawn_games: bool,
     pub train_ratio: f64,
     pub train_batch_size: usize,
     pub epochs: usize,
