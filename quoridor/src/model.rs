@@ -85,14 +85,16 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         let invert = !game_state.p1_turn_to_move;
 
         let result:[f32; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
-            let (action, _) = &p;
+            let (action, visits) = &p;
+            // Policy scores for quoridor should be in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
+            // at the board from the perspective of player 1, but with the pieces inverted.
             let input_idx = if invert {
                 map_action_to_input_idx(&action.invert())
             } else {
                 map_action_to_input_idx(&action)
             };
 
-            r[input_idx] = p.1 as f32 / total_visits;
+            r[input_idx] = *visits as f32 / total_visits;
             r
         });
 
@@ -109,6 +111,9 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
             .map(|a|
             {
+                // Policy scores coming from the quoridor model are always from the perspective of player 1.
+                // This means that if we are p2, we need to flip the actions coming back and translate them
+                // to be actions in the p2 perspective.
                 let p_idx = if invert {
                     map_action_to_input_idx(&a.invert())
                 } else {
