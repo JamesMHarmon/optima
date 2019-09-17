@@ -136,7 +136,6 @@ Why is there a bias towards p2 in the Quoridor_run-1_00003 results
 * See why there is a disparity between p1 and p2.
 * Exclude quoridor games from training if it is a draw.
 * Consider adding a pool for vectors/slices. https://github.com/CJP10/object-pool , https://carllerche.github.io/pool/pool/ , https://crates.io/crates/lifeguard
-* Use f32 instead of f64
 * TensorRT or f16 the networks
 * Add multiple players
 * Add multiple moves

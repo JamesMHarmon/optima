@@ -38,7 +38,7 @@ where
     let run_num = source_model_info.get_run_num();
     let number_of_games_per_net = options.number_of_games_per_net;
     let num_games_since_beginning = run_num * number_of_games_per_net;
-    let num_max_moving_window_percentage_games = number_of_games_per_net + (num_games_since_beginning as f64 * options.max_moving_window_percentage) as usize;
+    let num_max_moving_window_percentage_games = number_of_games_per_net + (num_games_since_beginning as f32 * options.max_moving_window_percentage) as usize;
     let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
     let position_sample_percentage = options.position_sample_percentage;
     let exclude_drawn_games = options.exclude_drawn_games;
@@ -52,7 +52,7 @@ where
             let analysis = m.take_analysis();
 
             let num_positions = analysis.len();
-            let num_samples = ((num_positions as f64) * position_sample_percentage).ceil() as usize;
+            let num_samples = ((num_positions as f32) * position_sample_percentage).ceil() as usize;
             let samples = analysis.into_iter().choose_multiple(&mut rng, num_samples);
             let (_, positions_metrics) = samples.into_iter().enumerate().fold(
                 (S::initial(), Vec::new()),
@@ -85,7 +85,7 @@ where
             policy_loss_weight: options.policy_loss_weight,
             value_loss_weight: options.value_loss_weight
         }
-    ).map(|_| {
-        new_model_info
-    })
+    )?;
+
+    Ok(new_model_info)
 }

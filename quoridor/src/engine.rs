@@ -67,7 +67,7 @@ impl GameState {
             .collect()
     }
 
-    pub fn is_terminal(&self) -> Option<f64> {
+    pub fn is_terminal(&self) -> Option<f32> {
         let pawn_board = if self.p1_turn_to_move { self.p2_pawn_board } else { self.p1_pawn_board };
         let objective_mask = if self.p1_turn_to_move { P2_OBJECTIVE_MASK } else { P1_OBJECTIVE_MASK };
 
@@ -418,7 +418,7 @@ impl GameEngine for Engine {
         game_state.take_action(action)
     }
 
-    fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
+    fn is_terminal_state(&self, game_state: &GameState) -> Option<f32> {
         game_state.is_terminal()
     }
 }

@@ -15,22 +15,22 @@ use model::node_metrics::NodeMetrics;
 pub struct SelfPlayMetrics<A> {
     guid: String,
     analysis: Vec<(A, NodeMetrics<A>)>,
-    score: f64
+    score: f32
 }
 
 #[derive(Debug)]
 pub struct SelfPlayOptions {
-    pub temperature: f64,
+    pub temperature: f32,
     pub temperature_max_actions: usize,
-    pub temperature_post_max_actions: f64,
+    pub temperature_post_max_actions: f32,
     pub visits: usize,
-    pub fpu: f64,
-    pub fpu_root: f64,
-    pub cpuct_base: f64,
-    pub cpuct_init: f64,
-    pub cpuct_root_scaling: f64,
-    pub alpha: f64,
-    pub epsilon: f64
+    pub fpu: f32,
+    pub fpu_root: f32,
+    pub cpuct_base: f32,
+    pub cpuct_init: f32,
+    pub cpuct_root_scaling: f32,
+    pub alpha: f32,
+    pub epsilon: f32
 }
 
 impl<A> SelfPlayMetrics<A> {
@@ -38,7 +38,7 @@ impl<A> SelfPlayMetrics<A> {
         self.analysis
     }
 
-    pub fn score(&self) -> f64 {
+    pub fn score(&self) -> f32 {
         self.score
     }
 }
@@ -75,7 +75,7 @@ pub async fn self_play<'a, S, A, E, M>(
             }),
             0.0,
             1.0,
-            |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+            |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
             |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             seedable_rng,
         )

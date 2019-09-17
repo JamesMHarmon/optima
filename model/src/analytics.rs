@@ -12,11 +12,11 @@ pub trait GameAnalyzer
 #[derive(Clone,Debug)]
 pub struct GameStateAnalysis<A> {
     pub policy_scores: Vec<ActionWithPolicy<A>>,
-    pub value_score: f64
+    pub value_score: f32
 }
 
 impl<A> GameStateAnalysis<A> {
-    pub fn new(value_score: f64, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+    pub fn new(value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         GameStateAnalysis {
             policy_scores,
             value_score
@@ -27,11 +27,11 @@ impl<A> GameStateAnalysis<A> {
 #[derive(Clone,Debug)]
 pub struct ActionWithPolicy<A> {
     pub action: A,
-    pub policy_score: f64,
+    pub policy_score: f32,
 }
 
 impl<A> ActionWithPolicy<A> {
-    pub fn new(action: A, policy_score: f64) -> Self {
+    pub fn new(action: A, policy_score: f32) -> Self {
         ActionWithPolicy {
             action,
             policy_score

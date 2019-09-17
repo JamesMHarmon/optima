@@ -7,9 +7,9 @@ pub enum BoardType {
     HorizontalWall
 }
 
-pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> [f64; 81] {
+pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> [f32; 81] {
     let mut board = board;
-    let mut result:[f64; 81] = [0.0; 81];
+    let mut result:[f32; 81] = [0.0; 81];
 
     if invert && (board_type == BoardType::VerticalWall || board_type == BoardType::HorizontalWall) {
         // Shift the walls up and to the right so that when we do a 180 rotation, they will be in their respective positions.
@@ -80,12 +80,12 @@ mod tests {
         vec_idx
     }
 
-    fn value_at_coordinate(vec: [f64; 81], col: char, row: usize) -> f64 {
+    fn value_at_coordinate(vec: [f32; 81], col: char, row: usize) -> f32 {
         let idx = coordinate_to_idx(Coordinate::new(col, row));
         vec[idx]
     }
 
-    fn num_values_set(vec: [f64; 81]) -> usize {
+    fn num_values_set(vec: [f32; 81]) -> usize {
         vec.iter().filter(|v| **v != 0.0).count()
     }
 

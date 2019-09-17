@@ -40,9 +40,9 @@ pub struct TensorflowModel<S,A,E,Map>
 }
 
 pub trait Mapper<S,A> {
-    fn game_state_to_input(&self, game_state: &S) -> Vec<Vec<Vec<f64>>>;
-    fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f64>;
-    fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<A>>;
+    fn game_state_to_input(&self, game_state: &S) -> Vec<Vec<Vec<f32>>>;
+    fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f32>;
+    fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<A>>;
 }
 
 impl<S,A,E,Map> TensorflowModel<S,A,E,Map>
@@ -78,7 +78,7 @@ where
                     if i == 0 && elapsed_mills >= 5_000 {
                         let num_nodes = batching_model_ref.take_num_nodes_analysed();
                         let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
-                        let nps = num_nodes as f64 * 1000.0 / elapsed_mills as f64;
+                        let nps = num_nodes as f32 * 1000.0 / elapsed_mills as f32;
                         let now = Utc::now().format("%H:%M:%S").to_string();
                         println!(
                             "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
@@ -555,12 +555,12 @@ where
         ).map(|(game_state, value_score, policy_scores)| {
                 let valid_actions_with_policies = self.mapper.policy_to_valid_actions(
                     game_state,
-                    &policy_scores.into_iter().map(|v| *v as f64).collect()
+                    &policy_scores.into_iter().map(|v| *v as f32).collect()
                 );
 
                 GameStateAnalysis {
                     policy_scores: valid_actions_with_policies,
-                    value_score: value_score as f64
+                    value_score: value_score as f32
                 }
             })
             .collect();

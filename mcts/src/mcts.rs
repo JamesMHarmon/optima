@@ -13,8 +13,8 @@ use model::node_metrics::{NodeMetrics};
 use common::linked_list::{List};
 
 pub struct DirichletOptions {
-    pub alpha: f64,
-    pub epsilon: f64
+    pub alpha: f32,
+    pub epsilon: f32
 }
 
 pub struct MCTSOptions<S, A, C, T, R>
@@ -23,8 +23,8 @@ where
     R: Rng
 {
     dirichlet: Option<DirichletOptions>,
-    fpu: f64,
-    fpu_root: f64,
+    fpu: f32,
+    fpu_root: f32,
     cpuct: C,
     temperature: T,
     rng: R,
@@ -36,14 +36,14 @@ impl<S, A, C, T, R> MCTSOptions<S, A, C, T, R>
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f64,
-    T: Fn(&S, &List<A>) -> f64,
+    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
+    T: Fn(&S, &List<A>) -> f32,
     R: Rng,
 {
     pub fn new(
         dirichlet: Option<DirichletOptions>,
-        fpu: f64,
-        fpu_root: f64,
+        fpu: f32,
+        fpu_root: f32,
         cpuct: C,
         temperature: T,
         rng: R
@@ -67,8 +67,8 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine,
     M: GameAnalyzer,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f64,
-    T: Fn(&S, &List<A>) -> f64,
+    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
+    T: Fn(&S, &List<A>) -> f32,
     R: Rng
 {
     options: MCTSOptions<S, A, C, T, R>,
@@ -83,8 +83,8 @@ where
 #[derive(Debug)]
 struct MCTSNode<S, A> {
     visits: usize,
-    value_score: f64,
-    W: f64,
+    value_score: f32,
+    W: f32,
     game_state: S,
     actions: List<A>,
     children: Vec<MCTSChildNode<S, A>>
@@ -93,17 +93,17 @@ struct MCTSNode<S, A> {
 #[derive(Debug)]
 struct MCTSChildNode<S, A> {
     action: A,
-    policy_score: f64,
+    policy_score: f32,
     node: Option<MCTSNode<S, A>>
 }
 
 struct NodePUCT<'a, S, A> {
     node: &'a mut MCTSChildNode<S, A>,
-    score: f64
+    score: f32
 }
 
 struct StateAnalysisValue {
-    value_score: f64
+    value_score: f32
 }
 
 #[allow(non_snake_case)]
@@ -113,8 +113,8 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + GameAnalyzer<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f64,
-    T: Fn(&S, &List<A>) -> f64,
+    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
+    T: Fn(&S, &List<A>) -> f32,
     R: Rng
 {
     pub fn new(
@@ -255,7 +255,7 @@ where
         Ok(matching_action.node.take())
     }
 
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f64, fpu_root: f64, cpuct: &C, temp: &T, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, Error> {
+    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C, temp: &T, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, Error> {
         let mut pucts = Self::get_PUCT_for_nodes(nodes, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
 
         let temp = temp(game_state, prior_actions);
@@ -269,7 +269,7 @@ where
     }
 
     fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>, rng: &mut R) -> Result<usize, Error> {
-        let max_puct = pucts.iter().fold(std::f64::MIN, |acc, puct| f64::max(acc, puct.score));
+        let max_puct = pucts.iter().fold(std::f32::MIN, |acc, puct| f32::max(acc, puct.score));
         let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
             .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
             .collect();
@@ -281,7 +281,7 @@ where
         }
     }
 
-    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f64, rng: &mut R) -> Result<usize, Error> {
+    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f32, rng: &mut R) -> Result<usize, Error> {
         let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(puct_scores);
@@ -297,7 +297,7 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f64, fpu_root: f64, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
+    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
     {
         let fpu = if is_root { fpu_root } else { fpu };
 
@@ -315,11 +315,11 @@ where
             let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
 
             let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb, is_root);
-            let root_Nsb = (Nsb as f64).sqrt();
-            let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f64;
+            let root_Nsb = (Nsb as f32).sqrt();
+            let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
 
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
-            let Qsa = child_node.as_ref().map_or(fpu, |n| { 1.0 - n.W / n.visits as f64 });
+            let Qsa = child_node.as_ref().map_or(fpu, |n| { 1.0 - n.W / n.visits as f32 });
             let PUCT = Qsa + Usa;
 
             NodePUCT {
@@ -374,7 +374,7 @@ where
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S, A>, dirichlet: &Option<DirichletOptions>, rng: &mut R) {
         if let Some(dirichlet) = dirichlet {
-            let policy_scores: Vec<f64> = node.children.iter().map(|child_node| {
+            let policy_scores: Vec<f32> = node.children.iter().map(|child_node| {
                 child_node.policy_score
             }).collect();
 
@@ -386,7 +386,7 @@ where
         }
     }
 
-    fn apply_dirichlet_noise(policy_scores: Vec<f64>, dirichlet: &DirichletOptions, rng: &mut R) -> Vec<f64>
+    fn apply_dirichlet_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions, rng: &mut R) -> Vec<f32>
     {
         // Do not apply noise if there is only one action.
         if policy_scores.len() < 2 {
@@ -405,7 +405,7 @@ where
 }
 
 impl<S, A> MCTSNode<S, A> {
-    pub fn new(game_state: S, actions: List<A>, value_score: f64, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+    pub fn new(game_state: S, actions: List<A>, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
             visits: 1,
             value_score,
@@ -428,8 +428,8 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,R>(
     node: &'a mut MCTSNode<S, A>,
     game_engine: &'a E,
     analytics: &'a M,
-    fpu: f64,
-    fpu_root: f64,
+    fpu: f32,
+    fpu_root: f32,
     cpuct: &'a C,
     temp: &'a T,
     rng: &'a mut R
@@ -439,14 +439,14 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine<State=S,Action=A>,
     M: GameAnalyzer<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f64,
-    T: Fn(&S, &List<A>) -> f64,
+    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
+    T: Fn(&S, &List<A>) -> f32,
     R: Rng
 {
     let mut depth = 0;
-    let mut Ws_to_update: Vec<&mut f64> = Vec::new();
+    let mut Ws_to_update: Vec<&mut f32> = Vec::new();
     let mut node = node;
-    let value_score: f64;
+    let value_score: f32;
 
     loop {
         depth += 1;
@@ -457,7 +457,7 @@ where
         // If the node is a terminal node.
         let children = &mut node.children;
         if children.len() == 0 {
-            value_score = node.value_score as f64;
+            value_score = node.value_score as f32;
             break;
         }
 
@@ -545,7 +545,7 @@ mod tests {
             Self { p1_turn, count }
         }
 
-        fn is_terminal_state(&self) -> Option<f64> {
+        fn is_terminal_state(&self) -> Option<f32> {
             if self.count == 100 {
                 Some(if self.p1_turn { 1.0 } else { -1.0 })
             } else if self.count == 0 {
@@ -593,7 +593,7 @@ mod tests {
             Self::State { p1_turn: !game_state.p1_turn, count: new_count }
         }
 
-        fn is_terminal_state(&self, game_state: &Self::State) -> Option<f64> {
+        fn is_terminal_state(&self, game_state: &Self::State) -> Option<f32> {
             game_state.is_terminal_state()
         }
     }
@@ -630,7 +630,7 @@ mod tests {
         type Future = CountingGameStateAnalysisFuture;
 
         fn get_state_analysis(&self, game_state: &Self::State) -> CountingGameStateAnalysisFuture {
-            let count = game_state.count as f64;
+            let count = game_state.count as f32;
 
             if let Some(score) = game_state.is_terminal_state() {
                 return CountingGameStateAnalysisFuture::new(GameStateAnalysis {

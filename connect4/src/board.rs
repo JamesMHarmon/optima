@@ -1,8 +1,8 @@
 use common::bits::single_bit_index;
 
-pub fn map_board_to_arr(board: u64) -> [f64; 42] {
+pub fn map_board_to_arr(board: u64) -> [f32; 42] {
     let mut board = board;
-    let mut result:[f64; 42] = [0.0; 42];
+    let mut result:[f32; 42] = [0.0; 42];
     while board != 0 {
         let board_without_first_bit = board & (board - 1);
         let removed_bit = board ^ board_without_first_bit;

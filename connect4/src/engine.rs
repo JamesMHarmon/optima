@@ -67,7 +67,7 @@ impl GameState {
     /// Drawn: If the position is a draw then the return will be Some(0.0);
     /// 
     /// Not Terminal: If the position is not yet the end of the game then None will be returned.
-    pub fn is_terminal(&self) -> Option<f64> {
+    pub fn is_terminal(&self) -> Option<f32> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
         if self.has_connected_4() {
@@ -161,7 +161,7 @@ impl GameEngine for Engine {
         }
     }
 
-    fn is_terminal_state(&self, game_state: &GameState) -> Option<f64> {
+    fn is_terminal_state(&self, game_state: &GameState) -> Option<f32> {
         game_state.is_terminal()
     }
 

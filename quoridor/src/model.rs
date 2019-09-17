@@ -30,8 +30,8 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f64>>> {
-        let result: Vec<Vec<Vec<f64>>> = Vec::with_capacity(6);
+    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f32>>> {
+        let result: Vec<Vec<Vec<f32>>> = Vec::with_capacity(9);
 
         let GameState {
             p1_turn_to_move,
@@ -52,12 +52,12 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         let curr_pawn_board_vec = map_board_to_arr_invertable(curr_player_pawn_board, BoardType::Pawn, invert);
         let oppo_pawn_board_vec = map_board_to_arr_invertable(oppo_player_pawn_board, BoardType::Pawn, invert);
         let vertical_wall_vec = map_board_to_arr_invertable(*vertical_wall_placement_board, BoardType::VerticalWall, invert);
-        let horizontal_wall_vec = map_board_to_arr_invertable(*horizontal_wall_placement_board, BoardType::VerticalWall, invert);
+        let horizontal_wall_vec = map_board_to_arr_invertable(*horizontal_wall_placement_board, BoardType::HorizontalWall, invert);
 
         let curr_num_walls_placed = if *p1_turn_to_move { p1_num_walls_placed } else { p2_num_walls_placed };
         let oppo_num_walls_placed = if *p1_turn_to_move { p2_num_walls_placed } else { p1_num_walls_placed };
-        let curr_num_walls_placed_norm = (*curr_num_walls_placed as f64) / 10.0;
-        let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f64) / 10.0;
+        let curr_num_walls_placed_norm = (*curr_num_walls_placed as f32) / 10.0;
+        let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f32) / 10.0;
 
         izip!(
             curr_pawn_board_vec.iter(),
@@ -81,19 +81,20 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         })
     }
 
-    fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f64> {
-        let total_visits = policy_metrics.visits as f64 - 1.0;
-        let result:[f64; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
-            let input_idx = map_action_to_input_idx(&p.0);
+    fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
+        let total_visits = policy_metrics.visits as f32 - 1.0;
+        let result:[f32; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
+            let (action, _) = &p;
+            let input_idx = map_action_to_input_idx(action);
 
-            r[input_idx] = p.1 as f64 / total_visits;
+            r[input_idx] = p.1 as f32 / total_visits;
             r
         });
 
         result.to_vec()
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f64>) -> Vec<ActionWithPolicy<Action>> {
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<Action>> {
         let valid_pawn_moves = game_state.get_valid_pawn_move_actions().into_iter();
         let valid_vert_walls = game_state.get_valid_vertical_wall_actions().into_iter();
         let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions().into_iter();

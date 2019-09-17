@@ -8,7 +8,7 @@ use serde::de::{Deserialize, Deserializer, Visitor};
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A> {
     pub visits: usize,
-    pub W: f64,
+    pub W: f32,
     pub children_visits: Vec<(A, usize)>
 }
 

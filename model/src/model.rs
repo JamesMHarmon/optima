@@ -25,10 +25,10 @@ pub trait ModelFactory
 }
 
 pub struct TrainOptions {
-    pub train_ratio: f64,
+    pub train_ratio: f32,
     pub train_batch_size: usize,
     pub epochs: usize,
-    pub learning_rate: f64,
-    pub policy_loss_weight: f64,
-    pub value_loss_weight: f64
+    pub learning_rate: f32,
+    pub policy_loss_weight: f32,
+    pub value_loss_weight: f32
 }

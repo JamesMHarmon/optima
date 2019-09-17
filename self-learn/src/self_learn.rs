@@ -55,26 +55,26 @@ pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
     pub self_play_batch_size: usize,
     pub moving_window_size: usize,
-    pub max_moving_window_percentage: f64,
-    pub position_sample_percentage: f64,
+    pub max_moving_window_percentage: f32,
+    pub position_sample_percentage: f32,
     pub exclude_drawn_games: bool,
-    pub train_ratio: f64,
+    pub train_ratio: f32,
     pub train_batch_size: usize,
     pub epochs: usize,
-    pub learning_rate: f64,
-    pub policy_loss_weight: f64,
-    pub value_loss_weight: f64,
-    pub temperature: f64,
+    pub learning_rate: f32,
+    pub policy_loss_weight: f32,
+    pub value_loss_weight: f32,
+    pub temperature: f32,
     pub temperature_max_actions: usize,
-    pub temperature_post_max_actions: f64,
+    pub temperature_post_max_actions: f32,
     pub visits: usize,
-    pub fpu: f64,
-    pub fpu_root: f64,
-    pub cpuct_base: f64,
-    pub cpuct_init: f64,
-    pub cpuct_root_scaling: f64,
-    pub alpha: f64,
-    pub epsilon: f64
+    pub fpu: f32,
+    pub fpu_root: f32,
+    pub cpuct_base: f32,
+    pub cpuct_init: f32,
+    pub cpuct_root_scaling: f32,
+    pub alpha: f32,
+    pub epsilon: f32
 }
 
 impl<'a,S,A,E> SelfLearn<'a,S,A,E>
@@ -249,10 +249,10 @@ where
 
                     println!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, GPM: {:.2}",
-                        starting_run_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
+                        starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,
                         num_games_to_play,
-                        num_of_games_played as f64 / starting_run_time.elapsed().as_secs() as f64 * 60 as f64
+                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
                     );
                 }
 

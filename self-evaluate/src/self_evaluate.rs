@@ -25,15 +25,15 @@ use super::constants::SELF_EVALUATE_PARALLELISM;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfEvaluateOptions {
     pub num_games: usize,
-    pub temperature: f64,
+    pub temperature: f32,
     pub temperature_max_actions: usize,
-    pub temperature_post_max_actions: f64,
+    pub temperature_post_max_actions: f32,
     pub visits: usize,
-    pub fpu: f64,
-    pub fpu_root: f64,
-    pub cpuct_base: f64,
-    pub cpuct_init: f64,
-    pub cpuct_root_scaling: f64
+    pub fpu: f32,
+    pub fpu_root: f32,
+    pub cpuct_base: f32,
+    pub cpuct_init: f32,
+    pub cpuct_root_scaling: f32
 }
 
 pub struct SelfEvaluate {}
@@ -44,17 +44,17 @@ pub struct GameResult<A> {
     model_1_num: usize,
     model_2_num: usize,
     actions: Vec<A>,
-    score: f64
+    score: f32
 }
 
 #[derive(Debug,Serialize)]
 pub struct MatchResult {
     model_1_num: usize,
     model_2_num: usize,
-    model_1_score: f64,
-    model_2_score: f64,
-    score_as_p1: f64,
-    score_as_p2: f64,
+    model_1_score: f32,
+    model_2_score: f32,
+    score_as_p1: f32,
+    score_as_p2: f32,
     num_of_games_played: usize
 }
 
@@ -115,10 +115,10 @@ impl SelfEvaluate
 
             s.spawn(move |_| -> Result<(), Error> {
                 let mut num_of_games_played: usize = 0;
-                let mut model_1_score: f64 = 0.0;
-                let mut model_2_score: f64 = 0.0;
-                let mut score_as_p1: f64 = 0.0;
-                let mut score_as_p2: f64 = 0.0;
+                let mut model_1_score: f32 = 0.0;
+                let mut model_2_score: f32 = 0.0;
+                let mut score_as_p1: f32 = 0.0;
+                let mut score_as_p2: f32 = 0.0;
 
                 let mut presistance = SelfEvaluatePersistance::new(
                     &get_run_directory(model_1_info.get_game_name(), model_1_info.get_run_name()),
@@ -146,9 +146,9 @@ impl SelfEvaluate
 
                     println!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
-                        starting_time.elapsed().as_secs() as f64 / (60 * 60) as f64,
+                        starting_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,
-                        num_of_games_played as f64 / starting_run_time.elapsed().as_secs() as f64 * 60 as f64
+                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
                     );
 
                     presistance.write_game(&game_result)?;
@@ -242,7 +242,7 @@ impl SelfEvaluate
                 None,
                 fpu,
                 fpu_root,
-                |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+                |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),
             )
@@ -257,7 +257,7 @@ impl SelfEvaluate
                 None,
                 fpu,
                 fpu_root,
-                |_,_,_,Nsb,is_root| (((Nsb as f64 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+                |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 rng::create_rng_from_uuid(uuid),
             )
