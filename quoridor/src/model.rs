@@ -30,8 +30,8 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f32>>> {
-        let result: Vec<Vec<Vec<f32>>> = Vec::with_capacity(9);
+    fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
+        let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
 
         let GameState {
             p1_turn_to_move,
@@ -59,26 +59,25 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         let curr_num_walls_placed_norm = (*curr_num_walls_placed as f32) / 10.0;
         let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f32) / 10.0;
 
-        izip!(
+        for (curr_pawn, oppo_pawn, vw, hw) in izip!(
             curr_pawn_board_vec.iter(),
             oppo_pawn_board_vec.iter(),
             vertical_wall_vec.iter(),
             horizontal_wall_vec.iter()
-        )
-        .enumerate()
-        .fold(result, |mut r, (i, (curr_pawn, oppo_pawn, vw, hw))| {
-            let column_idx = i % 9;
+        ) {
+            result.push(*curr_pawn);
+            result.push(*oppo_pawn);
+            result.push(*vw);
+            result.push(*hw);
+            result.push(curr_num_walls_placed_norm);
+            result.push(oppo_num_walls_placed_norm);
+        }
 
-            if column_idx == 0 {
-                r.push(Vec::with_capacity(9))
-            }
+        result
+    }
 
-            let column_vec = r.last_mut().unwrap();
-
-            column_vec.push(vec!(*curr_pawn, *oppo_pawn, *vw, *hw, curr_num_walls_placed_norm, oppo_num_walls_placed_norm));
-
-            r
-        })
+    fn get_input_dimensions(&self) -> [u64; 3] {
+        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
     fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
@@ -203,6 +202,14 @@ impl model::analysis_cache::ShouldCache for ShouldCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engine::game_state::{GameState as GameStateTrait};
+    use model::tensorflow::model::{Mapper as MapperTrait};
+
+    fn map_to_input_vec(curr_pawn_idx: usize, opp_pawn_idx: usize, vertical_wall_idxs: &[usize], horizontal_wall_idxs: &[usize], curr_walls_remaining: usize, opp_walls_remaining: usize) -> Vec<Vec<Vec<f32>>> {
+        let output = [0.0; 81 * 6];
+
+        output.to_vec()
+    }
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_a1() {
@@ -336,5 +343,19 @@ mod tests {
         let idx = map_action_to_input_idx(&action);
 
         assert_eq!(208, idx);
+    }
+
+    #[test]
+    fn test_game_state_to_input_initial_p1() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+
+        let input = mapper.game_state_to_input(&game_state);
+
+
+        assert_eq!(
+            input,
+        )
     }
 }

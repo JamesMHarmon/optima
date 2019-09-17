@@ -40,7 +40,8 @@ pub struct TensorflowModel<S,A,E,Map>
 }
 
 pub trait Mapper<S,A> {
-    fn game_state_to_input(&self, game_state: &S) -> Vec<Vec<Vec<f32>>>;
+    fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
+    fn get_input_dimensions(&self) -> [u64; 3];
     fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<A>>;
 }
@@ -518,12 +519,10 @@ where
 
         let inputs: Vec<_> = game_states.iter().map(|game_state| mapper.game_state_to_input(game_state)).collect();
 
-        let batch_size = inputs.len();
-        let height = inputs[0].len();
-        let width = inputs[0][0].len();
-        let channels = inputs[0][0][0].len();
-        let input_dimensions = [batch_size as u64, height as u64, width as u64, channels as u64];
-        let flattened_inputs: Vec<f32> = inputs.into_iter().flatten().flatten().flatten().map(|v| v as f32).collect();
+        let batch_size = game_states.len();
+        let input_dim = mapper.get_input_dimensions();
+        let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
+        let flattened_inputs: Vec<f32> = inputs.into_iter().flatten().collect();
         let mut value_head_outputs = Vec::with_capacity(batch_size);
         let mut policy_head_outputs = Vec::with_capacity(batch_size);
         let policy_dimension;

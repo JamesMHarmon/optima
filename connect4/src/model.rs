@@ -30,33 +30,25 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<Vec<Vec<f32>>> {
-        let result: Vec<Vec<Vec<f32>>> = Vec::with_capacity(6);
+    fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
+        let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+        let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
+            (game_state.p1_piece_board, game_state.p2_piece_board)
+        } else {
+            (game_state.p2_piece_board, game_state.p1_piece_board)
+        };
 
-        map_board_to_arr(game_state.p1_piece_board).iter()
-            .zip(map_board_to_arr(game_state.p2_piece_board).iter())
-            .enumerate()
-            .fold(result, |mut r, (i, (p1, p2))| {
-                let column_idx = i % 7;
-                
-                if column_idx == 0 {
-                    r.push(Vec::with_capacity(7))
-                }
+        for (curr, opp) in map_board_to_arr(curr_piece_board).iter()
+            .zip(map_board_to_arr(opp_piece_board).iter()) {
+                result.push(*curr);
+                result.push(*opp);
+            }
 
-                let column_vec = r.last_mut().unwrap();
+        result
+    }
 
-                // The input is normalized by listing the player to move first. This is different than having
-                // black first and then red. So on red's turn, red will be listed first, then black.
-                let (c1, c2) = if game_state.p1_turn_to_move {
-                    (*p1, *p2)
-                } else {
-                    (*p2, *p1)
-                };
-
-                column_vec.push(vec!(c1, c2));
-
-                r
-            })
+    fn get_input_dimensions(&self) -> [u64; 3] {
+        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
     fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
