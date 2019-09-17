@@ -783,11 +783,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 400.9499999999998,
+            W: 400.88995,
             children_visits: vec!(
-                (CountingAction::Increment, 312),
-                (CountingAction::Decrement, 181),
-                (CountingAction::Stay, 306)
+                (CountingAction::Increment, 316),
+                (CountingAction::Decrement, 179),
+                (CountingAction::Stay, 304)
             )
         });
     }
@@ -815,7 +815,7 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 100,
-            W: 50.04000000000002,
+            W: 50.040005,
             children_visits: vec!(
                 (CountingAction::Increment, 33),
                 (CountingAction::Decrement, 27),
@@ -911,11 +911,11 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 8000,
-            W: 6870.909999999993,
+            W: 6873.078,
             children_visits: vec!(
-                (CountingAction::Increment, 6456),
-                (CountingAction::Decrement, 718),
-                (CountingAction::Stay, 825)
+                (CountingAction::Increment, 6470),
+                (CountingAction::Decrement, 712),
+                (CountingAction::Stay, 817)
             )
         });
     }
@@ -943,7 +943,7 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 8.87999999999999,
+            W: 8.879993,
             children_visits: vec!(
                 (CountingAction::Increment, 182),
                 (CountingAction::Decrement, 312),
@@ -975,7 +975,7 @@ mod tests {
 
         assert_eq!(metrics, NodeMetrics {
             visits: 800,
-            W: 784.690000000006,
+            W: 784.65857,
             children_visits: vec!(
                 (CountingAction::Increment, 316),
                 (CountingAction::Decrement, 178),
