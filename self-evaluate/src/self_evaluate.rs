@@ -41,20 +41,20 @@ pub struct SelfEvaluate {}
 #[derive(Debug,Serialize)]
 pub struct GameResult<A> {
     guid: String,
-    p1_model_num: usize,
-    p2_model_num: usize,
+    model_1_num: usize,
+    model_2_num: usize,
     actions: Vec<A>,
     score: f64
 }
 
 #[derive(Debug,Serialize)]
 pub struct MatchResult {
-    p1_model_num: usize,
-    p2_model_num: usize,
-    p1_score: f64,
-    p2_score: f64,
-    total_score_as_p1: f64,
-    total_score_as_p2: f64,
+    model_1_num: usize,
+    model_2_num: usize,
+    model_1_score: f64,
+    model_2_score: f64,
+    score_as_p1: f64,
+    score_as_p2: f64,
     num_of_games_played: usize
 }
 
@@ -76,8 +76,8 @@ impl SelfEvaluate
         let model_1_info = model_1.get_model_info();
         let model_2_info = model_2.get_model_info();
 
-        let p1_model_num = model_1_info.get_run_num();
-        let p2_model_num = model_2_info.get_run_num();
+        let model_1_num = model_1_info.get_run_num();
+        let model_2_num = model_2_info.get_run_num();
 
         let starting_time = Instant::now();
 
@@ -115,10 +115,10 @@ impl SelfEvaluate
 
             s.spawn(move |_| -> Result<(), Error> {
                 let mut num_of_games_played: usize = 0;
-                let mut p1_score: f64 = 0.0;
-                let mut p2_score: f64 = 0.0;
-                let mut total_score_as_p1: f64 = 0.0;
-                let mut total_score_as_p2: f64 = 0.0;
+                let mut model_1_score: f64 = 0.0;
+                let mut model_2_score: f64 = 0.0;
+                let mut score_as_p1: f64 = 0.0;
+                let mut score_as_p2: f64 = 0.0;
 
                 let mut presistance = SelfEvaluatePersistance::new(
                     &get_run_directory(model_1_info.get_game_name(), model_1_info.get_run_name()),
@@ -131,16 +131,16 @@ impl SelfEvaluate
 
                     let normalized_score = (game_result.score + 1.0) / 2.0;
 
-                    if p1_model_num == game_result.p1_model_num {
-                        p1_score += normalized_score;
-                        p2_score += 1.0 - normalized_score;
+                    if model_1_num == game_result.model_1_num {
+                        model_1_score += normalized_score;
+                        model_2_score += 1.0 - normalized_score;
                     } else {
-                        p2_score += normalized_score;
-                        p1_score += 1.0 - normalized_score;
+                        model_2_score += normalized_score;
+                        model_1_score += 1.0 - normalized_score;
                     }
 
-                    total_score_as_p1 += normalized_score;
-                    total_score_as_p2 += 1.0 - normalized_score;
+                    score_as_p1 += normalized_score;
+                    score_as_p2 += 1.0 - normalized_score;
 
                     println!("{:?}", game_result);
 
@@ -156,12 +156,12 @@ impl SelfEvaluate
 
                 presistance.write_match(&MatchResult {
                     num_of_games_played,
-                    p1_model_num,
-                    p2_model_num,
-                    p1_score,
-                    p2_score,
-                    total_score_as_p1,
-                    total_score_as_p2
+                    model_1_num,
+                    model_2_num,
+                    model_1_score,
+                    model_2_score,
+                    score_as_p1,
+                    score_as_p2
                 })?;
 
                 Ok(())
@@ -290,8 +290,8 @@ impl SelfEvaluate
 
         Ok(GameResult {
             guid: uuid.to_string(),
-            p1_model_num: model_1.0.get_run_num(),
-            p2_model_num: model_2.0.get_run_num(),
+            model_1_num: model_1.0.get_run_num(),
+            model_2_num: model_2.0.get_run_num(),
             actions,
             score
         })

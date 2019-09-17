@@ -131,3 +131,5 @@ Change train.Dockerfile to use cpu
 change flag when running docker to not use environment = nvidia.
 
 Update Display to show shorthand moves "f4"
+
+Why is there a bias towards p2 in the Quoridor_run-1_00003 results
