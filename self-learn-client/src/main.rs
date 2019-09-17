@@ -171,6 +171,7 @@ fn get_init_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, 
         moving_window_size: 500_000,
         max_moving_window_percentage: 0.5,
         position_sample_percentage: 0.0512,
+        exclude_drawn_games: false,
         train_ratio: 0.9,
         train_batch_size: 512,
         epochs: 1,
@@ -195,6 +196,7 @@ fn get_init_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, 
     if let Some(moving_window_size) = matches.value_of("moving_window_size") { self_learn_options.moving_window_size = moving_window_size.parse()? };
     if let Some(max_moving_window_percentage) = matches.value_of("max_moving_window_percentage") { self_learn_options.max_moving_window_percentage = max_moving_window_percentage.parse()? };
     if let Some(position_sample_percentage) = matches.value_of("position_sample_percentage") { self_learn_options.position_sample_percentage = position_sample_percentage.parse()? };
+    if let Some(exclude_drawn_games) = matches.value_of("exclude_drawn_games") { self_learn_options.exclude_drawn_games = exclude_drawn_games.parse()? };
     if let Some(train_ratio) = matches.value_of("train_ratio") { self_learn_options.train_ratio = train_ratio.parse()? };
     if let Some(train_batch_size) = matches.value_of("train_batch_size") { self_learn_options.train_batch_size = train_batch_size.parse()? };
     if let Some(epochs) = matches.value_of("epochs") { self_learn_options.epochs = epochs.parse()? };

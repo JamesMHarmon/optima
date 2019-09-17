@@ -126,6 +126,15 @@ export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 
 
-GPU vs CPU
+Update readme with proper GPU vs CPU changes. Potentially add feature flag
 Change train.Dockerfile to use cpu
 change flag when running docker to not use environment = nvidia.
+
+* See why there is a disparity between p1 and p2.
+* Exclude quoridor games from training if it is a draw.
+* Consider adding a pool for vectors/slices. https://github.com/CJP10/object-pool , https://carllerche.github.io/pool/pool/ , https://crates.io/crates/lifeguard
+* Use f32 instead of f64
+* TensorRT or f16 the networks
+* Add multiple players
+* Add multiple moves
+* Create ponder cli (.parse()!)
