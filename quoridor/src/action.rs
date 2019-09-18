@@ -50,6 +50,41 @@ impl Coordinate {
 
         col_bit << ((self.row - 1) * 9)
     }
+
+    pub fn invert(&self, shift: bool) -> Coordinate {
+        Coordinate::new(
+            if shift { Self::invert_column_shift(self.column) } else { Self::invert_column(self.column) },
+            if shift { 9 } else { 10 } - self.row
+        )
+    }
+
+    fn invert_column(column: char) -> char {
+        match column {
+            'a' => 'i',
+            'b' => 'h',
+            'c' => 'g',
+            'd' => 'f',
+            'e' => 'e',
+            'f' => 'd',
+            'g' => 'c',
+            'h' => 'b',
+             _ => 'a'
+        }
+    }
+
+    fn invert_column_shift(column: char) -> char {
+        match column {
+            'a' => 'h',
+            'b' => 'g',
+            'c' => 'f',
+            'd' => 'e',
+            'e' => 'd',
+            'f' => 'c',
+            'g' => 'b',
+            'h' => 'a',
+             _  => panic!("Can't shift from 'i'")
+        }
+    }
 }
 
 impl Serialize for Action
@@ -115,6 +150,16 @@ pub enum Action {
     MovePawn(Coordinate),
     PlaceHorizontalWall(Coordinate),
     PlaceVerticalWall(Coordinate)
+}
+
+impl Action {
+    pub fn invert(&self) -> Self {
+        match self {
+            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert(false)),
+            Action::PlaceHorizontalWall(coordinate) => Action::PlaceHorizontalWall(coordinate.invert(true)),
+            Action::PlaceVerticalWall(coordinate) => Action::PlaceVerticalWall(coordinate.invert(true))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +278,84 @@ mod tests {
 
             assert_eq!(orig_coordinate, coordinate);
         }
+    }
+
+    #[test]
+    fn test_invert_coordinate_a1() {
+        let coord = Coordinate::new('a', 1);
+        let expected = Coordinate::new('i', 9);
+        
+        assert_eq!(coord.invert(false), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_i9() {
+        let coord = Coordinate::new('i', 9);
+        let expected = Coordinate::new('a', 1);
+        
+        assert_eq!(coord.invert(false), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_e5() {
+        let coord = Coordinate::new('e', 5);
+        let expected = Coordinate::new('e', 5);
+        
+        assert_eq!(coord.invert(false), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_d3() {
+        let coord = Coordinate::new('d', 3);
+        let expected = Coordinate::new('f', 7);
+        
+        assert_eq!(coord.invert(false), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_double_invert() {
+        let coord = Coordinate::new('d', 3);
+        
+        assert_eq!(coord.invert(false).invert(false), coord);
+    }
+
+    #[test]
+    fn test_invert_coordinate_shift_a1() {
+        let coord = Coordinate::new('a', 1);
+        let expected = Coordinate::new('h', 8);
+        
+        assert_eq!(coord.invert(true), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_shift_h8() {
+        let coord = Coordinate::new('h', 8);
+        let expected = Coordinate::new('a', 1);
+        
+        assert_eq!(coord.invert(true), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_shift_e5() {
+        let coord = Coordinate::new('e', 5);
+        let expected = Coordinate::new('d', 4);
+        
+        assert_eq!(coord.invert(true), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_shift_d3() {
+        let coord = Coordinate::new('d', 3);
+        let expected = Coordinate::new('e', 6);
+        
+        assert_eq!(coord.invert(true), expected);
+    }
+
+    #[test]
+    fn test_invert_coordinate_shift_double_invert() {
+        let coord = Coordinate::new('d', 3);
+        
+        assert_eq!(coord.invert(true).invert(true), coord);
     }
 }
 

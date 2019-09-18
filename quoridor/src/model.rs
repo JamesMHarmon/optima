@@ -80,29 +80,46 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
-    fn policy_metrics_to_expected_input(&self, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
+    fn policy_metrics_to_expected_input(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let result:[f32; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
-            let (action, _) = &p;
-            let input_idx = map_action_to_input_idx(action);
+        let invert = !game_state.p1_turn_to_move;
 
-            r[input_idx] = p.1 as f32 / total_visits;
+        let result:[f32; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
+            let (action, visits) = &p;
+            // Policy scores for quoridor should be in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
+            // at the board from the perspective of player 1, but with the pieces inverted.
+            let input_idx = if invert {
+                map_action_to_input_idx(&action.invert())
+            } else {
+                map_action_to_input_idx(&action)
+            };
+
+            r[input_idx] = *visits as f32 / total_visits;
             r
         });
 
         result.to_vec()
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<Action>> {
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
         let valid_pawn_moves = game_state.get_valid_pawn_move_actions().into_iter();
         let valid_vert_walls = game_state.get_valid_vertical_wall_actions().into_iter();
         let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions().into_iter();
         let actions = valid_pawn_moves.chain(valid_vert_walls).chain(valid_horiz_walls);
+        let invert = !game_state.p1_turn_to_move;
 
         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
             .map(|a|
             {
-                let p_idx = map_action_to_input_idx(&a);
+                // Policy scores coming from the quoridor model are always from the perspective of player 1.
+                // This means that if we are p2, we need to flip the actions coming back and translate them
+                // to be actions in the p2 perspective.
+                let p_idx = if invert {
+                    map_action_to_input_idx(&a.invert())
+                } else {
+                    map_action_to_input_idx(&a)
+                };
+
                 let p = policy_scores[p_idx];
 
                 ActionWithPolicy::new(
@@ -205,8 +222,28 @@ mod tests {
     use engine::game_state::{GameState as GameStateTrait};
     use model::tensorflow::model::{Mapper as MapperTrait};
 
-    fn map_to_input_vec(curr_pawn_idx: usize, opp_pawn_idx: usize, vertical_wall_idxs: &[usize], horizontal_wall_idxs: &[usize], curr_walls_remaining: usize, opp_walls_remaining: usize) -> Vec<Vec<Vec<f32>>> {
-        let output = [0.0; 81 * 6];
+    fn map_to_input_vec(curr_pawn_idx: usize, opp_pawn_idx: usize, vertical_wall_idxs: &[usize], horizontal_wall_idxs: &[usize], curr_num_walls_placed: usize, opp_num_walls_placed: usize) -> Vec<f32> {
+        let offset = INPUT_C;
+        let mut output = [0.0; INPUT_W * INPUT_H * INPUT_C];
+
+        output[curr_pawn_idx * offset] = 1.0;
+        output[opp_pawn_idx * offset + 1] = 1.0;
+
+        for idx in vertical_wall_idxs {
+            output[idx * offset + 2] = 1.0;
+        }
+
+        for idx in horizontal_wall_idxs {
+            output[idx * offset + 3] = 1.0;
+        }
+
+        for idx in 0..81 {
+            output[idx * offset + 4] = curr_num_walls_placed as f32 / 10.0;
+        }
+
+        for idx in 0..81 {
+            output[idx * offset + 5] = opp_num_walls_placed as f32 / 10.0;
+        }
 
         output.to_vec()
     }
@@ -353,9 +390,88 @@ mod tests {
 
         let input = mapper.game_state_to_input(&game_state);
 
+        assert_eq!(
+            map_to_input_vec(76, 4, &vec!(), &vec!(), 0, 0),
+            input
+        )
+    }
+
+    #[test]
+    fn test_game_state_to_input_initial_p2() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
+
+        let input = mapper.game_state_to_input(&game_state);
 
         assert_eq!(
-            input,
+            map_to_input_vec(76, 13, &vec!(), &vec!(), 0, 0),
+            input
+        )
+    }
+
+    #[test]
+    fn test_game_state_to_input_walls_remaining() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
+
+        let input = mapper.game_state_to_input(&game_state);
+
+        assert_eq!(
+            map_to_input_vec(76, 4, &vec!(), &vec!(9,10), 0, 1),
+            input
+        )
+    }
+
+    #[test]
+    fn test_game_state_to_input_walls_remaining_p2() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('d', 9)));
+
+        let input = mapper.game_state_to_input(&game_state);
+
+        assert_eq!(
+            map_to_input_vec(76, 3, &vec!(), &vec!(79,80), 1, 0),
+            input
+        )
+    }
+
+    #[test]
+    fn test_game_state_to_input_vertical_walls() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
+
+        let input = mapper.game_state_to_input(&game_state);
+
+        assert_eq!(
+            map_to_input_vec(67, 4, &vec!(38,47), &vec!(), 0, 1),
+            input
+        )
+    }
+
+    #[test]
+    fn test_game_state_to_input_vertical_walls_p2() {
+        let mapper = Mapper::new();
+
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
+        let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
+        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
+
+        let input = mapper.game_state_to_input(&game_state);
+
+        assert_eq!(
+            map_to_input_vec(76, 22, &vec!(32,41), &vec!(), 1, 0),
+            input
         )
     }
 }

@@ -54,9 +54,10 @@ where
             let num_positions = analysis.len();
             let num_samples = ((num_positions as f32) * position_sample_percentage).ceil() as usize;
             let samples = analysis.into_iter().choose_multiple(&mut rng, num_samples);
+            let samples_len = samples.len();
             let (_, positions_metrics) = samples.into_iter().enumerate().fold(
-                (S::initial(), Vec::new()),
-                |(prev_game_state,mut samples), (i, (action, metrics))| {
+                (S::initial(), Vec::with_capacity(samples_len)),
+                |(prev_game_state, mut samples), (i, (action, metrics))| {
                     let sample_is_p1 = i % 2 == 0;
                     let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
                     let game_state = game_engine.take_action(&prev_game_state, &action);

@@ -42,8 +42,8 @@ pub struct TensorflowModel<S,A,E,Map>
 pub trait Mapper<S,A> {
     fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
     fn get_input_dimensions(&self) -> [u64; 3];
-    fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f32>;
-    fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<A>>;
+    fn policy_metrics_to_expected_input(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
+    fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
 }
 
 impl<S,A,E,Map> TensorflowModel<S,A,E,Map>
@@ -231,7 +231,7 @@ where
         let X: Vec<_> = X.chunks(dimensions[0] as usize).into_iter().collect();
 
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.game_state, &v.policy)).collect();
 
         let json = json!({
             "x": X,
@@ -560,7 +560,7 @@ where
         ).map(|(game_state, value_score, policy_scores)| {
                 let valid_actions_with_policies = self.mapper.policy_to_valid_actions(
                     game_state,
-                    &policy_scores.into_iter().map(|v| *v as f32).collect()
+                    &policy_scores
                 );
 
                 GameStateAnalysis {
