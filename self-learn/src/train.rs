@@ -45,8 +45,8 @@ where
     let mut rng = rand::thread_rng();
 
     let positions_metrics = metric_iter
-        .take(num_games)
         .filter(|m| !exclude_drawn_games || m.score() != 0.0)
+        .take(num_games)
         .flat_map(|m| {
             let score = m.score();
             let analysis = m.take_analysis();

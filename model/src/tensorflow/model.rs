@@ -225,10 +225,12 @@ where
         let sample_metrics: Vec<_> = sample_metrics.collect();
 
         let dimensions = mapper.get_input_dimensions();
-        let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
-        let X: Vec<_> = X.chunks(dimensions[2] as usize).into_iter().collect();
-        let X: Vec<_> = X.chunks(dimensions[1] as usize).into_iter().collect();
-        let X: Vec<_> = X.chunks(dimensions[0] as usize).into_iter().collect();
+        let X: Vec<_> = sample_metrics.iter().map(|v| {
+            let X: Vec<_> = mapper.game_state_to_input(&v.game_state);
+            let X: Vec<_> = X.chunks_exact(dimensions[2] as usize).map(|v| v.to_owned()).collect();
+            let X: Vec<_> = X.chunks_exact(dimensions[1] as usize).map(|v| v.to_owned()).collect();
+            X
+        }).collect();
 
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
         let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.game_state, &v.policy)).collect();
