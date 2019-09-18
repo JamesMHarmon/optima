@@ -87,6 +87,7 @@ impl Ponder
                     println!("Taking Action: {:?}", action);
                     state = game_engine.take_action(&state, &action);
                     mcts_1.advance_to_action(action).await?;
+                    total_visits = 0;
                     println!("New Game State: {}", state);
                 },
                 Err(_) => println!("{}", "Error parsing action")
