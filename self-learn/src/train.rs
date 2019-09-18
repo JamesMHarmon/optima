@@ -51,12 +51,8 @@ where
             let score = m.score();
             let analysis = m.take_analysis();
 
-            let num_positions = analysis.len();
-            let num_samples = ((num_positions as f32) * position_sample_percentage).ceil() as usize;
-            let samples = analysis.into_iter().choose_multiple(&mut rng, num_samples);
-            let samples_len = samples.len();
-            let (_, positions_metrics) = samples.into_iter().enumerate().fold(
-                (S::initial(), Vec::with_capacity(samples_len)),
+            let (_, positions_metrics) = analysis.into_iter().enumerate().fold(
+                (S::initial(), vec!()),
                 |(prev_game_state, mut samples), (i, (action, metrics))| {
                     let sample_is_p1 = i % 2 == 0;
                     let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
@@ -72,7 +68,9 @@ where
                 }
             );
 
-            positions_metrics
+            let num_positions = positions_metrics.len();
+            let num_samples = ((num_positions as f32) * position_sample_percentage).ceil() as usize;
+            positions_metrics.into_iter().choose_multiple(&mut rng, num_samples)
         });
 
     model.train(
