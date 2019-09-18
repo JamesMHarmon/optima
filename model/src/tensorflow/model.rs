@@ -223,7 +223,13 @@ where
 
     for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
         let sample_metrics: Vec<_> = sample_metrics.collect();
+
+        let dimensions = mapper.get_input_dimensions();
         let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
+        let X: Vec<_> = X.chunks(dimensions[2] as usize).into_iter().collect();
+        let X: Vec<_> = X.chunks(dimensions[1] as usize).into_iter().collect();
+        let X: Vec<_> = X.chunks(dimensions[0] as usize).into_iter().collect();
+
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
         let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
 
