@@ -1,6 +1,8 @@
+use std::fmt::Formatter;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::collections::HashMap;
-use std::fs::{self,File};
+use std::fs::{self};
 use std::future::Future;
 use std::pin::Pin;
 use std::process::{Command,Stdio};
@@ -11,7 +13,6 @@ use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
 use itertools::{izip,Itertools};
-use serde_json::json;
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 
 
@@ -227,29 +228,24 @@ where
         let dimensions = mapper.get_input_dimensions();
         let X: Vec<_> = sample_metrics.iter().map(|v| {
             let X: Vec<_> = mapper.game_state_to_input(&v.game_state);
-            let X: Vec<_> = X.chunks_exact(dimensions[2] as usize).map(|v| v.to_owned()).collect();
-            let X: Vec<_> = X.chunks_exact(dimensions[1] as usize).map(|v| v.to_owned()).collect();
-            X
+            let X: Vec<_> = X.chunks_exact(dimensions[2] as usize).map(|v| NumVec(v.to_owned())).collect();
+            let X: Vec<_> = X.chunks_exact(dimensions[1] as usize).map(|v| NumVec(v.to_owned())).collect();
+            NumVec(X)
         }).collect();
 
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.game_state, &v.policy)).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| NumVec(mapper.policy_metrics_to_expected_input(&v.game_state, &v.policy))).collect();
 
-        let json = json!({
-            "x": X,
-            "yv": yv,
-            "yp": yp
-        });
+        // Note that we are no longer using serde_json here due to the way that it elongates floats.
+        // Perhaps there is a way to override the way that serde_json formats floats?
+        let json = format!("{{\"x\":{},\"yv\":{},\"yp\":{}}}", NumVec(X), NumVec(yv), NumVec(yp));
 
         let train_data_file_name = format!("training_data_{}.json", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
 
         println!("Writing data to {:?}", &train_data_path);
 
-        serde_json::to_writer(
-            &File::create(train_data_path)?,
-            &json
-        )?;
+        fs::write(train_data_path, json)?;
 
         train_data_file_names.push(train_data_file_name);
     }
@@ -607,3 +603,21 @@ where
     }
 }
 
+#[derive(Clone)]
+struct NumVec<T>(Vec<T>);
+
+impl<T> Display for NumVec<T>
+    where T: Display
+{
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        let mut comma_separated = String::new();
+
+        for num in &self.0[0..self.0.len() - 1] {
+            comma_separated.push_str(&num.to_string());
+            comma_separated.push_str(",");
+        }
+
+        comma_separated.push_str(&self.0[self.0.len() - 1].to_string());
+        write!(f, "[{}]", comma_separated)
+    }
+}

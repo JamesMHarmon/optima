@@ -56,7 +56,7 @@ where
                 |(prev_game_state, mut samples), (i, (action, metrics))| {
                     let sample_is_p1 = i % 2 == 0;
                     let score = score * if sample_is_p1 { 1.0 } else { -1.0 };
-                    let game_state = game_engine.take_action(&prev_game_state, &action);
+                    let next_game_state = game_engine.take_action(&prev_game_state, &action);
 
                     samples.push(PositionMetrics {
                         game_state: prev_game_state,
@@ -64,7 +64,7 @@ where
                         policy: metrics
                     });
 
-                    (game_state, samples)
+                    (next_game_state, samples)
                 }
             );
 
