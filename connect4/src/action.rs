@@ -1,11 +1,36 @@
+use std::fmt::{Display,Formatter};
+use std::str::FromStr;
 use serde::de::Error;
 use std::fmt;
 use serde::ser::{Serialize, Serializer};
 use serde::de::{Deserialize, Deserializer, Visitor};
 
+use failure::{format_err};
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Action {
     DropPiece(u64)
+}
+
+impl FromStr for Action {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let column_num = s.parse()?;
+
+        if column_num > 7 {
+            return Err(format_err!("Column number must be between 1 and 7"));
+        }
+
+        Ok(Action::DropPiece(column_num))
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let Action::DropPiece(column) = self;
+        write!(f, "{}", column)
+    }
 }
 
 impl Serialize for Action

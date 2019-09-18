@@ -29,7 +29,7 @@ where
 }
 
 struct NodeMetricsVisitor<A> {
-    marker: PhantomData<fn() -> NodeMetrics<A>>
+    marker: PhantomData<A>
 }
 
 impl<A> NodeMetricsVisitor<A> {

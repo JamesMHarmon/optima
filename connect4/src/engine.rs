@@ -164,16 +164,6 @@ impl GameEngine for Engine {
     fn is_terminal_state(&self, game_state: &GameState) -> Option<f32> {
         game_state.is_terminal()
     }
-
-    // fn parse_input(&self, input: &str) -> Result<Action,Error> {
-    //     let column_num = input.parse()?;
-
-    //     if column_num > 7 {
-    //         return Err(format_err!("Column number must be between 1 and 7"));
-    //     }
-
-    //     Ok(Action::DropPiece(column_num))
-    // }
 }
 
 #[cfg(test)]

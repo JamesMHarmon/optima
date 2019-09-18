@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::fmt::Display;
 use std::fmt::Debug;
 use serde::{Serialize};
@@ -33,7 +34,7 @@ impl Ponder
     ) -> Result<(), Error> 
     where
         S: GameState + Display,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
+        A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
         E: GameEngine<State=S,Action=A>,
         M: Model<State=S,Action=A,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S> + Send
@@ -75,12 +76,11 @@ impl Ponder
                 println!("PONDERING: {}", visits);
                 total_visits += visits;
                 mcts_1.search(total_visits).await?;
-                println!("{:?}", mcts_1.get_root_node_metrics());
+                println!("{}", mcts_1.get_root_node_details()?);
                 continue;
             }
 
-            // let action = game_engine.parse_input(&input);
-            let action = Err("");
+            let action = input.parse::<A>();
 
             match action {
                 Ok(action) => {
@@ -89,7 +89,7 @@ impl Ponder
                     mcts_1.advance_to_action(action).await?;
                     println!("New Game State: {}", state);
                 },
-                Err(err) => println!("{}", err)
+                Err(_) => println!("{}", "Error parsing action")
             }
         };
 

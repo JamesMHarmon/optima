@@ -11,6 +11,7 @@ use engine::engine::{GameEngine};
 use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
 use common::linked_list::{List};
+use super::node_details::{PUCT,NodeDetails};
 
 pub struct DirichletOptions {
     pub alpha: f32,
@@ -172,8 +173,8 @@ where
         self.advance_to_action_clearable(action, false).await
     }
 
-    pub fn get_root_node_metrics(&self) -> Result<NodeMetrics<A>, Error> {
-        let root = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>, Error> {
+        let root = self.root.as_mut().ok_or(format_err!("No root node found!"))?;
 
         Ok(NodeMetrics {
             visits: root.visits,
@@ -182,6 +183,36 @@ where
                 n.action.clone(),
                 n.node.as_ref().map_or(0, |n| n.visits)
             )).collect()
+        })
+    }
+
+    pub fn get_root_node_details(&self) -> Result<NodeDetails<A>, Error> {
+        let root = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+        let children = &root.children;
+        let options = &self.options;
+
+        let metrics = Self::get_PUCT_for_nodes(
+            children,
+            root.visits,
+            &root.game_state,
+            true,
+            &root.actions,
+            options.fpu,
+            options.fpu_root,
+            &options.cpuct
+        );
+
+        let mut children: Vec<_> = children.iter().zip(metrics).map(|(n, m)| (
+            n.action.clone(),
+            m
+        )).collect();
+
+        children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
+
+        Ok(NodeDetails {
+            visits: root.visits,
+            W: root.W,
+            children
         })
     }
 
@@ -256,7 +287,7 @@ where
     }
 
     fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C, temp: &T, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, Error> {
-        let mut pucts = Self::get_PUCT_for_nodes(nodes, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
+        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
 
         let temp = temp(game_state, prior_actions);
         let chosen_puct_idx = if temp == 0.0 {
@@ -297,11 +328,19 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
+    fn get_PUCT_for_nodes_mut(nodes: &'a mut [MCTSChildNode<S, A>], Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'a, S, A>>
+    {
+        let pucts = Self::get_PUCT_for_nodes(nodes, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
+        nodes.iter_mut().zip(pucts).map(|(node, puct)| {
+            NodePUCT { node, score: puct.PUCT }
+        }).collect()
+    }
+
+    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<S, A>], Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
     {
         let fpu = if is_root { fpu_root } else { fpu };
 
-        nodes.iter_mut().map(|child| {
+        nodes.iter().map(|child| {
             let mut child_node = &child.node;
 
             // If the child nodes visits is 0, then it has been cleared and should have it's cpuct be calculated as if it is a leaf.
@@ -321,11 +360,7 @@ where
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
             let Qsa = child_node.as_ref().map_or(fpu, |n| { 1.0 - n.W / n.visits as f32 });
             let PUCT = Qsa + Usa;
-
-            NodePUCT {
-                node: child,
-                score: PUCT
-            }
+            PUCT { Psa, Nsa, cpuct, Usa, Qsa, PUCT }
         }).collect()
     }
 
