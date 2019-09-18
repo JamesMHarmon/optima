@@ -4,7 +4,7 @@ use serde::ser::{Serialize,Serializer};
 use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
 use common::bits::single_bit_index;
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Eq,PartialEq)]
 pub struct Coordinate {
     pub column: char,
     pub row: usize
@@ -93,13 +93,7 @@ impl Serialize for Action
     where
         S: Serializer,
     {
-        let coordinate = match self {
-            Action::MovePawn(coord) => format!("{}{}", coord.column, coord.row),
-            Action::PlaceVerticalWall(coord) => format!("{}{}v", coord.column, coord.row),
-            Action::PlaceHorizontalWall(coord) => format!("{}{}h", coord.column, coord.row)
-        };
-
-        serializer.serialize_str(&coordinate)
+        serializer.serialize_str(&format!("{}",self))
     }
 }
 
@@ -145,7 +139,7 @@ impl<'de> Deserialize<'de> for Action
     }
 }
 
-#[derive(Clone,Debug,Eq,PartialEq)]
+#[derive(Clone,Eq,PartialEq)]
 pub enum Action {
     MovePawn(Coordinate),
     PlaceHorizontalWall(Coordinate),
@@ -159,6 +153,36 @@ impl Action {
             Action::PlaceHorizontalWall(coordinate) => Action::PlaceHorizontalWall(coordinate.invert(true)),
             Action::PlaceVerticalWall(coordinate) => Action::PlaceVerticalWall(coordinate.invert(true))
         }
+    }
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (action_type, coordinate) = match self {
+            Action::MovePawn(coordinate) => ("", coordinate),
+            Action::PlaceHorizontalWall(coordinate) => ("h", coordinate),
+            Action::PlaceVerticalWall(coordinate) => ("v", coordinate)
+        };
+
+        write!(f, "{coordinate}{action_type}", action_type = action_type, coordinate = coordinate)
+    }
+}
+
+impl fmt::Debug for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl fmt::Display for Coordinate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.column, self.row)
+    }
+}
+
+impl fmt::Debug for Coordinate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
