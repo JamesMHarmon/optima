@@ -1,6 +1,8 @@
+use std::fmt::{self,Display,Formatter};
 use super::constants::MAX_NUMBER_OF_MOVES;
 use super::action::Coordinate;
 use super::action::{Action};
+use super::board::{map_board_to_arr_invertable,BoardType};
 use engine::engine::GameEngine;
 use engine::game_state;
 
@@ -29,6 +31,49 @@ pub struct GameState {
     pub p2_num_walls_placed: usize,
     pub vertical_wall_placement_board: u128,
     pub horizontal_wall_placement_board: u128
+}
+
+impl Display for GameState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let p1_board = map_board_to_arr_invertable(self.p1_pawn_board, BoardType::Pawn, false);
+        let p2_board = map_board_to_arr_invertable(self.p2_pawn_board, BoardType::Pawn, false);
+        let horizontal_wall_placement = map_board_to_arr_invertable(self.horizontal_wall_placement_board, BoardType::Pawn, false);
+        let vertical_wall_placement = map_board_to_arr_invertable(self.vertical_wall_placement_board, BoardType::Pawn, false);
+        let horizontal_wall_board = map_board_to_arr_invertable(self.horizontal_wall_placement_board, BoardType::HorizontalWall, false);
+        let vertical_wall_board = map_board_to_arr_invertable(self.vertical_wall_placement_board, BoardType::VerticalWall, false);
+
+        writeln!(f, "")?;
+
+        for y in 0..9 {
+            for x in 0..9 {
+                if x == 0 { write!(f, "  +")?; }
+                let idx = y * 9 + x;
+                let w = if horizontal_wall_board[idx] != 0.0 { "■■■" } else { "---" };
+                let c = if horizontal_wall_placement[idx] != 0.0 { "■" } else if vertical_wall_placement[idx] != 0.0 { "█" } else { "+" };
+                write!(f, "{}{}", w, c)?;
+            }
+
+            writeln!(f, "")?;
+
+            for x in 0..9 {
+                let idx = y * 9 + x;
+                if x == 0 { write!(f, "{} |", 9 - y)?; }
+                let p = if p1_board[idx] != 0.0 { "1" } else if p2_board[idx] != 0.0 { "2" } else { " " };
+                let w = if vertical_wall_board[idx] != 0.0 { "█" } else { "|" };
+                write!(f, " {} {}", p, w)?;
+            }
+
+            writeln!(f, "")?;
+        }
+
+        writeln!(f, "  +---+---+---+---+---+---+---+---+---+")?;
+        writeln!(f, "    a   b   c   d   e   f   g   h   i  ")?;
+
+        writeln!(f, "")?;
+        writeln!(f, "  P1: {}  P2: {}", 10 - self.p1_num_walls_placed, 10 - self.p2_num_walls_placed)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 connect4 = { path = "../connect4" }
+quoridor = { path = "../quoridor" }
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }

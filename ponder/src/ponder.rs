@@ -65,6 +65,8 @@ impl Ponder
         let mut total_visits = 0;
 
         while game_engine.is_terminal_state(&state) == None {
+            println!("{}", state);
+
             println!("Input action or Enter to ponder");
             let reader = std::io::stdin();
             let mut input = String::new();
@@ -84,15 +86,20 @@ impl Ponder
 
             match action {
                 Ok(action) => {
-                    println!("Taking Action: {:?}", action);
+                    if let Err(_) = mcts_1.advance_to_action(action.clone()).await {
+                        println!("Illegal Action: {:?}", &action);
+                        continue;
+                    }
+
+                    println!("Taking Action: {:?}", &action);
                     state = game_engine.take_action(&state, &action);
-                    mcts_1.advance_to_action(action).await?;
                     total_visits = 0;
-                    println!("New Game State: {}", state);
                 },
                 Err(_) => println!("{}", "Error parsing action")
             }
         };
+
+        println!("{}", state);
 
         Ok(())
     }

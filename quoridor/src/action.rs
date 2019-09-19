@@ -1,8 +1,10 @@
+use std::str::FromStr;
 use serde::de::Error;
 use std::fmt;
 use serde::ser::{Serialize,Serializer};
 use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
 use common::bits::single_bit_index;
+use failure::{format_err};
 
 #[derive(Clone,Eq,PartialEq)]
 pub struct Coordinate {
@@ -115,17 +117,7 @@ impl<'de> Visitor<'de> for ActionVisitor
     where
         E: Error,
     {
-        let chars: Vec<char> = v.chars().collect();
-        let row = chars[0];
-        let col = chars[1].to_digit(10).ok_or_else(|| DeserializeError::invalid_value(Unexpected::Char(chars[1]), &self))?;
-        let coordinate = Coordinate::new(row, col as usize);
-
-        match chars.get(2) {
-            None => Ok(Action::MovePawn(coordinate)),
-            Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
-            Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
-            Some(v) => Err(DeserializeError::invalid_value(Unexpected::Char(*v),&self))
-        }
+        v.parse::<Action>().map_err(|_| DeserializeError::invalid_value(Unexpected::Str(v),&self))
     }
 }
 
@@ -171,6 +163,24 @@ impl fmt::Display for Action {
 impl fmt::Debug for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl FromStr for Action {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars: Vec<char> = s.chars().collect();
+        let row = chars[0];
+        let col = chars[1].to_digit(10).ok_or_else(|| format_err!("Invalid value"))?;
+        let coordinate = Coordinate::new(row, col as usize);
+
+        match chars.get(2) {
+            None => Ok(Action::MovePawn(coordinate)),
+            Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
+            Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
+            Some(_) => Err(format_err!("Invalid value"))
+        }
     }
 }
 
