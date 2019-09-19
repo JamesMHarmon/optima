@@ -1,5 +1,5 @@
 use std::fmt::{self,Display,Formatter};
-use super::constants::MAX_NUMBER_OF_MOVES;
+use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,NUM_WALLS_PER_PLAYER,MAX_NUMBER_OF_MOVES};
 use super::action::Coordinate;
 use super::action::{Action};
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -44,10 +44,10 @@ impl Display for GameState {
 
         writeln!(f, "")?;
 
-        for y in 0..9 {
-            for x in 0..9 {
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_WIDTH {
                 if x == 0 { write!(f, "  +")?; }
-                let idx = y * 9 + x;
+                let idx = y * BOARD_WIDTH + x;
                 let w = if horizontal_wall_board[idx] != 0.0 { "■■■" } else { "---" };
                 let c = if horizontal_wall_placement[idx] != 0.0 { "■" } else if vertical_wall_placement[idx] != 0.0 { "█" } else { "+" };
                 write!(f, "{}{}", w, c)?;
@@ -55,9 +55,9 @@ impl Display for GameState {
 
             writeln!(f, "")?;
 
-            for x in 0..9 {
-                let idx = y * 9 + x;
-                if x == 0 { write!(f, "{} |", 9 - y)?; }
+            for x in 0..BOARD_WIDTH {
+                let idx = y * BOARD_WIDTH + x;
+                if x == 0 { write!(f, "{} |", BOARD_HEIGHT - y)?; }
                 let p = if p1_board[idx] != 0.0 { "1" } else if p2_board[idx] != 0.0 { "2" } else { " " };
                 let w = if vertical_wall_board[idx] != 0.0 { "█" } else { "|" };
                 write!(f, " {} {}", p, w)?;
@@ -70,7 +70,7 @@ impl Display for GameState {
         writeln!(f, "    a   b   c   d   e   f   g   h   i  ")?;
 
         writeln!(f, "")?;
-        writeln!(f, "  P1: {}  P2: {}", 10 - self.p1_num_walls_placed, 10 - self.p2_num_walls_placed)?;
+        writeln!(f, "  P1: {}  P2: {}", NUM_WALLS_PER_PLAYER - self.p1_num_walls_placed, NUM_WALLS_PER_PLAYER - self.p2_num_walls_placed)?;
 
         Ok(())
     }
@@ -173,10 +173,10 @@ impl GameState {
         let move_down_mask = self.get_move_down_mask();
         let move_left_mask = self.get_move_left_mask();
 
-        let up_move = active_player_board << 9 & move_up_mask;
-        let right_move = active_player_board >> 1 & move_right_mask;
-        let down_move = active_player_board >> 9 & move_down_mask;
-        let left_move = active_player_board << 1 & move_left_mask;
+        let up_move = shift_up!(active_player_board) & move_up_mask;
+        let right_move = shift_right!(active_player_board) & move_right_mask;
+        let down_move = shift_down!(active_player_board) & move_down_mask;
+        let left_move = shift_left!(active_player_board) & move_left_mask;
 
         let valid_moves: u128 = up_move | right_move | down_move | left_move;
         let overlapping_move: u128 = valid_moves & opposing_player_board;
@@ -190,10 +190,10 @@ impl GameState {
         let overlap_down_move = down_move & opposing_player_board;
         let overlap_left_move = left_move & opposing_player_board;
 
-        let straight_jump_up_move = overlap_up_move << 9 & move_up_mask;
-        let straight_jump_right_move = overlap_right_move >> 1 & move_right_mask;
-        let straight_jump_down_move = overlap_down_move >> 9 & move_down_mask;
-        let straight_jump_left_move = overlap_left_move << 1 & move_left_mask;
+        let straight_jump_up_move = shift_up!(overlap_up_move) & move_up_mask;
+        let straight_jump_right_move = shift_right!(overlap_right_move) & move_right_mask;
+        let straight_jump_down_move = shift_down!(overlap_down_move) & move_down_mask;
+        let straight_jump_left_move = shift_left!(overlap_left_move) & move_left_mask;
 
         let straight_jump_move = straight_jump_up_move | straight_jump_right_move | straight_jump_down_move | straight_jump_left_move;
 
@@ -203,10 +203,10 @@ impl GameState {
 
         let side_jump_moves =
             (
-                overlapping_move << 9 & move_up_mask
-                | overlapping_move >> 1 & move_right_mask
-                | overlapping_move >> 9 & move_down_mask
-                | overlapping_move << 1 & move_left_mask
+                shift_up!(overlapping_move) & move_up_mask
+                | shift_right!(overlapping_move)& move_right_mask
+                | shift_down!(overlapping_move) & move_down_mask
+                | shift_left!(overlapping_move) & move_left_mask
             ) 
             & !active_player_board;
 
@@ -230,11 +230,11 @@ impl GameState {
     }
 
     fn get_vertical_wall_blocks(&self) -> u128 {
-        self.vertical_wall_placement_board << 9 | self.vertical_wall_placement_board
+        shift_up!(self.vertical_wall_placement_board) | self.vertical_wall_placement_board
     }
 
     fn get_horizontal_wall_blocks(&self) -> u128 {
-        self.horizontal_wall_placement_board >> 1 | self.horizontal_wall_placement_board
+        shift_right!(self.horizontal_wall_placement_board) | self.horizontal_wall_placement_board
     }
 
     fn get_valid_horizontal_wall_placement(&self) -> u128 {
@@ -255,9 +255,9 @@ impl GameState {
 
     fn active_player_has_wall_to_place(&self) -> bool {
         if self.p1_turn_to_move {
-            self.p1_num_walls_placed < 10
+            self.p1_num_walls_placed < NUM_WALLS_PER_PLAYER
         } else {
-            self.p2_num_walls_placed < 10
+            self.p2_num_walls_placed < NUM_WALLS_PER_PLAYER
         }
     }
 
@@ -274,13 +274,13 @@ impl GameState {
     }
 
     fn get_candidate_horizontal_wall_placement(&self) -> u128 {
-        !(self.horizontal_wall_placement_board | self.horizontal_wall_placement_board >> 1 | self.horizontal_wall_placement_board << 1)
+        !(self.horizontal_wall_placement_board | shift_right!(self.horizontal_wall_placement_board) | shift_left!(self.horizontal_wall_placement_board))
         & !self.vertical_wall_placement_board
         & CANDIDATE_WALL_PLACEMENT_MASK
     }
 
     fn get_candidate_vertical_wall_placement(&self) -> u128 {
-        !(self.vertical_wall_placement_board | self.vertical_wall_placement_board >> 9 | self.vertical_wall_placement_board << 9)
+        !(self.vertical_wall_placement_board | shift_down!(self.vertical_wall_placement_board) | shift_up!(self.vertical_wall_placement_board))
         & !self.horizontal_wall_placement_board
         & CANDIDATE_WALL_PLACEMENT_MASK
     }
@@ -355,10 +355,10 @@ impl GameState {
 
         loop {
             // MOVE UP & DOWN & LEFT & RIGHT
-            let up_path = path << 9 & up_mask;
-            let right_path = path >> 1 & right_mask;
-            let down_path = path >> 9 & down_mask;
-            let left_path = path << 1 & left_mask;
+            let up_path = shift_up!(path) & up_mask;
+            let right_path = shift_right!(path) & right_mask;
+            let down_path = shift_down!(path) & down_mask;
+            let left_path = shift_left!(path) & left_mask;
             let updated_path = up_path | right_path | down_path | left_path | path;
 
             // Check if the objective is reachable
@@ -376,11 +376,11 @@ impl GameState {
     }
 
     fn get_move_up_mask(&self) -> u128 {
-        !(self.get_horizontal_wall_blocks() << 9) & VALID_PIECE_POSITION_MASK
+        !(shift_up!(self.get_horizontal_wall_blocks())) & VALID_PIECE_POSITION_MASK
     }
 
     fn get_move_right_mask(&self) -> u128 {
-        !(self.get_vertical_wall_blocks() >> 1) & VALID_PIECE_POSITION_MASK & !LEFT_COLUMN_MASK
+        !shift_right!(self.get_vertical_wall_blocks()) & VALID_PIECE_POSITION_MASK & !LEFT_COLUMN_MASK
     }
 
     fn get_move_down_mask(&self) -> u128{
@@ -397,9 +397,9 @@ impl GameState {
         let vertical_walls = self.vertical_wall_placement_board;
 
         // Compare to existing walls. Wall segment candidates check against locations of possible new connections. These are checked in combinations since the walls may already be connected. We don't want to count the same existing connection twice or thrice.
-        let middle_touching = candidate_horizontal_walls & (vertical_walls << 9 | vertical_walls >> 9);
-        let left_edge_touching = candidate_horizontal_walls & (vertical_walls >> 1 | vertical_walls >> 10 | vertical_walls << 8 | horizontal_walls >> 2 | HORIZONTAL_WALL_LEFT_EDGE_TOUCHING_BOARD_MASK);
-        let right_edge_touching = candidate_horizontal_walls & (vertical_walls << 1 | vertical_walls << 10 | vertical_walls >> 8 | horizontal_walls << 2 | HORIZONTAL_WALL_RIGHT_EDGE_TOUCHING_BOARD_MASK);
+        let middle_touching = candidate_horizontal_walls & (shift_up!(vertical_walls) | shift_down!(vertical_walls));
+        let left_edge_touching = candidate_horizontal_walls & (shift_right!(vertical_walls) | shift_down_right!(vertical_walls) | shift_up_right!(vertical_walls) | shift_right!(shift_right!(horizontal_walls)) | HORIZONTAL_WALL_LEFT_EDGE_TOUCHING_BOARD_MASK);
+        let right_edge_touching = candidate_horizontal_walls & (shift_left!(vertical_walls) | shift_down_left!(vertical_walls) | shift_up_left!(vertical_walls) | shift_left!(shift_left!(horizontal_walls)) | HORIZONTAL_WALL_RIGHT_EDGE_TOUCHING_BOARD_MASK);
 
         (left_edge_touching & middle_touching) | (left_edge_touching & right_edge_touching) | (middle_touching & right_edge_touching)
     }
@@ -410,9 +410,9 @@ impl GameState {
         let horizontal_walls = self.horizontal_wall_placement_board;
 
         // Compare to existing walls. Wall segment candidates check against locations of possible new connections. These are checked in combinations since the walls may already be connected. We don't want to count the same existing connection twice or thrice.
-        let middle_touching = candidate_vertical_walls & (horizontal_walls >> 1 | horizontal_walls << 1);
-        let top_edge_touching = candidate_vertical_walls & (horizontal_walls >> 8 | horizontal_walls >> 9 | horizontal_walls >> 10 | vertical_walls >> 18 | VERTICAL_WALL_TOP_EDGE_TOUCHING_BOARD_MASK);
-        let bottom_edge_touching = candidate_vertical_walls & (horizontal_walls << 8 | horizontal_walls << 9 | horizontal_walls << 10 | vertical_walls << 18 | VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK);
+        let middle_touching = candidate_vertical_walls & (shift_right!(horizontal_walls) | shift_left!(horizontal_walls));
+        let top_edge_touching = candidate_vertical_walls & (shift_down_left!(horizontal_walls) | shift_down!(horizontal_walls) | shift_down_right!(horizontal_walls) | shift_down!(shift_down!(vertical_walls))| VERTICAL_WALL_TOP_EDGE_TOUCHING_BOARD_MASK);
+        let bottom_edge_touching = candidate_vertical_walls & (shift_up_left!(horizontal_walls) | shift_up!(horizontal_walls) | shift_up_right!(horizontal_walls) | shift_up!(shift_up!(vertical_walls)) | VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK);
 
         (top_edge_touching & middle_touching) | (top_edge_touching & bottom_edge_touching) | (middle_touching & bottom_edge_touching)
     }
