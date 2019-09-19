@@ -11,7 +11,7 @@ use ponder::PonderOptions;
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let game_name = "Quoridor";
-    let run_name = "run-1";
+    let run_name = "run-2";
 
     let model_factory = QuoridorModelFactory::new();
     let latest_model_info = model_factory.get_latest(&ModelInfo::new(

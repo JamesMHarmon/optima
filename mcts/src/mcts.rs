@@ -224,7 +224,16 @@ where
         let game_engine = &self.game_engine;
         let mut root_node = MCTS::<S,A,E,M,C,T,R>::get_or_create_root_node(&mut root, starting_game_state, starting_actions, analytics).await;
 
-        let node = Self::take_node_of_action(&mut root_node, &action)?;
+        let node = Self::take_node_of_action(&mut root_node, &action);
+
+        if let Err(err) = node {
+            // If there is an error, replace the root node back to it's original value.
+            self.root = root;
+            return Err(err);
+        }
+
+        let node = node.unwrap();
+
         let node = match node {
             Some(mut node) => {
                 if clear { Self::clear_node_visits(&mut node); }
