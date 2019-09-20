@@ -126,20 +126,21 @@ impl Display for GameState {
         let p2_board = map_board_to_arr(self.p2_piece_board);
 
         writeln!(f, "")?;
-        writeln!(f, "-----------------------------")?;
+        writeln!(f, "   +---+---+---+---+---+---+---+")?;
 
         for y in 0..6 {
             for x in 0..7 {
-                if x == 0 { write!(f, "|")?; }
+                if x == 0 { write!(f, "   |")?; }
                 let idx = y * 7 + x;
                 let p = if p1_board[idx] != 0.0 { "X" } else if p2_board[idx] != 0.0 { "O" } else { " " };
                 write!(f, " {} |", p)?;
             }
             writeln!(f, "")?;
-            if y != 5 { writeln!(f, "|---------------------------|")?; }
+            if y != 5 { writeln!(f, "   |---+---+---+---+---+---+---|")?; }
         }
 
-        writeln!(f, "-----------------------------")?;
+        writeln!(f, "   +---+---+---+---+---+---+---+")?;
+        writeln!(f, "     1   2   3   4   5   6   7  ")?;
 
         Ok(())
     }
