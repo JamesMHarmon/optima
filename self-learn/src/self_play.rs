@@ -89,8 +89,8 @@ pub async fn self_play<'a, S, A, E, M>(
     };
 
     while game_engine.is_terminal_state(&state) == None {
-        let search_result = mcts.search(options.visits).await?;
-        let action = search_result.0;
+        mcts.search(options.visits).await?;
+        let action = mcts.select_action().await?;
         let metrics = mcts.get_root_node_metrics()?;
 
         mcts.advance_to_action(action.to_owned()).await?;

@@ -267,13 +267,13 @@ impl SelfEvaluate
         let mut state: S = S::initial();
 
         while game_engine.is_terminal_state(&state) == None {
-            let search_result = if !p1_last_to_move {
-                mcts_1.search(visits).await?
+            let action = if !p1_last_to_move {
+                mcts_1.search(visits).await?;
+                mcts_1.select_action().await?
             } else {
-                mcts_2.search(visits).await?
+                mcts_2.search(visits).await?;
+                mcts_2.select_action().await?
             };
-
-            let action = search_result.0;
 
             mcts_1.advance_to_action(action.to_owned()).await?;
             mcts_2.advance_to_action(action.to_owned()).await?;

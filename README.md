@@ -126,16 +126,16 @@ export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 
 
-Update readme with proper GPU vs CPU changes. Potentially add feature flag
-Change train.Dockerfile to use cpu
-change flag when running docker to not use environment = nvidia.
 
-Update Display to show shorthand moves "f4"
+# Update readme with proper GPU vs CPU changes. Potentially add feature flag
+- Change train.Dockerfile to use cpu
+- change flag when running docker to not use environment = nvidia.
 
-Why is there a bias towards p2 in the Quoridor_run-1_00003 results
-* See why there is a disparity between p1 and p2.
 * Consider adding a pool for vectors/slices. https://github.com/CJP10/object-pool , https://carllerche.github.io/pool/pool/ , https://crates.io/crates/lifeguard
 * TensorRT or f16 the networks
 * Add multiple players
 * Add multiple moves
-* Create ponder cli (.parse()!)
+* Create ponder cli
+* Use proper logging
+* Calculate the p values from logits only on legal actions. Inverse calculation for training? // https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
+* Sampling of action when using temp to select should be softmax

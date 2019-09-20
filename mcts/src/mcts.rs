@@ -135,12 +135,11 @@ where
         }
     }
 
-    pub async fn search(&mut self, visits: usize) -> Result<(A, usize), Error> {
+    pub async fn search(&mut self, visits: usize) -> Result<usize, Error> {
         let game_engine = &self.game_engine;
         let fpu = self.options.fpu;
         let fpu_root = self.options.fpu_root;
         let cpuct = &self.options.cpuct;
-        let temp = &self.options.temperature;
         let dirichlet = &self.options.dirichlet;
         let rng = &mut self.options.rng;
         let analytics = &mut self.analytics;
@@ -153,16 +152,38 @@ where
         Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
         while root_node.visits < visits {
-            let md = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node, game_engine, analytics, fpu, fpu_root, cpuct, temp, rng).await?;
+            let md = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node, game_engine, analytics, fpu, fpu_root, cpuct, rng).await?;
 
             if md > max_depth {
                 max_depth = md;
             }
         }
 
-        let most_visited_action = Self::get_most_visited_action(&root_node, rng)?;
+        Ok(max_depth)
+    }
 
-        Ok((most_visited_action, max_depth))
+    pub async fn select_action(&mut self) -> Result<A, Error> {
+        if let Some(root_node) = &self.root {
+            let temp = &self.options.temperature;
+            let game_state = &root_node.game_state;
+            let prior_actions = &root_node.actions;
+            let temp = temp(game_state, prior_actions);
+            let child_node_details = self.get_root_node_details()?.children;
+            let rng = &mut self.options.rng;
+
+            let best_action = if temp == 0.0 {
+                let (best_action, _) = child_node_details.first().ok_or_else(|| format_err!("No available actions"))?;
+                best_action
+            } else {
+                let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
+                let chosen_index = Self::select_path_using_temperature(&candidates, temp, rng)?;
+                candidates[chosen_index].0
+            };
+
+            return Ok(best_action.clone());
+        }
+
+        return Err(format_err!("Root node does not exist. Run search first."));
     }
 
     pub async fn advance_to_action(&mut self, action: A) -> Result<(), Error> {
@@ -265,50 +286,21 @@ where
         }
     }
 
-    fn get_most_visited_action(current_root: &MCTSNode<S, A>, rng: &mut R) -> Result<A, Error> {
-        let max_visits = current_root.children.iter()
-            .map(|n| n.node.as_ref().map_or(0, |n| n.visits))
-            .max().ok_or(format_err!("No visited_nodes to choose from"))?;
-
-        let mut max_actions: Vec<A> = current_root.children.iter()
-            .filter_map(|n| {
-                if n.node.as_ref().map_or(0, |n| n.visits) >= max_visits {
-                    Some(n.action.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        let chosen_idx = match max_actions.len() {
-            0 => Err(format_err!("No candidate moves available")),
-            1 => Ok(0),
-            len => Ok(rng.gen_range(0, len))
-        }?;
-
-        Ok(max_actions.remove(chosen_idx))
-    }
-
     fn take_node_of_action(current_root: &mut MCTSNode<S, A>, action: &A) -> Result<Option<MCTSNode<S, A>>, Error> {
         let matching_action = current_root.children.iter_mut().find(|n| n.action == *action).ok_or(format_err!("No matching Action"))?;
 
         Ok(matching_action.node.take())
     }
 
-    fn select_path_using_PUCT(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C, temp: &T, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, Error> {
+    fn select_path(nodes: &'a mut Vec<MCTSChildNode<S, A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C, rng: &mut R) -> Result<&'a mut MCTSChildNode<S, A>, Error> {
         let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
 
-        let temp = temp(game_state, prior_actions);
-        let chosen_puct_idx = if temp == 0.0 {
-            Self::select_path_using_PUCT_max(&pucts, rng)
-        } else {
-            Self::select_path_using_PUCT_Temperature(&pucts, temp, rng)
-        }?;
+        let chosen_puct_idx = Self::get_max_PUCT_score_index(&pucts, rng)?;
 
-        Ok(pucts.remove(chosen_puct_idx).node)
+        Ok(pucts.swap_remove(chosen_puct_idx).node)
     }
 
-    fn select_path_using_PUCT_max(pucts: &Vec<NodePUCT<S, A>>, rng: &mut R) -> Result<usize, Error> {
+    fn get_max_PUCT_score_index(pucts: &Vec<NodePUCT<S, A>>, rng: &mut R) -> Result<usize, Error> {
         let max_puct = pucts.iter().fold(std::f32::MIN, |acc, puct| f32::max(acc, puct.score));
         let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
             .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
@@ -316,20 +308,20 @@ where
     
         match max_nodes.len() {
             0 => Err(format_err!("No candidate moves available")),
-            1 => Ok(max_nodes.remove(0)),
-            len => Ok(max_nodes.remove(rng.gen_range(0, len)))
+            1 => Ok(max_nodes.swap_remove(0)),
+            len => Ok(max_nodes.swap_remove(rng.gen_range(0, len)))
         }
     }
 
-    fn select_path_using_PUCT_Temperature(pucts: &Vec<NodePUCT<S, A>>, temp: f32, rng: &mut R) -> Result<usize, Error> {
-        let puct_scores = pucts.iter().map(|puct| puct.score.powf(1.0 / temp));
+    fn select_path_using_temperature(action_visits: &[(&A, usize)], temp: f32, rng: &mut R) -> Result<usize, Error> {
+        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32).powf(1.0 / temp));
 
-        let weighted_index = WeightedIndex::new(puct_scores);
+        let weighted_index = WeightedIndex::new(normalized_visits);
 
         let chosen_idx = match weighted_index {
             Err(_) => {
                 println!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
-                rng.gen_range(0, pucts.len())
+                rng.gen_range(0, action_visits.len())
             },
             Ok(weighted_index) => weighted_index.sample(rng)
         };
@@ -475,7 +467,6 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,R>(
     fpu: f32,
     fpu_root: f32,
     cpuct: &'a C,
-    temp: &'a T,
     rng: &'a mut R
 ) -> Result<usize, Error>
 where
@@ -508,7 +499,7 @@ where
         let game_state = &node.game_state;
         let prior_actions = &node.actions;
         let is_root = depth == 1;
-        let selected_child_node = MCTS::<S,A,E,M,C,T,R>::select_path_using_PUCT(
+        let selected_child_node = MCTS::<S,A,E,M,C,T,R>::select_path(
             children,
             visits,
             game_state,
@@ -517,7 +508,6 @@ where
             fpu,
             fpu_root,
             cpuct,
-            temp,
             rng
         )?;
 
@@ -755,7 +745,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = mcts.search(800).await.unwrap();
+        mcts.search(800).await.unwrap();
+        let action = mcts.select_action().await.unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
@@ -779,7 +770,8 @@ mod tests {
 
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
-        let (action, _) = mcts.search(800).await.unwrap();
+        mcts.search(800).await.unwrap();
+        let action = mcts.select_action().await.unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -1046,7 +1038,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = non_clear_mcts.search(search_num_visits).await.unwrap();
+        non_clear_mcts.search(search_num_visits).await.unwrap();
+        let action = non_clear_mcts.select_action().await.unwrap();
         non_clear_mcts.advance_to_action_retain(action).await.unwrap();
         non_clear_mcts.search(search_num_visits).await.unwrap();
 
@@ -1061,7 +1054,8 @@ mod tests {
             rng::create_rng_from_uuid(uuid)
         ));
 
-        let (action, _) = clear_mcts.search(search_num_visits).await.unwrap();
+        clear_mcts.search(search_num_visits).await.unwrap();
+        let action = clear_mcts.select_action().await.unwrap();
         clear_mcts.advance_to_action(action).await.unwrap();
         clear_mcts.search(search_num_visits).await.unwrap();
 
