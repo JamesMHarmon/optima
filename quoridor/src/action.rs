@@ -31,7 +31,7 @@ impl Coordinate {
     pub fn as_bit_board(&self) -> u128 {
         let letter_pos: u8 = self.column as u8 - ASCII_LETTER_A + 1;
         let bit_in_column: u128 = 1 << (BOARD_WIDTH as u128 - letter_pos as u128);
-        let row_shift = (self.row - 1) * BOARD_HEIGHT;
+        let row_shift = (self.row - 1) * BOARD_WIDTH;
 
         bit_in_column << row_shift
     }
