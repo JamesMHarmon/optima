@@ -43,7 +43,7 @@ pub struct TensorflowModel<S,A,E,Map>
 pub trait Mapper<S,A> {
     fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
     fn get_input_dimensions(&self) -> [u64; 3];
-    fn policy_metrics_to_expected_input(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
+    fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
 }
 
@@ -234,7 +234,7 @@ where
         }).collect();
 
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| NumVec(mapper.policy_metrics_to_expected_input(&v.game_state, &v.policy))).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| NumVec(mapper.policy_metrics_to_expected_output(&v.game_state, &v.policy))).collect();
 
         // Note that we are no longer using serde_json here due to the way that it elongates floats.
         // Perhaps there is a way to override the way that serde_json formats floats?

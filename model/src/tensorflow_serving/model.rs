@@ -37,7 +37,7 @@ pub struct TensorflowServingModel<S,A,E,Map>
 
 pub trait Mapper<S,A> {
     fn game_state_to_input(&self, game_state: &S) -> Vec<Vec<Vec<f32>>>;
-    fn policy_metrics_to_expected_input(&self, policy: &NodeMetrics<A>) -> Vec<f32>;
+    fn policy_metrics_to_expected_output(&self, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &Vec<f32>) -> Vec<ActionWithPolicy<A>>;
 }
 
@@ -210,7 +210,7 @@ where
         let sample_metrics: Vec<_> = sample_metrics.collect();
         let X: Vec<_> = sample_metrics.iter().map(|v| mapper.game_state_to_input(&v.game_state)).collect();
         let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_input(&v.policy)).collect();
+        let yp: Vec<_> = sample_metrics.iter().map(|v| mapper.policy_metrics_to_expected_output(&v.policy)).collect();
 
         let json = json!({
             "x": X,

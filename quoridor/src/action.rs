@@ -1,3 +1,4 @@
+use super::constants::{BOARD_HEIGHT,BOARD_WIDTH,ASCII_LETTER_A};
 use std::str::FromStr;
 use serde::de::Error;
 use std::fmt;
@@ -19,73 +20,43 @@ impl Coordinate {
 
     pub fn from_bit_board(board: u128) -> Self {
         let index = single_bit_index(board);
-        let column = 9 - (index % 9);
-        let row = ((index / 9) as usize) + 1;
+        let column = BOARD_WIDTH - (index % BOARD_WIDTH);
+        let row = ((index / BOARD_WIDTH) as usize) + 1;
 
-        let column = match column {
-            1 => 'a',
-            2 => 'b',
-            3 => 'c',
-            4 => 'd',
-            5 => 'e',
-            6 => 'f',
-            7 => 'g',
-            8 => 'h',
-            _ => 'i',
-        };
+        let column = (ASCII_LETTER_A  + column as u8 - 1) as char;
 
         Coordinate::new(column, row)
     }
 
     pub fn as_bit_board(&self) -> u128 {
-        let col_bit = match self.column {
-            'a' => 1 << 8,
-            'b' => 1 << 7,
-            'c' => 1 << 6,
-            'd' => 1 << 5,
-            'e' => 1 << 4,
-            'f' => 1 << 3,
-            'g' => 1 << 2,
-            'h' => 1 << 1,
-             _  => 1 << 0
-        };
+        let letter_pos: u8 = self.column as u8 - ASCII_LETTER_A + 1;
+        let bit_in_column: u128 = 1 << (BOARD_WIDTH as u128 - letter_pos as u128);
+        let row_shift = (self.row - 1) * BOARD_HEIGHT;
 
-        col_bit << ((self.row - 1) * 9)
+        bit_in_column << row_shift
     }
 
     pub fn invert(&self, shift: bool) -> Coordinate {
         Coordinate::new(
             if shift { Self::invert_column_shift(self.column) } else { Self::invert_column(self.column) },
-            if shift { 9 } else { 10 } - self.row
+            if shift { BOARD_HEIGHT } else { BOARD_HEIGHT + 1 } - self.row
         )
     }
 
     fn invert_column(column: char) -> char {
-        match column {
-            'a' => 'i',
-            'b' => 'h',
-            'c' => 'g',
-            'd' => 'f',
-            'e' => 'e',
-            'f' => 'd',
-            'g' => 'c',
-            'h' => 'b',
-             _ => 'a'
-        }
+        let col_num = column as u8 - ASCII_LETTER_A + 1;
+        let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
+        let a = (ASCII_LETTER_A + inverted_col_num - 1) as char;
+
+        a
     }
 
     fn invert_column_shift(column: char) -> char {
-        match column {
-            'a' => 'h',
-            'b' => 'g',
-            'c' => 'f',
-            'd' => 'e',
-            'e' => 'd',
-            'f' => 'c',
-            'g' => 'b',
-            'h' => 'a',
-             _  => panic!("Can't shift from 'i'")
-        }
+        let col_num = column as u8 - ASCII_LETTER_A + 1;
+        let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
+        let a = (ASCII_LETTER_A + inverted_col_num - 2) as char;
+
+        a
     }
 }
 
@@ -150,13 +121,13 @@ impl Action {
 
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (action_type, coordinate) = match self {
-            Action::MovePawn(coordinate) => ("", coordinate),
-            Action::PlaceHorizontalWall(coordinate) => ("h", coordinate),
-            Action::PlaceVerticalWall(coordinate) => ("v", coordinate)
+        let (coordinate,action_type) = match self {
+            Action::MovePawn(coordinate) => (coordinate, ""),
+            Action::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
+            Action::PlaceVerticalWall(coordinate) => (coordinate, "v")
         };
 
-        write!(f, "{coordinate}{action_type}", action_type = action_type, coordinate = coordinate)
+        write!(f, "{coordinate}{action_type}", coordinate = coordinate, action_type = action_type)
     }
 }
 
@@ -172,6 +143,7 @@ impl FromStr for Action {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
         let row = chars[0];
+        // @TODO: Update to take multiple digits
         let col = chars[1].to_digit(10).ok_or_else(|| format_err!("Invalid value"))?;
         let coordinate = Coordinate::new(row, col as usize);
 

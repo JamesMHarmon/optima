@@ -1,3 +1,4 @@
+use super::constants::{BOARD_WIDTH,BOARD_HEIGHT};
 use common::bits::single_bit_index;
 
 #[derive(PartialEq)]
@@ -7,13 +8,15 @@ pub enum BoardType {
     HorizontalWall
 }
 
-pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> [f32; 81] {
+pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> Vec<f32> {
+    let size = BOARD_HEIGHT * BOARD_WIDTH;
     let mut board = board;
-    let mut result:[f32; 81] = [0.0; 81];
+    let mut result: Vec<f32> = Vec::with_capacity(size);
+    result.extend(std::iter::repeat(0.0).take(size));
 
     if invert && (board_type == BoardType::VerticalWall || board_type == BoardType::HorizontalWall) {
         // Shift the walls up and to the right so that when we do a 180 rotation, they will be in their respective positions.
-        board = board << 8;
+        board = shift_up_right!(board);
     }
 
     while board != 0 {
@@ -26,7 +29,7 @@ pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: b
 
         // Walls cover two squares, we want both of the covered locations to be part of the output.
         if board_type == BoardType::VerticalWall {
-            result[removed_bit_vec_idx - 9] = 1.0;
+            result[removed_bit_vec_idx - BOARD_WIDTH] = 1.0;
         }
 
         if board_type == BoardType::HorizontalWall {
@@ -63,7 +66,7 @@ pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: b
 /// 17 16 15 14 13 12 11 10 09
 /// 08 07 06 05 04 03 02 01 00
 fn map_board_idx_to_vec_idx(board_idx: usize) -> usize {
-    80 - board_idx
+    (BOARD_WIDTH * BOARD_HEIGHT) - board_idx - 1
 }
 
 #[cfg(test)]
@@ -80,12 +83,12 @@ mod tests {
         vec_idx
     }
 
-    fn value_at_coordinate(vec: [f32; 81], col: char, row: usize) -> f32 {
+    fn value_at_coordinate(vec: &[f32], col: char, row: usize) -> f32 {
         let idx = coordinate_to_idx(Coordinate::new(col, row));
         vec[idx]
     }
 
-    fn num_values_set(vec: [f32; 81]) -> usize {
+    fn num_values_set(vec: &[f32]) -> usize {
         vec.iter().filter(|v| **v != 0.0).count()
     }
 
@@ -132,9 +135,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'i', 8), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'i', 8), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -143,9 +146,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'b', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'b', 1), 1.0);
     }
 
     #[test]
@@ -159,9 +162,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'b', 8), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'b', 8), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -170,9 +173,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'i', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
     }
 
     #[test]
@@ -186,9 +189,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'b', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'b', 1), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -197,9 +200,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'i', 8), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'i', 8), 1.0);
     }
 
     #[test]
@@ -213,9 +216,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'i', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -224,9 +227,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'b', 8), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'b', 8), 1.0);
     }
 
     #[test]
@@ -240,9 +243,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'e', 5), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'f', 5), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'f', 5), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -251,9 +254,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'd', 4), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'e', 4), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'd', 4), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'e', 4), 1.0);
     }
 
     #[test]
@@ -267,9 +270,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'h', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'h', 9), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -278,9 +281,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'a', 2), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'a', 2), 1.0);
     }
 
     #[test]
@@ -294,9 +297,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'a', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -305,9 +308,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'h', 2), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'h', 2), 1.0);
     }
 
     #[test]
@@ -321,9 +324,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'a', 2), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'a', 2), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -332,9 +335,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'h', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'h', 9), 1.0);
     }
 
     #[test]
@@ -348,9 +351,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'h', 1), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'h', 2), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'h', 2), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -359,9 +362,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'a', 8), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'a', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
     }
 
     #[test]
@@ -375,9 +378,9 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'e', 5), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'e', 6), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'e', 6), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -386,9 +389,9 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 2);
-        assert_eq!(value_at_coordinate(arr, 'd', 4), 1.0);
-        assert_eq!(value_at_coordinate(arr, 'd', 5), 1.0);
+        assert_eq!(num_values_set(&arr), 2);
+        assert_eq!(value_at_coordinate(&arr, 'd', 4), 1.0);
+        assert_eq!(value_at_coordinate(&arr, 'd', 5), 1.0);
     }
 
 
@@ -403,8 +406,8 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'i', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'i', 9), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -413,8 +416,8 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
     }
 
     #[test]
@@ -428,8 +431,8 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'a', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -438,8 +441,8 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'i', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
     }
 
     #[test]
@@ -453,8 +456,8 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'a', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -463,8 +466,8 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'i', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'i', 9), 1.0);
     }
 
     #[test]
@@ -478,8 +481,8 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'i', 1), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -488,8 +491,8 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'a', 9), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
     }
 
     #[test]
@@ -503,8 +506,8 @@ mod tests {
             false
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'e', 5), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
 
         // Inverted
         let arr = map_board_to_arr_invertable(
@@ -513,7 +516,7 @@ mod tests {
             true
         );
 
-        assert_eq!(num_values_set(arr), 1);
-        assert_eq!(value_at_coordinate(arr, 'e', 5), 1.0);
+        assert_eq!(num_values_set(&arr), 1);
+        assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
     }
 }

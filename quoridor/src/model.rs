@@ -5,7 +5,7 @@ use model::model_info::ModelInfo;
 use model::tensorflow::model::TensorflowModel;
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use super::action::{Action,Coordinate};
-use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE};
+use super::constants::{ASCII_LETTER_A,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE,NUM_WALLS_PER_PLAYER,WALL_BOARD_SIZE,PAWN_BOARD_SIZE,BOARD_WIDTH,BOARD_HEIGHT};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -56,8 +56,8 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 
         let curr_num_walls_placed = if *p1_turn_to_move { p1_num_walls_placed } else { p2_num_walls_placed };
         let oppo_num_walls_placed = if *p1_turn_to_move { p2_num_walls_placed } else { p1_num_walls_placed };
-        let curr_num_walls_placed_norm = (*curr_num_walls_placed as f32) / 10.0;
-        let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f32) / 10.0;
+        let curr_num_walls_placed_norm = (*curr_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
+        let oppo_num_walls_placed_norm = (*oppo_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
 
         for (curr_pawn, oppo_pawn, vw, hw) in izip!(
             curr_pawn_board_vec.iter(),
@@ -80,11 +80,13 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
         [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
-    fn policy_metrics_to_expected_input(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
+    fn policy_metrics_to_expected_output(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let invert = !game_state.p1_turn_to_move;
+        let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
+        inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
 
-        let result:[f32; 209] = policy_metrics.children_visits.iter().fold([0.0; 209], |mut r, p| {
+        policy_metrics.children_visits.iter().fold(inputs, |mut r, p| {
             let (action, visits) = &p;
             // Policy scores for quoridor should be in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
             // at the board from the perspective of player 1, but with the pieces inverted.
@@ -96,9 +98,7 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 
             r[input_idx] = *visits as f32 / total_visits;
             r
-        });
-
-        result.to_vec()
+        })
     }
 
     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
@@ -133,8 +133,8 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 }
 
 fn map_action_to_input_idx(action: &Action) -> usize {
-    let len_moves_inputs = 81;
-    let len_wall_inputs = 64;
+    let len_moves_inputs = PAWN_BOARD_SIZE;
+    let len_wall_inputs = WALL_BOARD_SIZE;
 
     match action {
         Action::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(coord),
@@ -144,34 +144,15 @@ fn map_action_to_input_idx(action: &Action) -> usize {
 }
 
 fn map_coord_to_input_idx_nine_by_nine(coord: &Coordinate) -> usize {
-    let col = match coord.column {
-        'a' => 0,
-        'b' => 1,
-        'c' => 2,
-        'd' => 3,
-        'e' => 4,
-        'f' => 5,
-        'g' => 6,
-        'h' => 7,
-         _  => 8
-    };
+    let col_idx = (coord.column as u8 - ASCII_LETTER_A) as usize;
 
-    col + ((9 - coord.row) * 9)
+    col_idx + ((BOARD_HEIGHT - coord.row) * BOARD_WIDTH)
 }
 
 fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
-    let col = match coord.column {
-        'a' => 0,
-        'b' => 1,
-        'c' => 2,
-        'd' => 3,
-        'e' => 4,
-        'f' => 5,
-        'g' => 6,
-         _  => 7
-    };
+    let col_idx = (coord.column as u8 - ASCII_LETTER_A) as usize;
 
-    col + ((8 - coord.row) * 8)
+    col_idx + ((BOARD_HEIGHT - coord.row - 1) * (BOARD_WIDTH - 1))
 }
 
 impl model::model::ModelFactory for ModelFactory {

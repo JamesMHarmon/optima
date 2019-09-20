@@ -1,7 +1,7 @@
 
-mod board;
 #[macro_use]
 mod bits;
+mod board;
 
 pub mod action;
 pub mod engine;
