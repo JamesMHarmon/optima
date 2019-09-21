@@ -1,5 +1,5 @@
 use std::fmt::{self,Display,Formatter};
-use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,NUM_WALLS_PER_PLAYER,MAX_NUMBER_OF_MOVES};
+use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,NUM_WALLS_PER_PLAYER,MAX_NUMBER_OF_MOVES,ASCII_LETTER_A};
 use super::action::Coordinate;
 use super::action::{Action};
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -66,9 +66,20 @@ impl Display for GameState {
             writeln!(f, "")?;
         }
 
-        writeln!(f, "  +---+---+---+---+---+---+---+---+---+")?;
-        writeln!(f, "    a   b   c   d   e   f   g   h   i  ")?;
+        for x in 0..BOARD_WIDTH {
+            if x == 0 { write!(f, "  +")?; }
+            write!(f, "---+")?;
+        }
 
+        writeln!(f, "")?;
+
+        for x in 0..BOARD_WIDTH {
+            if x == 0 { write!(f, "   ")?; }
+            let col_letter = (ASCII_LETTER_A + x as u8) as char;
+            write!(f, " {}  ", col_letter)?;
+        }
+
+        writeln!(f, "")?;
         writeln!(f, "")?;
         writeln!(f, "  P1: {}  P2: {}", NUM_WALLS_PER_PLAYER - self.p1_num_walls_placed, NUM_WALLS_PER_PLAYER - self.p2_num_walls_placed)?;
 
