@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::sync::{self,Mutex};
+use sync::atomic::{AtomicUsize,Ordering};
 use rand::Rng;
 use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
@@ -83,9 +85,9 @@ where
 #[allow(non_snake_case)]
 #[derive(Debug)]
 struct MCTSNode<S, A> {
-    visits: usize,
+    visits: AtomicUsize,
     value_score: f32,
-    W: f32,
+    W: Mutex<f32>,
     game_state: S,
     actions: List<A>,
     children: Vec<MCTSChildNode<S, A>>
@@ -151,7 +153,7 @@ where
 
         Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet, rng);
 
-        while root_node.visits < visits {
+        while root_node.visits.load(Ordering::SeqCst) < visits {
             let md = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node, game_engine, analytics, fpu, fpu_root, cpuct, rng).await?;
 
             if md > max_depth {
@@ -196,25 +198,27 @@ where
 
     pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>, Error> {
         let root = self.root.as_mut().ok_or(format_err!("No root node found!"))?;
+        let visits = root.visits.load(Ordering::SeqCst);
 
         Ok(NodeMetrics {
-            visits: root.visits,
-            W: root.W,
+            visits,
+            W: *root.W.lock().unwrap(),
             children_visits: root.children.iter().map(|n| (
                 n.action.clone(),
-                n.node.as_ref().map_or(0, |n| n.visits)
+                n.node.as_ref().map_or(0, |n| n.visits.load(Ordering::SeqCst))
             )).collect()
         })
     }
 
     pub fn get_root_node_details(&self) -> Result<NodeDetails<A>, Error> {
         let root = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+        let root_visits = root.visits.load(Ordering::SeqCst);
         let children = &root.children;
         let options = &self.options;
 
         let metrics = Self::get_PUCT_for_nodes(
             children,
-            root.visits,
+            root_visits,
             &root.game_state,
             true,
             &root.actions,
@@ -231,8 +235,8 @@ where
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
 
         Ok(NodeDetails {
-            visits: root.visits,
-            W: root.W,
+            visits: root_visits,
+            W: *root.W.lock().unwrap(),
             children
         })
     }
@@ -258,9 +262,9 @@ where
         let node = match node {
             Some(mut node) => {
                 if clear { Self::clear_node_visits(&mut node); }
-                // If the node was cleared then the visits may still be 1. This should be incremented to 1 if that is the case.
+                // If the node was cleared then the visits may still be 0. This should be incremented to 1 if that is the case.
                 // This condition can occur even if clear is false.
-                if node.visits == 0 { node.visits = 1 };
+                node.visits.compare_and_swap(0, 1, Ordering::SeqCst);
                 node
             },
             None => {
@@ -276,8 +280,8 @@ where
     } 
 
     fn clear_node_visits(node: &mut MCTSNode<S, A>) {
-        node.visits = 0;
-        node.W = node.value_score;
+        node.visits.store(0, Ordering::SeqCst);
+        *node.W.lock().unwrap() = node.value_score;
 
         for child in &mut node.children {
             if let Some(child_node) = &mut child.node {
@@ -346,20 +350,20 @@ where
 
             // If the child nodes visits is 0, then it has been cleared and should have it's cpuct be calculated as if it is a leaf.
             if let Some(node) = child_node {
-                if node.visits == 0 {
+                if node.visits.load(Ordering::SeqCst) == 0 {
                     child_node = &None;
                 }
             }
 
             let Psa = child.policy_score;
-            let Nsa = child_node.as_ref().map_or(0, |n| { n.visits });
+            let Nsa = child_node.as_ref().map_or(0, |n| { n.visits.load(Ordering::SeqCst) });
 
             let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb, is_root);
             let root_Nsb = (Nsb as f32).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
 
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
-            let Qsa = child_node.as_ref().map_or(fpu, |n| { 1.0 - n.W / n.visits as f32 });
+            let Qsa = child_node.as_ref().map_or(fpu, |n| { 1.0 - *n.W.lock().unwrap() / n.visits.load(Ordering::SeqCst) as f32 });
             let PUCT = Qsa + Usa;
             PUCT { Psa, Nsa, cpuct, Usa, Qsa, PUCT }
         }).collect()
@@ -443,9 +447,9 @@ where
 impl<S, A> MCTSNode<S, A> {
     pub fn new(game_state: S, actions: List<A>, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
-            visits: 1,
+            visits: AtomicUsize::new(1),
             value_score,
-            W: value_score,
+            W: Mutex::new(value_score),
             game_state,
             actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
@@ -461,7 +465,7 @@ impl<S, A> MCTSNode<S, A> {
 
 #[allow(non_snake_case)]
 async fn recurse_path_and_expand<'a,S,A,E,M,C,T,R>(
-    node: &'a mut MCTSNode<S, A>,
+    node: &'a MCTSNode<S, A>,
     game_engine: &'a E,
     analytics: &'a M,
     fpu: f32,
@@ -479,15 +483,14 @@ where
     R: Rng
 {
     let mut depth = 0;
-    let mut Ws_to_update: Vec<&mut f32> = Vec::new();
+    let mut Ws_to_update: Vec<&Mutex<f32>> = Vec::new();
     let mut node = node;
     let value_score: f32;
 
     loop {
         depth += 1;
-        let visits = node.visits;
-        node.visits += 1;
-        Ws_to_update.push(&mut node.W);
+        let prev_visits = node.visits.fetch_add(1, Ordering::SeqCst);
+        Ws_to_update.push(&node.W);
 
         // If the node is a terminal node.
         let children = &mut node.children;
@@ -501,7 +504,7 @@ where
         let is_root = depth == 1;
         let selected_child_node = MCTS::<S,A,E,M,C,T,R>::select_path(
             children,
-            visits,
+            prev_visits,
             game_state,
             is_root,
             prior_actions,
@@ -513,8 +516,9 @@ where
 
         // If the node exists but visits is 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
         if let Some(node) = &mut selected_child_node.node {
-            if node.visits == 0 {
-                node.visits = 1;
+            if node.visits.compare_and_swap(0, 1, Ordering::SeqCst) == 0 {
+                // The compare_and_swap above will update visits to be 1.
+                // node.visits = 1;
                 // Flip the score in this case because we are going one node deeper and that viewpoint is from
                 // the next player and not the current node's player
                 value_score = 1.0 - node.value_score;
@@ -549,6 +553,7 @@ where
     // Reverse the value score at each depth according to the player's valuation perspective.
     for (i, W) in Ws_to_update.into_iter().rev().enumerate() {
         let score = if i % 2 == 0 { value_score } else { 1.0 - value_score };
+        let mut W = W.lock().unwrap();
         *W = *W + score;
     }
 
