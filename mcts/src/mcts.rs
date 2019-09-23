@@ -95,7 +95,7 @@ struct MCTSNode<S, A> {
 struct MCTSChildNode<S, A> {
     action: A,
     policy_score: f32,
-    node: Option<MCTSNode<S, A>>
+    node: Option<Box<MCTSNode<S, A>>>
 }
 
 struct NodePUCT<'a, S, A> {
@@ -266,11 +266,11 @@ where
             None => {
                 let prior_actions = &root_node.actions;
                 let (node, _) = MCTS::<S,A,E,M,C,T,R>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await;
-                node
+                Box::new(node)
             }
         };
 
-        self.root.replace(node);
+        self.root.replace(*node);
 
         Ok(())
     } 
@@ -286,7 +286,7 @@ where
         }
     }
 
-    fn take_node_of_action(current_root: &mut MCTSNode<S, A>, action: &A) -> Result<Option<MCTSNode<S, A>>, Error> {
+    fn take_node_of_action(current_root: &mut MCTSNode<S, A>, action: &A) -> Result<Option<Box<MCTSNode<S, A>>>, Error> {
         let matching_action = current_root.children.iter_mut().find(|n| n.action == *action).ok_or(format_err!("No matching Action"))?;
 
         Ok(matching_action.node.take())
@@ -534,7 +534,7 @@ where
                 analytics
             ).await;
 
-            selected_child_node.node.replace(expanded_node);
+            selected_child_node.node.replace(Box::new(expanded_node));
 
             // Flip the score in this case because we are going one node deeper and that viewpoint is from
             // the next player and not the current node's player.
