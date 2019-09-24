@@ -17,6 +17,7 @@ use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
 use common::linked_list::{List};
 use super::node_details::{PUCT,NodeDetails};
+use super::constants::{SEARCHERS};
 
 pub struct DirichletOptions {
     pub alpha: f32,
@@ -162,16 +163,27 @@ where
             dirichlet
         ).await;
 
+        let current_visits = self.arena.read().await[root_node_index].visits.load(Ordering::SeqCst);
+
         let mut max_depth: usize = 0;
+        let mut searches_remaining = visits - current_visits;
+        let initial_searches = SEARCHERS.min(searches_remaining);
 
         let mut searches = FuturesUnordered::new();
-        for _ in 0..visits {
+        for _ in 0..initial_searches {
+            searches_remaining -= 1;
             let future = recurse_path_and_expand::<S,A,E,M,C,T>(root_node_index, arena, game_engine, analytics, fpu, fpu_root, cpuct);
 
             searches.push(future);
         }
 
         while let Some(search_depth) = searches.next().await {
+            if searches_remaining > 0 {
+                searches_remaining -= 1;
+                let future = recurse_path_and_expand::<S,A,E,M,C,T>(root_node_index, arena, game_engine, analytics, fpu, fpu_root, cpuct);
+                searches.push(future)
+            }
+
             max_depth = max_depth.max(search_depth?);
         }
 
@@ -532,15 +544,12 @@ where
     let value_score: f32;
     let mut node_stack = vec!(root_index);
 
-    loop {
+    'outer: loop {
         depth += 1;
         if let Some(latest_index) = node_stack.last() {
             let node_read_lock = arena.read().await;
             let node = &node_read_lock[*latest_index];
             let prev_visits = node.visits.fetch_add(1, Ordering::SeqCst);
-
-            // @TODO: ADD back!!
-            // Ws_to_update.push(&node.W);
 
             // If the node is a terminal node.
             let children = &node.children;
@@ -584,68 +593,70 @@ where
             let selected_action = selected_child_node.action.clone();
             drop(node_read_lock);
 
+            'inner: loop {
+                let node_read_lock = arena.read().await;
+                let arena_read = &*node_read_lock;
+                let prior_node = &arena_read[*latest_index];
+                let selected_child_node = prior_node.children.iter().find(|c| c.action == selected_action).unwrap();
+                let selected_child_node_state = &selected_child_node.state;
+                if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
+                    node_stack.push(selected_child_node_index);
+                    continue 'outer;
+                }
 
-            let mut node_write_lock = arena.write().await;
-            let arena_write = &mut *node_write_lock;
-            let prior_node = &mut arena_write[*latest_index];
-            let selected_child_node = prior_node.children.iter_mut().find(|c| c.action == selected_action).unwrap();
-            let selected_child_node_state = &mut selected_child_node.state;
+                // If the node is currently expanding. Wait for the expansion to be completed.
+                if let MCTSNodeState::Expanding(expanding_lock) = selected_child_node_state {
+                    let expanding_lock = expanding_lock.clone();
+                    drop(node_read_lock);
 
-            // Double check that the node has not changed now that the lock has been reacquired as a write.
-            if let MCTSNodeState::Unexpanded = selected_child_node_state {
-                // Immediately replace the state with an indication that we are expanding.RwLock
-                let expanding_lock = std::sync::Arc::new(RwLock::new(()));
-                let expanding_write_lock = expanding_lock.write().await;
-                std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
+                    expanding_lock.read().await;
 
-                let action = selected_child_node.action.clone();
-                let prior_game_state = prior_node.game_state.clone();
-                let prior_actions = prior_node.actions.clone();
+                    continue 'inner;
+                }
 
-                drop(node_write_lock);
-
-                let fut = MCTS::<S,A,E,M,C,T>::expand_leaf(
-                    &prior_game_state,
-                    &prior_actions,
-                    &action,
-                    game_engine,
-                    analytics
-                );
-
-                let (expanded_node, state_analysis) = fut.await;
-
+                // It is not expanded or expanded so let's expand it.
+                drop(node_read_lock);
                 let mut node_write_lock = arena.write().await;
                 let arena_write = &mut *node_write_lock;
-                let index = arena_write.insert(expanded_node);
                 let prior_node = &mut arena_write[*latest_index];
                 let selected_child_node = prior_node.children.iter_mut().find(|c| c.action == selected_action).unwrap();
                 let selected_child_node_state = &mut selected_child_node.state;
-                std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(index));
-                drop(expanding_write_lock);
 
-                // Flip the score in this case because we are going one node deeper and that viewpoint is from
-                // the next player and not the current node's player.
-                value_score = 1.0 - state_analysis.value_score;
-                break;
-            }
+                // Double check that the node has not changed now that the lock has been reacquired as a write.
+                if let MCTSNodeState::Unexpanded = selected_child_node_state {
+                    // Immediately replace the state with an indication that we are expanding.RwLock
+                    let expanding_lock = std::sync::Arc::new(RwLock::new(()));
+                    let expanding_write_lock = expanding_lock.write().await;
+                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
 
-            // If the node is currently expanding. Wait for the expansion to be completed.
-            if let MCTSNodeState::Expanding(expanding_lock) = selected_child_node_state {
-                let expanding_lock = expanding_lock.clone();
-                drop(node_write_lock);
+                    let action = selected_child_node.action.clone();
+                    let prior_game_state = prior_node.game_state.clone();
+                    let prior_actions = prior_node.actions.clone();
 
-                expanding_lock.read().await;
+                    drop(node_write_lock);
 
-                // @TODO: go around again here to get expanded state
-                continue;
-            }
+                    let (expanded_node, state_analysis) = MCTS::<S,A,E,M,C,T>::expand_leaf(
+                        &prior_game_state,
+                        &prior_actions,
+                        &action,
+                        game_engine,
+                        analytics
+                    ).await;
 
-            if let MCTSNodeState::Expanded(expanded_node_index) = selected_child_node_state {
-                // This case is when the node was not expanded initially when acquiring the original read lock.
-                // Then when the write lock was acquired, the node was expanded in the interim. So proceed as if it
-                // was always an expanded node.
-                node_stack.push(*expanded_node_index);
-                drop(node_write_lock);
+                    let mut node_write_lock = arena.write().await;
+                    let arena_write = &mut *node_write_lock;
+                    let index = arena_write.insert(expanded_node);
+                    let prior_node = &mut arena_write[*latest_index];
+                    let selected_child_node = prior_node.children.iter_mut().find(|c| c.action == selected_action).unwrap();
+                    let selected_child_node_state = &mut selected_child_node.state;
+                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(index));
+                    drop(expanding_write_lock);
+
+                    // Flip the score in this case because we are going one node deeper and that viewpoint is from
+                    // the next player and not the current node's player.
+                    value_score = 1.0 - state_analysis.value_score;
+                    break 'outer;
+                }
             }
         }
     }
