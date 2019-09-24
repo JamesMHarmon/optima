@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{self,Arc,Mutex};
+use futures::stream::{FuturesUnordered,StreamExt};
 use async_std::sync::RwLock;
 use generational_arena::{Arena,Index};
 use sync::atomic::{AtomicUsize,Ordering};
@@ -172,12 +173,15 @@ where
 
         let mut max_depth: usize = 0;
 
+        let mut searches = FuturesUnordered::new();
         for _ in 0..visits {
-            let md = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node_index, arena, game_engine, analytics, fpu, fpu_root, cpuct, rng).await?;
+            let future = recurse_path_and_expand::<S,A,E,M,C,T,R>(root_node_index, arena, game_engine, analytics, fpu, fpu_root, cpuct, rng);
 
-            if md > max_depth {
-                max_depth = md;
-            }
+            searches.push(future);
+        }
+
+        while let Some(search_result) = searches.next().await {
+
         }
 
         Ok(max_depth)
