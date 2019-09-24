@@ -13,6 +13,8 @@ failure="0.1"
 rand="0.7.0"
 rand_distr="0.2.1"
 tokio = "=0.2.0-alpha.4"
+async-std = "0.99"
+generational-arena = "0.2"
 uuid={version="0.7",features=["v4"]}
 
 engine = { path = "../engine" }

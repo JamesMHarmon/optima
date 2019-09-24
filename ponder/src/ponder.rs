@@ -78,7 +78,7 @@ impl Ponder
                 println!("PONDERING: {}", visits);
                 total_visits += visits;
                 mcts_1.search(total_visits).await?;
-                println!("{}", mcts_1.get_root_node_details()?);
+                println!("{}", mcts_1.get_root_node_details().await?);
                 continue;
             }
 
