@@ -6,12 +6,10 @@ use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
-use uuid::Uuid;
 use failure::{Error,format_err};
 use tokio_executor::current_thread;
 
 use common::linked_list::List;
-use common::rng;
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -40,7 +38,6 @@ pub struct SelfEvaluate {}
 
 #[derive(Debug,Serialize)]
 pub struct GameResult<A> {
-    guid: String,
     model_1_num: usize,
     model_2_num: usize,
     actions: Vec<A>,
@@ -221,7 +218,6 @@ impl SelfEvaluate
         E: GameEngine<State=S,Action=A> + Sync,
         T: GameAnalyzer<Action=A,State=S> + Send
     {
-        let uuid = Uuid::new_v4();
         let fpu = options.fpu;
         let fpu_root = options.fpu_root;
         let cpuct_base = options.cpuct_base;
@@ -238,13 +234,12 @@ impl SelfEvaluate
             List::new(),
             game_engine,
             model_1.1,
-            MCTSOptions::<S,A,_,_,_>::new(
+            MCTSOptions::<S,A,_,_>::new(
                 None,
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
-                rng::create_rng_from_uuid(uuid),
+                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
             )
         );
 
@@ -253,13 +248,12 @@ impl SelfEvaluate
             List::new(),
             game_engine,
             model_2.1,
-            MCTSOptions::<S,A,_,_,_>::new(
+            MCTSOptions::<S,A,_,_>::new(
                 None,
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
-                rng::create_rng_from_uuid(uuid),
+                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
             )
         );
 
@@ -289,7 +283,6 @@ impl SelfEvaluate
         let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
 
         Ok(GameResult {
-            guid: uuid.to_string(),
             model_1_num: model_1.0.get_run_num(),
             model_2_num: model_2.0.get_run_num(),
             actions,
