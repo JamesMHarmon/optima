@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{self,Arc,Mutex};
 use futures::stream::{FuturesUnordered,StreamExt};
-use async_std::sync::RwLock;
+use async_std::sync::{Mutex as AsyncMutex,RwLock};
 use generational_arena::{Arena,Index};
 use sync::atomic::{AtomicUsize,Ordering};
 use rand::{thread_rng,Rng};
@@ -84,8 +84,8 @@ where
 #[allow(non_snake_case)]
 #[derive(Debug)]
 struct MCTSNode<S, A> {
-    visits: AtomicUsize,
     value_score: f32,
+    child_selection_mutex: AsyncMutex<()>,
     W: Mutex<f32>,
     game_state: S,
     actions: List<A>,
@@ -102,6 +102,7 @@ enum MCTSNodeState {
 #[derive(Debug)]
 struct MCTSChildNode<A> {
     action: A,
+    visits: AtomicUsize,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -163,7 +164,9 @@ where
             dirichlet
         ).await;
 
-        let current_visits = self.arena.read().await[root_node_index].visits.load(Ordering::SeqCst);
+        let node_read_lock = self.arena.read().await;
+        let current_visits = node_read_lock[root_node_index].get_node_visits();
+        drop(node_read_lock);
 
         let mut max_depth: usize = 0;
         let mut searches_remaining = visits - current_visits;
@@ -181,7 +184,7 @@ where
             if searches_remaining > 0 {
                 searches_remaining -= 1;
                 let future = recurse_path_and_expand::<S,A,E,M,C,T>(root_node_index, arena, game_engine, analytics, fpu, fpu_root, cpuct);
-                searches.push(future)
+                searches.push(future);
             }
 
             max_depth = max_depth.max(search_depth?);
@@ -192,7 +195,9 @@ where
 
     pub async fn select_action(&mut self) -> Result<A, Error> {
         if let Some(root_node_index) = &self.root {
-            let root_node = &self.arena.read().await[*root_node_index];
+            let node_read_lock = &self.arena.read().await;
+            let root_node = &node_read_lock[*root_node_index];
+            drop(node_read_lock);
             let temp = &self.options.temperature;
             let game_state = &root_node.game_state;
             let prior_actions = &root_node.actions;
@@ -224,9 +229,9 @@ where
 
     pub async fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>, Error> {
         let root_index = self.root.ok_or(format_err!("No root node found!"))?;
-        let arena = self.arena.read().await;
-        let root = &arena[root_index];
-        let visits = root.visits.load(Ordering::SeqCst);
+        let node_read_lock = self.arena.read().await;
+        let root = &node_read_lock[root_index];
+        let visits = root.get_node_visits();
         let W_lock = root.W.lock().unwrap();
         let W = *W_lock;
         drop(W_lock);
@@ -236,10 +241,7 @@ where
             W,
             children_visits: root.children.iter().map(|n| (
                 n.action.clone(),
-                if let MCTSNodeState::Expanded(node_index) = n.state {
-                    let node = &arena[node_index];
-                    node.visits.load(Ordering::SeqCst)
-                } else { 0 }
+                n.visits.load(Ordering::SeqCst)
             )).collect()
         })
     }
@@ -249,7 +251,7 @@ where
         let root_index = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
         let arena_read_lock = arena.read().await;
         let root = &arena_read_lock[*root_index];
-        let root_visits = root.visits.load(Ordering::SeqCst);
+        let root_visits = root.get_node_visits();
         let children = &root.children;
         let options = &self.options;
 
@@ -305,13 +307,11 @@ where
 
         let node = node.unwrap();
 
+        // @TODO remove indexes from arena.
+
         let node = match node {
             MCTSNodeState::Expanded(node_index) => {
                 if clear { Self::clear_node_visits(*node_index, arena); }
-                // If the node was cleared then the visits may still be 0. This should be incremented to 1 if that is the case.
-                // This condition can occur even if clear is false.
-                let node = &mut arena[*node_index];
-                node.visits.compare_and_swap(0, 1, Ordering::SeqCst);
                 *node_index
             },
             _ => {
@@ -328,8 +328,11 @@ where
 
     fn clear_node_visits(node_index: Index, arena: &mut Arena<MCTSNode<S,A>>) {
         let node = &mut arena[node_index];
-        node.visits.store(0, Ordering::SeqCst);
-        *node.W.lock().unwrap() = node.value_score;
+        *node.W.get_mut().unwrap() = node.value_score;
+
+        for child in &node.children {
+            child.visits.store(0, Ordering::SeqCst);
+        }
 
         let child_indexes: Vec<_> = node.children.iter().filter_map(|child| {
             if let MCTSNodeState::Expanded(child_node_index) = child.state { Some(child_node_index) } else { None }
@@ -395,19 +398,16 @@ where
     {
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
-        let arena = arena.read().await;
+        let node_read_lock = arena.read().await;
 
         for child in nodes {
-            // If the child nodes visits is 0, then it has been cleared and should have it's cpuct be calculated as if it is a leaf.
-            let (Nsa, W) = if let MCTSNodeState::Expanded(index) = child.state {
-                let node = &arena[index];
-                let visits = node.visits.load(Ordering::SeqCst);
-                let W = *node.W.lock().unwrap();
-                (visits, W)
+            let W = if let MCTSNodeState::Expanded(index) = child.state {
+                *node_read_lock[index].W.lock().unwrap()
             } else {
-                (0, 0.0)
+                0.0
             };
 
+            let Nsa = child.visits.load(Ordering::SeqCst);
             let Psa = child.policy_score;
             let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb, is_root);
             let root_Nsb = (Nsb as f32).sqrt();
@@ -506,13 +506,14 @@ where
 impl<S, A> MCTSNode<S, A> {
     pub fn new(game_state: S, actions: List<A>, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
-            visits: AtomicUsize::new(1),
             value_score,
+            child_selection_mutex: AsyncMutex::new(()),
             W: Mutex::new(value_score),
             game_state,
             actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
+                    visits: AtomicUsize::new(0),
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -549,8 +550,10 @@ where
         if let Some(latest_index) = node_stack.last() {
             let node_read_lock = arena.read().await;
             let node = &node_read_lock[*latest_index];
-            let prev_visits = node.visits.fetch_add(1, Ordering::SeqCst);
 
+            let selected_child_lock = node.child_selection_mutex.lock().await;
+
+            // @TODO: Update terminal node count?? // This may not need to be changed since it would have been incremented on the previous loop.
             // If the node is a terminal node.
             let children = &node.children;
             if children.len() == 0 {
@@ -561,10 +564,12 @@ where
             let game_state = &node.game_state;
             let prior_actions = &node.actions;
             let is_root = depth == 1;
+            let Nsb = node.get_node_visits();
+
             let selected_child_node = MCTS::<S,A,E,M,C,T>::select_path(
                 children,
                 arena,
-                prev_visits,
+                Nsb,
                 game_state,
                 is_root,
                 prior_actions,
@@ -573,14 +578,15 @@ where
                 cpuct
             ).await?;
 
+            let prev_visits = selected_child_node.visits.fetch_add(1, Ordering::SeqCst);
+            drop(selected_child_lock);
+
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                 let node = &node_read_lock[selected_child_node_index];
-                // If the node exists but visits is 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
-                if node.visits.compare_and_swap(0, 1, Ordering::SeqCst) == 0 {
-                    // The compare_and_swap above will update visits to be 1.
-                    // node.visits = 1;
-                    // Flip the score in this case because we are going one node deeper and that viewpoint is from
-                    // the next player and not the current node's player
+                // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
+                // Flip the score in this case because we are going one node deeper and that viewpoint is from
+                // the next player and not the current node's player
+                if prev_visits == 0 {
                     value_score = 1.0 - node.value_score;
                     break;
                 }
@@ -671,6 +677,12 @@ where
     }
 
     Ok(depth)
+}
+
+impl<S,A> MCTSNode<S,A> {
+    fn get_node_visits(&self) -> usize {
+        self.children.iter().map(|c| c.visits.load(Ordering::SeqCst)).sum::<usize>() + 1
+    }
 }
 
 
