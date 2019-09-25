@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::{self,Arc,Mutex};
+use std::sync::{self,Arc};
 use futures::stream::{FuturesUnordered,StreamExt};
 use async_std::sync::{Mutex as AsyncMutex,RwLock};
 use generational_arena::{Arena,Index};
@@ -86,7 +86,7 @@ where
 struct MCTSNode<S, A> {
     value_score: f32,
     child_selection_mutex: AsyncMutex<()>,
-    W: Mutex<f32>,
+    W: AsyncMutex<f32>,
     game_state: S,
     actions: List<A>,
     children: Vec<MCTSChildNode<A>>
@@ -103,6 +103,7 @@ enum MCTSNodeState {
 struct MCTSChildNode<A> {
     action: A,
     visits: AtomicUsize,
+    in_flight: AtomicUsize,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -141,6 +142,25 @@ where
             starting_actions: Some(actions),
             root: None,
             arena: RwLock::new(Arena::new())
+        }
+    }
+
+    pub fn with_capacity(
+        game_state: S,
+        actions: List<A>,
+        game_engine: &'a E,
+        analytics: &'a M,
+        options: MCTSOptions<S, A, C, T>,
+        capacity: usize
+    ) -> Self {
+        MCTS {
+            options,
+            game_engine,
+            analytics,
+            starting_game_state: Some(game_state),
+            starting_actions: Some(actions),
+            root: None,
+            arena: RwLock::new(Arena::with_capacity(capacity))
         }
     }
 
@@ -232,7 +252,7 @@ where
         let node_read_lock = self.arena.read().await;
         let root = &node_read_lock[root_index];
         let visits = root.get_node_visits();
-        let W_lock = root.W.lock().unwrap();
+        let W_lock = root.W.lock().await;
         let W = *W_lock;
         drop(W_lock);
 
@@ -274,7 +294,7 @@ where
 
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
 
-        let W = *root.W.lock().unwrap();
+        let W = *root.W.lock().await;
 
         Ok(NodeDetails {
             visits: root_visits,
@@ -334,7 +354,7 @@ where
 
     fn clear_node_visits(node_index: Index, arena: &mut Arena<MCTSNode<S,A>>) {
         let node = &mut arena[node_index];
-        *node.W.get_mut().unwrap() = node.value_score;
+        *node.W.get_mut() = node.value_score;
 
         for child in &node.children {
             child.visits.store(0, Ordering::SeqCst);
@@ -348,7 +368,7 @@ where
     }
 
     fn split_node_children_by_action<'b>(current_root: &'b MCTSNode<S, A>, action: &A) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>), Error> {
-        let matching_action = current_root.children.iter().find(|n| n.action == *action).ok_or(format_err!("No matching Action"))?;
+        let matching_action = current_root.get_child_of_action(action).ok_or(format_err!("No matching Action"))?;
         let other_actions: Vec<_> = current_root.children.iter().filter(|n| n.action != *action).map(|n| &n.state).collect();
 
         Ok((&matching_action.state, other_actions))
@@ -406,7 +426,11 @@ where
         let node_read_lock = arena.read().await;
 
         for child in nodes {
-            let W = child.state.get_index().map_or(0.0, |index| *node_read_lock[index].W.lock().unwrap());
+            let W = if let Some(node_index) = child.state.get_index() {
+                *node_read_lock[node_index].W.lock().await
+            } else {
+                0.0
+            };
 
             let Nsa = child.visits.load(Ordering::SeqCst);
             let Psa = child.policy_score;
@@ -415,7 +439,8 @@ where
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
 
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
-            let Qsa = if Nsa == 0 { fpu } else { 1.0 - W / Nsa as f32 };
+            let virtual_loss = child.in_flight.load(Ordering::SeqCst) as f32;
+            let Qsa = if Nsa == 0 { fpu } else { 1.0 - (W + virtual_loss) / Nsa as f32 };
             let PUCT = Qsa + Usa;
             pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, PUCT });
         }
@@ -509,12 +534,13 @@ impl<S, A> MCTSNode<S, A> {
         MCTSNode {
             value_score,
             child_selection_mutex: AsyncMutex::new(()),
-            W: Mutex::new(value_score),
+            W: AsyncMutex::new(value_score),
             game_state,
             actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
                     visits: AtomicUsize::new(0),
+                    in_flight: AtomicUsize::new(0),
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -545,6 +571,7 @@ where
     let mut depth = 0;
     let value_score: f32;
     let mut node_stack = vec!(root_index);
+    let mut in_flight_stack = vec!();
 
     'outer: loop {
         depth += 1;
@@ -579,6 +606,8 @@ where
             ).await?;
 
             let prev_visits = selected_child_node.visits.fetch_add(1, Ordering::SeqCst);
+            selected_child_node.in_flight.fetch_add(1, Ordering::SeqCst);
+            in_flight_stack.push((*latest_index, selected_child_node.action.clone()));
             drop(selected_child_lock);
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
@@ -592,7 +621,6 @@ where
                 }
 
                 // Continue with the next iteration of the loop since we found an already expanded child node.
-                node_stack.push(selected_child_node_index);
                 continue;
             }
 
@@ -603,7 +631,7 @@ where
                 let node_read_lock = arena.read().await;
                 let arena_read = &*node_read_lock;
                 let prior_node = &arena_read[*latest_index];
-                let selected_child_node = prior_node.children.iter().find(|c| c.action == selected_action).unwrap();
+                let selected_child_node = prior_node.get_child_of_action(&selected_action).unwrap();
                 let selected_child_node_state = &selected_child_node.state;
                 if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                     node_stack.push(selected_child_node_index);
@@ -625,7 +653,7 @@ where
                 let mut node_write_lock = arena.write().await;
                 let arena_write = &mut *node_write_lock;
                 let prior_node = &mut arena_write[*latest_index];
-                let selected_child_node = prior_node.children.iter_mut().find(|c| c.action == selected_action).unwrap();
+                let selected_child_node = prior_node.get_child_of_action_mut(&selected_action).unwrap();
                 let selected_child_node_state = &mut selected_child_node.state;
 
                 // Double check that the node has not changed now that the lock has been reacquired as a write.
@@ -653,7 +681,7 @@ where
                     let arena_write = &mut *node_write_lock;
                     let index = arena_write.insert(expanded_node);
                     let prior_node = &mut arena_write[*latest_index];
-                    let selected_child_node = prior_node.children.iter_mut().find(|c| c.action == selected_action).unwrap();
+                    let selected_child_node = prior_node.get_child_of_action_mut(&selected_action).unwrap();
                     let selected_child_node_state = &mut selected_child_node.state;
                     std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(index));
                     drop(expanding_write_lock);
@@ -668,20 +696,38 @@ where
     }
 
     // Reverse the value score at each depth according to the player's valuation perspective.
+    let node_read_lock = &arena.read().await;
     for (i, node_index) in node_stack.into_iter().rev().enumerate() {
         let score = if i % 2 == 0 { value_score } else { 1.0 - value_score };
-        let node_read_lock = &arena.read().await;
         let node = &node_read_lock[node_index];
-        let mut W = node.W.lock().unwrap();
+        let mut W = node.W.lock().await;
         *W = *W + score;
     }
+
+    for (parent_node_index, action) in in_flight_stack {
+        let parent_node = &node_read_lock[parent_node_index];
+        parent_node.get_child_of_action(&action).unwrap().in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    drop(node_read_lock);
 
     Ok(depth)
 }
 
-impl<S,A> MCTSNode<S,A> {
+impl<S,A> MCTSNode<S,A>
+where
+    A: Eq
+{
     fn get_node_visits(&self) -> usize {
         self.children.iter().map(|c| c.visits.load(Ordering::SeqCst)).sum::<usize>() + 1
+    }
+
+    fn get_child_of_action(&self, action: &A) -> Option<&MCTSChildNode<A>> {
+        self.children.iter().find(|c| c.action == *action)
+    }
+
+    fn get_child_of_action_mut(&mut self, action: &A) -> Option<&mut MCTSChildNode<A>> {
+        self.children.iter_mut().find(|c| c.action == *action)
     }
 }
 
