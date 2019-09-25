@@ -296,34 +296,40 @@ where
 
         let arena = &mut *arena.write().await;
         let root_node = arena.remove(root_index).expect("Root node should exist in arena.");
-        let node = Self::get_index_of_action(&root_node, &action);
+        let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
-        if let Err(err) = node {
+        if let Err(err) = split_nodes {
             // If there is an error, replace the root node back to it's original value.
             let index = arena.insert(root_node);
             self.root = Some(index);
             return Err(err);
         }
 
-        let node = node.unwrap();
+        let (chosen_node, other_nodes) = split_nodes.unwrap();
 
-        // @TODO remove indexes from arena.
+        let other_node_indexes: Vec<_> = other_nodes.iter().filter_map(|n| n.get_index()).collect();
+        Self::remove_nodes_from_arena(&other_node_indexes, arena);
 
-        let node = match node {
-            MCTSNodeState::Expanded(node_index) => {
-                if clear { Self::clear_node_visits(*node_index, arena); }
-                *node_index
-            },
-            _ => {
-                let prior_actions = &root_node.actions;
-                let (node, _) = MCTS::<S,A,E,M,C,T>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await;
-                arena.insert(node)
-            }
+        let chosen_node = if let Some(node_index) = chosen_node.get_index() {
+            if clear { Self::clear_node_visits(node_index, arena); }
+            node_index
+        } else {
+            let prior_actions = &root_node.actions;
+            let (node, _) = MCTS::<S,A,E,M,C,T>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await;
+            arena.insert(node)
         };
 
-        self.root.replace(node);
+        self.root.replace(chosen_node);
 
         Ok(())
+    }
+
+    fn remove_nodes_from_arena(node_indexes: &[Index], arena: &mut Arena<MCTSNode<S,A>>) {
+        for node_index in node_indexes {
+            let child_node = &arena[*node_index];
+            let child_node_indexes: Vec<_> = child_node.children.iter().filter_map(|n| n.state.get_index()).collect();
+            Self::remove_nodes_from_arena(&child_node_indexes, arena);
+        }
     }
 
     fn clear_node_visits(node_index: Index, arena: &mut Arena<MCTSNode<S,A>>) {
@@ -334,19 +340,18 @@ where
             child.visits.store(0, Ordering::SeqCst);
         }
 
-        let child_indexes: Vec<_> = node.children.iter().filter_map(|child| {
-            if let MCTSNodeState::Expanded(child_node_index) = child.state { Some(child_node_index) } else { None }
-        }).collect();
+        let child_indexes: Vec<_> = node.children.iter().filter_map(|c| c.state.get_index()).collect();
 
         for child_index in child_indexes {
             Self::clear_node_visits(child_index, arena);
         }
     }
 
-    fn get_index_of_action<'b>(current_root: &'b MCTSNode<S, A>, action: &A) -> Result<&'b MCTSNodeState, Error> {
+    fn split_node_children_by_action<'b>(current_root: &'b MCTSNode<S, A>, action: &A) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>), Error> {
         let matching_action = current_root.children.iter().find(|n| n.action == *action).ok_or(format_err!("No matching Action"))?;
+        let other_actions: Vec<_> = current_root.children.iter().filter(|n| n.action != *action).map(|n| &n.state).collect();
 
-        Ok(&matching_action.state)
+        Ok((&matching_action.state, other_actions))
     }
 
     async fn select_path(nodes: &'a [MCTSChildNode<A>], arena: &'a RwLock<Arena<MCTSNode<S,A>>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'a MCTSChildNode<A>, Error> {
@@ -401,11 +406,7 @@ where
         let node_read_lock = arena.read().await;
 
         for child in nodes {
-            let W = if let MCTSNodeState::Expanded(index) = child.state {
-                *node_read_lock[index].W.lock().unwrap()
-            } else {
-                0.0
-            };
+            let W = child.state.get_index().map_or(0.0, |index| *node_read_lock[index].W.lock().unwrap());
 
             let Nsa = child.visits.load(Ordering::SeqCst);
             let Psa = child.policy_score;
@@ -553,7 +554,6 @@ where
 
             let selected_child_lock = node.child_selection_mutex.lock().await;
 
-            // @TODO: Update terminal node count?? // This may not need to be changed since it would have been incremented on the previous loop.
             // If the node is a terminal node.
             let children = &node.children;
             if children.len() == 0 {
@@ -682,6 +682,12 @@ where
 impl<S,A> MCTSNode<S,A> {
     fn get_node_visits(&self) -> usize {
         self.children.iter().map(|c| c.visits.load(Ordering::SeqCst)).sum::<usize>() + 1
+    }
+}
+
+impl MCTSNodeState {
+    fn get_index(&self) -> Option<Index> {
+        if let Self::Expanded(index) = self { Some(*index) } else { None }
     }
 }
 
