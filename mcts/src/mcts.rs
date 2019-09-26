@@ -1,11 +1,10 @@
 use std::cell::{Cell,RefCell};
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::{self,Arc};
+use std::sync::{Arc};
 use futures::stream::{FuturesUnordered,StreamExt};
 use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
-use sync::atomic::{AtomicUsize,Ordering};
 use rand::{thread_rng,Rng};
 use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
@@ -103,8 +102,8 @@ enum MCTSNodeState {
 #[derive(Debug)]
 struct MCTSChildNode<A> {
     action: A,
-    visits: AtomicUsize,
-    in_flight: AtomicUsize,
+    visits: Cell<usize>,
+    in_flight: Cell<usize>,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -258,7 +257,7 @@ where
             W: root.W.get(),
             children_visits: root.children.iter().map(|n| (
                 n.action.clone(),
-                n.visits.load(Ordering::SeqCst)
+                n.visits.get()
             )).collect()
         })
     }
@@ -381,7 +380,7 @@ where
         *node.W.get_mut() = node.value_score;
 
         for child in &node.children {
-            child.visits.store(0, Ordering::SeqCst);
+            child.visits.set(0);
         }
 
         let child_indexes: Vec<_> = node.children.iter().filter_map(|c| c.state.get_index()).collect();
@@ -455,7 +454,7 @@ where
                 0.0
             };
 
-            let Nsa = child.visits.load(Ordering::SeqCst);
+            let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb, is_root);
             let root_Nsb = (Nsb as f32).sqrt();
@@ -463,7 +462,7 @@ where
 
             // W + virtual_loss is done since we want the "losses" to actually be counted as winning for p2 to lower the value of Q.
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
-            let virtual_loss = child.in_flight.load(Ordering::SeqCst) as f32;
+            let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { 1.0 - (W + virtual_loss) / (Nsa as f32 + virtual_loss) };
 
             let PUCT = Qsa + Usa;
@@ -563,8 +562,8 @@ impl<S, A> MCTSNode<S, A> {
             actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
-                    visits: AtomicUsize::new(0),
-                    in_flight: AtomicUsize::new(0),
+                    visits: Cell::new(0),
+                    in_flight: Cell::new(0),
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -627,8 +626,9 @@ where
                 cpuct
             )?;
 
-            let prev_visits = selected_child_node.visits.fetch_add(1, Ordering::SeqCst);
-            selected_child_node.in_flight.fetch_add(1, Ordering::SeqCst);
+            let prev_visits = selected_child_node.visits.get();
+            selected_child_node.visits.set(prev_visits + 1);
+            selected_child_node.in_flight.set(selected_child_node.in_flight.get() + 1);
             in_flight_stack.push((*latest_index, selected_child_node.action.clone()));
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
@@ -725,7 +725,8 @@ where
 
     for (parent_node_index, action) in in_flight_stack {
         let parent_node = &arena_borrow[parent_node_index];
-        parent_node.get_child_of_action(&action).unwrap().in_flight.fetch_sub(1, Ordering::SeqCst);
+        let in_flight = &parent_node.get_child_of_action(&action).unwrap().in_flight;
+        in_flight.set(in_flight.get() - 1);
     }
 
     drop(arena_borrow);
@@ -738,7 +739,7 @@ where
     A: Eq
 {
     fn get_node_visits(&self) -> usize {
-        self.children.iter().map(|c| c.visits.load(Ordering::SeqCst)).sum::<usize>() + 1
+        self.children.iter().map(|c| c.visits.get()).sum::<usize>() + 1
     }
 
     fn get_child_of_action(&self, action: &A) -> Option<&MCTSChildNode<A>> {
