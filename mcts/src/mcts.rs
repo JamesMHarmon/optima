@@ -382,7 +382,7 @@ where
         Ok(pucts.swap_remove(chosen_puct_idx).node)
     }
 
-    fn get_max_PUCT_score_index(pucts: &Vec<NodePUCT<A>>) -> Result<usize, Error> {
+    fn get_max_PUCT_score_index(pucts: &[NodePUCT<A>]) -> Result<usize, Error> {
         let max_puct = pucts.iter().fold(std::f32::MIN, |acc, puct| f32::max(acc, puct.score));
         let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
             .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
