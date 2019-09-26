@@ -58,7 +58,7 @@ pub async fn self_play<'a, S, A, E, M>(
     let cpuct_init = options.cpuct_init;
     let cpuct_root_scaling = options.cpuct_root_scaling;
 
-    let mut mcts = MCTS::new(
+    let mut mcts = MCTS::with_capacity(
         game_state,
         actions,
         game_engine,
@@ -72,7 +72,8 @@ pub async fn self_play<'a, S, A, E, M>(
             1.0,
             |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
             |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions }
-        )
+        ),
+        options.visits
     );
 
     let mut state: S = S::initial();

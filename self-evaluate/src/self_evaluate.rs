@@ -229,7 +229,7 @@ impl SelfEvaluate
         let visits = options.visits;
         let mut p1_last_to_move = false;
 
-        let mut mcts_1 = MCTS::new(
+        let mut mcts_1 = MCTS::with_capacity(
             S::initial(),
             List::new(),
             game_engine,
@@ -240,10 +240,11 @@ impl SelfEvaluate
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
-            )
+            ),
+            visits
         );
 
-        let mut mcts_2 = MCTS::new(
+        let mut mcts_2 = MCTS::with_capacity(
             S::initial(),
             List::new(),
             game_engine,
@@ -254,7 +255,8 @@ impl SelfEvaluate
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
-            )
+            ),
+            visits
         );
 
         let mut actions: Vec<A> = Vec::new();

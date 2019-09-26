@@ -267,10 +267,42 @@ where
     }
 
     pub async fn get_root_node_details(&self) -> Result<NodeDetails<A>, Error> {
-        let arena = &self.arena;
         let root_index = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+        self.get_node_details(*root_index).await
+    }
+
+    pub async fn get_principal_variation(&mut self) -> Result<Vec<(A, PUCT)>, Error> {
+        let arena = &self.arena;
         let arena_read_lock = arena.read().await;
-        let root = &arena_read_lock[*root_index];
+
+        let mut node_index = *self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+        let mut nodes = vec!();
+
+        loop {
+            let mut children = self.get_node_details(node_index).await?.children;
+
+            if children.len() == 0 { break; }
+
+            let (action, puct) = children.swap_remove(0);
+            nodes.push((action.clone(), puct));
+
+            if let Some(child) = arena_read_lock[node_index].get_child_of_action(&action) {
+                if let Some(child_index) = child.state.get_index() {
+                    node_index = child_index;
+                    continue;
+                }
+            }
+
+            break;
+        }
+
+        Ok(nodes)
+    }
+
+    async fn get_node_details(&self, node_index: Index) -> Result<NodeDetails<A>, Error> {
+        let arena = &self.arena;
+        let arena_read_lock = arena.read().await;
+        let root = &arena_read_lock[node_index];
         let root_visits = root.get_node_visits();
         let children = &root.children;
         let options = &self.options;
