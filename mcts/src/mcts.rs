@@ -1,8 +1,9 @@
+use std::cell::Cell;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{self,Arc};
 use futures::stream::{FuturesUnordered,StreamExt};
-use async_std::sync::{Mutex as AsyncMutex,RwLock};
+use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
 use sync::atomic::{AtomicUsize,Ordering};
 use rand::{thread_rng,Rng};
@@ -85,8 +86,7 @@ where
 #[derive(Debug)]
 struct MCTSNode<S, A> {
     value_score: f32,
-    child_selection_mutex: AsyncMutex<()>,
-    W: AsyncMutex<f32>,
+    W: Cell<f32>,
     game_state: S,
     actions: List<A>,
     children: Vec<MCTSChildNode<A>>
@@ -95,7 +95,8 @@ struct MCTSNode<S, A> {
 #[derive(Debug)]
 enum MCTSNodeState {
     Unexpanded,
-    Expanding(Arc<RwLock<()>>),
+    // @TODO: The RwLock is to act as a notification system that the node is ready and expanded. Then the awaits know to continue. There must be a better way to achieve this.
+    Expanding(Box<Arc<RwLock<()>>>),
     Expanded(Index)
 }
 
@@ -251,14 +252,10 @@ where
         let root_index = self.root.ok_or(format_err!("No root node found!"))?;
         let node_read_lock = self.arena.read().await;
         let root = &node_read_lock[root_index];
-        let visits = root.get_node_visits();
-        let W_lock = root.W.lock().await;
-        let W = *W_lock;
-        drop(W_lock);
 
         Ok(NodeMetrics {
-            visits,
-            W,
+            visits: root.get_node_visits(),
+            W: root.W.get(),
             children_visits: root.children.iter().map(|n| (
                 n.action.clone(),
                 n.visits.load(Ordering::SeqCst)
@@ -309,7 +306,7 @@ where
 
         let metrics = Self::get_PUCT_for_nodes(
             children,
-            arena,
+            &*arena_read_lock,
             root_visits,
             &root.game_state,
             true,
@@ -317,7 +314,7 @@ where
             options.fpu,
             options.fpu_root,
             &options.cpuct
-        ).await;
+        );
 
         let mut children: Vec<_> = children.iter().zip(metrics).map(|(n, m)| (
             n.action.clone(),
@@ -326,11 +323,9 @@ where
 
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
 
-        let W = *root.W.lock().await;
-
         Ok(NodeDetails {
             visits: root_visits,
-            W,
+            W: root.W.get(),
             children
         })
     }
@@ -406,8 +401,8 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    async fn select_path(nodes: &'a [MCTSChildNode<A>], arena: &'a RwLock<Arena<MCTSNode<S,A>>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'a MCTSChildNode<A>, Error> {
-        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct).await;
+    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
 
         let chosen_puct_idx = Self::get_max_PUCT_score_index(&pucts)?;
 
@@ -443,23 +438,22 @@ where
         Ok(chosen_idx)
     }
 
-    async fn get_PUCT_for_nodes_mut(nodes: &'a [MCTSChildNode<A>], arena: &'a RwLock<Arena<MCTSNode<S,A>>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'a, A>>
+    fn get_PUCT_for_nodes_mut<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'b, A>>
     {
-        let pucts = Self::get_PUCT_for_nodes(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct).await;
+        let pucts = Self::get_PUCT_for_nodes(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
         nodes.iter().zip(pucts).map(|(node, puct)| {
             NodePUCT::<A> { node, score: puct.PUCT }
         }).collect()
     }
 
-    async fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &'a RwLock<Arena<MCTSNode<S,A>>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
+    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
     {
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
-        let node_read_lock = arena.read().await;
 
         for child in nodes {
             let W = if let Some(node_index) = child.state.get_index() {
-                *node_read_lock[node_index].W.lock().await
+                arena[node_index].W.get()
             } else {
                 0.0
             };
@@ -480,7 +474,7 @@ where
         pucts
     }
 
-    async fn expand_leaf(prior_game_state: &'a S, prior_actions: &'a List<A>, action: &'a A, game_engine: &'a E, analytics: &'a M) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    async fn expand_leaf(prior_game_state: &S, prior_actions: &List<A>, action: &A, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(prior_game_state, action);
         let new_actions = prior_actions.append(action.to_owned());
         MCTS::<S,A,E,M,C,T>::analyse_and_create_node(new_game_state, new_actions, analytics).await
@@ -518,7 +512,7 @@ where
 
     // Value range is [-1, 1] for the "get_state_analysis" method. However internally for the MCTS a range of
     // [0, 1] is used.
-    async fn analyse_and_create_node(game_state: S, actions: List<A>, analytics: &'a M) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    async fn analyse_and_create_node(game_state: S, actions: List<A>, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let analysis_result = analytics.get_state_analysis(&game_state).await;
 
         let value_score = (analysis_result.value_score + 1.0) / 2.0;
@@ -565,8 +559,7 @@ impl<S, A> MCTSNode<S, A> {
     pub fn new(game_state: S, actions: List<A>, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
             value_score,
-            child_selection_mutex: AsyncMutex::new(()),
-            W: AsyncMutex::new(value_score),
+            W: Cell::new(value_score),
             game_state,
             actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
@@ -585,12 +578,12 @@ impl<S, A> MCTSNode<S, A> {
 #[allow(non_snake_case)]
 async fn recurse_path_and_expand<'a,S,A,E,M,C,T>(
     root_index: Index,
-    arena: &'a RwLock<Arena<MCTSNode<S,A>>>,
-    game_engine: &'a E,
-    analytics: &'a M,
+    arena: &RwLock<Arena<MCTSNode<S,A>>>,
+    game_engine: &E,
+    analytics: &M,
     fpu: f32,
     fpu_root: f32,
-    cpuct: &'a C
+    cpuct: &C
 ) -> Result<usize, Error>
 where
     S: GameState,
@@ -611,8 +604,6 @@ where
             let node_read_lock = arena.read().await;
             let node = &node_read_lock[*latest_index];
 
-            let selected_child_lock = node.child_selection_mutex.lock().await;
-
             // If the node is a terminal node.
             let children = &node.children;
             if children.len() == 0 {
@@ -627,7 +618,7 @@ where
 
             let selected_child_node = MCTS::<S,A,E,M,C,T>::select_path(
                 children,
-                arena,
+                &*node_read_lock,
                 Nsb,
                 game_state,
                 is_root,
@@ -635,12 +626,11 @@ where
                 fpu,
                 fpu_root,
                 cpuct
-            ).await?;
+            )?;
 
             let prev_visits = selected_child_node.visits.fetch_add(1, Ordering::SeqCst);
             selected_child_node.in_flight.fetch_add(1, Ordering::SeqCst);
             in_flight_stack.push((*latest_index, selected_child_node.action.clone()));
-            drop(selected_child_lock);
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                 let node = &node_read_lock[selected_child_node_index];
@@ -694,7 +684,7 @@ where
                     // Immediately replace the state with an indication that we are expanding.RwLock
                     let expanding_lock = std::sync::Arc::new(RwLock::new(()));
                     let expanding_write_lock = expanding_lock.write().await;
-                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
+                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(Box::new(expanding_lock.clone())));
 
                     let action = selected_child_node.action.clone();
                     let prior_game_state = prior_node.game_state.clone();
@@ -732,9 +722,8 @@ where
     let node_read_lock = &arena.read().await;
     for (i, node_index) in node_stack.into_iter().rev().enumerate() {
         let score = if i % 2 == 0 { value_score } else { 1.0 - value_score };
-        let node = &node_read_lock[node_index];
-        let mut W = node.W.lock().await;
-        *W = *W + score;
+        let W = &node_read_lock[node_index].W;
+        W.set(W.get() + score);
     }
 
     for (parent_node_index, action) in in_flight_stack {
