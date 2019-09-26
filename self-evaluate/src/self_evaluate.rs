@@ -194,11 +194,12 @@ impl SelfEvaluate
                 (model_2, model_1)
             };
 
-            Self::play_game(game_engine, p1, p2, options)
+            (p1, p2)
         }).collect();
 
         for _ in 0..batch_size {
-            if let Some(game_to_play) = games_to_play.pop() {
+            if let Some((p1, p2)) = games_to_play.pop() {
+                let game_to_play = Self::play_game(game_engine, p1, p2, options);
                 game_result_stream.push(game_to_play);
             }
         }
@@ -208,7 +209,8 @@ impl SelfEvaluate
 
             results_channel.send(game_result).map_err(|_| format_err!("Failed to send game_result"))?;
 
-            if let Some(game_to_play) = games_to_play.pop() {
+            if let Some((p1, p2)) = games_to_play.pop() {
+                let game_to_play = Self::play_game(game_engine, p1, p2, options);
                 game_result_stream.push(game_to_play);
             }
         }
