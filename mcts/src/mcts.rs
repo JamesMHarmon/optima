@@ -621,7 +621,8 @@ where
                 }
 
                 // Continue with the next iteration of the loop since we found an already expanded child node.
-                continue;
+                node_stack.push(selected_child_node_index);
+                continue 'outer;
             }
 
             let selected_action = selected_child_node.action.clone();
