@@ -461,9 +461,11 @@ where
             let root_Nsb = (Nsb as f32).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
 
+            // W + virtual_loss is done since we want the "losses" to actually be counted as winning for p2 to lower the value of Q.
             // Reverse W here since the evaluation of each child node is that from the other player's perspective.
             let virtual_loss = child.in_flight.load(Ordering::SeqCst) as f32;
-            let Qsa = if Nsa == 0 { fpu } else { 1.0 - (W + virtual_loss) / Nsa as f32 };
+            let Qsa = if Nsa == 0 { fpu } else { 1.0 - (W + virtual_loss) / (Nsa as f32 + virtual_loss) };
+
             let PUCT = Qsa + Usa;
             pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, PUCT });
         }
