@@ -1,15 +1,12 @@
+use std::path::Path;
 use std::fmt::Debug;
 use std::time::Instant;
-use std::io::Write;
-use std::io::Read;
-use std::fs::{create_dir_all, OpenOptions};
-use std::path::{Path,PathBuf};
 use std::sync::mpsc;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use futures::future::FutureExt;
-use failure::{Error,format_err};
+use failure::{Error};
 use tokio_executor::current_thread;
 
 use model::analytics::GameAnalyzer;
@@ -31,17 +28,11 @@ where
     A: Clone + Eq + Serialize + Unpin,
     E: 'a + GameEngine<State=S,Action=A>
 {
-    options: Options,
-    run_directory: PathBuf,
+    self_learn_options: &'a SelfLearnOptions,
+    self_evaluate_options: &'a SelfEvaluateOptions,
+    run_directory: &'a Path,
     game_engine: &'a E,
     model_info: ModelInfo
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Options {
-    pub self_learn: SelfLearnOptions,
-    pub self_evaluate: SelfEvaluateOptions,
-    pub model: ModelOptions
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,26 +78,16 @@ where
         game_name: String,
         run_name: String,
         model_factory: &F,
-        options: &Options
+        options: &ModelOptions
     ) -> Result<(), Error>
     where
         M: Model<Action=A,State=S,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
-        if game_name.contains("_") {
-            return Err(format_err!("game_name cannot contain any '_' characters"));
-        }
-
-        if run_name.contains("_") {
-            return Err(format_err!("run_name cannot contain any '_' characters"));
-        }
-
-        SelfLearn::<S,A,E>::initialize_directories_and_files(&game_name, &run_name, &options)?;
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
-        let model_options = &options.model;
-        model_factory.create(&model_info, model_options.number_of_filters, model_options.number_of_residual_blocks);
+        model_factory.create(&model_info, options.number_of_filters, options.number_of_residual_blocks);
 
         Ok(())
     }
@@ -114,15 +95,17 @@ where
     pub fn from(
         game_name: String,
         run_name: String,
-        game_engine: &'a E
+        game_engine: &'a E,
+        run_directory: &'a Path,
+        self_learn_options: &'a SelfLearnOptions,
+        self_evaluate_options: &'a SelfEvaluateOptions,
     ) -> Result<Self, Error>
     {
-        let run_directory = Self::get_run_directory(&game_name, &run_name);
-        let options = Self::get_config(&run_directory)?;
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
         Ok(Self {
-            options,
+            self_learn_options,
+            self_evaluate_options,
             run_directory,
             game_engine,
             model_info
@@ -135,9 +118,8 @@ where
         T: GameAnalyzer<Action=A,State=S> + Send,
         F: ModelFactory<M=M>
     {
-        let options = &self.options;
-        let self_learn_options = &options.self_learn;
-        let self_evaluate_options = &options.self_evaluate;
+        let self_learn_options = self.self_learn_options;
+        let self_evaluate_options = self.self_evaluate_options;
         let run_directory = &self.run_directory;
         let game_engine = self.game_engine;
         let mut latest_model_info = model_factory.get_latest(&self.model_info)?;
@@ -309,51 +291,5 @@ where
         }
 
         Ok(())
-    }
-
-    fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
-        PathBuf::from(format!("./{}_runs/{}", game_name, run_name))
-    }
-
-    fn get_config_path(run_directory: &Path) -> PathBuf {
-        run_directory.join("config.json")
-    }
-
-    fn get_config(run_directory: &Path) -> Result<Options, Error> {
-        let config_path = Self::get_config_path(run_directory);
-        let mut file = OpenOptions::new()
-            .read(true)
-            .open(config_path)
-            .expect("Couldn't load config file.");
-
-        let mut config_file_contents = String::new();
-        file.read_to_string(&mut config_file_contents).expect("Failed to read config file");
-        let options: Options = serde_json::from_str(&config_file_contents).expect("Failed to parse config file");
-        Ok(options)
-    }
-
-    fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &Options) -> Result<PathBuf, Error> {
-        let run_directory = SelfLearn::<S,A,E>::get_run_directory(game_name, run_name);
-        create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
-
-        let config_path = Self::get_config_path(&run_directory);
-
-        if config_path.exists() {
-            return Err(format_err!("Run already exists"));
-        }
-
-        println!("{:?}", run_directory);
-        println!("{:?}", config_path);
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(config_path)
-            .expect("Couldn't open or create the config file");
-
-        let serialized_options = serde_json::to_string_pretty(options).expect("Unable to serialize options");
-        file.write(serialized_options.as_bytes()).expect("Unable to write options to file");
-
-        Ok(run_directory)
     }
 }

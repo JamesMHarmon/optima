@@ -8,11 +8,13 @@ publish = false
 [dependencies]
 self-learn = { path = "../self-learn" }
 self-evaluate = { path = "../self-evaluate" }
+ponder = { path = "../ponder" }
 model = { path = "../model" }
 connect4 = { path = "../connect4" }
 quoridor = { path = "../quoridor" }
 
 failure="0.1"
-uuid={version="0.7",features=["v4"]}
+serde_json="1.0"
 serde={version="1.0.95",features=["derive"]}
 clap={version="2.33",features=["yaml"]}
+tokio = "=0.2.0-alpha.4"
