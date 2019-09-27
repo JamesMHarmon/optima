@@ -143,17 +143,27 @@ where
         let mut latest_model_info = model_factory.get_latest(&self.model_info)?;
 
         loop {
-            let latest_model = model_factory.get(&latest_model_info);
             let model_name = latest_model_info.get_model_name();
+
+            let num_games_to_play = {
+                let self_play_persistance = SelfPlayPersistance::new(
+                    run_directory,
+                    model_name.to_owned()
+                )?;
+
+                let num_games_this_net = self_play_persistance.read::<A>()?.len();
+                let number_of_games_per_net = self_learn_options.number_of_games_per_net;
+                let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
+                drop(self_play_persistance);
+                num_games_to_play
+            };
+
             let mut self_play_persistance = SelfPlayPersistance::new(
                 run_directory,
                 model_name
             )?;
 
-            let num_games_this_net = self_play_persistance.read::<A>()?.len();
-            let number_of_games_per_net = self_learn_options.number_of_games_per_net;
-            let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
-
+            let latest_model = model_factory.get(&latest_model_info);
             Self::play_self(
                 &latest_model,
                 game_engine,

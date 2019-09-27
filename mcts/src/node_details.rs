@@ -11,7 +11,7 @@ pub struct NodeDetails<A> {
 
 impl<A: Display> Display for NodeDetails<A> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let actions = format!("[{}]", self.children.iter().fold(String::new(), |acc, (a, puct)| acc + &format!("(A: {}, {}),", a, puct)));
+        let actions = format!("[{}]", self.children.iter().fold(String::new(), |acc, (a, puct)| acc + &format!("\n\t(A: {}, {}),", a, puct)));
 
         write!(f, "V: {visits}, Q: {value}, Actions: {actions}",
             visits = self.visits,

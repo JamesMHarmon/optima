@@ -3,11 +3,9 @@ use std::fmt::Display;
 use std::fmt::Debug;
 use serde::{Serialize};
 use serde::de::DeserializeOwned;
-use uuid::Uuid;
 use failure::Error;
 
 use common::linked_list::List;
-use common::rng;
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -39,26 +37,25 @@ impl Ponder
         M: Model<State=S,Action=A,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S> + Send
     {
-        let uuid = Uuid::new_v4();
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
 
-        let mut mcts_1 = MCTS::new(
+        let mut mcts = MCTS::with_capacity(
             S::initial(),
             List::new(),
             game_engine,
             &analyzer,
-            MCTSOptions::<S,A,_,_,_>::new(
+            MCTSOptions::<S,A,_,_>::new(
                 None,
                 0.0,
                 1.0,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,_| 0.0,
-                rng::create_rng_from_uuid(uuid),
-            )
+                |_,_| 0.0
+            ),
+            visits
         );
 
         let mut state: S = S::initial();
@@ -77,8 +74,10 @@ impl Ponder
             if input == "" {
                 println!("PONDERING: {}", visits);
                 total_visits += visits;
-                mcts_1.search(total_visits).await?;
-                println!("{}", mcts_1.get_root_node_details()?);
+                mcts.search(total_visits).await?;
+                println!("{}", mcts.get_root_node_details().await?);
+                let pvs: Vec<_> = mcts.get_principal_variation().await?.iter().map(|n| format!("\n\t{:?}", n)).collect();
+                println!("{}", pvs.join(""));
                 continue;
             }
 
@@ -86,7 +85,7 @@ impl Ponder
 
             match action {
                 Ok(action) => {
-                    if let Err(_) = mcts_1.advance_to_action(action.clone()).await {
+                    if let Err(_) = mcts.advance_to_action(action.clone()).await {
                         println!("Illegal Action: {:?}", &action);
                         continue;
                     }

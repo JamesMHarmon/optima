@@ -467,8 +467,9 @@ where
         let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
+        let states_analysed_map = &mut *self.states_analysed.lock().unwrap();
         for ((id, _s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            self.states_analysed.lock().unwrap().insert(id, analysis);
+            states_analysed_map.insert(id, analysis);
             waker.wake();
         }
 

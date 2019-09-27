@@ -225,6 +225,7 @@ fn get_init_options_from_matches(matches: &clap::ArgMatches) -> Result<Options, 
 
     let self_evaluate_options = SelfEvaluateOptions {
         num_games: 1000,
+        batch_size: self_learn_options.self_play_batch_size,
         temperature: self_learn_options.temperature,
         temperature_max_actions: self_learn_options.temperature_max_actions,
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
@@ -248,6 +249,7 @@ fn get_evaluate_options_from_matches(matches: &clap::ArgMatches) -> Result<(Opti
         temperature: 1.2,
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
+        batch_size: 32,
         visits: 800,
         fpu: 0.0,
         fpu_root: 1.0,
