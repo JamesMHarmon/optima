@@ -189,7 +189,6 @@ subcommands:
                 value_name: MODEL
                 help: "[Default: Second Most Latest Model] The number of the model that is the p1 challenger."
             - model_2:
-                short: m_2
                 long: model_2
                 takes_value: true
                 value_name: MODEL 2
