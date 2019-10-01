@@ -81,10 +81,10 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Engine,Mapper>>;
+    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<Engine,Mapper>>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        TensorflowModel::<GameState,Action,Engine,Mapper>::create(
+        TensorflowModel::<Engine,Mapper>::create(
             model_info,
             num_filters,
             num_blocks,

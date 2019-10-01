@@ -156,10 +156,10 @@ fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Engine,Mapper>>;
+    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<Engine,Mapper>>;
 
     fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        TensorflowModel::<GameState,Action,Engine,Mapper>::create(
+        TensorflowModel::<Engine,Mapper>::create(
             model_info,
             num_filters,
             num_blocks,
