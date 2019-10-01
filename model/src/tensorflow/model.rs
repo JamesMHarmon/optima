@@ -1,7 +1,7 @@
+use chashmap::CHashMap;
 use std::fmt::Formatter;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::collections::HashMap;
 use std::fs::{self};
 use std::future::Future;
 use std::pin::Pin;
@@ -31,10 +31,10 @@ use super::super::position_metrics::PositionMetrics;
 #[cfg(feature="tensorflow_system_alloc")]
 static ALLOCATOR: std::alloc::System = std::alloc::System;
 
-pub struct TensorflowModel<S,A,E,Map>
+pub struct TensorflowModel<E,Map>
 {
     model_info: ModelInfo,
-    batching_model: Arc<BatchingModel<S,A,E,Map>>,
+    batching_model: Arc<BatchingModel<E,Map>>,
     alive: Arc<AtomicBool>,
     id_generator: Arc<AtomicUsize>,
     mapper: Arc<Map>
@@ -47,9 +47,9 @@ pub trait Mapper<S,A> {
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
 }
 
-impl<S,A,E,Map> TensorflowModel<S,A,E,Map>
+impl<S,A,E,Map> TensorflowModel<E,Map>
 where
-    S: Clone + PartialEq + Hash + Send + Sync + 'static,
+    S: PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A> + Send + Sync + 'static
@@ -127,16 +127,16 @@ where
     }
 }
 
-impl<S,A,E,Map> ModelTrait for TensorflowModel<S,A,E,Map>
+impl<S,A,E,Map> ModelTrait for TensorflowModel<E,Map>
 where
-    S: GameState + Send + Sync + 'static,
+    S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A> + Send + Sync + 'static
 {
     type State = S;
     type Action = A;
-    type Analyzer = GameAnalyzer<S,A,E,Map>;
+    type Analyzer = GameAnalyzer<E,Map>;
 
     fn get_model_info(&self) -> &ModelInfo {
         &self.model_info
@@ -172,27 +172,27 @@ pub struct SessionAndOps {
     op_policy_head: Operation
 }
 
-pub struct GameAnalyzer<S,A,E,Map> {
-    batching_model: Arc<BatchingModel<S,A,E,Map>>,
+pub struct GameAnalyzer<E,Map> {
+    batching_model: Arc<BatchingModel<E,Map>>,
     id_generator: Arc<AtomicUsize>
 }
 
-impl<S,A,E,Map> analytics::GameAnalyzer for GameAnalyzer<S,A,E,Map>
+impl<S,A,E,Map> analytics::GameAnalyzer for GameAnalyzer<E,Map>
 where
-    S: Clone + PartialEq + Hash,
+    S: Clone + PartialEq + Hash + Unpin,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A>
 {
     type State = S;
     type Action = A;
-    type Future = GameStateAnalysisFuture<S,A,E,Map>;
+    type Future = GameStateAnalysisFuture<S,E,Map>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,A,E,Map> {
+    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S,E,Map> {
         GameStateAnalysisFuture::new(
             game_state.to_owned(),
             self.id_generator.fetch_add(1, Ordering::SeqCst),
@@ -430,15 +430,15 @@ fn create(
     Ok(())
 }
 
-impl<S,A,E,Map> Drop for TensorflowModel<S,A,E,Map> {
+impl<E,Map> Drop for TensorflowModel<E,Map> {
     fn drop(&mut self) {
         self.alive.store(false, Ordering::SeqCst);
     }
 }
 
-pub struct BatchingModel<S,A,E,Map> {
-    states_to_analyse: SegQueue<(usize, S, Waker)>,
-    states_analysed: Mutex<HashMap<usize, GameStateAnalysis<A>>>,
+pub struct BatchingModel<E,Map> {
+    states_to_analyse: SegQueue<(usize, Vec<f32>, Waker)>,
+    states_analysed: CHashMap<usize, (Vec<f32>,f32)>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -447,9 +447,9 @@ pub struct BatchingModel<S,A,E,Map> {
     session: Mutex<SessionAndOps>
 }
 
-impl<S,A,E,Map> BatchingModel<S,A,E,Map>
+impl<S,A,E,Map> BatchingModel<E,Map>
 where
-    S: Clone + PartialEq + Hash,
+    S: PartialEq + Hash,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A>
@@ -457,7 +457,7 @@ where
     fn new(model_info: ModelInfo, engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS));
+        let states_analysed = CHashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -523,13 +523,13 @@ where
             return 0;
         }
 
-        let game_states_to_predict = states_to_analyse.iter().map(|(_,s,_)| s).collect();
+        let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
         let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
-        let states_analysed_map = &mut *self.states_analysed.lock().unwrap();
+        let states_analysed = &self.states_analysed;
         for ((id, _s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            states_analysed_map.insert(id, analysis);
+            states_analysed.insert(id, analysis);
             waker.wake();
         }
 
@@ -549,45 +549,43 @@ where
         )
     }
 
-    fn poll(&self, id: usize, game_state: &S, waker: &Waker) -> Poll<GameStateAnalysis<A>> {
-        let is_terminal = self.engine.is_terminal_state(game_state);
-
-        if let Some(value) = is_terminal {
-            self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
-            return Poll::Ready(GameStateAnalysis::new(
-                value,
-                Vec::new()
-            ));
-        }
-
-        let analysis = self.states_analysed.lock().unwrap().remove(&id);
+    fn poll(&self, id: usize) -> Poll<(Vec<f32>,f32)> {
+        let analysis = self.states_analysed.remove(&id);
 
         match analysis {
             Some(analysis) => {
                 self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
                 Poll::Ready(analysis)
             },
-            None => {
-                self.states_to_analyse.push((
-                    id,
-                    game_state.clone(),
-                    waker.clone()
-                ));
-
-                Poll::Pending
-            }
+            None => Poll::Pending
         }
     }
 
-    fn predict(&self, game_states: Vec<&S>) -> Result<Vec<GameStateAnalysis<A>>, Error> {
+    fn request(&self, id: usize, game_state: &S, waker: &Waker) -> Poll<GameStateAnalysis<A>> {
+        if let Some(value) = self.engine.is_terminal_state(game_state) {
+            self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(GameStateAnalysis::new(
+                value,
+                Vec::new()
+            ))
+        } else {
+            self.states_to_analyse.push((
+                id,
+                self.mapper.game_state_to_input(game_state),
+                waker.clone()
+            ));
+
+            Poll::Pending
+        }
+    }
+
+    fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32)>, Error> {
         let mapper = &*self.mapper;
 
-        let inputs: Vec<_> = game_states.iter().map(|game_state| mapper.game_state_to_input(game_state)).collect();
-
-        let batch_size = game_states.len();
+        let batch_size = game_state_inputs.len();
         let input_dim = mapper.get_input_dimensions();
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let flattened_inputs: Vec<f32> = inputs.into_iter().flatten().collect();
+        let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| *v).collect();
         let mut value_head_outputs = Vec::with_capacity(batch_size);
         let mut policy_head_outputs = Vec::with_capacity(batch_size);
         let policy_dimension;
@@ -612,47 +610,36 @@ where
             policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
         }
         
-        let analysis_results = izip!(
-            game_states.into_iter(),
-            value_head_outputs.into_iter(),
-            policy_head_outputs.chunks_exact(policy_dimension as usize).into_iter()
-        ).map(|(game_state, value_score, policy_scores)| {
-                let valid_actions_with_policies = self.mapper.policy_to_valid_actions(
-                    game_state,
-                    &policy_scores
-                );
-
-                GameStateAnalysis {
-                    policy_scores: valid_actions_with_policies,
-                    value_score: value_score as f32
-                }
-            })
-            .collect();
+        let analysis_results: Vec<_> = izip!(
+            policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
+            value_head_outputs
+        ).collect();
 
         Ok(analysis_results)
     }
 }
 
-pub struct GameStateAnalysisFuture<S,A,E,Map> {
+pub struct GameStateAnalysisFuture<S,E,Map> {
     game_state: S,
     id: usize,
-    batching_model: Arc<BatchingModel<S,A,E,Map>>
+    has_requested: bool,
+    batching_model: Arc<BatchingModel<E,Map>>
 }
 
-impl<S,A,E,Map> GameStateAnalysisFuture<S,A,E,Map> {
+impl<S,E,Map> GameStateAnalysisFuture<S,E,Map> {
     fn new(
         game_state: S,
         id: usize,
-        batching_model: Arc<BatchingModel<S,A,E,Map>>
+        batching_model: Arc<BatchingModel<E,Map>>
     ) -> Self
     {
-        Self { game_state, id, batching_model }
+        Self { game_state, id, batching_model, has_requested: false }
     }
 }
 
-impl<S,A,E,Map> Future for GameStateAnalysisFuture<S,A,E,Map>
+impl<S,A,E,Map> Future for GameStateAnalysisFuture<S,E,Map>
 where
-    S: Clone + PartialEq + Hash,
+    S: PartialEq + Hash + Unpin,
     A: Clone,
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A>
@@ -660,7 +647,26 @@ where
     type Output = GameStateAnalysis<A>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        (*self).batching_model.poll(self.id, &self.game_state, cx.waker())
+        if !self.has_requested {
+            let self_mut = self.get_mut();
+            self_mut.has_requested = true;
+            self_mut.batching_model.request(self_mut.id, &self_mut.game_state, cx.waker())
+        } else {
+            match (*self).batching_model.poll(self.id) {
+                Poll::Ready((policy_scores, value_score)) => {
+                    let valid_actions_with_policies = self.batching_model.mapper.policy_to_valid_actions(
+                        &self.game_state,
+                        &policy_scores
+                    );
+
+                    Poll::Ready(GameStateAnalysis {
+                        policy_scores: valid_actions_with_policies,
+                        value_score: value_score as f32
+                    })
+                },
+                Poll::Pending => Poll::Pending
+            }
+        }
     }
 }
 
