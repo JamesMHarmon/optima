@@ -311,7 +311,7 @@ where
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
-        --dir /{game_name}_runs/{run_name}/exported_models/{source_run_num} \
+        --dir /{game_name}_runs/{run_name}/exported_models/{target_run_num} \
         --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{target_run_num} \
         --tag_set serve \
         tensorrt \
@@ -320,7 +320,6 @@ where
         --is_dynamic_op False",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
-        source_run_num = source_model_info.get_run_num(),
         target_run_num = target_model_info.get_run_num()
     );
 
@@ -529,7 +528,7 @@ where
 
         let states_analysed = &self.states_analysed;
         for ((id, _s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            states_analysed.insert(id, analysis);
+            states_analysed.insert_new(id, analysis);
             waker.wake();
         }
 
