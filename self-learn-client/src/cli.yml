@@ -262,7 +262,7 @@ subcommands:
                 takes_value: true
                 value_name: RUN NAME
                 help: Name of the run, cannot contain '_'.
-            - model_1:
+            - model:
                 short: m
                 long: model
                 takes_value: true

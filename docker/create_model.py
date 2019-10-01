@@ -4,12 +4,15 @@ from pathlib import Path
 from keras import backend as K 
 import tensorflow as tf
 from keras.callbacks import TensorBoard
+from tensorflow.python.tools import freeze_graph
+from tensorflow.python.saved_model import tag_constants
 
 import c4_model as c4
 
 def export(model_path, export_model_path):
     c4.clear()
-    K.set_learning_phase(0)
+    tf.keras.backend.clear_session()
+    tf.keras.backend.set_learning_phase(0)
 
     model = tf.keras.models.load_model(model_path)
 

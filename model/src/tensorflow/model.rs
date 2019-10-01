@@ -306,6 +306,37 @@ where
         fs::remove_file(path)?;
     }
 
+    let docker_cmd = format!("docker run --rm \
+        --runtime=nvidia \
+        --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
+        tensorflow/tensorflow:latest-gpu \
+        usr/local/bin/saved_model_cli convert \
+        --dir /{game_name}_runs/{run_name}/exported_models/{source_run_num} \
+        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{target_run_num} \
+        --tag_set serve \
+        tensorrt \
+        --precision_mode FP16 \
+        --max_batch_size 2048 \
+        --is_dynamic_op False",
+        game_name = source_model_info.get_game_name(),
+        run_name = source_model_info.get_run_name(),
+        source_run_num = source_model_info.get_run_num(),
+        target_run_num = target_model_info.get_run_num()
+    );
+
+    println!("{}", docker_cmd);
+
+    let mut cmd = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(docker_cmd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let result = cmd.wait();
+
+    println!("OUTPUT: {:?}", result);
+
     println!("Training process complete");
 
     Ok(())
@@ -365,6 +396,35 @@ fn create(
 
     println!("OUTPUT: {:?}", result);
 
+    let docker_cmd = format!("docker run --rm \
+        --runtime=nvidia \
+        --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
+        tensorflow/tensorflow:latest-gpu \
+        usr/local/bin/saved_model_cli convert \
+        --dir /{game_name}_runs/{run_name}/exported_models/1 \
+        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/1 \
+        --tag_set serve \
+        tensorrt \
+        --precision_mode FP16 \
+        --max_batch_size 2048 \
+        --is_dynamic_op False",
+        game_name = game_name,
+        run_name = run_name
+    );
+
+    println!("{}", docker_cmd);
+
+    let mut cmd = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(docker_cmd)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let result = cmd.wait();
+
+    println!("OUTPUT: {:?}", result);
+
     println!("Model creation process complete");
 
     Ok(())
@@ -405,7 +465,7 @@ where
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/exported_models/{run_num}",
+            "{game_name}_runs/{run_name}/tensorrt_models/{run_num}",
             game_name = model_info.get_game_name(),
             run_name = model_info.get_run_name(),
             run_num = model_info.get_run_num(),
