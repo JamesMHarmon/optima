@@ -15,6 +15,7 @@ use model::model::Model;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PonderOptions {
     pub visits: usize,
+    pub parallelism: usize,
     pub fpu: f32,
     pub fpu_root: f32,
     pub cpuct_base: f32,
@@ -57,7 +58,8 @@ impl Ponder
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,_| 0.0
+                |_,_| 0.0,
+                options.parallelism
             ),
             visits
         );

@@ -285,6 +285,7 @@ fn get_default_options() -> Result<Options, Error> {
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
         visits: 800,
+        parallelism: 32,
         fpu: 0.0,
         fpu_root: 1.0,
         cpuct_base: 19_652.0,
@@ -300,12 +301,13 @@ fn get_default_options() -> Result<Options, Error> {
     };
 
     let self_evaluate_options = SelfEvaluateOptions {
-        num_games: 1000,
+        num_games: 200,
         batch_size: self_learn_options.self_play_batch_size,
+        parallelism: self_learn_options.parallelism * 4,
         temperature: self_learn_options.temperature,
         temperature_max_actions: self_learn_options.temperature_max_actions,
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
-        visits: self_learn_options.visits,
+        visits: self_learn_options.visits * 5,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
         cpuct_base: self_learn_options.cpuct_base,
@@ -315,6 +317,7 @@ fn get_default_options() -> Result<Options, Error> {
 
     let ponder_options = PonderOptions {
         visits: self_learn_options.visits * 50,
+        parallelism: self_learn_options.parallelism * 4,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
         cpuct_base: self_learn_options.cpuct_base,

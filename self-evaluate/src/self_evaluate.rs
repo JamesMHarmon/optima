@@ -24,6 +24,7 @@ use super::constants::SELF_EVALUATE_PARALLELISM;
 pub struct SelfEvaluateOptions {
     pub num_games: usize,
     pub batch_size: usize,
+    pub parallelism: usize,
     pub temperature: f32,
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f32,
@@ -252,7 +253,8 @@ impl SelfEvaluate
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
+                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
+                options.parallelism
             ),
             visits
         );
@@ -267,7 +269,8 @@ impl SelfEvaluate
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions }
+                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
+                options.parallelism
             ),
             visits
         );

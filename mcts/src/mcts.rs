@@ -17,7 +17,6 @@ use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
 use common::linked_list::{List};
 use super::node_details::{PUCT,NodeDetails};
-use super::constants::{SEARCHERS};
 
 pub struct DirichletOptions {
     pub alpha: f32,
@@ -26,13 +25,17 @@ pub struct DirichletOptions {
 
 pub struct MCTSOptions<S, A, C, T>
 where
-    S: GameState
+    S: GameState,
+    A: Clone + Eq + Debug,
+    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
+    T: Fn(&S, &List<A>) -> f32
 {
     dirichlet: Option<DirichletOptions>,
     fpu: f32,
     fpu_root: f32,
     cpuct: C,
     temperature: T,
+    parallelism: usize,
     _phantom_action: PhantomData<*const A>,
     _phantom_state: PhantomData<*const S>
 }
@@ -49,7 +52,8 @@ where
         fpu: f32,
         fpu_root: f32,
         cpuct: C,
-        temperature: T
+        temperature: T,
+        parallelism: usize
     ) -> Self {
         MCTSOptions {
             dirichlet,
@@ -57,6 +61,7 @@ where
             fpu_root,
             cpuct,
             temperature,
+            parallelism,
             _phantom_action: PhantomData,
             _phantom_state: PhantomData
         }
@@ -191,7 +196,7 @@ where
 
         let mut max_depth: usize = 0;
         let mut searches_remaining = visits - current_visits;
-        let initial_searches = SEARCHERS.min(searches_remaining);
+        let initial_searches = self.options.parallelism.min(searches_remaining);
 
         let mut searches = FuturesUnordered::new();
         for _ in 0..initial_searches {
@@ -905,7 +910,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         let mut mcts2 = MCTS::new(game_state, actions, &game_engine, &analytics, MCTSOptions::new(
@@ -913,7 +919,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(800).await.unwrap();
@@ -937,7 +944,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(800).await.unwrap();
@@ -958,7 +966,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
@@ -981,7 +990,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
@@ -999,7 +1009,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(800).await.unwrap();
@@ -1029,7 +1040,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(100).await.unwrap();
@@ -1059,7 +1071,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(1).await.unwrap();
@@ -1089,7 +1102,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(2).await.unwrap();
@@ -1119,7 +1133,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 0.1,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(8000).await.unwrap();
@@ -1149,7 +1164,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(800).await.unwrap();
@@ -1179,7 +1195,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         mcts.search(800).await.unwrap();
@@ -1210,7 +1227,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         non_clear_mcts.search(search_num_visits).await.unwrap();
@@ -1225,7 +1243,8 @@ mod tests {
             0.0,
             0.0,
             |_,_,_,_,_| 1.0,
-            |_,_| 0.0
+            |_,_| 0.0,
+            1
         ));
 
         clear_mcts.search(search_num_visits).await.unwrap();

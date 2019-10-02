@@ -45,6 +45,7 @@ pub struct ModelOptions {
 pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
     pub self_play_batch_size: usize,
+    pub parallelism: usize,
     pub moving_window_size: usize,
     pub max_moving_window_percentage: f32,
     pub position_sample_percentage: f32,
@@ -213,7 +214,8 @@ where
                     temperature: options.temperature,
                     temperature_max_actions: options.temperature_max_actions,
                     temperature_post_max_actions: options.temperature_post_max_actions,
-                    visits: options.visits
+                    visits: options.visits,
+                    parallelism: options.parallelism
                 };
 
                 s.spawn(move |_| {

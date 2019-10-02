@@ -1,4 +1,4 @@
-use chashmap::CHashMap;
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -437,7 +437,7 @@ impl<E,Map> Drop for TensorflowModel<E,Map> {
 
 pub struct BatchingModel<E,Map> {
     states_to_analyse: SegQueue<(usize, Vec<f32>, Waker)>,
-    states_analysed: CHashMap<usize, (Vec<f32>,f32)>,
+    states_analysed: Mutex<HashMap<usize, (Vec<f32>,f32)>>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -456,7 +456,7 @@ where
     fn new(model_info: ModelInfo, engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = CHashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS);
+        let states_analysed = Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS));
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -526,9 +526,16 @@ where
         let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
         let num_analysed = analysis.len();
 
-        let states_analysed = &self.states_analysed;
-        for ((id, _s, waker), analysis) in states_to_analyse.into_iter().zip(analysis) {
-            states_analysed.insert_new(id, analysis);
+        {
+            let mut states_analysed_lock = self.states_analysed.lock().unwrap();
+            for (i, analysis) in analysis.into_iter().enumerate() {
+                let id = states_to_analyse[i].0;
+                states_analysed_lock.insert(id, analysis);
+            }
+            drop(states_analysed_lock);
+        }
+
+        for (_id, _s, waker) in states_to_analyse.into_iter() {
             waker.wake();
         }
 
@@ -549,7 +556,7 @@ where
     }
 
     fn poll(&self, id: usize) -> Poll<(Vec<f32>,f32)> {
-        let analysis = self.states_analysed.remove(&id);
+        let analysis = self.states_analysed.lock().unwrap().remove(&id);
 
         match analysis {
             Some(analysis) => {
