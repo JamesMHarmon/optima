@@ -9,7 +9,6 @@ use futures::future::FutureExt;
 use failure::{Error,format_err};
 use tokio_executor::current_thread;
 
-use common::linked_list::List;
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;

@@ -341,6 +341,9 @@ where
 
     println!("Training process complete");
 
+    // Wait some time to allow the gpu to clear
+    std::thread::sleep(std::time::Duration::from_secs(30));
+
     Ok(())
 }
 
