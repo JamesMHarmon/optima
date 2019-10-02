@@ -5,7 +5,6 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use failure::Error;
 
-use common::linked_list::List;
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -50,7 +49,7 @@ impl Ponder
 
         let mut mcts = MCTS::with_capacity(
             S::initial(),
-            List::new(),
+            0,
             game_engine,
             &analyzer,
             MCTSOptions::<S,A,_,_>::new(

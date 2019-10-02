@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use failure::{Error,format_err};
 
-use common::linked_list::List;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use mcts::mcts::{DirichletOptions,MCTS,MCTSOptions};
@@ -54,14 +53,14 @@ pub async fn self_play<'a, S, A, E, M>(
     M: 'a + GameAnalyzer<State=S, Action=A>
 {
     let game_state: S = S::initial();
-    let actions = List::new();
+    let num_actions = 0;
     let cpuct_base = options.cpuct_base;
     let cpuct_init = options.cpuct_init;
     let cpuct_root_scaling = options.cpuct_root_scaling;
 
     let mut mcts = MCTS::with_capacity(
         game_state,
-        actions,
+        num_actions,
         game_engine,
         analytics,
         MCTSOptions::<S,A,_,_>::new(
@@ -72,7 +71,7 @@ pub async fn self_play<'a, S, A, E, M>(
             0.0,
             1.0,
             |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-            |_,actions| if actions.len() < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
+            |_,num_actions| if num_actions < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             options.parallelism
         ),
         options.visits

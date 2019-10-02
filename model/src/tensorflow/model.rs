@@ -306,6 +306,9 @@ where
         fs::remove_file(path)?;
     }
 
+    // Wait some time to allow the gpu to clear
+    std::thread::sleep(std::time::Duration::from_secs(30));
+
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
@@ -394,6 +397,9 @@ fn create(
     let result = cmd.wait();
 
     println!("OUTPUT: {:?}", result);
+
+    // Wait some time to allow the gpu to clear
+    std::thread::sleep(std::time::Duration::from_secs(30));
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \

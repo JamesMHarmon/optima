@@ -15,7 +15,6 @@ use engine::game_state::GameState;
 use engine::engine::{GameEngine};
 use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
-use common::linked_list::{List};
 use super::node_details::{PUCT,NodeDetails};
 
 pub struct DirichletOptions {
@@ -27,8 +26,8 @@ pub struct MCTSOptions<S, A, C, T>
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
-    T: Fn(&S, &List<A>) -> f32
+    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    T: Fn(&S, usize) -> f32
 {
     dirichlet: Option<DirichletOptions>,
     fpu: f32,
@@ -44,8 +43,8 @@ impl<S, A, C, T> MCTSOptions<S, A, C, T>
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
-    T: Fn(&S, &List<A>) -> f32
+    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    T: Fn(&S, usize) -> f32
 {
     pub fn new(
         dirichlet: Option<DirichletOptions>,
@@ -74,14 +73,14 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine,
     M: GameAnalyzer,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
-    T: Fn(&S, &List<A>) -> f32
+    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    T: Fn(&S, usize) -> f32
 {
     options: MCTSOptions<S, A, C, T>,
     game_engine: &'a E,
     analytics: &'a M,
     starting_game_state: Option<S>,
-    starting_actions: Option<List<A>>,
+    starting_num_actions: Option<usize>,
     root: Option<Index>,
     arena: RefCell<Arena<MCTSNode<S, A>>>
 }
@@ -92,7 +91,7 @@ struct MCTSNode<S, A> {
     value_score: f32,
     W: Cell<f32>,
     game_state: S,
-    actions: List<A>,
+    num_actions: usize,
     children: Vec<MCTSChildNode<A>>
 }
 
@@ -129,12 +128,12 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State=S,Action=A>,
     M: 'a + GameAnalyzer<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
-    T: Fn(&S, &List<A>) -> f32
+    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    T: Fn(&S, usize) -> f32
 {
     pub fn new(
         game_state: S,
-        actions: List<A>,
+        actions: usize,
         game_engine: &'a E,
         analytics: &'a M,
         options: MCTSOptions<S, A, C, T>
@@ -144,7 +143,7 @@ where
             game_engine,
             analytics,
             starting_game_state: Some(game_state),
-            starting_actions: Some(actions),
+            starting_num_actions: Some(actions),
             root: None,
             arena: RefCell::new(Arena::new())
         }
@@ -152,7 +151,7 @@ where
 
     pub fn with_capacity(
         game_state: S,
-        actions: List<A>,
+        actions: usize,
         game_engine: &'a E,
         analytics: &'a M,
         options: MCTSOptions<S, A, C, T>,
@@ -163,7 +162,7 @@ where
             game_engine,
             analytics,
             starting_game_state: Some(game_state),
-            starting_actions: Some(actions),
+            starting_num_actions: Some(actions),
             root: None,
             arena: RefCell::new(Arena::with_capacity(capacity))
         }
@@ -177,7 +176,7 @@ where
         let dirichlet = &self.options.dirichlet;
         let analytics = &mut self.analytics;
         let root = &mut self.root;
-        let starting_actions = &mut self.starting_actions;
+        let starting_num_actions = &mut self.starting_num_actions;
         let starting_game_state = &mut self.starting_game_state;
         let arena_cell = &self.arena;
 
@@ -185,7 +184,7 @@ where
         let root_node_index = MCTS::<S,A,E,M,C,T>::get_or_create_root_node(
             root,
             starting_game_state,
-            starting_actions,
+            starting_num_actions,
             analytics,
             &mut *arena_borrow_mut,
             dirichlet
@@ -225,8 +224,7 @@ where
             let root_node = &arena_borrow[*root_node_index];
             let temp = &self.options.temperature;
             let game_state = &root_node.game_state;
-            let prior_actions = &root_node.actions;
-            let temp = temp(game_state, prior_actions);
+            let temp = temp(game_state, root_node.num_actions);
             drop(arena_borrow);
             let child_node_details = self.get_root_node_details().await?.children;
 
@@ -312,7 +310,7 @@ where
             root_visits,
             &root.game_state,
             true,
-            &root.actions,
+            root.num_actions,
             options.fpu,
             options.fpu_root,
             &options.cpuct
@@ -336,12 +334,12 @@ where
         let mut root = self.root.take();
         let analytics = &mut self.analytics;
         let starting_game_state = &mut self.starting_game_state;
-        let starting_actions = &mut self.starting_actions;
+        let starting_num_actions = &mut self.starting_num_actions;
         let game_engine = &self.game_engine;
         let dirichlet = &self.options.dirichlet;
 
         let arena_borrow_mut = &mut *self.arena.borrow_mut();
-        let root_index = MCTS::<S,A,E,M,C,T>::get_or_create_root_node(&mut root, starting_game_state, starting_actions, analytics, arena_borrow_mut, dirichlet).await;
+        let root_index = MCTS::<S,A,E,M,C,T>::get_or_create_root_node(&mut root, starting_game_state, starting_num_actions, analytics, arena_borrow_mut, dirichlet).await;
 
         let root_node = arena_borrow_mut.remove(root_index).expect("Root node should exist in arena.");
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
@@ -362,8 +360,8 @@ where
             if clear { Self::clear_node_visits(node_index, arena_borrow_mut); }
             node_index
         } else {
-            let prior_actions = &root_node.actions;
-            let (node, _) = MCTS::<S,A,E,M,C,T>::expand_leaf(&root_node.game_state, prior_actions, &action, game_engine, analytics).await;
+            let prior_num_actions = root_node.num_actions;
+            let (node, _) = MCTS::<S,A,E,M,C,T>::expand_leaf(&root_node.game_state, prior_num_actions, &action, game_engine, analytics).await;
             arena_borrow_mut.insert(node)
         };
 
@@ -402,8 +400,8 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
-        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
+    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, arena, Nsb, game_state, is_root, prior_num_actions, fpu, fpu_root, cpuct);
 
         let chosen_puct_idx = Self::get_max_PUCT_score_index(&pucts)?;
 
@@ -439,15 +437,15 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes_mut<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'b, A>>
+    fn get_PUCT_for_nodes_mut<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'b, A>>
     {
-        let pucts = Self::get_PUCT_for_nodes(nodes, arena, Nsb, game_state, is_root, prior_actions, fpu, fpu_root, cpuct);
+        let pucts = Self::get_PUCT_for_nodes(nodes, arena, Nsb, game_state, is_root, prior_num_actions, fpu, fpu_root, cpuct);
         nodes.iter().zip(pucts).map(|(node, puct)| {
             NodePUCT::<A> { node, score: puct.PUCT }
         }).collect()
     }
 
-    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_actions: &List<A>, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
+    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
     {
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
@@ -461,7 +459,7 @@ where
 
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
-            let cpuct = cpuct(game_state, prior_actions, &child.action, Nsb, is_root);
+            let cpuct = cpuct(game_state, prior_num_actions, &child.action, Nsb, is_root);
             let root_Nsb = (Nsb as f32).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
 
@@ -477,16 +475,16 @@ where
         pucts
     }
 
-    async fn expand_leaf(prior_game_state: &S, prior_actions: &List<A>, action: &A, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    async fn expand_leaf(prior_game_state: &S, prior_num_actions: usize, action: &A, game_engine: &E, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let new_game_state = game_engine.take_action(prior_game_state, action);
-        let new_actions = prior_actions.append(action.to_owned());
-        MCTS::<S,A,E,M,C,T>::analyse_and_create_node(new_game_state, new_actions, analytics).await
+        let num_actions = prior_num_actions + 1;
+        MCTS::<S,A,E,M,C,T>::analyse_and_create_node(new_game_state, num_actions, analytics).await
     }
 
     async fn get_or_create_root_node(
         root: &mut Option<Index>,
         starting_game_state: &mut Option<S>,
-        starting_actions: &mut Option<List<A>>,
+        starting_num_actions: &mut Option<usize>,
         analytics: &M,
         arena: &mut Arena<MCTSNode<S,A>>,
         dirichlet: &Option<DirichletOptions>
@@ -496,11 +494,11 @@ where
         }
 
         let starting_game_state = starting_game_state.take().expect("Tried to use the same starting game state twice");
-        let starting_actions = starting_actions.take().expect("Tried to use the same starting actions twice");
+        let starting_num_actions = starting_num_actions.take().expect("Tried to use the same starting actions twice");
 
         let (mut root_node, _) = MCTS::<S,A,E,M,C,T>::analyse_and_create_node(
             starting_game_state,
-            starting_actions,
+            starting_num_actions,
             analytics
         ).await;
 
@@ -515,7 +513,7 @@ where
 
     // Value range is [-1, 1] for the "get_state_analysis" method. However internally for the MCTS a range of
     // [0, 1] is used.
-    async fn analyse_and_create_node(game_state: S, actions: List<A>, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
+    async fn analyse_and_create_node(game_state: S, actions: usize, analytics: &M) -> (MCTSNode<S, A>, StateAnalysisValue) {
         let analysis_result = analytics.get_state_analysis(&game_state).await;
 
         let value_score = (analysis_result.value_score + 1.0) / 2.0;
@@ -559,12 +557,12 @@ where
 }
 
 impl<S, A> MCTSNode<S, A> {
-    pub fn new(game_state: S, actions: List<A>, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+    pub fn new(game_state: S, num_actions: usize, value_score: f32, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
             value_score,
             W: Cell::new(value_score),
             game_state,
-            actions,
+            num_actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
                     visits: Cell::new(0),
@@ -593,8 +591,8 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine<State=S,Action=A>,
     M: GameAnalyzer<State=S,Action=A>,
-    C: Fn(&S, &List<A>, &A, usize, bool) -> f32,
-    T: Fn(&S, &List<A>) -> f32
+    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    T: Fn(&S, usize) -> f32
 {
     let mut depth = 0;
     let value_score: f32;
@@ -615,7 +613,7 @@ where
             }
 
             let game_state = &node.game_state;
-            let prior_actions = &node.actions;
+            let prior_num_actions = node.num_actions;
             let is_root = depth == 1;
             let Nsb = node.get_node_visits();
 
@@ -625,7 +623,7 @@ where
                 Nsb,
                 game_state,
                 is_root,
-                prior_actions,
+                prior_num_actions,
                 fpu,
                 fpu_root,
                 cpuct
@@ -689,7 +687,7 @@ where
 
                     let action = selected_child_node.action.clone();
                     let prior_game_state = prior_node.game_state.clone();
-                    let prior_actions = prior_node.actions.clone();
+                    let prior_num_actions = prior_node.num_actions;
 
                     drop(arena_borrow_mut);
 
@@ -697,7 +695,7 @@ where
 
                     let (expanded_node, state_analysis) = MCTS::<S,A,E,M,C,T>::expand_leaf(
                         &prior_game_state,
-                        &prior_actions,
+                        prior_num_actions,
                         &action,
                         game_engine,
                         analytics
@@ -901,11 +899,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_is_deterministic() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
-        let mut mcts = MCTS::new(game_state.to_owned(), actions.to_owned(), &game_engine, &analytics, MCTSOptions::new(
+        let mut mcts = MCTS::new(game_state.to_owned(), actions, &game_engine, &analytics, MCTSOptions::new(
             None,
             0.0,
             0.0,
@@ -935,7 +933,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_chooses_best_p1_move() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -957,7 +955,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_chooses_best_p2_move() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -981,7 +979,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_advance_to_next_works_without_search() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1000,7 +998,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_metrics_returns_accurate_results() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1031,7 +1029,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_weights_policy_initially() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1062,7 +1060,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_with_single_node() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1093,7 +1091,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_with_two_nodes() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1124,7 +1122,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_from_provided_non_initial_game_state() {
         let game_state = CountingGameState::from_starting_count(true, 95);
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1155,7 +1153,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_correctly_handles_terminal_nodes_1() {
         let game_state = CountingGameState::from_starting_count(false, 99);
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1186,7 +1184,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_correctly_handles_terminal_nodes_2() {
         let game_state = CountingGameState::from_starting_count(true, 98);
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
 
@@ -1217,7 +1215,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_clear_nodes_results_in_same_outcome() {
         let game_state = CountingGameState::initial();
-        let actions = List::new();
+        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analytics = CountingAnalytics::new();
         let search_num_visits = 3;

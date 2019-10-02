@@ -245,7 +245,7 @@ impl SelfEvaluate
 
         let mut mcts_1 = MCTS::with_capacity(
             S::initial(),
-            List::new(),
+            0,
             game_engine,
             model_1.1,
             MCTSOptions::<S,A,_,_>::new(
@@ -253,7 +253,7 @@ impl SelfEvaluate
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
+                |_,num_actions| if num_actions < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 options.parallelism
             ),
             visits
@@ -261,7 +261,7 @@ impl SelfEvaluate
 
         let mut mcts_2 = MCTS::with_capacity(
             S::initial(),
-            List::new(),
+            0,
             game_engine,
             model_2.1,
             MCTSOptions::<S,A,_,_>::new(
@@ -269,7 +269,7 @@ impl SelfEvaluate
                 fpu,
                 fpu_root,
                 |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,actions| if actions.len() < temperature_max_actions { temperature } else { temperature_post_max_actions },
+                |_,num_actions| if num_actions < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 options.parallelism
             ),
             visits
