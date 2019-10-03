@@ -312,6 +312,7 @@ where
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
         --dir /{game_name}_runs/{run_name}/exported_models/{target_run_num} \
@@ -319,7 +320,7 @@ where
         --tag_set serve \
         tensorrt \
         --precision_mode FP16 \
-        --max_batch_size 2048 \
+        --max_batch_size 512 \
         --is_dynamic_op False",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
@@ -414,7 +415,7 @@ fn create(
         --tag_set serve \
         tensorrt \
         --precision_mode FP16 \
-        --max_batch_size 2048 \
+        --max_batch_size 512 \
         --is_dynamic_op False",
         game_name = game_name,
         run_name = run_name
