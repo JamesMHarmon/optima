@@ -61,20 +61,35 @@ where
     ) -> Self
     {
         let mapper = Arc::new(mapper);
-        let batching_model = Arc::new(BatchingModel::new(model_info.clone(), engine, mapper.clone()));
+        let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone()));
         let alive = Arc::new(AtomicBool::new(true));
 
         for i in 0..ANALYSIS_REQUEST_THREADS {
             let batching_model_ref = batching_model.clone();
             let alive_ref = alive.clone();
+            let model_info = model_info.clone();
+            let mapper = mapper.clone();
+
             std::thread::spawn(move || {
                 let mut last_report = Instant::now();
-                loop {
-                    let num_analysed = batching_model_ref.run_batch_predict();
+                let input_dim = mapper.get_input_dimensions();
+                let predictor = Predictor::new(&model_info, input_dim);
 
-                    if num_analysed == 0 {
+                loop {
+                    let states_to_analyse = batching_model_ref.get_states_to_analyse();
+                    let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
+
+                    if states_to_analyse.len() == 0 {
                         std::thread::sleep(std::time::Duration::from_millis(1));
                     }
+
+                    let predictions = predictor.predict(game_states_to_predict).unwrap();
+                    let predictions: Vec<_> = predictions.into_iter()
+                        .zip(states_to_analyse.into_iter())
+                        .map(|(prediction,(id,_,waker))| (id, prediction, waker))
+                        .collect();
+
+                    batching_model_ref.provide_analysis(predictions);
 
                     let elapsed_mills = last_report.elapsed().as_millis();
                     if i == 0 && elapsed_mills >= 5_000 {
@@ -95,8 +110,6 @@ where
                     if !alive_ref.load(Ordering::SeqCst) {
                         break;
                     }
-
-                    std::thread::sleep(std::time::Duration::from_micros(1));
                 }
             });
         }
@@ -162,6 +175,86 @@ where
             batching_model: self.batching_model.clone(),
             id_generator: self.id_generator.clone()
         }
+    }
+}
+
+struct Predictor {
+    session: SessionAndOps,
+    input_dimensions: [u64; 3]
+}
+
+impl Predictor {
+    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3]) -> Self {
+        let mut graph = Graph::new();
+
+        let exported_model_path = format!(
+            "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
+            game_name = model_info.get_game_name(),
+            run_name = model_info.get_run_name(),
+            model_num = model_info.get_model_num(),
+        );
+
+        let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
+
+        println!("{:?}", exported_model_path);
+
+        let session = Session::from_saved_model(
+            &SessionOptions::new(),
+            &["serve"],
+            &mut graph,
+            exported_model_path
+        ).unwrap();
+
+        let op_input = graph.operation_by_name_required("input_1").unwrap();
+        let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
+        let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
+
+        Self {
+            input_dimensions,
+            session: SessionAndOps {
+                session,
+                op_input,
+                op_value_head,
+                op_policy_head
+            }
+        }
+    }
+
+    fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32)>, Error> {
+        let batch_size = game_state_inputs.len();
+        let input_dim = self.input_dimensions;
+        let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
+        let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| *v).collect();
+        let mut value_head_outputs = Vec::with_capacity(batch_size);
+        let mut policy_head_outputs = Vec::with_capacity(batch_size);
+        let policy_dimension;
+
+        {
+            let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
+            let session = &self.session;
+
+            let mut output_step = SessionRunArgs::new();
+            output_step.add_feed(&session.op_input, 0, &input_tensor);
+            let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
+            let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
+
+            session.session.run(&mut output_step).unwrap();
+
+            let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
+            let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
+
+            policy_dimension = policy_head_output.dims()[1];
+
+            value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
+            policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
+        }
+        
+        let analysis_results: Vec<_> = izip!(
+            policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
+            value_head_outputs
+        ).collect();
+
+        Ok(analysis_results)
     }
 }
 
@@ -295,15 +388,9 @@ where
         fs::remove_file(path)?;
     }
 
-    // Wait some time to allow the gpu to clear
-    std::thread::sleep(std::time::Duration::from_secs(30));
-
     create_tensorrt_model(source_model_info.get_game_name(), source_model_info.get_run_name(), target_model_info.get_model_num())?;
 
     println!("Training process complete");
-
-    // Wait some time to allow the gpu to clear
-    std::thread::sleep(std::time::Duration::from_secs(30));
 
     Ok(())
 }
@@ -413,8 +500,7 @@ pub struct BatchingModel<E,Map> {
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
     engine: E,
-    mapper: Arc<Map>,
-    session: Mutex<SessionAndOps>
+    mapper: Arc<Map>
 }
 
 impl<S,A,E,Map> BatchingModel<E,Map>
@@ -424,37 +510,13 @@ where
     E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
     Map: Mapper<S,A>
 {
-    fn new(model_info: ModelInfo, engine: E, mapper: Arc<Map>) -> Self
+    fn new(engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
         let states_analysed = Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS));
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
-
-        let mut graph = Graph::new();
-
-        let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
-            game_name = model_info.get_game_name(),
-            run_name = model_info.get_run_name(),
-            model_num = model_info.get_model_num(),
-        );
-
-        let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
-
-        println!("{:?}", exported_model_path);
-
-        let session = Session::from_saved_model(
-            &SessionOptions::new(),
-            &["serve"],
-            &mut graph,
-            exported_model_path
-        ).unwrap();
-
-        let op_input = graph.operation_by_name_required("input_1").unwrap();
-        let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
-        let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
 
         Self {
             states_to_analyse,
@@ -463,17 +525,11 @@ where
             min_batch_size,
             max_batch_size,
             engine,
-            mapper,
-            session: Mutex::new(SessionAndOps {
-                session,
-                op_input,
-                op_value_head,
-                op_policy_head
-            })
+            mapper
         }
     }
 
-    fn run_batch_predict(&self) -> usize {
+    fn get_states_to_analyse(&self) -> Vec<(usize, Vec<f32>, Waker)> {
         let states_to_analyse_queue = &self.states_to_analyse;
 
         let mut states_to_analyse: Vec<_> = Vec::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE);
@@ -485,32 +541,27 @@ where
             }
         }
 
-        let states_to_analyse_len = states_to_analyse.len();
-        self.min_batch_size.fetch_min(states_to_analyse_len, Ordering::SeqCst);
-        self.max_batch_size.fetch_max(states_to_analyse_len, Ordering::SeqCst);
+        states_to_analyse
+    }
 
-        if states_to_analyse_len == 0 {
-            return 0;
-        }
-
-        let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
-        let analysis: Vec<_> = self.predict(game_states_to_predict).unwrap();
-        let num_analysed = analysis.len();
+    fn provide_analysis(&self, analysis: Vec<(usize, (Vec<f32>,f32), Waker)>) {
+        let analysis_len = analysis.len();
+        self.min_batch_size.fetch_min(analysis_len, Ordering::SeqCst);
+        self.max_batch_size.fetch_max(analysis_len, Ordering::SeqCst);
+        let mut wakers = Vec::with_capacity(analysis.len());
 
         {
             let mut states_analysed_lock = self.states_analysed.lock().unwrap();
-            for (i, analysis) in analysis.into_iter().enumerate() {
-                let id = states_to_analyse[i].0;
+            for (id, analysis, waker) in analysis.into_iter() {
                 states_analysed_lock.insert(id, analysis);
+                wakers.push(waker);
             }
             drop(states_analysed_lock);
         }
 
-        for (_id, _s, waker) in states_to_analyse.into_iter() {
+        for waker in wakers.into_iter() {
             waker.wake();
         }
-
-        num_analysed
     }
 
     fn take_num_nodes_analysed(&self) -> usize {
@@ -554,45 +605,6 @@ where
 
             Poll::Pending
         }
-    }
-
-    fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32)>, Error> {
-        let mapper = &*self.mapper;
-
-        let batch_size = game_state_inputs.len();
-        let input_dim = mapper.get_input_dimensions();
-        let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| *v).collect();
-        let mut value_head_outputs = Vec::with_capacity(batch_size);
-        let mut policy_head_outputs = Vec::with_capacity(batch_size);
-        let policy_dimension;
-
-        {
-            let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
-            let session = self.session.lock().unwrap();
-
-            let mut output_step = SessionRunArgs::new();
-            output_step.add_feed(&session.op_input, 0, &input_tensor);
-            let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
-            let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
-
-            session.session.run(&mut output_step).unwrap();
-
-            let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
-            let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
-
-            policy_dimension = policy_head_output.dims()[1];
-
-            value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
-            policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
-        }
-        
-        let analysis_results: Vec<_> = izip!(
-            policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
-            value_head_outputs
-        ).collect();
-
-        Ok(analysis_results)
     }
 }
 
