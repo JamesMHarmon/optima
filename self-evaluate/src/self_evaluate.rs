@@ -74,8 +74,8 @@ impl SelfEvaluate
         let model_1_info = model_1.get_model_info();
         let model_2_info = model_2.get_model_info();
 
-        let model_1_num = model_1_info.get_run_num();
-        let model_2_num = model_2_info.get_run_num();
+        let model_1_num = model_1_info.get_model_num();
+        let model_2_num = model_2_info.get_model_num();
 
         let starting_time = Instant::now();
 
@@ -300,8 +300,8 @@ impl SelfEvaluate
         let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
 
         Ok(GameResult {
-            model_1_num: model_1.0.get_run_num(),
-            model_2_num: model_2.0.get_run_num(),
+            model_1_num: model_1.0.get_model_num(),
+            model_2_num: model_2.0.get_model_num(),
             actions,
             score
         })

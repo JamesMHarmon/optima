@@ -243,9 +243,9 @@ where
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
-        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
-        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
+        -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_model_num:0>5}.h5 \
+        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_model_num:0>5}.h5 \
+        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_model_num} \
         -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
         -e INITIAL_EPOCH={initial_epoch} \
         -e DATA_PATHS={train_data_paths} \
@@ -259,12 +259,12 @@ where
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
-        source_run_num = source_model_info.get_run_num(),
-        target_run_num = target_model_info.get_run_num(),
+        source_model_num = source_model_info.get_model_num(),
+        target_model_num = target_model_info.get_model_num(),
         train_ratio = options.train_ratio,
         train_batch_size = options.train_batch_size,
-        epochs = (source_model_info.get_run_num() - 1) + options.epochs,
-        initial_epoch = (source_model_info.get_run_num() - 1),
+        epochs = (source_model_info.get_model_num() - 1) + options.epochs,
+        initial_epoch = (source_model_info.get_model_num() - 1),
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
@@ -560,7 +560,7 @@ struct PredictionResults {
 fn get_model_url(model_info: &ModelInfo) -> String {
     format!(
         "http://localhost:8501/v1/models/exported_models/versions/{version}:predict",
-        version = model_info.get_run_num()
+        version = model_info.get_model_num()
     )
 }
 

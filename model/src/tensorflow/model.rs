@@ -260,9 +260,9 @@ where
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_run_num:0>5}.h5 \
-        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_run_num:0>5}.h5 \
-        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_run_num} \
+        -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_model_num:0>5}.h5 \
+        -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_model_num:0>5}.h5 \
+        -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_model_num} \
         -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
         -e INITIAL_EPOCH={initial_epoch} \
         -e DATA_PATHS={train_data_paths} \
@@ -276,30 +276,19 @@ where
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
-        source_run_num = source_model_info.get_run_num(),
-        target_run_num = target_model_info.get_run_num(),
+        source_model_num = source_model_info.get_model_num(),
+        target_model_num = target_model_info.get_model_num(),
         train_ratio = options.train_ratio,
         train_batch_size = options.train_batch_size,
-        epochs = (source_model_info.get_run_num() - 1) + options.epochs,
-        initial_epoch = (source_model_info.get_run_num() - 1),
+        epochs = (source_model_info.get_model_num() - 1) + options.epochs,
+        initial_epoch = (source_model_info.get_model_num() - 1),
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight
     );
 
-    println!("{}", docker_cmd);
-
-    let mut cmd = Command::new("/bin/bash")
-        .arg("-c")
-        .arg(docker_cmd)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()?;
-
-    let result = cmd.wait();
-
-    println!("OUTPUT: {:?}", result);
+    run_cmd(&docker_cmd)?;
 
     for file_name in train_data_file_names {
         let path = source_base_path.join(file_name);
@@ -309,36 +298,7 @@ where
     // Wait some time to allow the gpu to clear
     std::thread::sleep(std::time::Duration::from_secs(30));
 
-    let docker_cmd = format!("docker run --rm \
-        --runtime=nvidia \
-        --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        -e NVIDIA_VISIBLE_DEVICES=1 \
-        tensorflow/tensorflow:latest-gpu \
-        usr/local/bin/saved_model_cli convert \
-        --dir /{game_name}_runs/{run_name}/exported_models/{target_run_num} \
-        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{target_run_num} \
-        --tag_set serve \
-        tensorrt \
-        --precision_mode FP16 \
-        --max_batch_size 512 \
-        --is_dynamic_op False",
-        game_name = source_model_info.get_game_name(),
-        run_name = source_model_info.get_run_name(),
-        target_run_num = target_model_info.get_run_num()
-    );
-
-    println!("{}", docker_cmd);
-
-    let mut cmd = Command::new("/bin/bash")
-        .arg("-c")
-        .arg(docker_cmd)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()?;
-
-    let result = cmd.wait();
-
-    println!("OUTPUT: {:?}", result);
+    create_tensorrt_model(source_model_info.get_game_name(), source_model_info.get_run_name(), target_model_info.get_model_num())?;
 
     println!("Training process complete");
 
@@ -389,43 +349,46 @@ fn create(
         num_blocks = num_blocks,
     );
 
-    println!("{}", docker_cmd);
+    run_cmd(&docker_cmd)?;
 
-    let mut cmd = Command::new("/bin/bash")
-        .arg("-c")
-        .arg(docker_cmd)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()?;
+    create_tensorrt_model(game_name, run_name, 1)?;
 
-    let result = cmd.wait();
+    println!("Model creation process complete");
 
-    println!("OUTPUT: {:?}", result);
+    Ok(())
+}
 
-    // Wait some time to allow the gpu to clear
-    std::thread::sleep(std::time::Duration::from_secs(30));
-
+fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<(), Error> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
-        --dir /{game_name}_runs/{run_name}/exported_models/1 \
-        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/1 \
+        --dir /{game_name}_runs/{run_name}/exported_models/{model_num} \
+        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{model_num} \
         --tag_set serve \
         tensorrt \
         --precision_mode FP16 \
         --max_batch_size 512 \
         --is_dynamic_op False",
         game_name = game_name,
-        run_name = run_name
+        run_name = run_name,
+        model_num = model_num
     );
 
-    println!("{}", docker_cmd);
+    run_cmd(&docker_cmd)?;
+
+    Ok(())
+}
+
+fn run_cmd(cmd: &str) -> Result<(), Error> {
+    println!("\n");
+    println!("{}", cmd);
+    println!("\n");
 
     let mut cmd = Command::new("/bin/bash")
         .arg("-c")
-        .arg(docker_cmd)
+        .arg(cmd)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()?;
@@ -433,8 +396,6 @@ fn create(
     let result = cmd.wait();
 
     println!("OUTPUT: {:?}", result);
-
-    println!("Model creation process complete");
 
     Ok(())
 }
@@ -474,10 +435,10 @@ where
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/tensorrt_models/{run_num}",
+            "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
             game_name = model_info.get_game_name(),
             run_name = model_info.get_run_name(),
-            run_num = model_info.get_run_num(),
+            model_num = model_info.get_model_num(),
         );
 
         let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);

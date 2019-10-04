@@ -6,7 +6,7 @@ use super::super::model_info::ModelInfo;
 pub fn get_latest_model_info(model_info: &ModelInfo) -> std::io::Result<ModelInfo> {
     let paths = Paths::from_model_info(model_info);
 
-    let latest_run_num = fs::read_dir(paths.get_models_path())?
+    let latest_model_num = fs::read_dir(paths.get_models_path())?
         .map(|e| e.expect("Could not read model file").path())
         .filter(|p| p.is_file())
         .filter_map(|p| {
@@ -14,7 +14,7 @@ pub fn get_latest_model_info(model_info: &ModelInfo) -> std::io::Result<ModelInf
         })
         .map(|n| {
             let model_name_excluding_file_ext = &n[0..(n.len() - 3)];
-            ModelInfo::from_model_name(model_name_excluding_file_ext).get_run_num()
+            ModelInfo::from_model_name(model_name_excluding_file_ext).get_model_num()
         })
         .max()
         .expect("No models found");
@@ -22,7 +22,7 @@ pub fn get_latest_model_info(model_info: &ModelInfo) -> std::io::Result<ModelInf
     let latest_model_info = ModelInfo::new(
         model_info.get_game_name().to_owned(),
         model_info.get_run_name().to_owned(),
-        latest_run_num
+        latest_model_num
     );
 
     println!("Getting latest model: {}", latest_model_info.get_model_name());
