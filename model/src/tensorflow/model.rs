@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -6,7 +5,7 @@ use std::fs::{self};
 use std::future::Future;
 use std::pin::Pin;
 use std::process::{Command,Stdio};
-use std::sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}};
+use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::time::Instant;
 use chrono::{Utc};
@@ -15,7 +14,7 @@ use failure::Error;
 use itertools::{izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 
-
+use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
 
@@ -222,6 +221,11 @@ impl Predictor {
 
     fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32)>, Error> {
         let batch_size = game_state_inputs.len();
+
+        if batch_size == 0 {
+            return Ok(Vec::new());
+        }
+
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
         let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| *v).collect();
@@ -229,25 +233,23 @@ impl Predictor {
         let mut policy_head_outputs = Vec::with_capacity(batch_size);
         let policy_dimension;
 
-        {
-            let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
-            let session = &self.session;
+        let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
+        let session = &self.session;
 
-            let mut output_step = SessionRunArgs::new();
-            output_step.add_feed(&session.op_input, 0, &input_tensor);
-            let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
-            let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
+        let mut output_step = SessionRunArgs::new();
+        output_step.add_feed(&session.op_input, 0, &input_tensor);
+        let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
+        let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
 
-            session.session.run(&mut output_step).unwrap();
+        session.session.run(&mut output_step).unwrap();
 
-            let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
-            let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
+        let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
+        let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
 
-            policy_dimension = policy_head_output.dims()[1];
+        policy_dimension = policy_head_output.dims()[1];
 
-            value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
-            policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
-        }
+        value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
+        policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
         
         let analysis_results: Vec<_> = izip!(
             policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
@@ -495,7 +497,7 @@ impl<E,Map> Drop for TensorflowModel<E,Map> {
 
 pub struct BatchingModel<E,Map> {
     states_to_analyse: SegQueue<(usize, Vec<f32>, Waker)>,
-    states_analysed: Mutex<HashMap<usize, (Vec<f32>,f32)>>,
+    states_analysed: IncrementingMap<(Vec<f32>,f32)>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -513,7 +515,7 @@ where
     fn new(engine: E, mapper: Arc<Map>) -> Self
     {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = Mutex::new(HashMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS));
+        let states_analysed = IncrementingMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -550,13 +552,9 @@ where
         self.max_batch_size.fetch_max(analysis_len, Ordering::SeqCst);
         let mut wakers = Vec::with_capacity(analysis.len());
 
-        {
-            let mut states_analysed_lock = self.states_analysed.lock().unwrap();
-            for (id, analysis, waker) in analysis.into_iter() {
-                states_analysed_lock.insert(id, analysis);
-                wakers.push(waker);
-            }
-            drop(states_analysed_lock);
+        for (id, analysis, waker) in analysis.into_iter() {
+            self.states_analysed.insert(id, analysis);
+            wakers.push(waker);
         }
 
         for waker in wakers.into_iter() {
@@ -578,7 +576,7 @@ where
     }
 
     fn poll(&self, id: usize) -> Poll<(Vec<f32>,f32)> {
-        let analysis = self.states_analysed.lock().unwrap().remove(&id);
+        let analysis = self.states_analysed.remove(id);
 
         match analysis {
             Some(analysis) => {

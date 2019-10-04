@@ -9,6 +9,7 @@ publish = false
 name="model"
 
 [dependencies]
+common = { path = "../common" }
 engine = { path = "../engine" }
 
 failure="0.1"
