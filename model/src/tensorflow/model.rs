@@ -448,6 +448,7 @@ fn create(
 fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<(), Error> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
