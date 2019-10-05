@@ -79,7 +79,7 @@ where
                     let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
 
                     if states_to_analyse.len() == 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(1));
+                        std::thread::sleep(std::time::Duration::from_micros(100));
                     }
 
                     let predictions = predictor.predict(game_states_to_predict).unwrap();
