@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct ModelInfo {
     game_name: String,
     run_name: String,
