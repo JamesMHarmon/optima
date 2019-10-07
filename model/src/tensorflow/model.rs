@@ -79,7 +79,7 @@ where
                     let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
 
                     if states_to_analyse.len() == 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(1));
+                        std::thread::sleep(std::time::Duration::from_micros(100));
                     }
 
                     let predictions = predictor.predict(game_states_to_predict).unwrap();
@@ -450,6 +450,7 @@ fn create(
 fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<(), Error> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
