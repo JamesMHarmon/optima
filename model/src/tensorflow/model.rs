@@ -1,23 +1,27 @@
 use std::fmt::Formatter;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::fs::{self};
+use std::fs::{self,File};
 use std::future::Future;
 use std::pin::Pin;
 use std::process::{Command,Stdio};
 use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::time::Instant;
+use std::path::{PathBuf};
+use std::io::{BufReader,Write};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
 use itertools::{izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
+use serde::{Serialize, Deserialize};
 
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
 
+use super::half::Half;
 use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,TRAIN_DATA_CHUNK_SIZE};
 use super::paths::Paths;
 use super::super::analytics::{self,ActionWithPolicy,GameStateAnalysis};
@@ -37,6 +41,16 @@ pub struct TensorflowModel<E,Map>
     alive: Arc<AtomicBool>,
     id_generator: Arc<AtomicUsize>,
     mapper: Arc<Map>
+}
+
+#[derive(Serialize,Deserialize)]
+pub struct TensorflowModelOptions {
+    pub num_filters: usize,
+    pub num_blocks: usize,
+    pub channel_height: usize,
+    pub channel_width: usize,
+    pub channels: usize,
+    pub output_size: usize
 }
 
 pub trait Mapper<S,A> {
@@ -124,17 +138,11 @@ where
 
     pub fn create(
         model_info: &ModelInfo,
-        num_filters: usize,
-        num_blocks: usize,
-        (input_h, input_w, input_c): (usize, usize, usize),
-        output_size: usize
+        options: &TensorflowModelOptions
      ) -> Result<(), Error> {
         create(
             model_info,
-            num_filters,
-            num_blocks,
-            (input_h, input_w, input_c),
-            output_size
+            options
         )
     }
 }
@@ -228,10 +236,9 @@ impl Predictor {
 
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| *v).collect();
-        let mut value_head_outputs = Vec::with_capacity(batch_size);
-        let mut policy_head_outputs = Vec::with_capacity(batch_size);
-        let policy_dimension;
+        let flattened_inputs: Vec<Half> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| Half::from(*v)).collect();
+        let mut value_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
+        let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
 
         let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
         let session = &self.session;
@@ -243,13 +250,13 @@ impl Predictor {
 
         session.session.run(&mut output_step).unwrap();
 
-        let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
-        let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
+        let value_head_output: Tensor<Half> = output_step.fetch(value_head_fetch_token).unwrap();
+        let policy_head_output: Tensor<Half> = output_step.fetch(policy_head_fetch_token).unwrap();
 
-        policy_dimension = policy_head_output.dims()[1];
+        let policy_dimension = policy_head_output.dims()[1];
 
-        value_head_outputs.extend(value_head_output.into_iter().map(|v| *v));
-        policy_head_outputs.extend(policy_head_output.into_iter().map(|c| *c));
+        value_head_outputs.extend(value_head_output.into_iter().map::<f32,_>(|v| (*v).into()));
+        policy_head_outputs.extend(policy_head_output.into_iter().map::<f32,_>(|c| (*c).into()));
         
         let analysis_results: Vec<_> = izip!(
             policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
@@ -352,6 +359,7 @@ where
         file_name = file_name
     ));
 
+    let model_options = get_options(source_model_info)?;
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
@@ -367,6 +375,12 @@ where
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
         -e VALUE_LOSS_WEIGHT={value_loss_weight} \
+        -e INPUT_H={input_h} \
+        -e INPUT_W={input_w} \
+        -e INPUT_C={input_c} \
+        -e OUTPUT_SIZE={output_size} \
+        -e NUM_FILTERS={num_filters} \
+        -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
@@ -380,7 +394,13 @@ where
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
-        value_loss_weight = options.value_loss_weight
+        value_loss_weight = options.value_loss_weight,
+        input_h = model_options.channel_height,
+        input_w = model_options.channel_width,
+        input_c = model_options.channels,
+        output_size = model_options.output_size,
+        num_filters = model_options.num_filters,
+        num_blocks = model_options.num_blocks,
     );
 
     run_cmd(&docker_cmd)?;
@@ -400,20 +420,16 @@ where
 #[allow(non_snake_case)]
 fn create(
     model_info: &ModelInfo,
-    num_filters: usize,
-    num_blocks: usize,
-    (input_h, input_w, input_c): (usize, usize, usize),
-    output_size: usize
+    options: &TensorflowModelOptions
 ) -> Result<(), Error>
 {
     let game_name = model_info.get_game_name();
     let run_name = model_info.get_run_name();
 
-    fs::create_dir_all(format!(
-        "./{game_name}_runs/{run_name}/models",
-        game_name = game_name,
-        run_name = run_name
-    ))?;
+    let model_dir = get_model_dir(model_info);
+    fs::create_dir_all(model_dir)?;
+
+    write_options(model_info, options)?;
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
@@ -430,12 +446,12 @@ fn create(
         quoridor_engine/create:latest",
         game_name = game_name,
         run_name = run_name,
-        input_h = input_h,
-        input_w = input_w,
-        input_c = input_c,
-        output_size = output_size,
-        num_filters = num_filters,
-        num_blocks = num_blocks,
+        input_h = options.channel_height,
+        input_w = options.channel_width,
+        input_c = options.channels,
+        output_size = options.output_size,
+        num_filters = options.num_filters,
+        num_blocks = options.num_blocks,
     );
 
     run_cmd(&docker_cmd)?;
@@ -443,6 +459,32 @@ fn create(
     create_tensorrt_model(game_name, run_name, 1)?;
 
     println!("Model creation process complete");
+
+    Ok(())
+}
+
+fn get_model_dir(model_info: &ModelInfo) -> PathBuf {
+    Paths::from_model_info(model_info).get_models_path()
+}
+
+fn get_model_options_path(model_info: &ModelInfo) -> PathBuf {
+    get_model_dir(model_info).join("model-options.json")
+}
+
+fn get_options(model_info: &ModelInfo) -> Result<TensorflowModelOptions, Error> {
+    let file_path = get_model_options_path(model_info);
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let options = serde_json::from_reader(reader)?;
+    Ok(options)
+}
+
+fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<(), Error> {
+    let serialized_options = serde_json::to_string(options)?;
+
+    let file_path = get_model_options_path(model_info);
+    let mut file = File::create(file_path)?;
+    writeln!(file, "{}", serialized_options)?;
 
     Ok(())
 }

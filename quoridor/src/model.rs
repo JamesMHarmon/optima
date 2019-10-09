@@ -1,8 +1,9 @@
+use model::model::ModelOptions;
 use model::analysis_cache::{cache,AnalysisCacheModel};
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
-use model::tensorflow::model::TensorflowModel;
+use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use super::action::{Action,Coordinate};
 use super::constants::{ASCII_LETTER_A,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE,NUM_WALLS_PER_PLAYER,WALL_BOARD_SIZE,PAWN_BOARD_SIZE,BOARD_WIDTH,BOARD_HEIGHT};
@@ -157,14 +158,20 @@ fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
 
 impl model::model::ModelFactory for ModelFactory {
     type M = AnalysisCacheModel<ShouldCache,TensorflowModel<Engine,Mapper>>;
+    type O = ModelOptions;
 
-    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
+    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
+    {
         TensorflowModel::<Engine,Mapper>::create(
             model_info,
-            num_filters,
-            num_blocks,
-            (INPUT_H, INPUT_W, INPUT_C),
-            OUTPUT_SIZE
+            &TensorflowModelOptions {
+                num_filters: options.number_of_filters,
+                num_blocks: options.number_of_residual_blocks,
+                channel_height: INPUT_H,
+                channel_width: INPUT_W,
+                channels: INPUT_C,
+                output_size: OUTPUT_SIZE
+            }
         ).unwrap();
 
         self.get(model_info)

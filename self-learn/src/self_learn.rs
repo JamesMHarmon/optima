@@ -36,12 +36,6 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ModelOptions {
-    pub number_of_filters: usize,
-    pub number_of_residual_blocks: usize
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct SelfLearnOptions {
     pub number_of_games_per_net: usize,
     pub self_play_batch_size: usize,
@@ -75,20 +69,20 @@ where
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
     E: 'a + GameEngine<State=S,Action=A> + Sync
 {
-    pub fn create<M,T,F>(
+    pub fn create<M,T,F,O>(
         game_name: String,
         run_name: String,
         model_factory: &F,
-        options: &ModelOptions
+        options: &O
     ) -> Result<(), Error>
     where
         M: Model<Action=A,State=S,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S> + Send,
-        F: ModelFactory<M=M>
+        F: ModelFactory<M=M,O=O>
     {
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
-        model_factory.create(&model_info, options.number_of_filters, options.number_of_residual_blocks);
+        model_factory.create(&model_info, options);
 
         Ok(())
     }

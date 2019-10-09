@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct ModelInfo {
     game_name: String,
     run_name: String,
@@ -22,6 +22,11 @@ impl ModelInfo {
             run_name: parts[1].to_string(),
             model_num: parts[2].parse().unwrap()
         }
+    }
+
+    pub fn is_model_name(model_name: &str) -> bool {
+        let parts: Vec<_> = model_name.split("_").collect();
+        parts.len() == 3 && parts[2].split(".").collect::<Vec<_>>()[0].parse::<usize>().is_ok()
     }
 
     pub fn get_game_name(&self) -> &str {

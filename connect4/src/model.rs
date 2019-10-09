@@ -3,8 +3,9 @@ use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
 use model::analysis_cache::AnalysisCacheModel;
-use model::tensorflow::model::TensorflowModel;
+use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
+use model::model::ModelOptions;
 use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
@@ -82,14 +83,19 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 
 impl model::model::ModelFactory for ModelFactory {
     type M = AnalysisCacheModel<ShouldCache,TensorflowModel<Engine,Mapper>>;
+    type O = ModelOptions;
 
-    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
+    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M {
         TensorflowModel::<Engine,Mapper>::create(
             model_info,
-            num_filters,
-            num_blocks,
-            (INPUT_H, INPUT_W, INPUT_C),
-            OUTPUT_SIZE
+            &TensorflowModelOptions {
+                num_filters: options.number_of_filters,
+                num_blocks: options.number_of_residual_blocks,
+                channel_height: INPUT_H,
+                channel_width: INPUT_W,
+                channels: INPUT_C,
+                output_size: OUTPUT_SIZE
+            }
         ).unwrap();
 
         self.get(model_info)    

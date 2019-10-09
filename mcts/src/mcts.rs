@@ -112,6 +112,7 @@ struct MCTSChildNode<A> {
     state: MCTSNodeState
 }
 
+#[derive(Debug)]
 struct NodePUCT<'a, A> {
     node: &'a MCTSChildNode<A>,
     score: f32
@@ -415,7 +416,7 @@ where
             .collect();
     
         match max_nodes.len() {
-            0 => Err(format_err!("No candidate moves available")),
+            0 => Err(format_err!("No candidate moves available: {:?}", pucts)),
             1 => Ok(max_nodes.swap_remove(0)),
             len => Ok(max_nodes.swap_remove(thread_rng().gen_range(0, len)))
         }

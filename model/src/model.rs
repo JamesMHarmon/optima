@@ -1,5 +1,6 @@
 use engine::game_state::GameState;
 use failure::Error;
+use serde::{Serialize,Deserialize};
 
 use super::model_info::ModelInfo;
 use super::position_metrics::PositionMetrics;
@@ -18,10 +19,17 @@ pub trait Model {
 pub trait ModelFactory
 {
     type M: Model;
+    type O;
 
-    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M;
+    fn create(&self, model_info: &ModelInfo, model_options: &Self::O) -> Self::M;
     fn get(&self, model_info: &ModelInfo) -> Self::M;
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo,Error>;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ModelOptions {
+    pub number_of_filters: usize,
+    pub number_of_residual_blocks: usize
 }
 
 pub struct TrainOptions {

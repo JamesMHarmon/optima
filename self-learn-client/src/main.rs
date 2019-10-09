@@ -7,14 +7,14 @@ use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::io::Read;
 use serde::{Serialize, Deserialize};
-use model::model::ModelFactory;
+use model::model::{ModelOptions,ModelFactory};
 use model::model_info::ModelInfo;
 use clap::App;
 use connect4::engine::{Engine as Connect4Engine};
 use connect4::model::{ModelFactory as Connect4ModelFactory};
 use quoridor::engine::{Engine as QuoridorEngine};
 use quoridor::model::{ModelFactory as QuoridorModelFactory};
-use self_learn::self_learn::{ModelOptions,SelfLearn,SelfLearnOptions};
+use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 use self_evaluate::self_evaluate::{SelfEvaluateOptions};
 use ponder::ponder::{Ponder,PonderOptions};
 
