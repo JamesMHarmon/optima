@@ -9,9 +9,9 @@ use model::analytics::GameAnalyzer;
 use model::node_metrics::NodeMetrics;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SelfPlayMetrics<A> {
+pub struct SelfPlayMetrics<A,V> {
     analysis: Vec<(A, NodeMetrics<A>)>,
-    score: f32
+    score: V
 }
 
 #[derive(Debug)]
@@ -30,27 +30,24 @@ pub struct SelfPlayOptions {
     pub epsilon: f32
 }
 
-impl<A> SelfPlayMetrics<A> {
-    pub fn take_analysis(self) -> Vec<(A, NodeMetrics<A>)> {
-        self.analysis
-    }
+impl<A,V> SelfPlayMetrics<A,V> {
 
-    pub fn score(&self) -> f32 {
-        self.score
+    pub fn take(self) -> (Vec<(A, NodeMetrics<A>)>, V) {
+        (self.analysis, self.score)
     }
 }
 
 #[allow(non_snake_case)]
-pub async fn self_play<'a, S, A, E, M>(
+pub async fn self_play<'a, S, A, E, M, V>(
     game_engine: &'a E,
     analytics: &'a M,
     options: &'a SelfPlayOptions
-) -> Result<SelfPlayMetrics<A>, Error>
+) -> Result<SelfPlayMetrics<A,V>, Error>
     where
     S: GameState,
     A: Clone + Eq + Debug,
-    E: 'a + GameEngine<State=S, Action=A>,
-    M: 'a + GameAnalyzer<State=S, Action=A>
+    E: 'a + GameEngine<State=S,Action=A,Value=V>,
+    M: 'a + GameAnalyzer<State=S,Action=A>
 {
     let game_state: S = S::initial();
     let num_actions = 0;
@@ -78,25 +75,22 @@ pub async fn self_play<'a, S, A, E, M>(
     );
 
     let mut state: S = S::initial();
-    let mut self_play_metrics = SelfPlayMetrics::<A> {
-        analysis: Vec::new(),
-        score: 0.0
-    };
+    let mut analysis = Vec::new();
 
-    while game_engine.is_terminal_state(&state) == None {
+    while game_engine.is_terminal_state(&state).is_none() {
         mcts.search(options.visits).await?;
         let action = mcts.select_action().await?;
         let metrics = mcts.get_root_node_metrics().await?;
 
         mcts.advance_to_action(action.to_owned()).await?;
         state = game_engine.take_action(&state, &action);
-        self_play_metrics.analysis.push((action, metrics));
+        analysis.push((action, metrics));
     };
 
-    let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
-    let p1_last_to_move = self_play_metrics.analysis.len() % 2 == 1;
-    let final_score_p1 = if p1_last_to_move { final_score * -1.0 } else { final_score };
-    self_play_metrics.score = final_score_p1;
+    let score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
 
-    Ok(self_play_metrics)
+    Ok(SelfPlayMetrics::<A,V> {
+        analysis,
+        score
+    })
 }

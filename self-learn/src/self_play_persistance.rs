@@ -35,7 +35,7 @@ impl SelfPlayPersistance
         })
     }
 
-    pub fn write<A: Serialize>(&mut self, self_play_metrics: &SelfPlayMetrics<A>) -> Result<(), Error> {
+    pub fn write<A: Serialize, V: Serialize>(&mut self, self_play_metrics: &SelfPlayMetrics<A,V>) -> Result<(), Error> {
         let serialized = serde_json::to_string(self_play_metrics)?;
 
         writeln!(self.file, "{}", serialized)?;
@@ -43,25 +43,25 @@ impl SelfPlayPersistance
         Ok(())
     }
 
-    pub fn read<A: DeserializeOwned>(&self) -> Result<Vec<SelfPlayMetrics<A>>, Error> {
+    pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
         let file_path = Self::get_file_path(&self.games_dir, &self.name);
         Self::read_metrics_from_file(&file_path)
     }
 
-    pub fn read_all_reverse_iter<A: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A>, Error> {
+    pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A,V>, Error> {
         let file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
 
         Ok(SelfPlayMetricsIterator::new(file_paths))
     }
 
-    fn read_metrics_from_file<A: DeserializeOwned>(file_path: &Path) -> Result<Vec<SelfPlayMetrics<A>>, Error> {
+    fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
         let file = File::open(file_path);
 
         match file {
             Err(_) => Ok(Vec::new()),
             Ok(file) => {
                 let buf = BufReader::new(file);
-                let games: Vec<SelfPlayMetrics<A>> = buf.lines()
+                let games: Vec<SelfPlayMetrics<A,V>> = buf.lines()
                     .enumerate()
                     .filter_map(|(i,l)| l.ok().map(|l| (i,l)))
                     .map(|(_,l)| serde_json::from_str(&l).unwrap())
@@ -86,30 +86,33 @@ impl SelfPlayPersistance
     }
 }
 
-pub struct SelfPlayMetricsIterator<A>
+pub struct SelfPlayMetricsIterator<A,V>
 where
-    A: DeserializeOwned
+    A: DeserializeOwned,
+    V: DeserializeOwned
 {
     file_paths: Vec<PathBuf>,
-    metrics: Vec<SelfPlayMetrics<A>>
+    metrics: Vec<SelfPlayMetrics<A,V>>
 }
 
-impl<A> SelfPlayMetricsIterator<A>
+impl<A,V> SelfPlayMetricsIterator<A,V>
 where
-    A: DeserializeOwned
+    A: DeserializeOwned,
+    V: DeserializeOwned
 {
     pub fn new(file_paths: Vec<PathBuf>) -> Self {
         Self { file_paths, metrics: Vec::new() }
     }
 }
 
-impl<A> Iterator for SelfPlayMetricsIterator<A>
+impl<A,V> Iterator for SelfPlayMetricsIterator<A,V>
 where
-    A: DeserializeOwned
+    A: DeserializeOwned,
+    V: DeserializeOwned
 {
-    type Item = SelfPlayMetrics<A>;
+    type Item = SelfPlayMetrics<A,V>;
 
-    fn next(&mut self) -> Option<SelfPlayMetrics<A>> {
+    fn next(&mut self) -> Option<SelfPlayMetrics<A,V>> {
         loop {
             let metric = self.metrics.pop();
 

@@ -7,5 +7,4 @@ pub mod node_metrics;
 pub mod position_metrics;
 
 pub mod analysis_cache; 
-pub mod tensorflow; 
-pub mod tensorflow_serving; 
+pub mod tensorflow;

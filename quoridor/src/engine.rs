@@ -87,6 +87,8 @@ impl Display for GameState {
     }
 }
 
+type Value = [f32; 2];
+
 #[derive(Debug)]
 struct PathingResult {
     has_path: bool,
@@ -123,14 +125,15 @@ impl GameState {
             .collect()
     }
 
-    pub fn is_terminal(&self) -> Option<f32> {
+    pub fn is_terminal(&self) -> Option<Value> {
         let pawn_board = if self.p1_turn_to_move { self.p2_pawn_board } else { self.p1_pawn_board };
         let objective_mask = if self.p1_turn_to_move { P2_OBJECTIVE_MASK } else { P1_OBJECTIVE_MASK };
 
         if pawn_board & objective_mask != 0 {
-            Some(-1.0)
+            Some(if self.p1_turn_to_move { [0.0, 1.0] } else { [1.0, 0.0] })
         } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
-            Some(0.0)
+            // A game that runs too long will be a loss for both players.
+            Some([-1.0, -1.0])
         }
         else {
             None
@@ -469,12 +472,13 @@ impl Engine {
 impl GameEngine for Engine {
     type Action = Action;
     type State = GameState;
+    type Value = Value;
 
     fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
         game_state.take_action(action)
     }
 
-    fn is_terminal_state(&self, game_state: &GameState) -> Option<f32> {
+    fn is_terminal_state(&self, game_state: &GameState) -> Option<Self::Value> {
         game_state.is_terminal()
     }
 }
@@ -866,7 +870,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',1)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some(-1.0));
+        assert_eq!(is_terminal, Some([1.0, 0.0]));
     }
 
     #[test]
@@ -893,6 +897,6 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some(-1.0));
+        assert_eq!(is_terminal, Some([0.0, 1.0]));
     }
 }

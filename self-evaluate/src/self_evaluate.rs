@@ -69,7 +69,7 @@ impl SelfEvaluate
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State=S,Action=A> + Sync,
         M: Model<State=S,Action=A,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send
+        T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
     {
         let model_1_info = model_1.get_model_info();
         let model_2_info = model_2.get_model_info();
@@ -277,7 +277,7 @@ impl SelfEvaluate
         let mut actions: Vec<A> = Vec::new();
         let mut state: S = S::initial();
 
-        while game_engine.is_terminal_state(&state) == None {
+        while game_engine.is_terminal_state(&state).is_none() {
             let action = if !p1_last_to_move {
                 mcts_1.search(visits).await?;
                 mcts_1.select_action().await?
@@ -297,7 +297,9 @@ impl SelfEvaluate
         };
 
         let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
-        let score = if p1_last_to_move { final_score * -1.0 } else { final_score };
+
+        // @TODO: Add players here so that the score can be properly tracked.
+        let score = -1.0; //if p1_last_to_move { final_score * -1.0 } else { final_score };
 
         Ok(GameResult {
             model_1_num: model_1.0.get_model_num(),
