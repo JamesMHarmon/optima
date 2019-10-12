@@ -30,7 +30,9 @@ impl Mapper {
     }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
+type Value = [f32; 2];
+
+impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
 
@@ -130,6 +132,21 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
             }).collect();
 
         valid_actions_with_policies
+    }
+
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+        let curr_val = (value_output + 1.0) / 2.0;
+        let opp_val = 1.0 - curr_val;
+        if game_state.p1_turn_to_move { [curr_val, opp_val] } else { [opp_val, curr_val] }
+    }
+
+    fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
+        let val = self.get_value_for_player_to_move(game_state, value);
+        (val * 2.0) - 1.0
+    }
+
+    fn get_value_for_player_to_move(&self, game_state: &GameState, value: &Value) -> f32 {
+        value[if game_state.p1_turn_to_move { 0 } else { 1 }]
     }
 }
 

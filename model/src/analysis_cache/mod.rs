@@ -26,10 +26,11 @@ where
     C: ShouldCache<State=M::State> + Send,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone,
+    <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
     model: M,
     phantom: PhantomData<C>,
-    cache: Arc<CHashMap<<<M as Model>::Analyzer as GameAnalyzer>::State,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action>>>
+    cache: Arc<CHashMap<<<M as Model>::Analyzer as GameAnalyzer>::State,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action,<<M as Model>::Analyzer as GameAnalyzer>::Value>>>
 }
 
 pub fn cache<C,M>(model: M) -> AnalysisCacheModel<C,M>
@@ -38,6 +39,7 @@ where
     C: ShouldCache<State=M::State> + Send,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone,
+    <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
     AnalysisCacheModel {
         model,
@@ -51,20 +53,23 @@ where
     M: Model,
     M::State: Send + Sync + 'static,
     M::Action: Clone + Send + Sync + 'static,
+    M::Value: Clone + Send + Sync + 'static,
     C: ShouldCache<State=M::State> + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone + Send + Sync,
+    <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone + Send + Sync + 'static,
     <<M as Model>::Analyzer as GameAnalyzer>::Future: Send + 'static
 {
     type State = M::State;
-    type Analyzer = AnalysisCacheAnalyzer<C,M::Analyzer>;
     type Action = M::Action;
+    type Value = M::Value;
+    type Analyzer = AnalysisCacheAnalyzer<C,M::Analyzer>;
 
     fn get_model_info(&self) -> &ModelInfo {
         self.model.get_model_info()
     }
 
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error> {
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error> {
         M::train(&self.model, target_model_info, sample_metrics, options)
     }
 
@@ -84,11 +89,12 @@ where
     Analyzer: GameAnalyzer,
     C: ShouldCache + Send,
     Analyzer::State: PartialEq + Hash,
-    Analyzer::Action: Clone
+    Analyzer::Action: Clone,
+    Analyzer::Value: Clone
 {
     analyzer: Analyzer,
     phantom: PhantomData<C>,
-    cache: Arc<CHashMap<Analyzer::State,GameStateAnalysis<Analyzer::Action>>>
+    cache: Arc<CHashMap<Analyzer::State,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>
 }
 
 impl<C,Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<C,Analyzer>
@@ -97,11 +103,13 @@ where
     C: ShouldCache<State=Analyzer::State> + Send,
     Analyzer::Future: Send + 'static,
     Analyzer::State: Clone + PartialEq + Hash + Send + Sync + 'static,
-    Analyzer::Action: Clone + Send + Sync + 'static
+    Analyzer::Action: Clone + Send + Sync + 'static,
+    Analyzer::Value: Clone + Send + Sync + 'static
 {
     type State = Analyzer::State;
     type Action = Analyzer::Action;
-    type Future = Pin<Box<dyn Future<Output=GameStateAnalysis<Self::Action>> + Send>>;
+    type Value = Analyzer::Value;
+    type Future = Pin<Box<dyn Future<Output=GameStateAnalysis<Self::Action,Analyzer::Value>> + Send>>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let should_cache = C::should_cache(&game_state);
@@ -123,5 +131,9 @@ where
 
             analysis
         }).boxed()
+    }
+
+    fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
+        Analyzer::get_value_for_player_to_move(&self.analyzer, game_state, value)
     }
 }

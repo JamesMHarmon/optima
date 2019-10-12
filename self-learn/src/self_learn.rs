@@ -22,11 +22,11 @@ use super::constants::SELF_PLAY_PARALLELISM;
 use super::train;
 
 
-pub struct SelfLearn<'a, S, A, E>
+pub struct SelfLearn<'a, S, A, V, E>
 where
     S: GameState,
     A: Clone + Eq + Serialize + Unpin,
-    E: 'a + GameEngine<State=S,Action=A>
+    E: 'a + GameEngine<State=S,Action=A,Value=V>
 {
     self_learn_options: &'a SelfLearnOptions,
     self_evaluate_options: &'a SelfEvaluateOptions,
@@ -63,11 +63,12 @@ pub struct SelfLearnOptions {
     pub epsilon: f32
 }
 
-impl<'a,S,A,E> SelfLearn<'a,S,A,E>
+impl<'a,S,A,V,E> SelfLearn<'a,S,A,V,E>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-    E: 'a + GameEngine<State=S,Action=A> + Sync
+    V: DeserializeOwned + Serialize,
+    E: 'a + GameEngine<State=S,Action=A,Value=V> + Sync
 {
     pub fn create<M,T,F,O>(
         game_name: String,
@@ -77,7 +78,7 @@ where
     ) -> Result<(), Error>
     where
         M: Model<Action=A,State=S,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send,
+        T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
         F: ModelFactory<M=M,O=O>
     {
         let model_info = ModelInfo::new(game_name, run_name, 1);
@@ -109,9 +110,10 @@ where
 
     pub fn learn<M,T,F>(&mut self, model_factory: &F) -> Result<(), Error>
     where
-        M: Model<Action=A,State=S,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send,
-        F: ModelFactory<M=M>
+        M: Model<Action=A,State=S,Analyzer=T,Value=V>,
+        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
+        F: ModelFactory<M=M>,
+        V: Clone + Send
     {
         let self_learn_options = self.self_learn_options;
         let self_evaluate_options = self.self_evaluate_options;
@@ -128,7 +130,7 @@ where
                     model_name.to_owned()
                 )?;
 
-                let num_games_this_net = self_play_persistance.read::<A>()?.len();
+                let num_games_this_net = self_play_persistance.read::<A,V>()?.len();
                 let number_of_games_per_net = self_learn_options.number_of_games_per_net;
                 let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
                 drop(self_play_persistance);
@@ -149,7 +151,7 @@ where
                 self_learn_options
             )?;
 
-            let new_model_info = train::train_model::<S,A,E,M,T>(
+            let new_model_info = train::train_model::<S,A,V,E,M,T>(
                 &latest_model,
                 &self_play_persistance,
                 game_engine,
@@ -179,8 +181,9 @@ where
         options: &SelfLearnOptions,
     ) -> Result<(), Error>
     where
-        M: Model<State=S,Action=A,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send
+        M: Model<State=S,Action=A,Analyzer=T,Value=V>,
+        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
+        V: Send
     {
         let self_play_batch_size = options.self_play_batch_size;
         let starting_run_time = Instant::now();
@@ -254,7 +257,7 @@ where
     async fn play_games<T>(
         num_games_to_play: usize,
         self_play_batch_size: usize,
-        results_channel: mpsc::Sender<SelfPlayMetrics<A>>,
+        results_channel: mpsc::Sender<SelfPlayMetrics<A,V>>,
         game_engine: &E,
         analyzer: T,
         self_play_options: &SelfPlayOptions

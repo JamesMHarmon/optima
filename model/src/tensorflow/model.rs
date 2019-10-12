@@ -53,19 +53,22 @@ pub struct TensorflowModelOptions {
     pub output_size: usize
 }
 
-pub trait Mapper<S,A> {
+pub trait Mapper<S,A,V> {
     fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
     fn get_input_dimensions(&self) -> [u64; 3];
     fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
+    fn get_value_for_player_to_move(&self, game_state: &S, value: &V) -> f32;
+    fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
+    fn map_value_output_to_value(&self, game_state: &S, value_score: f32) -> V;
 }
 
-impl<S,A,E,Map> TensorflowModel<E,Map>
+impl<S,A,V,E,Map> TensorflowModel<E,Map>
 where
     S: PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
-    E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Map: Mapper<S,A> + Send + Sync + 'static
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V> + Send + Sync + 'static
 {
     pub fn new(
         model_info: ModelInfo,
@@ -147,15 +150,16 @@ where
     }
 }
 
-impl<S,A,E,Map> ModelTrait for TensorflowModel<E,Map>
+impl<S,A,V,E,Map> ModelTrait for TensorflowModel<E,Map>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
-    E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Map: Mapper<S,A> + Send + Sync + 'static
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V> + Send + Sync + 'static
 {
     type State = S;
     type Action = A;
+    type Value = V;
     type Analyzer = GameAnalyzer<E,Map>;
 
     fn get_model_info(&self) -> &ModelInfo {
@@ -169,7 +173,7 @@ where
         options: &TrainOptions
     ) -> Result<(), Error>
     where
-        I: Iterator<Item=PositionMetrics<S,A>>
+        I: Iterator<Item=PositionMetrics<S,A,V>>
     {
         let mapper = &*self.mapper;
 
@@ -178,7 +182,7 @@ where
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer
     {
-        GameAnalyzer {
+        Self::Analyzer {
             batching_model: self.batching_model.clone(),
             id_generator: self.id_generator.clone()
         }
@@ -279,15 +283,16 @@ pub struct GameAnalyzer<E,Map> {
     id_generator: Arc<AtomicUsize>
 }
 
-impl<S,A,E,Map> analytics::GameAnalyzer for GameAnalyzer<E,Map>
+impl<S,A,V,E,Map> analytics::GameAnalyzer for GameAnalyzer<E,Map>
 where
     S: Clone + PartialEq + Hash + Unpin,
     A: Clone,
-    E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Map: Mapper<S,A>
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V>
 {
     type State = S;
     type Action = A;
+    type Value = V;
     type Future = GameStateAnalysisFuture<S,E,Map>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
@@ -301,10 +306,14 @@ where
             self.batching_model.clone()
         )
     }
+
+    fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
+        self.batching_model.mapper.get_value_for_player_to_move(game_state, value)
+    }
 }
 
 #[allow(non_snake_case)]
-fn train<S,A,I,Map>(
+fn train<S,A,V,I,Map>(
     source_model_info: &ModelInfo,
     target_model_info: &ModelInfo,
     sample_metrics: I,
@@ -314,8 +323,8 @@ fn train<S,A,I,Map>(
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
-    I: Iterator<Item=PositionMetrics<S,A>>,
-    Map: Mapper<S,A>
+    I: Iterator<Item=PositionMetrics<S,A,V>>,
+    Map: Mapper<S,A,V>
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
@@ -335,7 +344,7 @@ where
             NumVec(X)
         }).collect();
 
-        let yv: Vec<_> = sample_metrics.iter().map(|v| v.score).collect();
+        let yv: Vec<_> = sample_metrics.iter().map(|v| mapper.map_value_to_value_output(&v.game_state, &v.score)).collect();
         let yp: Vec<_> = sample_metrics.iter().map(|v| NumVec(mapper.policy_metrics_to_expected_output(&v.game_state, &v.policy))).collect();
 
         // Note that we are no longer using serde_json here due to the way that it elongates floats.
@@ -548,12 +557,12 @@ pub struct BatchingModel<E,Map> {
     mapper: Arc<Map>
 }
 
-impl<S,A,E,Map> BatchingModel<E,Map>
+impl<S,A,V,E,Map> BatchingModel<E,Map>
 where
     S: PartialEq + Hash,
     A: Clone,
-    E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Map: Mapper<S,A>
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V>
 {
     fn new(engine: E, mapper: Arc<Map>) -> Self
     {
@@ -630,7 +639,7 @@ where
         }
     }
 
-    fn request(&self, id: usize, game_state: &S, waker: &Waker) -> Poll<GameStateAnalysis<A>> {
+    fn request(&self, id: usize, game_state: &S, waker: &Waker) -> Poll<GameStateAnalysis<A,V>> {
         if let Some(value) = self.engine.is_terminal_state(game_state) {
             self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
             Poll::Ready(GameStateAnalysis::new(
@@ -667,14 +676,14 @@ impl<S,E,Map> GameStateAnalysisFuture<S,E,Map> {
     }
 }
 
-impl<S,A,E,Map> Future for GameStateAnalysisFuture<S,E,Map>
+impl<S,A,V,E,Map> Future for GameStateAnalysisFuture<S,E,Map>
 where
     S: PartialEq + Hash + Unpin,
     A: Clone,
-    E: GameEngine<State=S,Action=A> + Send + Sync + 'static,
-    Map: Mapper<S,A>
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V>
 {
-    type Output = GameStateAnalysis<A>;
+    type Output = GameStateAnalysis<A,V>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.has_requested {
@@ -684,14 +693,15 @@ where
         } else {
             match (*self).batching_model.poll(self.id) {
                 Poll::Ready((policy_scores, value_score)) => {
-                    let valid_actions_with_policies = self.batching_model.mapper.policy_to_valid_actions(
+                    let mapper = &*self.batching_model.mapper;
+                    let valid_actions_with_policies = mapper.policy_to_valid_actions(
                         &self.game_state,
                         &policy_scores
                     );
 
                     Poll::Ready(GameStateAnalysis {
                         policy_scores: valid_actions_with_policies,
-                        value_score: value_score as f32
+                        value_score: mapper.map_value_output_to_value(&self.game_state, value_score)
                     })
                 },
                 Poll::Pending => Poll::Pending

@@ -104,7 +104,7 @@ async fn main() -> Result<(), Error> {
 fn create_connect4(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
     let model_factory = Connect4ModelFactory::new();
 
-    SelfLearn::<_,_,Connect4Engine>::create(
+    SelfLearn::<_,_,_,Connect4Engine>::create(
         C4_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,
@@ -194,7 +194,7 @@ fn create(game_name: &str, run_name: &str, options: &Options) -> Result<(), Erro
 fn create_quoridor(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
     let model_factory = QuoridorModelFactory::new();
 
-    SelfLearn::<_,_,QuoridorEngine>::create(
+    SelfLearn::<_,_,_,QuoridorEngine>::create(
         QUORIDOR_NAME.to_owned(),
         run_name.to_owned(),
         &model_factory,

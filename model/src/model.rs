@@ -8,11 +8,12 @@ use super::analytics::GameAnalyzer;
 
 pub trait Model {
     type State: GameState;
-    type Analyzer: GameAnalyzer<Action=Self::Action,State=Self::State> + Send;
     type Action;
+    type Value;
+    type Analyzer: GameAnalyzer<Action=Self::Action,State=Self::State,Value=Self::Value> + Send;
 
     fn get_model_info(&self) -> &ModelInfo;
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error>;
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error>;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 

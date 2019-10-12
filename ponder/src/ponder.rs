@@ -37,7 +37,7 @@ impl Ponder
         A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
         E: GameEngine<State=S,Action=A>,
         M: Model<State=S,Action=A,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S> + Send
+        T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
     {
         let fpu = options.fpu;
         let fpu_root = options.fpu_root;
@@ -66,7 +66,7 @@ impl Ponder
         let mut state: S = S::initial();
         let mut total_visits = 0;
 
-        while game_engine.is_terminal_state(&state) == None {
+        while game_engine.is_terminal_state(&state).is_none() {
             println!("{}", state);
 
             println!("Input action or Enter to ponder");
