@@ -2,7 +2,7 @@ use std::cell::{Cell,RefCell};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc};
-use futures::stream::{FuturesUnordered,StreamExt};
+use futures::stream::{FuturesOrdered,StreamExt};
 use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
 use rand::{thread_rng,Rng};
@@ -194,7 +194,7 @@ where
         let mut searches_remaining = visits - current_visits;
         let initial_searches = self.options.parallelism.min(searches_remaining);
 
-        let mut searches = FuturesUnordered::new();
+        let mut searches = FuturesOrdered::new();
         for _ in 0..initial_searches {
             searches_remaining -= 1;
             let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
@@ -264,7 +264,7 @@ where
 
     pub async fn get_root_node_details(&self) -> Result<NodeDetails<A>, Error> {
         let root_index = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
-        self.get_node_details(*root_index).await
+        self.get_node_details(*root_index, true).await
     }
 
     pub async fn get_principal_variation(&mut self) -> Result<Vec<(A, PUCT)>, Error> {
@@ -274,7 +274,8 @@ where
         let mut nodes = vec!();
 
         loop {
-            let mut children = self.get_node_details(node_index).await?.children;
+            let is_root = nodes.len() == 0;
+            let mut children = self.get_node_details(node_index, is_root).await?.children;
 
             if children.len() == 0 { break; }
 
@@ -294,7 +295,7 @@ where
         Ok(nodes)
     }
 
-    async fn get_node_details(&self, node_index: Index) -> Result<NodeDetails<A>, Error> {
+    async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>, Error> {
         let arena_borrow = &self.arena.borrow();
         let root = &arena_borrow[node_index];
         let root_visits = root.get_node_visits();
@@ -306,7 +307,7 @@ where
             &*arena_borrow,
             root_visits,
             &root.game_state,
-            true,
+            is_root,
             root.num_actions,
             options.fpu,
             options.fpu_root,
