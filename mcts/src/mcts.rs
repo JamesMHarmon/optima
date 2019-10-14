@@ -355,7 +355,14 @@ where
         Self::remove_nodes_from_arena(&other_node_indexes, arena_borrow_mut);
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {
-            if clear { Self::clear_node_visits(node_index, arena_borrow_mut); }
+            if clear {
+                Self::clear_node_visits(node_index, arena_borrow_mut);
+            } else {
+                // Always clear the node's W since it is no longer relevant
+                let node = &mut arena_borrow_mut[node_index];
+                node.W.set(0.0);
+            }
+
             node_index
         } else {
             let prior_num_actions = root_node.num_actions;
@@ -379,7 +386,7 @@ where
 
     fn clear_node_visits(node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>) {
         let node = &mut arena[node_index];
-        *node.W.get_mut() = 0.0;
+        node.W.set(0.0);
 
         for child in &node.children {
             child.visits.set(0);
@@ -762,12 +769,13 @@ impl MCTSNodeState {
 
 #[cfg(test)]
 mod tests {
-    use std::task::{Context,Poll};
-    use std::pin::Pin;
-    use std::future::Future;
     use super::*;
     use engine::game_state::{GameState};
     use model::analytics::{GameStateAnalysis};
+    use futures::future;
+    use assert_approx_eq::assert_approx_eq;
+
+    const ERROR_DIFF: f32 = 0.02;
 
     #[derive(Hash, PartialEq, Eq, Clone, Debug)]
     struct CountingGameState {
@@ -842,41 +850,23 @@ mod tests {
         fn new() -> Self { Self {} }
     }
 
-    struct CountingGameStateAnalysisFuture {
-        output: Option<GameStateAnalysis<CountingAction, [f32; 2]>>
-    }
-
-    impl CountingGameStateAnalysisFuture {
-        fn new(output: GameStateAnalysis<CountingAction, [f32; 2]>) -> Self {
-            Self { output: Some(output) }
-        }
-    }
-
-    impl Future for CountingGameStateAnalysisFuture {
-        type Output = GameStateAnalysis<CountingAction, [f32; 2]>;
-
-        fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-            Poll::Ready(self.get_mut().output.take().unwrap())
-        }
-    }
-
     impl GameAnalyzer for CountingAnalyzer {
         type Action = CountingAction;
         type State = CountingGameState;
-        type Future = CountingGameStateAnalysisFuture;
+        type Future = future::Ready<GameStateAnalysis<Self::Action,Self::Value>>;
         type Value = [f32; 2];
 
-        fn get_state_analysis(&self, game_state: &Self::State) -> CountingGameStateAnalysisFuture {
+        fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
             let count = game_state.count as f32;
 
             if let Some(score) = game_state.is_terminal_state() {
-                return CountingGameStateAnalysisFuture::new(GameStateAnalysis {
+                return future::ready(GameStateAnalysis {
                     policy_scores: Vec::new(),
                     value_score: score
                 });
             }
             
-            CountingGameStateAnalysisFuture::new(GameStateAnalysis {
+            future::ready(GameStateAnalysis {
                 policy_scores: vec!(
                     ActionWithPolicy {
                         action: CountingAction::Increment,
@@ -897,6 +887,18 @@ mod tests {
 
         fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
             value[if game_state.p1_turn { 0 } else { 1 }]
+        }
+    }
+
+    fn assert_metrics(left: &NodeMetrics<CountingAction>, right: &NodeMetrics<CountingAction>) {
+        assert_eq!(left.W, right.W);
+        assert_eq!(left.visits, right.visits);
+        assert_eq!(left.children_visits.len(), right.children_visits.len());
+
+        for ((l_a, l_visits), (r_a, r_visits)) in left.children_visits.iter().zip(right.children_visits.iter()) {
+            assert_eq!(l_a, r_a);
+            let allowed_diff = ((*l_visits).max(*r_visits) as f32) * ERROR_DIFF + 0.9;
+            assert_approx_eq!(*l_visits as f32, *r_visits as f32, allowed_diff);
         }
     }
 
@@ -931,7 +933,7 @@ mod tests {
         let metrics = mcts.get_root_node_metrics().await.unwrap();
         let metrics2 = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, metrics2);
+        assert_metrics(&metrics, &metrics2);
     }
 
     #[tokio::test]
@@ -1019,7 +1021,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
@@ -1050,7 +1052,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 100,
             W: 0.0,
             children_visits: vec!(
@@ -1081,7 +1083,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 1,
             W: 0.0,
             children_visits: vec!(
@@ -1112,7 +1114,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 2,
             W: 0.0,
             children_visits: vec!(
@@ -1143,7 +1145,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 8000,
             W: 0.0,
             children_visits: vec!(
@@ -1174,7 +1176,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
@@ -1205,7 +1207,7 @@ mod tests {
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(metrics, NodeMetrics {
+        assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
@@ -1222,7 +1224,7 @@ mod tests {
         let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
-        let search_num_visits = 3;
+        let search_num_visits = 800;
 
         let mut non_clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analyzer, MCTSOptions::new(
             None,
@@ -1240,7 +1242,7 @@ mod tests {
 
         let non_clear_metrics = non_clear_mcts.get_root_node_metrics().await.unwrap();
 
-        let mut clear_mcts = MCTS::new(game_state, actions, &game_engine, &analyzer, MCTSOptions::new(
+        let mut clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analyzer, MCTSOptions::new(
             None,
             0.0,
             0.0,
@@ -1251,11 +1253,26 @@ mod tests {
 
         clear_mcts.search(search_num_visits).await.unwrap();
         let action = clear_mcts.select_action().await.unwrap();
-        clear_mcts.advance_to_action(action).await.unwrap();
+        clear_mcts.advance_to_action(action.clone()).await.unwrap();
         clear_mcts.search(search_num_visits).await.unwrap();
 
         let clear_metrics = clear_mcts.get_root_node_metrics().await.unwrap();
 
-        assert_eq!(non_clear_metrics, clear_metrics);
+        let mut initial_mcts = MCTS::new(game_state, actions, &game_engine, &analyzer, MCTSOptions::new(
+            None,
+            0.0,
+            0.0,
+            |_,_,_,_,_| 1.0,
+            |_,_| 0.0,
+            1
+        ));
+
+        initial_mcts.advance_to_action(action).await.unwrap();
+        initial_mcts.search(search_num_visits).await.unwrap();
+
+        let initial_metrics = initial_mcts.get_root_node_metrics().await.unwrap();
+
+        assert_metrics(&initial_metrics, &clear_metrics);
+        assert_metrics(&non_clear_metrics, &clear_metrics);
     }
 }

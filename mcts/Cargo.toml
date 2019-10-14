@@ -16,6 +16,7 @@ tokio = "=0.2.0-alpha.4"
 async-std = "0.99"
 futures-preview = "=0.3.0-alpha.18"
 generational-arena = "0.2"
+assert_approx_eq = "1.1.0"
 
 engine = { path = "../engine" }
 common = { path = "../common" }

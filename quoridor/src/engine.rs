@@ -848,7 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_terminal_p1() {
+    fn test_is_terminal_p2() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
@@ -870,11 +870,11 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',1)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some([1.0, 0.0]));
+        assert_eq!(is_terminal, Some([0.0, 1.0]));
     }
 
     #[test]
-    fn test_is_terminal_p2() {
+    fn test_is_terminal_p1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
@@ -897,6 +897,6 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some([0.0, 1.0]));
+        assert_eq!(is_terminal, Some([1.0, 0.0]));
     }
 }
