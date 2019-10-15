@@ -132,12 +132,4 @@ where
             analysis
         }).boxed()
     }
-
-    fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
-        Analyzer::get_value_for_player_to_move(&self.analyzer, game_state, value)
-    }
-
-    fn get_value_for_player(&self, player: usize, value: &Self::Value) -> f32 {
-        Analyzer::get_value_for_player(&self.analyzer, player, value)
-    }
 }

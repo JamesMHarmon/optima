@@ -2,6 +2,7 @@ use std::fmt::{self,Display,Formatter};
 use engine::engine::GameEngine;
 use engine::game_state;
 
+use super::value::Value;
 use super::action::Action;
 use super::board::map_board_to_arr;
 
@@ -67,15 +68,15 @@ impl GameState {
     /// Drawn: If the position is a draw then the return will be Some(0.0);
     /// 
     /// Not Terminal: If the position is not yet the end of the game then None will be returned.
-    pub fn is_terminal(&self) -> Option<[f32; 2]> {
+    pub fn is_terminal(&self) -> Option<Value> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
         if self.has_connected_4() {
-            return Some(if self.p1_turn_to_move { [0.0, 1.0] } else { [1.0, 0.0] });
+            return Some(if self.p1_turn_to_move { Value([0.0, 1.0]) } else { Value([1.0, 0.0]) });
         }
 
         if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
-            return Some([0.5, 0.5]);
+            return Some(Value([0.5, 0.5]));
         }
 
         None
@@ -155,7 +156,7 @@ impl Engine {
 impl GameEngine for Engine {
     type Action = Action;
     type State = GameState;
-    type Value = [f32; 2];
+    type Value = Value;
 
     fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
         match action {

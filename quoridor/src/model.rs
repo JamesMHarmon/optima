@@ -5,6 +5,8 @@ use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
 use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
+use engine::value::{Value as ValueTrait};
+use super::value::Value;
 use super::action::{Action,Coordinate};
 use super::constants::{ASCII_LETTER_A,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE,NUM_WALLS_PER_PLAYER,WALL_BOARD_SIZE,PAWN_BOARD_SIZE,BOARD_WIDTH,BOARD_HEIGHT};
 use super::engine::Engine;
@@ -29,8 +31,6 @@ impl Mapper {
         Self {}
     }
 }
-
-type Value = [f32; 2];
 
 impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
@@ -137,20 +137,13 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
         let curr_val = (value_output + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
-        if game_state.p1_turn_to_move { [curr_val, opp_val] } else { [opp_val, curr_val] }
+        if game_state.p1_turn_to_move { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
     }
 
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        let val = self.get_value_for_player_to_move(game_state, value);
+        let player_to_move = if game_state.p1_turn_to_move { 0 } else { 1 };
+        let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
-    }
-
-    fn get_value_for_player_to_move(&self, game_state: &GameState, value: &Value) -> f32 {
-        value[if game_state.p1_turn_to_move { 0 } else { 1 }]
-    }
-
-    fn get_value_for_player(&self, player: usize, value: &Value) -> f32 {
-        value[player - 1]
     }
 }
 

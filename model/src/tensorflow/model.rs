@@ -20,6 +20,7 @@ use serde::{Serialize, Deserialize};
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
+use engine::value::Value;
 
 use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,TRAIN_DATA_CHUNK_SIZE};
 use super::paths::Paths;
@@ -57,8 +58,6 @@ pub trait Mapper<S,A,V> {
     fn get_input_dimensions(&self) -> [u64; 3];
     fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
-    fn get_value_for_player(&self, player: usize, value: &V) -> f32;
-    fn get_value_for_player_to_move(&self, game_state: &S, value: &V) -> f32;
     fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
     fn map_value_output_to_value(&self, game_state: &S, value_score: f32) -> V;
 }
@@ -67,6 +66,7 @@ impl<S,A,V,E,Map> TensorflowModel<E,Map>
 where
     S: PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
+    V: Value,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V> + Send + Sync + 'static
 {
@@ -154,6 +154,7 @@ impl<S,A,V,E,Map> ModelTrait for TensorflowModel<E,Map>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
+    V: Value,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V> + Send + Sync + 'static
 {
@@ -287,6 +288,7 @@ impl<S,A,V,E,Map> analytics::GameAnalyzer for GameAnalyzer<E,Map>
 where
     S: Clone + PartialEq + Hash + Unpin,
     A: Clone,
+    V: Value,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V>
 {
@@ -305,14 +307,6 @@ where
             self.id_generator.fetch_add(1, Ordering::SeqCst),
             self.batching_model.clone()
         )
-    }
-
-    fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
-        self.batching_model.mapper.get_value_for_player_to_move(game_state, value)
-    }
-
-    fn get_value_for_player(&self, player: usize, value: &Self::Value) -> f32 {
-        self.batching_model.mapper.get_value_for_player(player, value)
     }
 }
 
@@ -565,6 +559,7 @@ impl<S,A,V,E,Map> BatchingModel<E,Map>
 where
     S: PartialEq + Hash,
     A: Clone,
+    V: Value,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V>
 {
@@ -684,6 +679,7 @@ impl<S,A,V,E,Map> Future for GameStateAnalysisFuture<S,E,Map>
 where
     S: PartialEq + Hash + Unpin,
     A: Clone,
+    V: Value,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V>
 {

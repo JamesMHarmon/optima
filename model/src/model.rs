@@ -5,11 +5,12 @@ use serde::{Serialize,Deserialize};
 use super::model_info::ModelInfo;
 use super::position_metrics::PositionMetrics;
 use super::analytics::GameAnalyzer;
+use engine::value::Value;
 
 pub trait Model {
     type State: GameState;
     type Action;
-    type Value;
+    type Value: Value;
     type Analyzer: GameAnalyzer<Action=Self::Action,State=Self::State,Value=Self::Value> + Send;
 
     fn get_model_info(&self) -> &ModelInfo;

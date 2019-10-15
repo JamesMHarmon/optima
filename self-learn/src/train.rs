@@ -11,6 +11,7 @@ use failure::Error;
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
+use engine::value::Value;
 use model::model::Model;
 
 use super::self_learn::SelfLearnOptions;
@@ -25,7 +26,7 @@ pub fn train_model<S, A, V, E, M, T>(
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Send,
-    V: Clone + DeserializeOwned,
+    V: Value + Clone + DeserializeOwned,
     E: GameEngine<State=S,Action=A,Value=V> + Sync,
     M: Model<State=S,Action=A,Value=V,Analyzer=T>,
     T: GameAnalyzer<Action=A,State=S,Value=V> + Send

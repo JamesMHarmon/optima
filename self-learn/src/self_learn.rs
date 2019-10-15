@@ -12,6 +12,7 @@ use tokio_executor::current_thread;
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
+use engine::value::Value;
 use model::model::{Model, ModelFactory};
 use model::model_info::ModelInfo;
 use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
@@ -26,6 +27,7 @@ pub struct SelfLearn<'a, S, A, V, E>
 where
     S: GameState,
     A: Clone + Eq + Serialize + Unpin,
+    V: Value,
     E: 'a + GameEngine<State=S,Action=A,Value=V>
 {
     self_learn_options: &'a SelfLearnOptions,
@@ -67,7 +69,7 @@ impl<'a,S,A,V,E> SelfLearn<'a,S,A,V,E>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-    V: DeserializeOwned + Serialize,
+    V: Value + DeserializeOwned + Serialize,
     E: 'a + GameEngine<State=S,Action=A,Value=V> + Sync
 {
     pub fn create<M,T,F,O>(
@@ -259,7 +261,7 @@ where
         self_play_options: &SelfPlayOptions
     ) -> Result<(), Error>
     where
-        T: GameAnalyzer<Action=A,State=S> + Send,
+        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
     {
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();

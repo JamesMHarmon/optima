@@ -12,6 +12,7 @@ use rand_distr::Dirichlet;
 use failure::{Error,format_err};
 
 use engine::game_state::GameState;
+use engine::value::Value;
 use engine::engine::{GameEngine};
 use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
@@ -71,6 +72,7 @@ pub struct MCTS<'a, S, A, E, M, C, T, V>
 where
     S: GameState,
     A: Clone + Eq + Debug,
+    V: Value,
     E: GameEngine,
     M: GameAnalyzer,
     C: Fn(&S, usize, &A, usize, bool) -> f32,
@@ -123,7 +125,8 @@ impl<'a, S, A, E, M, C, T, V> MCTS<'a, S, A, E, M, C, T, V>
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    E: 'a + GameEngine<State=S,Action=A>,
+    V: Value,
+    E: 'a + GameEngine<State=S,Action=A,Value=V>,
     M: 'a + GameAnalyzer<State=S,Action=A,Value=V>,
     C: Fn(&S, usize, &A, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
@@ -581,7 +584,8 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,V>(
 where
     S: GameState,
     A: Clone + Eq + Debug,
-    E: GameEngine<State=S,Action=A>,
+    V: Value,
+    E: GameEngine<State=S,Action=A,Value=V>,
     M: GameAnalyzer<State=S,Action=A,Value=V>,
     C: Fn(&S, usize, &A, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
@@ -600,7 +604,7 @@ where
             let children = &node.children;
             if children.len() == 0 {
                 node_stack.pop();
-                update_Ws(node_stack, &node, &arena_borrow, analyzer);
+                update_Ws(node_stack, &node, &arena_borrow, game_engine);
                 break 'outer;
             }
 
@@ -630,7 +634,7 @@ where
                 let node = &arena_borrow[selected_child_node_index];
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    update_Ws(node_stack, &node, &arena_borrow, analyzer);
+                    update_Ws(node_stack, &node, &arena_borrow, game_engine);
                     break 'outer;
                 }
 
@@ -690,7 +694,7 @@ where
 
                     let mut arena_borrow_mut = arena.borrow_mut();
                     let latest_index = *latest_index;
-                    update_Ws(node_stack, &expanded_node, &arena_borrow_mut, analyzer);
+                    update_Ws(node_stack, &expanded_node, &arena_borrow_mut, game_engine);
 
                     update_child_with_expanded_node(latest_index, expanded_node, &selected_action, &mut arena_borrow_mut);
                     drop(expanding_write_lock);
@@ -724,9 +728,10 @@ where
 }
 
 #[allow(non_snake_case)]
-fn update_Ws<S,A,M,V>(nodes: Vec<Index>, value_node: &MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, analyzer: &M)
+fn update_Ws<S,A,V,E>(nodes: Vec<Index>, value_node: &MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, game_engine: &E)
 where
-    M: GameAnalyzer<State=S,Action=A,Value=V>
+    V: Value,
+    E: GameEngine<State=S,Action=A,Value=V>
 {
     let value_score = &value_node.value_score;
     let mut nodes: Vec<_> = nodes.into_iter().map(|node_index| &arena[node_index]).collect();
@@ -737,7 +742,8 @@ where
         // Update value of W from the parent node's perspective.
         // This is because the parent chooses which child node to select, and as such will want the one with the
         // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
-        let score = analyzer.get_value_for_player_to_move(&parent_node.game_state, value_score);
+        let player_to_move = game_engine.get_player_to_move(&parent_node.game_state);
+        let score = value_score.get_value_for_player(player_to_move);
         W.set(W.get() + score);
     }
 }
@@ -764,8 +770,6 @@ impl MCTSNodeState {
         if let Self::Expanded(index) = self { Some(*index) } else { None }
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

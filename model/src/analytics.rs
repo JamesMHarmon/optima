@@ -1,15 +1,14 @@
 use std::future::Future;
+use engine::value::Value;
 
 pub trait GameAnalyzer
 {
     type Future: Future<Output=GameStateAnalysis<Self::Action,Self::Value>>;
     type Action;
     type State;
-    type Value;
+    type Value: Value;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
-    fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32;
-    fn get_value_for_player(&self, player: usize, value: &Self::Value) -> f32;
 }
 
 #[derive(Clone,Debug)]

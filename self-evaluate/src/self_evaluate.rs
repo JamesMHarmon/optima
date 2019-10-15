@@ -15,6 +15,7 @@ use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
+use engine::value::Value;
 use model::model::{Model};
 use model::model_info::{ModelInfo};
 
@@ -255,9 +256,9 @@ impl SelfEvaluate
 
         let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
 
-        let scores: Vec<_> = players.iter().enumerate().map(|(i, (m, a))| (
+        let scores: Vec<_> = players.iter().enumerate().map(|(i, (m, _))| (
             (**m).to_owned(),
-            a.get_value_for_player(i + 1, &final_score))
+            final_score.get_value_for_player(i + 1))
         ).collect();
 
         Ok(GameResult {

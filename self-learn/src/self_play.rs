@@ -4,6 +4,7 @@ use failure::{Error,format_err};
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
+use engine::value::Value;
 use mcts::mcts::{DirichletOptions,MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
 use model::node_metrics::NodeMetrics;
@@ -46,8 +47,9 @@ pub async fn self_play<'a, S, A, E, M, V>(
     where
     S: GameState,
     A: Clone + Eq + Debug,
+    V: Value,
     E: 'a + GameEngine<State=S,Action=A,Value=V>,
-    M: 'a + GameAnalyzer<State=S,Action=A>
+    M: 'a + GameAnalyzer<State=S,Action=A,Value=V>
 {
     let game_state: S = S::initial();
     let num_actions = 0;

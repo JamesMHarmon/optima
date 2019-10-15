@@ -35,7 +35,7 @@ impl Ponder
     where
         S: GameState + Display,
         A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
-        E: GameEngine<State=S,Action=A>,
+        E: GameEngine<State=S,Action=A,Value=M::Value>,
         M: Model<State=S,Action=A,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
     {

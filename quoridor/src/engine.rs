@@ -3,6 +3,7 @@ use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,NUM_WALLS_PER_PLAYER,MAX_NUMBER_
 use super::action::Coordinate;
 use super::action::{Action};
 use super::board::{map_board_to_arr_invertable,BoardType};
+use super::value::Value;
 use engine::engine::GameEngine;
 use engine::game_state;
 
@@ -87,8 +88,6 @@ impl Display for GameState {
     }
 }
 
-type Value = [f32; 2];
-
 #[derive(Debug)]
 struct PathingResult {
     has_path: bool,
@@ -130,10 +129,10 @@ impl GameState {
         let objective_mask = if self.p1_turn_to_move { P2_OBJECTIVE_MASK } else { P1_OBJECTIVE_MASK };
 
         if pawn_board & objective_mask != 0 {
-            Some(if self.p1_turn_to_move { [0.0, 1.0] } else { [1.0, 0.0] })
+            Some(if self.p1_turn_to_move { Value([0.0, 1.0]) } else { Value([1.0, 0.0]) })
         } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
             // A game that runs too long will be a loss for both players.
-            Some([-1.0, -1.0])
+            Some(Value([-1.0, -1.0]))
         }
         else {
             None
@@ -491,6 +490,7 @@ impl GameEngine for Engine {
 mod tests {
     use super::GameState;
     use super::super::action::{Action,Coordinate};
+    use super::super::value::Value;
     use engine::game_state::{GameState as GameStateTrait};
 
     fn intersects(actions: &Vec<Action>, exclusions: &Vec<Action>) -> bool {
@@ -874,7 +874,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',1)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some([0.0, 1.0]));
+        assert_eq!(is_terminal, Some(Value([0.0, 1.0])));
     }
 
     #[test]
@@ -901,6 +901,6 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some([1.0, 0.0]));
+        assert_eq!(is_terminal, Some(Value([1.0, 0.0])));
     }
 }
