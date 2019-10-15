@@ -3,6 +3,7 @@ use serde::{Serialize};
 use std::fs;
 use std::io::Write;
 use std::fs::{File,OpenOptions};
+use itertools::Itertools;
 use failure::Error;
 
 use model::model_info::ModelInfo;
@@ -16,13 +17,12 @@ pub struct SelfEvaluatePersistance
 
 impl SelfEvaluatePersistance
 {
-    pub fn new(run_directory: &Path, model_info_1: &ModelInfo, model_info_2: &ModelInfo) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self, Error> {
         let evaluations_dir = run_directory.join("evaluations");
 
         let game_file_path = get_game_file_path(
             &evaluations_dir,
-            model_info_1,
-            model_info_2
+            model_infos
         );
 
         let match_file_path = get_match_file_path(&evaluations_dir);
@@ -62,11 +62,10 @@ impl SelfEvaluatePersistance
     }
 }
 
-fn get_game_file_path(evaluations_dir: &Path, model_info_1: &ModelInfo, model_info_2: &ModelInfo) -> PathBuf {
+fn get_game_file_path(evaluations_dir: &Path, model_infos: &[ModelInfo]) -> PathBuf {
     evaluations_dir.join(format!(
-        "{model_1_name}_vs_{model_2_name}.json",
-        model_1_name = model_info_1.get_model_name(),
-        model_2_name = model_info_2.get_model_name(),
+        "{model_names}.json",
+        model_names = model_infos.iter().map(|m| m.get_model_name()).join("_vs_")
     ))
 }
 

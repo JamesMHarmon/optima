@@ -160,16 +160,12 @@ where
 
             let new_model = model_factory.get(&new_model_info);
             SelfEvaluate::evaluate(
-                &latest_model,
-                &new_model,
+                &vec!(latest_model, new_model),
                 game_engine,
                 self_evaluate_options
             )?;
 
             latest_model_info = new_model_info;
-
-            drop(latest_model);
-            drop(self_play_persistance);
         }
     }
 

@@ -9,6 +9,7 @@ pub trait GameAnalyzer
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
     fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32;
+    fn get_value_for_player(&self, player: usize, value: &Self::Value) -> f32;
 }
 
 #[derive(Clone,Debug)]

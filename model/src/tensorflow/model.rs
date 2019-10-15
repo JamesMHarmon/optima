@@ -57,6 +57,7 @@ pub trait Mapper<S,A,V> {
     fn get_input_dimensions(&self) -> [u64; 3];
     fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
+    fn get_value_for_player(&self, player: usize, value: &V) -> f32;
     fn get_value_for_player_to_move(&self, game_state: &S, value: &V) -> f32;
     fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
     fn map_value_output_to_value(&self, game_state: &S, value_score: f32) -> V;
@@ -308,6 +309,10 @@ where
 
     fn get_value_for_player_to_move(&self, game_state: &Self::State, value: &Self::Value) -> f32 {
         self.batching_model.mapper.get_value_for_player_to_move(game_state, value)
+    }
+
+    fn get_value_for_player(&self, player: usize, value: &Self::Value) -> f32 {
+        self.batching_model.mapper.get_value_for_player(player, value)
     }
 }
 

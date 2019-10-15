@@ -481,6 +481,10 @@ impl GameEngine for Engine {
     fn is_terminal_state(&self, game_state: &GameState) -> Option<Self::Value> {
         game_state.is_terminal()
     }
+
+    fn get_player_to_move(&self, game_state: &GameState) -> usize {
+        if game_state.p1_turn_to_move { 1 } else { 2 }
+    }
 }
 
 #[cfg(test)]

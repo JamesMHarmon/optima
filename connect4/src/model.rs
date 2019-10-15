@@ -96,6 +96,10 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn get_value_for_player_to_move(&self, game_state: &GameState, value: &Value) -> f32 {
         value[if game_state.p1_turn_to_move { 0 } else { 1 }]
     }
+
+    fn get_value_for_player(&self, player: usize, value: &Value) -> f32 {
+        value[player - 1]
+    }
 }
 
 impl model::model::ModelFactory for ModelFactory {

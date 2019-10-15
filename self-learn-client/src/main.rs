@@ -147,8 +147,7 @@ fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_2 = model_factory.get(&model_2_info);
 
     self_evaluate::self_evaluate::SelfEvaluate::evaluate(
-        &model_1,
-        &model_2,
+        &vec!(model_1, model_2),
         &game_engine,
         options
     )?;
@@ -237,8 +236,7 @@ fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_2 = model_factory.get(&model_2_info);
 
     self_evaluate::self_evaluate::SelfEvaluate::evaluate(
-        &model_1,
-        &model_2,
+        &vec!(model_1, model_2),
         &game_engine,
         options
     )?;

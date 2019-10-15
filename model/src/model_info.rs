@@ -1,4 +1,6 @@
-#[derive(Clone,Debug)]
+use serde::{Serialize};
+
+#[derive(Clone,Debug,Serialize,PartialEq,Eq)]
 pub struct ModelInfo {
     game_name: String,
     run_name: String,
