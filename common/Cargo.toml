@@ -10,4 +10,3 @@ name="common"
 
 [dependencies]
 rand="0.7.0"
-uuid={version="0.7",features=["v4"]}

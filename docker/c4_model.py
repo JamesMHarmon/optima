@@ -1,6 +1,6 @@
 from keras.models import load_model
 from keras.optimizers import SGD
-from keras import backend as K 
+from tensorflow.keras import backend as K
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from os import listdir
@@ -50,6 +50,21 @@ def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch
           verbose=1,
           validation_data=(X_test, y_tests),
           callbacks=callbacks)
+
+def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size):
+    K.clear_session()
+    K.set_learning_phase(0)
+    model = tf.keras.models.load_model(model_path)
+
+    # Fetch the Keras session and save the model
+    # The signature definition is defined by the input and output tensors
+    # And stored with the default serving key
+    with tf.keras.backend.get_session() as sess:
+        tf.saved_model.simple_save(
+            sess,
+            export_model_path,
+            inputs={'input_image': model.input},
+            outputs={t.name: t for t in model.outputs})
 
 def clear():
     K.clear_session()

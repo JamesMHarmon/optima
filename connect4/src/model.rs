@@ -3,8 +3,11 @@ use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
 use model::analysis_cache::AnalysisCacheModel;
-use model::tensorflow::model::TensorflowModel;
+use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
+use model::model::ModelOptions;
+use engine::value::{Value as ValueTrait};
+use super::value::Value;
 use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
@@ -29,7 +32,7 @@ impl Mapper {
     }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
+impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
         let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
@@ -78,18 +81,35 @@ impl model::tensorflow::model::Mapper<GameState,Action> for Mapper {
 
         valid_actions_with_policies
     }
+
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+        let curr_val = (value_output + 1.0) / 2.0;
+        let opp_val = 1.0 - curr_val;
+        if game_state.p1_turn_to_move { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
+    }
+
+    fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
+        let player_to_move = if game_state.p1_turn_to_move { 0 } else { 1 };
+        let val = value.get_value_for_player(player_to_move);
+        (val * 2.0) - 1.0
+    }
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Engine,Mapper>>;
+    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<Engine,Mapper>>;
+    type O = ModelOptions;
 
-    fn create(&self, model_info: &ModelInfo, num_filters: usize, num_blocks: usize) -> Self::M {
-        TensorflowModel::<GameState,Action,Engine,Mapper>::create(
+    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M {
+        TensorflowModel::<Engine,Mapper>::create(
             model_info,
-            num_filters,
-            num_blocks,
-            (INPUT_H, INPUT_W, INPUT_C),
-            OUTPUT_SIZE
+            &TensorflowModelOptions {
+                num_filters: options.number_of_filters,
+                num_blocks: options.number_of_residual_blocks,
+                channel_height: INPUT_H,
+                channel_width: INPUT_W,
+                channels: INPUT_C,
+                output_size: OUTPUT_SIZE
+            }
         ).unwrap();
 
         self.get(model_info)    

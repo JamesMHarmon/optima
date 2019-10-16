@@ -183,13 +183,12 @@ subcommands:
                 value_name: RUN NAME
                 help: Name of the run, cannot contain '_'.
             - model_1:
-                short: m1
-                long: model_1
+                short: m
+                long: model
                 takes_value: true
-                value_name: MODEL 1
+                value_name: MODEL
                 help: "[Default: Second Most Latest Model] The number of the model that is the p1 challenger."
             - model_2:
-                short: m2
                 long: model_2
                 takes_value: true
                 value_name: MODEL 2
@@ -200,3 +199,101 @@ subcommands:
                 takes_value: true
                 value_name: NUM GAMES
                 help: "[Default: 1,000] The number of the model that is the p2 challenger."
+            - visits:
+                long: visits
+                takes_value: true
+                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800."
+                value_name: VISITS
+            - temperature:
+                long: temperature
+                takes_value: true
+                help: "[Default: 1.0] The temperature to use during self play games before the temperature_max_actions threshold has been met. The higher the temp, the more exploration."
+                value_name: TEMP
+            - temperature_max_actions:
+                long: temperature_max_actions
+                takes_value: true
+                help: "[Default: 30] The number of actions in the game to be made before changing the temperature to temperature_post_max_actions."
+                value_name: NUM
+            - temperature_post_max_actions:
+                long: temperature_post_max_actions
+                takes_value: true
+                help: "[Default: 0.45] The temperature to use during self play games after the temperature_max_actions threshold has been met. The higher the temp, the more exploration."
+                value_name: TEMP
+            - fpu:
+                long: fpu
+                takes_value: true
+                help: "[Default: 0.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
+            - fpu_root:
+                long: fpu_root
+                takes_value: true
+                help: "[Default: 1.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
+            - cpuct_base:
+                long: cpuct_base
+                takes_value: true
+                help: "[Default: 19,652] Adds a scaling factor for cpuct, the more visits that a node has, the more that exploration over exploitation will be favored. AZ used 19,652."
+                value_name: NUM
+            - cpuct_init:
+                long: cpuct_init
+                takes_value: true
+                help: "[Default: 1.25] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 1.25."
+                value_name: NUM
+            - cpuct_root_scaling:
+                long: cpuct_root_scaling
+                takes_value: true
+                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                value_name: NUM
+    - ponder:
+        about: Ponders on positions as the user select which moves to play.
+        args:
+            - game:
+                required: true
+                short: g
+                long: game
+                takes_value: true
+                value_name: GAME NAME
+                help: Name of the game to run.
+            - run:
+                required: true
+                short: r
+                long: run
+                takes_value: true
+                value_name: RUN NAME
+                help: Name of the run, cannot contain '_'.
+            - model:
+                short: m
+                long: model
+                takes_value: true
+                value_name: MODEL
+                help: "[Default: Latest Model] The number of the model to evaluate the positions."
+            - visits:
+                long: visits
+                takes_value: true
+                help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800."
+                value_name: VISITS
+            - fpu:
+                long: fpu
+                takes_value: true
+                help: "[Default: 0.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
+            - fpu_root:
+                long: fpu_root
+                takes_value: true
+                help: "[Default: 1.0] First Player Urgency. This value determine the value of an action that hasn't yet been evaluated. This is used during the caclulation of cpuct"
+                value_name: NUM
+            - cpuct_base:
+                long: cpuct_base
+                takes_value: true
+                help: "[Default: 19,652] Adds a scaling factor for cpuct, the more visits that a node has, the more that exploration over exploitation will be favored. AZ used 19,652."
+                value_name: NUM
+            - cpuct_init:
+                long: cpuct_init
+                takes_value: true
+                help: "[Default: 1.25] The cpuct value within the MCTS algorithm. A higher cpuct encourages exploration over exploitation. AZ used 1.25."
+                value_name: NUM
+            - cpuct_root_scaling:
+                long: cpuct_root_scaling
+                takes_value: true
+                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                value_name: NUM

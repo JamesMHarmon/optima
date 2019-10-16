@@ -2,7 +2,7 @@ pub const MAX_NUMBER_OF_MOVES: usize = 200;
 pub const BOARD_WIDTH: usize = 9;
 pub const BOARD_HEIGHT: usize = 9;
 pub const NUM_WALLS_PER_PLAYER: usize = 10;
-pub const MAX_WALLS_PLACED_TO_CACHE: usize = 2;
+pub const MAX_WALLS_PLACED_TO_CACHE: usize = 0;
 
 
 pub const INPUT_H: usize = BOARD_HEIGHT;

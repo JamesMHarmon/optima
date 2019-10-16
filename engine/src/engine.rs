@@ -1,7 +1,11 @@
+use super::value::Value;
+
 pub trait GameEngine {
     type Action;
     type State;
+    type Value: Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State;
-    fn is_terminal_state(&self, game_state: &Self::State) -> Option<f32>;
+    fn get_player_to_move(&self, game_state: &Self::State) -> usize;
+    fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value>;
 }

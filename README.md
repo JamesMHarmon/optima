@@ -139,3 +139,34 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 * Use proper logging
 * Calculate the p values from logits only on legal actions. Inverse calculation for training? // https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
 * Sampling of action when using temp to select should be softmax
+
+Hey Omar,
+
+I recently discovered the game of Arimaa and am loving it. I am enjoying how simple it has been to learn yet how deep and complex the strategy can become.
+
+I have also been a fan of and following the Alpha Zero project along with the open source versions like Leela Zero Chess.
+
+Someone mentioned to me that you have offered a challenge to recreate Alpha Zero for Arimaa.
+
+"If anyone is interested in reproducing these results for Arimaa and making the bot and bot generation code open source (along with a published paper describing the work), I would be willing to award a prize of $10,000. The program has to win a 10 game match against bot_Sharp2015CC to prove superior human level play. "
+
+I would love to take on this challenge if you are interested.
+
+Thanks!
+James
+
+docker run --rm --runtime=nvidia -it -v /home/james/quoridor_engine/Connect4_runs/run-4/exported_models/:/tmp/exported_models tensorflow/tensorflow:latest-gpu /usr/local/bin/saved_model_cli convert --dir /tmp/exported_models/75 --output_dir /tmp/exported_models/78 --tag_set serve tensorrt --precision_mode FP16 --max_batch_size 512 --is_dynamic_op False
+
+freeze_graph.freeze_graph(
+     None,
+     None,
+     None,
+     None,
+     [output.op.name for output in model.outputs],
+     None,
+     None,
+     frozen_model_path,
+     False,
+     "",
+     saved_model_tags=tag_constants.SERVING,
+     input_saved_model_dir=export_model_path)

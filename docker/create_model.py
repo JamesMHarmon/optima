@@ -1,27 +1,7 @@
 import os
-import json
-from pathlib import Path
-from keras import backend as K 
 import tensorflow as tf
-from keras.callbacks import TensorBoard
 
 import c4_model as c4
-
-def export(model_path, export_model_path):
-    c4.clear()
-    K.set_learning_phase(0)
-
-    model = tf.keras.models.load_model(model_path)
-
-    # Fetch the Keras session and save the model
-    # The signature definition is defined by the input and output tensors
-    # And stored with the default serving key
-    with tf.keras.backend.get_session() as sess:
-        tf.saved_model.simple_save(
-            sess,
-            export_model_path,
-            inputs={'input_image': model.input},
-            outputs={t.name: t for t in model.outputs})
 
 if __name__== "__main__":
 
@@ -40,4 +20,4 @@ if __name__== "__main__":
 
     model.save(target_model_path)
 
-    export(target_model_path, export_model_path)
+    c4.export(target_model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), output_size)
