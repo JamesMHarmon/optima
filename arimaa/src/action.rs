@@ -7,17 +7,135 @@ use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Vi
 use common::bits::single_bit_index;
 use failure::{format_err};
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Action {
-    Place(Piece),
-    Move(Coordinate,Coordinate),
-    Pass
+#[derive(Clone, Eq, PartialEq)]
+pub struct Square(u8);
+
+impl Square {
+    pub fn new(column: char, row: usize) -> Self {
+        let index = (column as u8 - ASCII_LETTER_A) + (BOARD_HEIGHT - row) as u8 * 8;
+        Square(index)
+    }
+
+    pub fn from_bit_board(board: u64) -> Self {
+        Square(single_bit_index(board as u128) as u8)
+    }
+
+    pub fn as_bit_board(&self) -> u64 {
+        1 << self.0
+    }
+
+    pub fn invert(&self) -> Self {
+        Square((BOARD_HEIGHT * BOARD_WIDTH) as u8 - 1 - self.0)
+    }
+
+    pub fn column_char(&self) -> char {
+        let index = self.0 as usize;
+        let column = index % BOARD_WIDTH;
+
+        (ASCII_LETTER_A + column as u8) as char
+    }
+
+    pub fn row(&self) -> u8 {
+        let index = self.0 as usize;
+        let row = BOARD_HEIGHT - (index / BOARD_WIDTH) as usize;
+        row as u8
+    }
+}
+
+impl fmt::Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let column = self.column_char();
+        let row = self.row();
+
+        write!(f, "{column}{row}", column = column, row = row)
+    }
+}
+
+impl fmt::Debug for Square {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+
+impl FromStr for Square {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars: Vec<char> = s.chars().collect();
+
+        if chars.len() == 2 {
+            let column = chars[0];
+            let row = chars[1];
+
+            if let Ok(row) = row.to_string().parse() {
+                let column_as_num = column as u8 - ASCII_LETTER_A + 1;
+                if column_as_num >= 1 && column_as_num <= BOARD_WIDTH as u8 && row >= 1 && row <= BOARD_HEIGHT {
+                    return Ok(Square::new(column, row));
+                }
+            }
+        }
+
+        Err(format_err!("Invalid value for square"))
+    }
 }
 
 #[derive(Clone,Eq,PartialEq)]
-pub struct Coordinate {
-    pub column: char,
-    pub row: usize
+pub enum Direction {
+    Up,
+    Right,
+    Down,
+    Left
+}
+
+impl Direction {
+    pub fn invert(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Down,
+            Direction::Right => Direction::Left,
+            Direction::Down => Direction::Up,
+            Direction::Left => Direction::Right
+        }
+    }
+}
+
+impl fmt::Display for Direction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let dir = match self {
+            Direction::Up => 'n',
+            Direction::Right => 'e',
+            Direction::Down => 's',
+            Direction::Left => 'w'
+        };
+
+        write!(f, "{}", dir)
+    }
+}
+
+impl FromStr for Direction {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars: Vec<char> = s.chars().collect();
+
+        if chars.len() == 1 {
+            if let Some(c) = chars.get(0) {
+                let direction = match c {
+                    'n' => Some(Direction::Up),
+                    'e' => Some(Direction::Right),
+                    's' => Some(Direction::Down),
+                    'w' => Some(Direction::Left),
+                    _ => None
+                };
+
+                if let Some(direction) = direction {
+                    return Ok(direction);
+                }
+            }
+        }
+
+        Err(format_err!("Invalid value for direction"))
+    }
 }
 
 #[derive(Clone,Eq,PartialEq)]
@@ -30,43 +148,54 @@ pub enum Piece {
     Rabbit
 }
 
-impl Coordinate {
-    pub fn new(column: char, row: usize) -> Self {
-        Self { column, row }
+impl fmt::Display for Piece {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let piece = match self {
+            Piece::Elephant => 'e',
+            Piece::Camel => 'm',
+            Piece::Horse => 'h',
+            Piece::Dog => 'd',
+            Piece::Cat => 'c',
+            Piece::Rabbit => 'r'
+        };
+
+        write!(f, "{}", piece)
     }
+}
 
-    pub fn from_bit_board(board: u64) -> Self {
-        let index = single_bit_index(board);
-        let column = BOARD_WIDTH - (index % BOARD_WIDTH);
-        let row = ((index / BOARD_WIDTH) as usize) + 1;
+impl FromStr for Piece {
+    type Err = failure::Error;
 
-        let column = (ASCII_LETTER_A  + column as u8 - 1) as char;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars: Vec<char> = s.chars().collect();
 
-        Coordinate::new(column, row)
+        if chars.len() == 1 {
+            if let Some(c) = chars.get(0) {
+                let piece = match c {
+                    'e' => Some(Piece::Elephant),
+                    'm' => Some(Piece::Camel),
+                    'h' => Some(Piece::Horse),
+                    'd' => Some(Piece::Dog),
+                    'c' => Some(Piece::Cat),
+                    'r' => Some(Piece::Rabbit),
+                    _ => None
+                };
+
+                if let Some(piece) = piece {
+                    return Ok(piece);
+                }
+            }
+        }
+
+        Err(format_err!("Invalid value for piece"))
     }
+}
 
-    pub fn as_bit_board(&self) -> u64 {
-        let letter_pos: u8 = self.column as u8 - ASCII_LETTER_A + 1;
-        let bit_in_column: u64 = 1 << (BOARD_WIDTH as u64 - letter_pos as u64);
-        let row_shift = (self.row - 1) * BOARD_WIDTH;
-
-        bit_in_column << row_shift
-    }
-
-    pub fn invert(&self, shift: bool) -> Coordinate {
-        Coordinate::new(
-            if shift { Self::invert_column_shift(self.column) } else { Self::invert_column(self.column) },
-            if shift { BOARD_HEIGHT } else { BOARD_HEIGHT + 1 } - self.row
-        )
-    }
-
-    fn invert_column(column: char) -> char {
-        let col_num = column as u8 - ASCII_LETTER_A + 1;
-        let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
-        let a = (ASCII_LETTER_A + inverted_col_num - 1) as char;
-
-        a
-    }
+#[derive(Clone, Eq, PartialEq)]
+pub enum Action {
+    Place(Piece),
+    Move(Square,Direction),
+    Pass
 }
 
 impl Serialize for Action
@@ -90,7 +219,7 @@ impl<'de> Visitor<'de> for ActionVisitor
     type Value = Action;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("Expecting a string with a letter representing the column then a number representing the row. Optionally followed by a 'v' or 'h' for a wall.")
+        formatter.write_str("Expecting a string with a letter representing the column then a number representing the row.")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -111,32 +240,25 @@ impl<'de> Deserialize<'de> for Action
     }
 }
 
-#[derive(Clone,Eq,PartialEq)]
-pub enum Action {
-    MovePawn(Coordinate),
-    PlaceHorizontalWall(Coordinate),
-    PlaceVerticalWall(Coordinate)
-}
-
 impl Action {
     pub fn invert(&self) -> Self {
         match self {
-            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert(false)),
-            Action::PlaceHorizontalWall(coordinate) => Action::PlaceHorizontalWall(coordinate.invert(true)),
-            Action::PlaceVerticalWall(coordinate) => Action::PlaceVerticalWall(coordinate.invert(true))
+            Action::Move(square,direction) => Action::Move(square.invert(),direction.invert()),
+            Action::Place(_) => panic!("Cannot invert placement"),
+            _ => self.clone()
         }
     }
 }
 
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (coordinate,action_type) = match self {
-            Action::MovePawn(coordinate) => (coordinate, ""),
-            Action::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
-            Action::PlaceVerticalWall(coordinate) => (coordinate, "v")
+        let action = match self {
+            Action::Move(square,direction) => format!("{}{}", square, direction),
+            Action::Pass => "p".to_string(),
+            Action::Place(piece) => format!("{}", piece)
         };
 
-        write!(f, "{coordinate}{action_type}", coordinate = coordinate, action_type = action_type)
+        write!(f, "{}", action)
     }
 }
 
@@ -151,29 +273,24 @@ impl FromStr for Action {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
-        let row = chars[0];
-        // @TODO: Update to take multiple digits
-        let col = chars[1].to_digit(10).ok_or_else(|| format_err!("Invalid value"))?;
-        let coordinate = Coordinate::new(row, col as usize);
 
-        match chars.get(2) {
-            None => Ok(Action::MovePawn(coordinate)),
-            Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
-            Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
-            Some(_) => Err(format_err!("Invalid value"))
+        if chars.len() == 1 {
+            if let Some(c) = chars.get(0) {
+                if *c == 'p' {
+                    return Ok(Action::Pass);
+                } else if let Ok(piece) = c.to_string().parse::<Piece>() {
+                    return Ok(Action::Place(piece));
+                }
+            }
+        } else if chars.len() == 3 {
+            if let Ok(square) = s[..2].parse::<Square>() {
+                if let Ok(dir) = s[2..].parse::<Direction>() {
+                    return Ok(Action::Move(square, dir));
+                }
+            }
         }
-    }
-}
 
-impl fmt::Display for Coordinate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}", self.column, self.row)
-    }
-}
-
-impl fmt::Debug for Coordinate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        Err(format_err!("Invalid action"))
     }
 }
 
@@ -181,197 +298,162 @@ impl fmt::Debug for Coordinate {
 mod tests {
     use super::*;
 
+    fn col_row_to_bit(col: usize, row: usize) -> u64 {
+        1 << ((col - 1) + (8 - row) * 8)
+    }
+
     #[test]
     fn test_as_bit_board_a1() {
-        let bit = Coordinate::new('a', 1).as_bit_board();
+        let bit = Square::new('a', 1).as_bit_board();
         let col = 1;
         let row = 1;
 
-        assert_eq!(1 << ((9 - col) + (row - 1) * 9), bit);
+        assert_eq!(col_row_to_bit(col, row), bit);
     }
 
     #[test]
-    fn test_as_bit_board_a9() {
-        let bit = Coordinate::new('a', 9).as_bit_board();
+    fn test_as_bit_board_a8() {
+        let bit = Square::new('a', 8).as_bit_board();
         let col = 1;
-        let row = 9;
+        let row = 8;
 
-        assert_eq!(1 << ((9 - col) + (row - 1) * 9), bit);
+        assert_eq!(col_row_to_bit(col, row), bit);
     }
 
     #[test]
-    fn test_as_bit_board_i1() {
-        let bit = Coordinate::new('i', 1).as_bit_board();
-        let col = 9;
+    fn test_as_bit_board_h1() {
+        let bit = Square::new('h', 1).as_bit_board();
+        let col = 8;
         let row = 1;
 
-        assert_eq!(1 << ((9 - col) + (row - 1) * 9), bit);
+        assert_eq!(col_row_to_bit(col, row), bit);
     }
-
     #[test]
-    fn test_as_bit_board_i9() {
-        let bit = Coordinate::new('i', 9).as_bit_board();
-        let col = 9;
-        let row = 9;
+    fn test_as_bit_board_h8() {
+        let bit = Square::new('h', 8).as_bit_board();
+        let col = 8;
+        let row = 8;
 
-        assert_eq!(1 << ((9 - col) + (row - 1) * 9), bit);
+        assert_eq!(col_row_to_bit(col, row), bit);
     }
 
     #[test]
     fn test_as_bit_board_e5() {
-        let bit = Coordinate::new('e', 5).as_bit_board();
+        let bit = Square::new('e', 5).as_bit_board();
         let col = 5;
         let row = 5;
 
-        assert_eq!(1 << ((9 - col) + (row - 1) * 9), bit);
+        assert_eq!(col_row_to_bit(col, row), bit);
     }
 
     #[test]
     fn test_from_bit_board_a1() {
         let col = 1;
         let row = 1;
-        let bit_board = 1 << ((9 - col) + (row - 1) * 9);
+        let bit_board = col_row_to_bit(col, row);
 
-        let coordinate = Coordinate::from_bit_board(bit_board);
+        let square = Square::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('a', 1), coordinate);
+        assert_eq!(Square::new('a', 1), square);
     }
 
     #[test]
-    fn test_from_bit_board_a9() {
+    fn test_from_bit_board_a8() {
         let col = 1;
-        let row = 9;
-        let bit_board = 1 << ((9 - col) + (row - 1) * 9);
+        let row = 8;
+        let bit_board = col_row_to_bit(col, row);
 
-        let coordinate = Coordinate::from_bit_board(bit_board);
+        let square = Square::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('a', 9), coordinate);
+        assert_eq!(Square::new('a', 8), square);
     }
 
     #[test]
-    fn test_from_bit_board_i1() {
-        let col = 9;
+    fn test_from_bit_board_h1() {
+        let col = 8;
         let row = 1;
-        let bit_board = 1 << ((9 - col) + (row - 1) * 9);
+        let bit_board = col_row_to_bit(col, row);
 
-        let coordinate = Coordinate::from_bit_board(bit_board);
+        let square = Square::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('i', 1), coordinate);
+        assert_eq!(Square::new('h', 1), square);
     }
 
     #[test]
-    fn test_from_bit_board_i9() {
-        let col = 9;
-        let row = 9;
-        let bit_board = 1 << ((9 - col) + (row - 1) * 9);
+    fn test_from_bit_board_h8() {
+        let col = 8;
+        let row = 8;
+        let bit_board = col_row_to_bit(col, row);
 
-        let coordinate = Coordinate::from_bit_board(bit_board);
+        let square = Square::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('i', 9), coordinate);
+        assert_eq!(Square::new('h', 8), square);
     }
 
     #[test]
     fn test_from_bit_board_e5() {
         let col = 5;
         let row = 5;
-        let bit_board = 1 << ((9 - col) + (row - 1) * 9);
+        let bit_board = col_row_to_bit(col, row);
 
-        let coordinate = Coordinate::from_bit_board(bit_board);
+        let square = Square::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('e', 5), coordinate);
+        assert_eq!(Square::new('e', 5), square);
     }
 
     #[test]
-    fn test_to_coordinate_to_bit_board_from_bit_board_back_to_coordinate() {
-        let cols = ['a','b','c','d','e','f','g','h','i'];
-        let rows = [1,2,3,4,5,6,7,8,9];
+    fn test_to_square_to_bit_board_from_bit_board_back_to_square() {
+        let cols = ['a','b','c','d','e','f','g','h'];
+        let rows = [1,2,3,4,5,6,7,8];
 
         for (col, row) in cols.iter().zip(rows.iter()) {
-            let orig_coordinate = Coordinate::new(*col, *row);
-            let bit_board = orig_coordinate.as_bit_board();
-            let coordinate = Coordinate::from_bit_board(bit_board);
+            let orig_square = Square::new(*col, *row);
+            let bit_board = orig_square.as_bit_board();
+            let square = Square::from_bit_board(bit_board);
 
-            assert_eq!(orig_coordinate, coordinate);
+            assert_eq!(orig_square, square);
         }
     }
 
     #[test]
-    fn test_invert_coordinate_a1() {
-        let coord = Coordinate::new('a', 1);
-        let expected = Coordinate::new('i', 9);
+    fn test_invert_square_a1() {
+        let square = Square::new('a', 1);
+        let expected = Square::new('h', 8);
         
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(square.invert(), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_i9() {
-        let coord = Coordinate::new('i', 9);
-        let expected = Coordinate::new('a', 1);
+    fn test_invert_square_h8() {
+        let square = Square::new('h', 8);
+        let expected = Square::new('a', 1);
         
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(square.invert(), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_e5() {
-        let coord = Coordinate::new('e', 5);
-        let expected = Coordinate::new('e', 5);
+    fn test_invert_square_e5() {
+        let square = Square::new('e', 5);
+        let expected = Square::new('d', 4);
         
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(square.invert(), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_d3() {
-        let coord = Coordinate::new('d', 3);
-        let expected = Coordinate::new('f', 7);
+    fn test_invert_square_d3() {
+        let square = Square::new('d', 3);
+        let expected = Square::new('e', 6);
         
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(square.invert(), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_double_invert() {
-        let coord = Coordinate::new('d', 3);
+    fn test_invert_square_double_invert() {
+        let square = Square::new('d', 3);
         
-        assert_eq!(coord.invert(false).invert(false), coord);
+        assert_eq!(square.invert().invert(), square);
     }
 
-    #[test]
-    fn test_invert_coordinate_shift_a1() {
-        let coord = Coordinate::new('a', 1);
-        let expected = Coordinate::new('h', 8);
-        
-        assert_eq!(coord.invert(true), expected);
-    }
-
-    #[test]
-    fn test_invert_coordinate_shift_h8() {
-        let coord = Coordinate::new('h', 8);
-        let expected = Coordinate::new('a', 1);
-        
-        assert_eq!(coord.invert(true), expected);
-    }
-
-    #[test]
-    fn test_invert_coordinate_shift_e5() {
-        let coord = Coordinate::new('e', 5);
-        let expected = Coordinate::new('d', 4);
-        
-        assert_eq!(coord.invert(true), expected);
-    }
-
-    #[test]
-    fn test_invert_coordinate_shift_d3() {
-        let coord = Coordinate::new('d', 3);
-        let expected = Coordinate::new('e', 6);
-        
-        assert_eq!(coord.invert(true), expected);
-    }
-
-    #[test]
-    fn test_invert_coordinate_shift_double_invert() {
-        let coord = Coordinate::new('d', 3);
-        
-        assert_eq!(coord.invert(true).invert(true), coord);
-    }
 }
 
 #[cfg(test)]
@@ -380,65 +462,87 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_action_pawn_move_ser_json() {
-        let action = Action::MovePawn(Coordinate::new('a', 1));
+    fn test_action_move_ser_json() {
+        let action = Action::Move(Square::new('a', 1),Direction::Up);
         let serialized_action_as_json = json!(action);
 
         assert_eq!(
             serialized_action_as_json,
-            "a1"
+            "a1n"
         );
     }
 
     #[test]
-    fn test_action_vertical_wall_ser_json() {
-        let action = Action::PlaceVerticalWall(Coordinate::new('a', 1));
+    fn test_action_move_ser_json_2() {
+        let action = Action::Move(Square::new('d', 4),Direction::Right);
         let serialized_action_as_json = json!(action);
 
         assert_eq!(
             serialized_action_as_json,
-            "a1v"
+            "d4e"
         );
     }
 
     #[test]
-    fn test_action_horizontal_wall_ser_json() {
-        let action = Action::PlaceHorizontalWall(Coordinate::new('a', 1));
+    fn test_action_place_elephant_ser_json() {
+        let action = Action::Place(Piece::Elephant);
         let serialized_action_as_json = json!(action);
 
         assert_eq!(
             serialized_action_as_json,
-            "a1h"
+            "e"
         );
     }
 
     #[test]
-    fn test_action_deser_pawn_move() {
-        let json = "\"i9\"";
+    fn test_action_place_camel_ser_json() {
+        let action = Action::Place(Piece::Camel);
+        let serialized_action_as_json = json!(action);
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
-            Action::MovePawn(Coordinate::new('i', 9)),
+            serialized_action_as_json,
+            "m"
         );
     }
 
     #[test]
-    fn test_action_deser_horizontal_wall() {
-        let json = "\"b6h\"";
+    fn test_action_pass_ser_json() {
+        let action = Action::Pass;
+        let serialized_action_as_json = json!(action);
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
-            Action::PlaceHorizontalWall(Coordinate::new('b', 6)),
+            serialized_action_as_json,
+            "p"
         );
     }
 
     #[test]
-    fn test_action_deser_vertical_wall() {
-        let json = "\"d1v\"";
+    fn test_action_deser_move() {
+        let json = "\"b2w\"";
 
         assert_eq!(
             serde_json::from_str::<Action>(&json).unwrap(),
-            Action::PlaceVerticalWall(Coordinate::new('d', 1)),
+            Action::Move(Square::new('b', 2), Direction::Left),
+        );
+    }
+
+    #[test]
+    fn test_action_deser_place() {
+        let json = "\"d\"";
+
+        assert_eq!(
+            serde_json::from_str::<Action>(&json).unwrap(),
+            Action::Place(Piece::Dog),
+        );
+    }
+
+    #[test]
+    fn test_action_deser_pass() {
+        let json = "\"p\"";
+
+        assert_eq!(
+            serde_json::from_str::<Action>(&json).unwrap(),
+            Action::Pass,
         );
     }
 }
