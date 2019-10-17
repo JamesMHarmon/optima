@@ -16,6 +16,10 @@ impl Square {
         Square(index)
     }
 
+    pub fn from_index(index: u8) -> Self {
+        Square(index)
+    }
+
     pub fn from_bit_board(board: u64) -> Self {
         Square(single_bit_index(board as u128) as u8)
     }

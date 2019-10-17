@@ -1,10 +1,12 @@
+use std::str::FromStr;
 use std::fmt::{self,Display,Formatter};
 use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,MAX_NUMBER_OF_MOVES};
 use super::action::{Action,Direction,Piece,Square};
 use super::value::Value;
 use engine::engine::GameEngine;
-use engine::game_state;
+use engine::game_state::{GameState as GameStateTrait};
 use common::bits::first_set_bit;
+use failure::Error;
 
 const LEFT_COLUMN_MASK: u64 =       0b__00000001__00000001__00000001__00000001__00000001__00000001__00000001__00000001;
 const RIGHT_COLUMN_MASK: u64 =      0b__10000000__10000000__10000000__10000000__10000000__10000000__10000000__10000000;
@@ -44,11 +46,11 @@ Out:
 */
 
 
-        // @TODO: Catch issue where pulling a piece and losing puller in trap on same move.
+// @TODO: Catch issue where pulling a piece and losing puller in trap on same move.
 
-        // @TODO: Ensure pass can't happen from the MustPush state.
-        // @TODO: Ensure pass can't happen from the 0 actions state.PLACEMENT_MASK
-        // @TODO: Don't push and pull on the same move.
+// @TODO: Ensure pass can't happen from the MustPush state.
+// @TODO: Ensure pass can't happen from the 0 actions state.PLACEMENT_MASK
+// @TODO: Don't push and pull on the same move.
 
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -158,7 +160,7 @@ impl GameState {
         let new_rabbit_board = shift_piece_in_direction(self.rabbit_board, source_square_bit, direction);
         let new_p1_piece_board = shift_piece_in_direction(self.p1_piece_board, source_square_bit, direction);
 
-        let new_play_phase = self.get_new_phase(square);
+        let new_play_phase = self.get_new_phase(square, direction);
         let new_p1_turn_to_move = if new_play_phase.actions_this_turn == 0 { !self.p1_turn_to_move } else { self.p1_turn_to_move };
 
         let mut new_game_state = GameState {
@@ -185,7 +187,7 @@ impl GameState {
         }
     }
 
-    fn get_new_phase(&self, square: &Square) -> PlayPhase {
+    fn get_new_phase(&self, square: &Square, direction: &Direction) -> PlayPhase {
         let play_phase = self.play_phase();
         let actions_this_turn = play_phase.actions_this_turn;
         let switch_players = actions_this_turn >= 3;
@@ -198,7 +200,7 @@ impl GameState {
 
             // Check if previous move can count as a pull, if so, do that.
             // Otherwise state that it must be followed with a push.
-            let push_pull_state = if is_opponent_piece && !self.move_can_be_counted_as_pull(square) {
+            let push_pull_state = if is_opponent_piece && !self.move_can_be_counted_as_pull(source_square_bit, direction) {
                 PushPullState::MustPush(square.clone(), self.get_piece_type_at_bit(source_square_bit))
             } else if !is_opponent_piece && !play_phase.must_push() {
                 PushPullState::PossiblePull(square.clone(), self.get_piece_type_at_bit(source_square_bit))
@@ -233,11 +235,11 @@ impl GameState {
         }
     }
 
-    fn move_can_be_counted_as_pull(&self, new_move_square: &Square) -> bool {
+    fn move_can_be_counted_as_pull(&self, new_move_square_bit: u64, direction: &Direction) -> bool {
         let play_phase = self.play_phase();
         if let PushPullState::PossiblePull(prev_move_square, my_piece) = &play_phase.push_pull_state {
-            if prev_move_square == new_move_square {
-                let their_piece = self.get_piece_type_at_square(new_move_square);
+            if prev_move_square.as_bit_board() == shift_in_direction(new_move_square_bit, direction) {
+                let their_piece = self.get_piece_type_at_bit(new_move_square_bit);
                 if my_piece > &their_piece {
                     return true;
                 }
@@ -328,7 +330,7 @@ fn shift_in_direction(bits: u64, direction: &Direction) -> u64 {
     }
 }
 
-impl game_state::GameState for GameState {
+impl GameStateTrait for GameState {
     fn initial() -> Self {
         GameState {
             p1_turn_to_move: true,
@@ -342,6 +344,69 @@ impl game_state::GameState for GameState {
             phase: Phase::PlacePhase
         }
     }
+}
+
+impl FromStr for GameState {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // @TODO: Introduce correct turn
+        // @TODO: Introduce correct push/pull state
+        // @TODO: Introduce correct num_actions
+
+        let mut game_state = GameState::initial();
+        game_state.p1_turn_to_move = true;
+        game_state.phase = Phase::PlayPhase(PlayPhase {
+            actions_this_turn: 0,
+            push_pull_state: PushPullState::None
+        });
+
+        let lines = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s);
+        for (row_idx, line) in lines.enumerate() {
+            for (col_idx, charr) in line.chars().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).enumerate() {
+                let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
+                let square = Square::from_index(idx);
+                if let Some((piece, is_p1)) = convert_char_to_piece(charr) {
+                    insert_piece_to_state(&mut game_state, &square, piece, is_p1);
+                }
+            }
+        }
+
+        Ok(game_state)
+    }
+}
+
+fn insert_piece_to_state(game_state: &mut GameState, square: &Square, piece: Piece, p1_piece: bool) {
+    let square_bit = square.as_bit_board();
+
+    match piece {
+        Piece::Elephant => game_state.elephant_board |= square_bit,
+        Piece::Camel => game_state.camel_board |= square_bit,
+        Piece::Horse => game_state.horse_board |= square_bit,
+        Piece::Dog => game_state.dog_board |= square_bit,
+        Piece::Cat => game_state.cat_board |= square_bit,
+        Piece::Rabbit => game_state.rabbit_board |= square_bit,
+    }
+
+    if p1_piece {
+        game_state.p1_piece_board |= square_bit;
+    }
+}
+
+fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
+    let is_p1 = c.is_uppercase();
+
+    let piece = match c {
+        'E' | 'e' => Some(Piece::Elephant),
+        'M' | 'm' => Some(Piece::Camel),
+        'H' | 'h' => Some(Piece::Horse),
+        'D' | 'd' => Some(Piece::Dog),
+        'C' | 'c' => Some(Piece::Cat),
+        'R' | 'r' => Some(Piece::Rabbit),
+        _ => None
+    };
+
+    piece.map(|p| (p, is_p1))
 }
 
 impl PlayPhase {
@@ -462,5 +527,321 @@ mod tests {
         assert_eq!(game_state.p1_piece_board,   0b__11111111__11111100__00000010__00000000__00000001__00000000__00000000__00000000);
         assert_eq!(game_state.play_phase().actions_this_turn, 0);
         assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_action_move_down() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00001000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Down));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00001000__00000000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00001000__00000000__00000000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 3);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00001000__00000000__00000000__00000000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_action_move_left() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00001000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Left));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00000100__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 6), Direction::Left));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00000010__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 3);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 6), Direction::Left));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00000001__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_action_move_right() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00001000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Right));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00010000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('e', 6), Direction::Right));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00100000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 3);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('f', 6), Direction::Right));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__01000000__11110111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_action_move_trap_unsupported() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 2), Direction::Up));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111011__00000000__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111011__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
+
+    #[test]
+    fn test_action_move_trap_supported_right() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 2), Direction::Up));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111001__00000110__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111001__00000110__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
+
+    #[test]
+    fn test_action_move_trap_supported_left() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 2), Direction::Up));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11110011__00001100__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11110011__00001100__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
+
+    #[test]
+    fn test_action_move_trap_supported_top() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 3), Direction::Right));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111101__00000100__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111101__00000100__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
+
+    #[test]
+    fn test_action_move_trap_supported_bottom() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 3), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 4), Direction::Right));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 2), Direction::Up));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111001__00000100__00000100__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111001__00000100__00000100__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+
+    #[test]
+    fn test_action_move_trap_adjacent_opp_unsupported() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 3), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 7), Direction::Down));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111001__00000010__00000000__00000100__00000000__11111011__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111001__00000010__00000000__00000100__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_action_move_push_must_push_rabbit() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 7), Direction::Down));
+
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::MustPush(Square::new('b', 7), Piece::Rabbit));
+    }
+
+    #[test]
+    fn test_action_move_push_must_push_elephant() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Pass);
+        let game_state = game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
+        let game_state = game_state.take_action(&Action::Pass);
+        let game_state = game_state.take_action(&Action::Move(Square::new('e', 8), Direction::Down));
+
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::MustPush(Square::new('e', 8), Piece::Elephant));
+    }
+
+    #[test]
+    fn test_action_move_possible_pull_with_valid_pull() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|     E m         |
+             3|     x     x     |
+             2|                 |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Elephant));
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::None);
+    }
+
+    #[test]
+    fn test_action_move_pull_into_trap() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|     E m         |
+             3|     x     x     |
+             2|                 |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Down));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Elephant));
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::None);
+    }
+
+    #[test]
+    fn test_action_move_possible_pull_with_invalid_pull() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|     E e         |
+             3|     x     x     |
+             2|                 |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Elephant));
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::MustPush(Square::new('d', 4), Piece::Elephant));
+    }
+
+    #[test]
+    fn test_action_move_possible_pull_with_invalid_pull_2() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|     M e         |
+             3|     x     x     |
+             2|                 |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Camel));
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::MustPush(Square::new('d', 4), Piece::Elephant));
+    }
+
+    #[test]
+    fn test_action_pass() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Pass);
+
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_gamestate_fromstr() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R H R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(game_state.rabbit_board,     0b__01011010__00000000__01011010__00000000__00000000__01011010__00000000__01011010);
+        assert_eq!(game_state.cat_board,        0b__00000000__00100100__00000000__00000000__00100000__00000000__10000000__00000000);
+        assert_eq!(game_state.dog_board,        0b__00000000__10000001__00000000__00000000__10000100__00000000__00000000__00000000);
+        assert_eq!(game_state.horse_board,      0b__00000000__00000000__00100000__00000100__00000001__00000000__00000100__00000000);
+        assert_eq!(game_state.camel_board,      0b__00000000__00000000__00000000__10000000__00000000__00000000__00000001__00000000);
+        assert_eq!(game_state.elephant_board,   0b__00000000__00000000__00000000__00000001__00000000__00000000__00100000__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__01011010__10100101__01111010__10000101__00000000__00000000__00000000__00000000);
     }
 }
