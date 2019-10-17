@@ -6,14 +6,21 @@ use engine::engine::GameEngine;
 use engine::game_state;
 use common::bits::first_set_bit;
 
-const LEFT_COLUMN_MASK: u64 =   0b__00000001__00000001__00000001__00000001__00000001__00000001__00000001__00000001;
-const RIGHT_COLUMN_MASK: u64 =  0b__10000000__10000000__10000000__10000000__10000000__10000000__10000000__10000000;
+const LEFT_COLUMN_MASK: u64 =       0b__00000001__00000001__00000001__00000001__00000001__00000001__00000001__00000001;
+const RIGHT_COLUMN_MASK: u64 =      0b__10000000__10000000__10000000__10000000__10000000__10000000__10000000__10000000;
 
-const P1_OBJECTIVE_MASK: u64 =  0b__00000000__00000000__00000000__00000000__00000000__00000000__00000000__11111111;
-const P2_OBJECTIVE_MASK: u64 =  0b__11111111__00000000__00000000__00000000__00000000__00000000__00000000__00000000;
+const TOP_ROW_MASK: u64 =           0b__00000000__00000000__00000000__00000000__00000000__00000000__00000000__11111111;
+const BOTTOM_ROW_MASK: u64 =        0b__11111111__00000000__00000000__00000000__00000000__00000000__00000000__00000000;
 
-const PLACEMENT_MASK: u64 =     0b__11111111__11111111__00000000__00000000__00000000__00000000__11111111__11111111;
-const P2_PLACEMENT_MASK: u64 =  0b__00000000__00000000__00000000__00000000__00000000__00000000__11111111__11111111;
+const P1_OBJECTIVE_MASK: u64 =      TOP_ROW_MASK;
+const P2_OBJECTIVE_MASK: u64 =      BOTTOM_ROW_MASK;
+
+const P1_PLACEMENT_MASK: u64 =      0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000;
+const P2_PLACEMENT_MASK: u64 =      0b__00000000__00000000__00000000__00000000__00000000__00000000__11111111__11111111;
+const LAST_P1_PLACEMENT_MASK: u64 = 0b__10000000__00000000__00000000__00000000__00000000__00000000__00000000__00000000;
+const LAST_P2_PLACEMENT_MASK: u64 = 0b__00000000__00000000__00000000__00000000__00000000__00000000__10000000__00000000;
+
+const TRAP_MASK: u64 =              0b__00000000__00000000__00100100__00000000__00000000__00100100__00000000__00000000;
 
 /*
 Layers:
@@ -110,25 +117,23 @@ impl GameState {
         let mut new_state = self.clone();
 
         match piece {
-            Piece::Elephant => new_state.elephant_board &= placement_bit,
-            Piece::Camel => new_state.camel_board &= placement_bit,
-            Piece::Horse => new_state.horse_board &= placement_bit,
-            Piece::Dog => new_state.dog_board &= placement_bit,
-            Piece::Cat => new_state.cat_board &= placement_bit,
-            Piece::Rabbit => new_state.rabbit_board &= placement_bit,
+            Piece::Elephant => new_state.elephant_board |= placement_bit,
+            Piece::Camel => new_state.camel_board |= placement_bit,
+            Piece::Horse => new_state.horse_board |= placement_bit,
+            Piece::Dog => new_state.dog_board |= placement_bit,
+            Piece::Cat => new_state.cat_board |= placement_bit,
+            Piece::Rabbit => new_state.rabbit_board |= placement_bit,
         }
 
         if self.p1_turn_to_move {
-            new_state.p1_piece_board &= placement_bit;
+            new_state.p1_piece_board |= placement_bit;
         }
 
-        let new_placement_bit = new_state.get_placement_bit();
-
-        if new_placement_bit == 0 {
+        if placement_bit == LAST_P1_PLACEMENT_MASK {
+            new_state.p1_turn_to_move = false;
+        } else if placement_bit == LAST_P2_PLACEMENT_MASK {
             new_state.p1_turn_to_move = true;
             new_state.phase = Phase::PlayPhase(PlayPhase::initial());
-        } else if new_placement_bit & P2_PLACEMENT_MASK != 0 {
-            new_state.p1_turn_to_move = false;
         }
 
         new_state
@@ -209,7 +214,23 @@ impl GameState {
     }
 
     fn remove_unprotected_pieces(&mut self) {
-        panic!("TODO")
+        let all_piece_bits = self.get_all_piece_bits();
+        let animal_is_on_trap = animal_is_on_trap(all_piece_bits);
+
+        if animal_is_on_trap {
+            let unsupported_piece_bits = self.get_unsupported_piece_bits(all_piece_bits);
+            let trapped_animal_bits = unsupported_piece_bits & TRAP_MASK;
+            if trapped_animal_bits != 0 {
+                let untrapped_animal_bits = !trapped_animal_bits;
+                self.elephant_board &= untrapped_animal_bits;
+                self.camel_board &= untrapped_animal_bits;
+                self.horse_board &= untrapped_animal_bits;
+                self.dog_board &= untrapped_animal_bits;
+                self.cat_board &= untrapped_animal_bits;
+                self.rabbit_board &= untrapped_animal_bits;
+                self.p1_piece_board &= untrapped_animal_bits;
+            }
+        }
     }
 
     fn move_can_be_counted_as_pull(&self, new_move_square: &Square) -> bool {
@@ -256,16 +277,42 @@ impl GameState {
     }
 
     fn get_placement_bit(&self) -> u64 {
-        let placed_pieces = self.elephant_board
-            | self.camel_board
-            | self.horse_board
-            | self.dog_board
-            | self.cat_board
-            | self.rabbit_board;
+        let placed_pieces = self.get_all_piece_bits();
 
-        let squares_to_place = !placed_pieces & PLACEMENT_MASK;
+        let placement_mask = if self.p1_turn_to_move { P1_PLACEMENT_MASK } else { P2_PLACEMENT_MASK };
+        let squares_to_place = !placed_pieces & placement_mask;
+
         first_set_bit(squares_to_place)
     }
+
+    fn get_all_piece_bits(&self) -> u64 {
+        self.elephant_board
+        | self.camel_board
+        | self.horse_board
+        | self.dog_board
+        | self.cat_board
+        | self.rabbit_board
+    }
+
+    fn get_unsupported_piece_bits(&self, all_piece_bits: u64) -> u64 {
+        all_piece_bits & !self.get_supported_piece_bits(all_piece_bits)
+    }
+
+    fn get_supported_piece_bits(&self, all_piece_bits: u64) -> u64 {
+        let p1_pieces = self.p1_piece_board;
+        let p2_pieces = all_piece_bits & !p1_pieces;
+
+        let up_supported_pieces = p1_pieces & shift_up!(p1_pieces & !TOP_ROW_MASK) | p2_pieces & shift_up!(p2_pieces & !TOP_ROW_MASK);
+        let right_supported_pieces = p1_pieces & shift_right!(p1_pieces & !RIGHT_COLUMN_MASK) | p2_pieces & shift_right!(p2_pieces & !RIGHT_COLUMN_MASK);
+        let down_supported_pieces = p1_pieces & shift_down!(p1_pieces & !BOTTOM_ROW_MASK) | p2_pieces & shift_down!(p2_pieces & !BOTTOM_ROW_MASK);
+        let left_supported_pieces = p1_pieces & shift_left!(p1_pieces & !LEFT_COLUMN_MASK) | p2_pieces & shift_left!(p2_pieces & !LEFT_COLUMN_MASK);
+
+        up_supported_pieces | right_supported_pieces | down_supported_pieces | left_supported_pieces
+    }
+}
+
+fn animal_is_on_trap(all_piece_bits: u64) -> bool {
+    (all_piece_bits & TRAP_MASK) != 0
 }
 
 fn shift_piece_in_direction(piece_board: u64, source_square_bit: u64, direction: &Direction) -> u64 {
@@ -337,420 +384,83 @@ impl GameEngine for Engine {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::GameState;
-//     use super::super::action::{Action,Coordinate};
-//     use engine::game_state::{GameState as GameStateTrait};
-
-//     fn intersects(actions: &Vec<Action>, exclusions: &Vec<Action>) -> bool {
-//         actions.iter().any(|a| exclusions.iter().any(|a2| a == a2))
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_p1() {
-//         let game_state = GameState::initial();
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('f', 1)),
-//             Action::MovePawn(Coordinate::new('d', 1)),
-//             Action::MovePawn(Coordinate::new('e', 2))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_p2() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('e', 8)),
-//             Action::MovePawn(Coordinate::new('f', 9)),
-//             Action::MovePawn(Coordinate::new('d', 9))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_vertical_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d',1)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('e', 2))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_vertical_wall_top() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d',1)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('e', 1)),
-//             Action::MovePawn(Coordinate::new('e', 3))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_horizontal_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d',8)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('f', 1)),
-//             Action::MovePawn(Coordinate::new('d', 1))
-//         ));
-
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('f', 9)),
-//             Action::MovePawn(Coordinate::new('d', 9))
-//         ));
-
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('g', 1)),
-//             Action::MovePawn(Coordinate::new('e', 1))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_pawn_move_actions_blocked() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
-
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('e',4)),
-//             Action::MovePawn(Coordinate::new('f',6)),
-//             Action::MovePawn(Coordinate::new('d',6)),
-//             Action::MovePawn(Coordinate::new('e',7))
-//         ));
-
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',1)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('f',5)),
-//             Action::MovePawn(Coordinate::new('d',5)),
-//             Action::MovePawn(Coordinate::new('f',6)),
-//             Action::MovePawn(Coordinate::new('d',6)),
-//             Action::MovePawn(Coordinate::new('e',7))
-//         ));
-
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',6)));
-//         let valid_actions = game_state.get_valid_pawn_move_actions();
-
-//         assert_eq!(valid_actions, vec!(
-//             Action::MovePawn(Coordinate::new('f',5)),
-//             Action::MovePawn(Coordinate::new('d',5)),
-//             Action::MovePawn(Coordinate::new('f',6)),
-//             Action::MovePawn(Coordinate::new('d',6))
-//         ));
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_initial() {
-//         let game_state = GameState::initial();
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-
-//         let mut cols = ['a','b','c','d','e','f','g','h'];
-//         let rows = [1,2,3,4,5,6,7,8];
-//         cols.reverse();
-
-//         let mut actions = Vec::new();
-
-//         for row in rows.into_iter() {
-//             for col in cols.into_iter() {
-//                 actions.push(Action::PlaceHorizontalWall(Coordinate::new(*col, *row)));
-//             }
-//         }
-
-//         assert_eq!(valid_actions.len(), actions.len());
-//         assert_eq!(valid_actions, actions);
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_on_horizontal_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d',1)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 1))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_on_vertical_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',5)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 5))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_blocking_path() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 2))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_blocking_path_other_player() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 2))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_blocking_path_vert_horz() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c',1)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_horizontal_wall_actions_blocking_path_edge() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',1)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('b',3)));
-
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceHorizontalWall(Coordinate::new('a', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('a', 3)),
-//             Action::PlaceHorizontalWall(Coordinate::new('a', 4)),
-//             Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('b', 3)),
-//             Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
-//             Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-//             Action::PlaceHorizontalWall(Coordinate::new('f', 2)),
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_vertical_wall_actions_initial() {
-//         let game_state = GameState::initial();
-//         let valid_actions = game_state.get_valid_vertical_wall_actions();
-
-//         let mut cols = ['a','b','c','d','e','f','g','h'];
-//         let rows = [1,2,3,4,5,6,7,8];
-//         cols.reverse();
-
-//         let mut actions = Vec::new();
-
-//         for row in rows.into_iter() {
-//             for col in cols.into_iter() {
-//                 actions.push(Action::PlaceVerticalWall(Coordinate::new(*col, *row)));
-//             }
-//         }
-
-//         assert_eq!(valid_actions.len(), actions.len());
-//         assert_eq!(valid_actions, actions);
-//     }
-
-//     #[test]
-//     fn test_get_valid_vertical_wall_actions_on_vertical_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e',5)));
-
-//         let valid_actions = game_state.get_valid_vertical_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceVerticalWall(Coordinate::new('e', 4)),
-//             Action::PlaceVerticalWall(Coordinate::new('e', 5)),
-//             Action::PlaceVerticalWall(Coordinate::new('e', 6))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_vertical_wall_actions_on_horizontal_wall() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',5)));
-
-//         let valid_actions = game_state.get_valid_vertical_wall_actions();
-//         let excludes_actions = vec!(
-//             Action::PlaceVerticalWall(Coordinate::new('e', 5))
-//         );
-//         let intersects = intersects(&valid_actions, &excludes_actions);
-
-//         assert_eq!(intersects, false);
-//         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
-//     }
-
-//     #[test]
-//     fn test_get_valid_wall_actions_on_all_walls_placed() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',1)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',1)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',1)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g',1)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f',9)));
-
-//         // 9 walls placed
-//         let valid_actions = game_state.get_valid_horizontal_wall_actions();
-//         assert_eq!(valid_actions.len(), 46);
-
-//         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-
-//         // 10 walls placed so we shouldn't be able to place anymore, horizontal or vertical
-//         let valid_horizontal_actions = game_state.get_valid_horizontal_wall_actions();
-//         assert_eq!(valid_horizontal_actions.len(), 0);
-
-//         let valid_vertical_actions = game_state.get_valid_vertical_wall_actions();
-//         assert_eq!(valid_vertical_actions.len(), 0);
-//     }
-
-//     #[test]
-//     fn test_is_terminal_p1() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
-
-//         let is_terminal = game_state.is_terminal();
-//         assert_eq!(is_terminal, None);
-
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',1)));
-
-//         let is_terminal = game_state.is_terminal();
-//         assert_eq!(is_terminal, Some(-1.0));
-//     }
-
-//     #[test]
-//     fn test_is_terminal_p2() {
-//         let game_state = GameState::initial();
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',5)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',4)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',6)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',7)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',2)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',8)));
-
-//         let is_terminal = game_state.is_terminal();
-//         assert_eq!(is_terminal, None);
-
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',3)));
-//         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e',9)));
-
-//         let is_terminal = game_state.is_terminal();
-//         assert_eq!(is_terminal, Some(-1.0));
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::action::{Action,Piece,Square};
+    use engine::game_state::{GameState as GameStateTrait};
+
+    fn place_major_pieces(game_state: &GameState) -> GameState {
+        let game_state = game_state.take_action(&Action::Place(Piece::Horse));
+        let game_state = game_state.take_action(&Action::Place(Piece::Cat));
+        let game_state = game_state.take_action(&Action::Place(Piece::Dog));
+        let game_state = game_state.take_action(&Action::Place(Piece::Camel));
+        let game_state = game_state.take_action(&Action::Place(Piece::Elephant));
+        let game_state = game_state.take_action(&Action::Place(Piece::Dog));
+        let game_state = game_state.take_action(&Action::Place(Piece::Cat));
+        game_state.take_action(&Action::Place(Piece::Horse))
+    }
+
+    fn place_8_rabbits(game_state: &GameState) -> GameState {
+        let mut game_state = game_state.take_action(&Action::Place(Piece::Rabbit));
+        for _ in 0..7 {
+            game_state = game_state.take_action(&Action::Place(Piece::Rabbit));
+        }
+        game_state
+    }
+
+    fn initial_play_state() -> GameState {
+        let game_state = GameState::initial();
+        let game_state = place_8_rabbits(&game_state);
+        let game_state = place_major_pieces(&game_state);
+
+        let game_state = place_major_pieces(&game_state);
+        place_8_rabbits(&game_state)
+    }
+
+    #[test]
+    fn test_action_placing_pieces() {
+        let game_state = initial_play_state();
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111111__00000000__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.cat_board,        0b__01000010__00000000__00000000__00000000__00000000__00000000__00000000__01000010);
+        assert_eq!(game_state.dog_board,        0b__00100100__00000000__00000000__00000000__00000000__00000000__00000000__00100100);
+        assert_eq!(game_state.horse_board,      0b__10000001__00000000__00000000__00000000__00000000__00000000__00000000__10000001);
+        assert_eq!(game_state.camel_board,      0b__00001000__00000000__00000000__00000000__00000000__00000000__00000000__00001000);
+        assert_eq!(game_state.elephant_board,   0b__00010000__00000000__00000000__00000000__00000000__00000000__00000000__00010000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000);
+
+        assert_eq!(game_state.p1_turn_to_move,  true);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.play_phase().push_pull_state, PushPullState::None);
+    }
+
+    #[test]
+    fn test_action_move_up() {
+        let game_state = initial_play_state();
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Up));
+
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111110__00000001__00000000__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111110__00000001__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 3), Direction::Up));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111110__00000000__00000001__00000000__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111110__00000000__00000001__00000000__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 2);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 4), Direction::Up));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111110__00000000__00000000__00000001__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111110__00000000__00000000__00000001__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 3);
+        assert_eq!(game_state.p1_turn_to_move, true);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+        assert_eq!(game_state.rabbit_board,     0b__00000000__11111100__00000010__00000000__00000001__00000000__11111111__00000000);
+        assert_eq!(game_state.p1_piece_board,   0b__11111111__11111100__00000010__00000000__00000001__00000000__00000000__00000000);
+        assert_eq!(game_state.play_phase().actions_this_turn, 0);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+}
