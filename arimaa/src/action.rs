@@ -7,7 +7,7 @@ use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Vi
 use common::bits::single_bit_index;
 use failure::{format_err};
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Hash, Eq, PartialEq, Clone)]
 pub struct Square(u8);
 
 impl Square {
@@ -138,14 +138,14 @@ impl FromStr for Direction {
     }
 }
 
-#[derive(Clone,Eq,PartialEq)]
+#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Debug)]
 pub enum Piece {
-    Elephant,
-    Camel,
-    Horse,
-    Dog,
+    Rabbit,
     Cat,
-    Rabbit
+    Dog,
+    Horse,
+    Camel,
+    Elephant
 }
 
 impl fmt::Display for Piece {
@@ -297,6 +297,7 @@ impl FromStr for Action {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cmp::Ordering;
 
     fn col_row_to_bit(col: usize, row: usize) -> u64 {
         1 << ((col - 1) + (8 - row) * 8)
@@ -454,6 +455,46 @@ mod tests {
         assert_eq!(square.invert().invert(), square);
     }
 
+    #[test]
+    fn test_piece_precedence_rabbit() {
+        assert_eq!(Piece::Rabbit.cmp(&Piece::Cat), Ordering::Less);
+        assert_eq!(Piece::Rabbit.cmp(&Piece::Rabbit), Ordering::Equal);
+        assert_eq!(Piece::Cat.cmp(&Piece::Rabbit), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_piece_precedence_cat() {
+        assert_eq!(Piece::Cat.cmp(&Piece::Dog), Ordering::Less);
+        assert_eq!(Piece::Cat.cmp(&Piece::Cat), Ordering::Equal);
+        assert_eq!(Piece::Dog.cmp(&Piece::Cat), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_piece_precedence_dog() {
+        assert_eq!(Piece::Dog.cmp(&Piece::Horse), Ordering::Less);
+        assert_eq!(Piece::Dog.cmp(&Piece::Dog), Ordering::Equal);
+        assert_eq!(Piece::Horse.cmp(&Piece::Dog), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_piece_precedence_horse() {
+        assert_eq!(Piece::Horse.cmp(&Piece::Camel), Ordering::Less);
+        assert_eq!(Piece::Horse.cmp(&Piece::Horse), Ordering::Equal);
+        assert_eq!(Piece::Camel.cmp(&Piece::Horse), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_piece_precedence_camel() {
+        assert_eq!(Piece::Camel.cmp(&Piece::Elephant), Ordering::Less);
+        assert_eq!(Piece::Camel.cmp(&Piece::Camel), Ordering::Equal);
+        assert_eq!(Piece::Elephant.cmp(&Piece::Camel), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_piece_precedence_elephant() {
+        assert_eq!(Piece::Elephant.cmp(&Piece::Elephant), Ordering::Equal);
+        assert_eq!(Piece::Elephant.cmp(&Piece::Rabbit), Ordering::Greater);
+    }
 }
 
 #[cfg(test)]

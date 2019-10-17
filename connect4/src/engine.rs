@@ -158,17 +158,17 @@ impl GameEngine for Engine {
     type State = GameState;
     type Value = Value;
 
-    fn take_action(&self, game_state: &GameState, action: &Action) -> GameState {
+    fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         match action {
             Action::DropPiece(column) => game_state.drop_piece(*column as usize)
         }
     }
 
-    fn is_terminal_state(&self, game_state: &GameState) -> Option<Self::Value> {
+    fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal()
     }
 
-    fn get_player_to_move(&self, game_state: &GameState) -> usize {
+    fn get_player_to_move(&self, game_state: &Self::State) -> usize {
         if game_state.p1_turn_to_move { 1 } else { 2 }
     }
 }
