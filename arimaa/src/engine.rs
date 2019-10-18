@@ -111,7 +111,7 @@ impl Display for GameState {
                     let is_p1_piece = self.is_p1_piece(square.as_bit_board());
                     convert_piece_to_letter(piece, is_p1_piece)
                 } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
-                    "X".to_string()
+                    "x".to_string()
                 } else {
                     " ".to_string()
                 };
@@ -395,7 +395,14 @@ impl FromStr for GameState {
         });
 
         let lines: Vec<_> = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
-        let p1_to_move = !lines[0].contains("s") && !lines[0].contains("b");
+        let regex = regex::Regex::new(r"^\s*(\d+)([gswb])").unwrap();
+
+        let (move_number, p1_to_move) = regex.captures(s.split("|").find(|_| true).unwrap()).map_or((1, true), |c| (
+            c.get(1).unwrap().as_str().parse().unwrap(),
+            c.get(2).unwrap().as_str() != "s" && c.get(2).unwrap().as_str() != "b"
+        ));
+
+        game_state.move_number = move_number;
         game_state.p1_turn_to_move = p1_to_move;
 
         for (row_idx, line) in lines.iter().enumerate() {
@@ -895,7 +902,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gamestate_to_str() {
+    fn test_gamestate_fromstr_move_number_default() {
         let game_state: GameState = "
               +-----------------+
              8|   r   r r   r   |
@@ -903,15 +910,118 @@ mod tests {
              6|   r x r r x r   |
              5| h   d     c   d |
              4| E   H         M |
-             3|   R x R R   R   |
+             3|   R x R R H R   |
              2| D   C     C   D |
              1|   R   R R   R   |
               +-----------------+
                 a b c d e f g h"
             .parse().unwrap();
 
-        println!("{}", game_state);
+        assert_eq!(game_state.move_number, 1);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
 
-        assert_eq!(format!("{}", game_state), "");
+    #[test]
+    fn test_gamestate_fromstr_move_number() {
+        let game_state: GameState = "
+              5s
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R H R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(game_state.move_number, 5);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_gamestate_fromstr_player() {
+        let game_state: GameState = "
+              176b
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R H R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(game_state.move_number, 176);
+        assert_eq!(game_state.p1_turn_to_move, false);
+    }
+
+    #[test]
+    fn test_gamestate_fromstr_player_w() {
+        let game_state: GameState = "
+              13w
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R H R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(game_state.move_number, 13);
+        assert_eq!(game_state.p1_turn_to_move, true);
+    }
+
+    #[test]
+    fn test_gamestate_to_str() {
+        let expected_output = "1g
+ +-----------------+
+8| h c d m e d c h |
+7| r r r r r r r r |
+6|     x     x     |
+5|                 |
+4|                 |
+3|     x     x     |
+2| R R R R R R R R |
+1| H C D M E D C H |
+ +-----------------+
+   a b c d e f g h
+";
+
+        assert_eq!(format!("{}", initial_play_state()), expected_output);
+    }
+
+    #[test]
+    fn test_gamestate_from_str_and_to_str() {
+        let orig_str = "14g
+ +-----------------+
+8|   r   r r   r   |
+7| m   h     e   c |
+6|   r x r r x r   |
+5| h   d     c   d |
+4| E   H         M |
+3|   R x R R x R   |
+2| D   C     C   D |
+1|   R   R R   R   |
+ +-----------------+
+   a b c d e f g h
+";
+
+        let game_state: GameState = orig_str.parse().unwrap();
+        let new_str = format!("{}", game_state);
+
+        assert_eq!(new_str, orig_str);
     }
 }
