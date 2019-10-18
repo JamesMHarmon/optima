@@ -132,7 +132,7 @@ impl GameState {
             Some(if self.p1_turn_to_move { Value([0.0, 1.0]) } else { Value([1.0, 0.0]) })
         } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
             // A game that runs too long will be a loss for both players.
-            Some(Value([-1.0, -1.0]))
+            Some(Value([-0.0, -0.0]))
         }
         else {
             None
