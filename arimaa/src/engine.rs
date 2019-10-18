@@ -83,6 +83,7 @@ pub enum Phase {
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
+    pub move_number: usize,
     pub p1_piece_board: u64,
     pub elephant_board: u64,
     pub camel_board: u64,
@@ -95,7 +96,33 @@ pub struct GameState {
 
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // @TODO: Display game state
+        let move_number = self.move_number;
+        let player_to_move = if self.p1_turn_to_move { "g" } else { "s" };
+        writeln!(f, "{}{}", move_number, player_to_move)?;
+
+        writeln!(f, " +-----------------+")?;
+
+        for row_idx in 0..BOARD_HEIGHT {
+            write!(f, "{}|", BOARD_HEIGHT - row_idx)?;
+            for col_idx in 0..BOARD_WIDTH {
+                let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
+                let square = Square::from_index(idx);
+                let letter = if let Some(piece) = self.get_piece_type_at_square(&square) {
+                    let is_p1_piece = self.is_p1_piece(square.as_bit_board());
+                    convert_piece_to_letter(piece, is_p1_piece)
+                } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
+                    "X".to_string()
+                } else {
+                    " ".to_string()
+                };
+
+                write!(f, " {}", letter)?;
+            }
+            writeln!(f, " |")?;
+        }
+
+        writeln!(f, " +-----------------+")?;
+        writeln!(f, "   a b c d e f g h")?;
 
         Ok(())
     }
@@ -162,9 +189,11 @@ impl GameState {
 
         let new_play_phase = self.get_new_phase(square, direction);
         let new_p1_turn_to_move = if new_play_phase.actions_this_turn == 0 { !self.p1_turn_to_move } else { self.p1_turn_to_move };
+        let new_move_number = self.move_number + if new_play_phase.actions_this_turn == 0 && new_p1_turn_to_move { 1 } else { 0 };
 
         let mut new_game_state = GameState {
             p1_turn_to_move: new_p1_turn_to_move,
+            move_number: new_move_number,
             p1_piece_board: new_p1_piece_board,
             elephant_board: new_elephant_board,
             camel_board: new_camel_board,
@@ -249,8 +278,13 @@ impl GameState {
         false
     }
 
-    fn get_piece_type_at_square(&self, square: &Square) -> Piece {
-        self.get_piece_type_at_bit(square.as_bit_board())
+    fn get_piece_type_at_square(&self, square: &Square) -> Option<Piece> {
+        let square_bit = square.as_bit_board();
+        if square_bit & self.get_all_piece_bits() != 0 {
+            Some(self.get_piece_type_at_bit(square_bit))
+        } else {
+            None
+        }
     }
 
     fn get_piece_type_at_bit(&self, square_bit: u64) -> Piece {
@@ -334,6 +368,7 @@ impl GameStateTrait for GameState {
     fn initial() -> Self {
         GameState {
             p1_turn_to_move: true,
+            move_number: 1,
             p1_piece_board: 0,
             elephant_board: 0,
             camel_board: 0,
@@ -350,19 +385,20 @@ impl FromStr for GameState {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // @TODO: Introduce correct turn
         // @TODO: Introduce correct push/pull state
         // @TODO: Introduce correct num_actions
 
         let mut game_state = GameState::initial();
-        game_state.p1_turn_to_move = true;
         game_state.phase = Phase::PlayPhase(PlayPhase {
             actions_this_turn: 0,
             push_pull_state: PushPullState::None
         });
 
-        let lines = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s);
-        for (row_idx, line) in lines.enumerate() {
+        let lines: Vec<_> = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
+        let p1_to_move = !lines[0].contains("s") && !lines[0].contains("b");
+        game_state.p1_turn_to_move = p1_to_move;
+
+        for (row_idx, line) in lines.iter().enumerate() {
             for (col_idx, charr) in line.chars().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).enumerate() {
                 let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
                 let square = Square::from_index(idx);
@@ -407,6 +443,19 @@ fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
     };
 
     piece.map(|p| (p, is_p1))
+}
+
+fn convert_piece_to_letter(piece: Piece, is_p1: bool) -> String {
+    let letter = match piece {
+        Piece::Elephant => "E",
+        Piece::Camel => "M",
+        Piece::Horse => "H",
+        Piece::Dog => "D",
+        Piece::Cat => "C",
+        Piece::Rabbit => "R"
+    };
+
+    if is_p1 { letter.to_string()} else { letter.to_lowercase() }
 }
 
 impl PlayPhase {
@@ -843,5 +892,26 @@ mod tests {
         assert_eq!(game_state.camel_board,      0b__00000000__00000000__00000000__10000000__00000000__00000000__00000001__00000000);
         assert_eq!(game_state.elephant_board,   0b__00000000__00000000__00000000__00000001__00000000__00000000__00100000__00000000);
         assert_eq!(game_state.p1_piece_board,   0b__01011010__10100101__01111010__10000101__00000000__00000000__00000000__00000000);
+    }
+
+    #[test]
+    fn test_gamestate_to_str() {
+        let game_state: GameState = "
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R   R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        println!("{}", game_state);
+
+        assert_eq!(format!("{}", game_state), "");
     }
 }
