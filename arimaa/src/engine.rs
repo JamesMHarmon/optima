@@ -45,8 +45,6 @@ Out:
 1 pass bit
 */
 
-// @TODO: ... but may not pass the whole turn or make a move equivalent to passing the whole turn.
-
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum PushPullState {
     /*
@@ -153,6 +151,7 @@ impl GameState {
     }
 
     pub fn valid_actions(&self) -> Vec<Action> {
+        // @TODO: ... but may not pass the whole turn or make a move equivalent to passing the whole turn.
         if let Phase::PlayPhase(play_phase) = &self.phase {
             let all_piece_bits = self.get_all_piece_bits();
             if play_phase.push_pull_state.is_must_complete_push() {
