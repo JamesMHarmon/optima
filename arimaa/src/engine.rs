@@ -45,14 +45,8 @@ Out:
 1 pass bit
 */
 
-
-// @TODO: Catch issue where pulling a piece and losing puller in trap on same move.
-
-// @TODO: Ensure pass can't happen from the MustPush state.
-// @TODO: Ensure pass can't happen from the 0 actions state.PLACEMENT_MASK
 // @TODO: Don't push and pull on the same move.
-// @TODO: but may not pass the whole turn or make a move equivalent to passing the whole turn.
-
+// @TODO: ... but may not pass the whole turn or make a move equivalent to passing the whole turn.
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum PushPullState {
@@ -163,21 +157,28 @@ impl GameState {
         self.as_play_phase().map_or(false, |play_phase| play_phase.actions_this_turn > 1 && !play_phase.push_pull_state.is_must_push())
     }
 
-    pub fn valid_moves(&self) -> Vec<Action> {
+    pub fn valid_actions(&self) -> Vec<Action> {
         // @TODO: Add validation for must push
 
         let all_pieces = self.get_all_piece_bits();
         let non_frozen_pieces = self.get_player_to_move_non_frozen_pieces(all_pieces);
-        let mut valid_moves = Vec::with_capacity(50);
+        let mut valid_actions = Vec::with_capacity(50);
 
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-            let moves = can_move_in_direction(all_pieces, direction) & non_frozen_pieces;
-            // @TODO stop rabbits from going backwards
-            let squares = map_bit_board_to_squares(moves);
-            valid_moves.extend(squares.into_iter().map(|s| Action::Move(s, direction.to_owned())));
+            let unoccupied_directions = can_move_in_direction(all_pieces, direction);
+            let invalid_rabbit_moves = self.get_invalid_rabbit_moves(direction);
+            let valid_curr_piece_moves = unoccupied_directions & non_frozen_pieces & !invalid_rabbit_moves;
+            // @TODO: let valid_push_pull_moves = ;
+
+            let squares = map_bit_board_to_squares(valid_moves);
+            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, direction.to_owned())));
         }
 
-        valid_moves
+        if self.can_pass() {
+            valid_actions.push(Action::Pass);
+        }
+
+        valid_actions
     }
 
     pub fn valid_placement(&self) -> Vec<Action> {
@@ -448,6 +449,18 @@ impl GameState {
             None
         }
     }
+
+    fn get_invalid_rabbit_moves(&self, direction: &Direction) -> u64 {
+        let backward_direction = if self.p1_turn_to_move { Direction::Down } else { Direction::Up };
+
+        if *direction == backward_direction {
+            let players_rabbits = if self.p1_turn_to_move { self.p1_piece_board } else { !self.p1_piece_board } & self.rabbit_board;
+            players_rabbits
+        } else {
+            0
+        }
+
+    }
 }
 
 fn animal_is_on_trap(all_piece_bits: u64) -> bool {
@@ -540,9 +553,6 @@ impl FromStr for GameState {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // @TODO: Introduce correct push/pull state
-        // @TODO: Introduce correct num_actions
-
         let mut game_state = GameState::initial();
         game_state.phase = Phase::PlayPhase(PlayPhase {
             actions_this_turn: 0,
@@ -1404,14 +1414,14 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_moves() {
+    fn test_valid_actions() {
         let game_state = initial_play_state();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[a2n, b2n, c2n, d2n, e2n, f2n, g2n, h2n]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a2n, b2n, c2n, d2n, e2n, f2n, g2n, h2n]");
     }
 
     #[test]
-    fn test_valid_moves_p2() {
+    fn test_valid_actions_p2() {
         let game_state: GameState = "
              1s
               +-----------------+
@@ -1427,11 +1437,11 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[a7s, b7s, c7s, d7s, e7s, f7s, g7s, h7s]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a7s, b7s, c7s, d7s, e7s, f7s, g7s, h7s]");
     }
 
     #[test]
-    fn test_valid_moves_2() {
+    fn test_valid_actions_2() {
         let game_state: GameState = "
               +-----------------+
              8| h c d m e d c h |
@@ -1446,11 +1456,11 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[e3n, a2n, b2n, c2n, d2n, f2n, g2n, h2n, e1n, e3e, d2e, e3w, f2w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e3n, a2n, b2n, c2n, d2n, f2n, g2n, h2n, e1n, e3e, d2e, e3w, f2w]");
     }
 
     #[test]
-    fn test_valid_moves_3() {
+    fn test_valid_actions_3() {
         let game_state: GameState = "
              1s
               +-----------------+
@@ -1466,11 +1476,11 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
     }
 
     #[test]
-    fn test_valid_moves_4() {
+    fn test_valid_actions_4() {
         let game_state: GameState = "
              1g
               +-----------------+
@@ -1486,11 +1496,11 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
     }
 
     #[test]
-    fn test_valid_moves_5() {
+    fn test_valid_actions_5() {
         let game_state: GameState = "
              1s
               +-----------------+
@@ -1506,11 +1516,11 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
     }
 
     #[test]
-    fn test_valid_moves_6() {
+    fn test_valid_actions_6() {
         let game_state: GameState = "
               +-----------------+
              8|   r   r r   r   |
@@ -1525,7 +1535,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_moves()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
     }
 
     #[test]
