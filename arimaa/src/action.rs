@@ -7,7 +7,7 @@ use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Vi
 use common::bits::single_bit_index;
 use failure::{format_err};
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy)]
 pub struct Square(u8);
 
 impl Square {
@@ -84,7 +84,7 @@ impl FromStr for Square {
     }
 }
 
-#[derive(Clone,Eq,PartialEq)]
+#[derive(Clone,Copy,Eq,PartialEq)]
 pub enum Direction {
     Up,
     Right,

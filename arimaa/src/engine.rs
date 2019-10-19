@@ -60,7 +60,7 @@ pub enum PushPullState {
     // Means that the currently player's piece was moved last action, next action can possibly be a pull.
     PossiblePull(Square, Piece),
     // Means that we pushed an opponent's piece last move. Follow up must be taking the empty square.
-    MustPush(Square, Piece)
+    MustCompletePush(Square, Piece)
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -92,8 +92,8 @@ pub struct GameState {
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let move_number = self.move_number;
-        let player_to_move = if self.p1_turn_to_move { "g" } else { "s" };
-        writeln!(f, "{}{}", move_number, player_to_move)?;
+        let curr_player = if self.p1_turn_to_move { "g" } else { "s" };
+        writeln!(f, "{}{}", move_number, curr_player)?;
 
         writeln!(f, " +-----------------+")?;
 
@@ -154,36 +154,99 @@ impl GameState {
     }
 
     pub fn can_pass(&self) -> bool {
-        self.as_play_phase().map_or(false, |play_phase| play_phase.actions_this_turn > 1 && !play_phase.push_pull_state.is_must_push())
+        self.as_play_phase().map_or(false, |play_phase| play_phase.actions_this_turn >= 1 && !play_phase.push_pull_state.is_must_complete_push())
     }
 
     pub fn valid_actions(&self) -> Vec<Action> {
-        // @TODO: Add validation for must push
+        if let Phase::PlayPhase(play_phase) = &self.phase {
+            let all_piece_bits = self.get_all_piece_bits();
+            if play_phase.push_pull_state.is_must_complete_push() {
+                self.get_must_complete_push_actions(all_piece_bits)
+            } else {
+                let mut valid_actions = Vec::with_capacity(50);
+                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, all_piece_bits);       
+                self.extend_with_pull_piece_actions(&mut valid_actions, all_piece_bits);
+                self.extend_with_push_piece_actions(&mut valid_actions, all_piece_bits);
 
-        let all_pieces = self.get_all_piece_bits();
-        let non_frozen_pieces = self.get_player_to_move_non_frozen_pieces(all_pieces);
-        let mut valid_actions = Vec::with_capacity(50);
+                valid_actions
+            }
+        } else {
+            self.valid_placement()
+        }
+    }
+
+    fn valid_placement(&self) -> Vec<Action> {
+        // @TODO: Add logic for place phase
+        panic!("")
+    }
+
+    fn extend_with_valid_curr_player_piece_moves(&self, valid_actions: &mut Vec<Action>, all_piece_bits: u64) {
+        let non_frozen_pieces = self.get_curr_player_non_frozen_pieces(all_piece_bits);
 
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-            let unoccupied_directions = can_move_in_direction(all_pieces, direction);
+            let unoccupied_directions = can_move_in_direction(all_piece_bits, direction);
             let invalid_rabbit_moves = self.get_invalid_rabbit_moves(direction);
             let valid_curr_piece_moves = unoccupied_directions & non_frozen_pieces & !invalid_rabbit_moves;
-            // @TODO: let valid_push_pull_moves = ;
 
-            let squares = map_bit_board_to_squares(valid_moves);
-            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, direction.to_owned())));
+            let squares = map_bit_board_to_squares(valid_curr_piece_moves);
+            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
         }
 
         if self.can_pass() {
             valid_actions.push(Action::Pass);
         }
-
-        valid_actions
     }
 
-    pub fn valid_placement(&self) -> Vec<Action> {
-        // @TODO: Add logic for place phase
-        panic!("")
+    fn extend_with_pull_piece_actions(&self, valid_actions: &mut Vec<Action>, all_piece_bits: u64) {
+        if let Some(play_phase) = self.as_play_phase() {
+            if let Some((square, piece)) = play_phase.push_pull_state.as_possible_pull() {
+                let opp_piece_mask = self.get_opponent_piece_mask(all_piece_bits);
+                let lesser_opp_pieces = self.get_lesser_pieces(piece) & opp_piece_mask;
+                let square_bit = square.as_bit_board();
+
+                for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
+                    if shift_in_direction(lesser_opp_pieces, &direction) & square_bit != 0 {
+                        valid_actions.push(Action::Move(*square, *direction));
+                    }
+                }
+            }
+        }
+    }
+
+    fn extend_with_push_piece_actions(&self, valid_actions: &mut Vec<Action>, all_piece_bits: u64) {
+        if let Some(play_phase) = self.as_play_phase() {
+            if play_phase.push_pull_state.can_push() {
+                let opp_piece_mask = self.get_opponent_piece_mask(all_piece_bits);
+                let predator_piece_mask = !opp_piece_mask & all_piece_bits;
+                let opp_threatened_pieces = self.get_threatened_pieces(predator_piece_mask, opp_piece_mask);
+
+                for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
+                    let unoccupied_directions = can_move_in_direction(all_piece_bits, direction);
+                    let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
+
+                    let squares = map_bit_board_to_squares(valid_push_moves);
+                    valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                }
+            }
+        }
+    }
+
+    fn get_must_complete_push_actions(&self, all_piece_bits: u64) -> Vec<Action> {
+        let play_phase = self.unwrap_play_phase();
+        let (square, pushed_piece) = play_phase.push_pull_state.unwrap_must_complete_push();
+
+        let curr_player_piece_mask = self.get_curr_player_piece_mask(all_piece_bits);
+        let square_bit = square.as_bit_board();
+
+        let mut valid_actions = vec![];
+        for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
+            let pushing_piece_bit = shift_in_direction(curr_player_piece_mask, &direction) & square_bit;
+            if pushing_piece_bit != 0 && self.get_piece_type_at_bit(pushing_piece_bit) > *pushed_piece {
+                valid_actions.push(Action::Move(*square, *direction));
+            }
+        }
+
+        valid_actions
     }
 
     fn place(&self, piece: &Piece) -> Self {
@@ -279,9 +342,9 @@ impl GameState {
             // Check if previous move can count as a pull, if so, do that.
             // Otherwise state that it must be followed with a push.
             let push_pull_state = if is_opponent_piece && !self.move_can_be_counted_as_pull(source_square_bit, direction) {
-                PushPullState::MustPush(square.clone(), self.get_piece_type_at_bit(source_square_bit))
-            } else if !is_opponent_piece && !play_phase.must_push() {
-                PushPullState::PossiblePull(square.clone(), self.get_piece_type_at_bit(source_square_bit))
+                PushPullState::MustCompletePush(*square, self.get_piece_type_at_bit(source_square_bit))
+            } else if !is_opponent_piece && !play_phase.push_pull_state.is_must_complete_push() {
+                PushPullState::PossiblePull(*square, self.get_piece_type_at_bit(source_square_bit))
             } else {
                 PushPullState::None
             };
@@ -390,20 +453,26 @@ impl GameState {
         get_supported_pieces(p1_pieces) | get_supported_pieces(p2_pieces)
     }
 
-    fn get_player_to_move_non_frozen_pieces(&self, all_piece_bits: u64) -> u64 {
-        let player_to_move_piece_mask = if self.p1_turn_to_move { self.p1_piece_board } else { !self.p1_piece_board } & all_piece_bits;
-        let opp_piece_mask = !player_to_move_piece_mask & all_piece_bits;
-        let opp_elephant_influence = get_influenced_squares(self.elephant_board & opp_piece_mask);
-        let opp_camel_influence = get_influenced_squares(self.camel_board & opp_piece_mask);
-        let opp_horse_influence = get_influenced_squares(self.horse_board & opp_piece_mask);
-        let opp_dog_influence = get_influenced_squares(self.dog_board & opp_piece_mask);
-        let opp_cat_influence = get_influenced_squares(self.cat_board & opp_piece_mask);
+    fn get_curr_player_non_frozen_pieces(&self, all_piece_bits: u64) -> u64 {
+        let opp_piece_mask = self.get_opponent_piece_mask(all_piece_bits);
+        let curr_player_piece_mask = !opp_piece_mask & all_piece_bits;
+        let threatened_pieces = self.get_threatened_pieces(opp_piece_mask, curr_player_piece_mask);
 
-        let camel_threats = opp_elephant_influence;
-        let horse_threats = camel_threats & opp_camel_influence;
-        let dog_threats = horse_threats & opp_horse_influence;
-        let cat_threats = dog_threats & opp_dog_influence;
-        let rabbit_threats = cat_threats & opp_cat_influence;
+        curr_player_piece_mask & (!threatened_pieces | get_supported_pieces(curr_player_piece_mask))
+    }
+
+    fn get_threatened_pieces(&self, predator_piece_mask: u64, prey_piece_mask: u64) -> u64 {
+        let predator_elephant_influence = get_influenced_squares(self.elephant_board & predator_piece_mask);
+        let predator_camel_influence = get_influenced_squares(self.camel_board & predator_piece_mask);
+        let predator_horse_influence = get_influenced_squares(self.horse_board & predator_piece_mask);
+        let predator_dog_influence = get_influenced_squares(self.dog_board & predator_piece_mask);
+        let predator_cat_influence = get_influenced_squares(self.cat_board & predator_piece_mask);
+
+        let camel_threats = predator_elephant_influence;
+        let horse_threats = camel_threats | predator_camel_influence;
+        let dog_threats = horse_threats | predator_horse_influence;
+        let cat_threats = dog_threats | predator_dog_influence;
+        let rabbit_threats = cat_threats | predator_cat_influence;
 
         let threatened_pieces =
             (self.camel_board & camel_threats)
@@ -412,7 +481,15 @@ impl GameState {
             | (self.cat_board & cat_threats)
             | (self.rabbit_board & rabbit_threats);
 
-        player_to_move_piece_mask & (!threatened_pieces | get_supported_pieces(player_to_move_piece_mask))
+        threatened_pieces & prey_piece_mask
+    }
+
+    fn get_curr_player_piece_mask(&self, all_piece_bits: u64) -> u64 {
+        if self.p1_turn_to_move { self.p1_piece_board } else { !self.p1_piece_board & all_piece_bits }
+    }
+
+    fn get_opponent_piece_mask(&self, all_piece_bits: u64) -> u64 {
+        if self.p1_turn_to_move { !self.p1_piece_board & all_piece_bits } else { self.p1_piece_board }
     }
 
     fn rabbit_at_goal(&self) -> Option<Value> {
@@ -459,8 +536,18 @@ impl GameState {
         } else {
             0
         }
-
     }
+
+    fn get_lesser_pieces(&self, piece: &Piece) -> u64 {
+        match piece {
+            Piece::Rabbit => 0,
+            Piece::Cat => self.rabbit_board,
+            Piece::Dog => self.rabbit_board | self.cat_board,
+            Piece::Horse => self.rabbit_board | self.cat_board | self.dog_board,
+            Piece::Camel => self.rabbit_board | self.cat_board | self.dog_board | self.horse_board,
+            Piece::Elephant => self.rabbit_board | self.cat_board | self.dog_board | self.horse_board | self.camel_board,
+        }
+    } 
 }
 
 fn animal_is_on_trap(all_piece_bits: u64) -> bool {
@@ -480,8 +567,8 @@ fn get_supported_pieces(piece_bits: u64) -> u64 {
     up_supported_pieces | right_supported_pieces | down_supported_pieces | left_supported_pieces
 }
 
-fn can_move_in_direction(all_pieces: u64, direction: &Direction) -> u64 {
-    let empty_squares = !all_pieces;
+fn can_move_in_direction(all_piece_bits: u64, direction: &Direction) -> u64 {
+    let empty_squares = !all_piece_bits;
     shift_pieces_in_opp_direction(empty_squares, direction)
 }
 
@@ -541,10 +628,32 @@ impl GameStateTrait for GameState {
 }
 
 impl PushPullState {
-    fn is_must_push(&self) -> bool {
+    fn is_must_complete_push(&self) -> bool {
         match self {
-            PushPullState::MustPush(_,_) => true,
+            PushPullState::MustCompletePush(_,_) => true,
             _ => false
+        }
+    }
+
+    fn unwrap_must_complete_push(&self) -> (&Square, &Piece) {
+        match self {
+            PushPullState::MustCompletePush(square, piece) => (square, piece),
+            _ => panic!("Expected PushPullState to be MustCompletePush")
+        }
+    }
+
+    fn as_possible_pull(&self) -> Option<(&Square, &Piece)> {
+        match self {
+            PushPullState::PossiblePull(square, piece) => Some((square, piece)),
+            _ => None
+        }
+    }
+
+    fn can_push(&self) -> bool {
+        match self {
+            // We can't push another piece if we are already obligated to push another
+            PushPullState::MustCompletePush(_,_) => false,
+            _ => true
         }
     }
 }
@@ -635,13 +744,6 @@ impl PlayPhase {
         PlayPhase {
             actions_this_turn: 0,
             push_pull_state: PushPullState::None
-        }
-    }
-
-    fn must_push(&self) -> bool {
-        match self.push_pull_state {
-            PushPullState::MustPush(_, _) => true,
-            _ => false
         }
     }
 }
@@ -920,7 +1022,7 @@ mod tests {
         let game_state = initial_play_state();
         let game_state = game_state.take_action(&Action::Move(Square::new('b', 7), Direction::Down));
 
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustPush(Square::new('b', 7), Piece::Rabbit));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustCompletePush(Square::new('b', 7), Piece::Rabbit));
     }
 
     #[test]
@@ -932,7 +1034,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Pass);
         let game_state = game_state.take_action(&Action::Move(Square::new('e', 8), Direction::Down));
 
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustPush(Square::new('e', 8), Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustCompletePush(Square::new('e', 8), Piece::Elephant));
     }
 
     #[test]
@@ -1373,7 +1475,7 @@ mod tests {
         assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Elephant));
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustPush(Square::new('d', 4), Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustCompletePush(Square::new('d', 4), Piece::Elephant));
     }
 
     #[test]
@@ -1396,7 +1498,7 @@ mod tests {
         assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::PossiblePull(Square::new('c', 4), Piece::Camel));
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Left));
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustPush(Square::new('d', 4), Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustCompletePush(Square::new('d', 4), Piece::Elephant));
     }
 
     #[test]
@@ -1496,7 +1598,7 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e3n, a2n, b2n, c2n, d2n, f2n, g2n, h2n, e1n, e3e, d2e, e3s, e3w, f2w]");
     }
 
     #[test]
@@ -1516,7 +1618,7 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e6n, d7e, e6e, e8s, a7s, b7s, c7s, d7s, f7s, g7s, h7s, e6s, f7w, e6w]");
     }
 
     #[test]
@@ -1535,7 +1637,219 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d7e, g7e, e6e, e8s, h8s, a7s, b7s, c7s, d7s, f7s, g7s, e6s, h6s, f7w, e6w, h6w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[b3n, d3n, e3n, f3n, g3n, a2n, c2n, h2n, b1n, d1n, e1n, g1n, a4e, c4e, b3e, g3e, a2e, c2e, f2e, b1e, e1e, g1e, a4s, c4s, h4s, a2s, c2s, f2s, h2s, c4w, h4w, b3w, d3w, c2w, f2w, h2w, b1w, d1w, g1w, a5n, c5n, h5n, a5e, c5e, c5w, h5w]");
+    }
+
+    #[test]
+    fn test_valid_actions_7() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8|   r   r r   r   |
+             7| m   h     e   c |
+             6|   r x r r x r   |
+             5| h   d     c   d |
+             4| E   H         M |
+             3|   R x R R H R   |
+             2| D   C     C   D |
+             1|   R   R R   R   |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a7n, c7n, f7n, h7n, f5n, b8e, e8e, g8e, a7e, c7e, f7e, b6e, e6e, g6e, f5e, b8s, d8s, e8s, g8s, a7s, c7s, f7s, h7s, b6s, d6s, e6s, g6s, f5s, b8w, d8w, g8w, c7w, f7w, h7w, b6w, d6w, g6w, f5w]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p1() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p1_2() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       m         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1|                 |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4e, d4s, d4w]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p2() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       m         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p2_2() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|       h         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a8e, a8s]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p2_3() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|       r         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a8e, a8s]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_piece_p2_4() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_push_p2_1() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, d4e, d4s, d4w]");
+    }
+
+
+    #[test]
+    fn test_valid_actions_frozen_push_p2_2() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, a8s, d5w, d4e, d4s, d4w]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5s]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, a8s, d5w, d4e, d4s, d4w, p]");
+
+        //@TODO: two possible pushers
+        // @TODO: two possible pushers supported piece
+    }
+
+    #[test]
+    fn test_valid_actions_supported_piece_p1_1() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       m         |
+             4|       M         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w]");
     }
 
     #[test]
