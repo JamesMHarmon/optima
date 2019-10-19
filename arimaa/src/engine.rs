@@ -152,10 +152,6 @@ impl GameState {
         })
     }
 
-    pub fn can_pass(&self) -> bool {
-        self.as_play_phase().map_or(false, |play_phase| play_phase.actions_this_turn >= 1 && !play_phase.push_pull_state.is_must_complete_push())
-    }
-
     pub fn valid_actions(&self) -> Vec<Action> {
         if let Phase::PlayPhase(play_phase) = &self.phase {
             let all_piece_bits = self.get_all_piece_bits();
@@ -174,9 +170,22 @@ impl GameState {
         }
     }
 
+    fn can_pass(&self) -> bool {
+        self.as_play_phase().map_or(false, |play_phase| play_phase.actions_this_turn >= 1 && !play_phase.push_pull_state.is_must_complete_push())
+    }
+
     fn valid_placement(&self) -> Vec<Action> {
-        // @TODO: Add logic for place phase
-        panic!("")
+        let mut actions = Vec::with_capacity(6);
+        let curr_player_pieces = self.get_curr_player_piece_mask(self.get_all_piece_bits());
+
+        if self.elephant_board & curr_player_pieces == 0 { actions.push(Action::Place(Piece::Elephant)); }
+        if self.camel_board & curr_player_pieces == 0 { actions.push(Action::Place(Piece::Camel)); }
+        if (self.horse_board & curr_player_pieces).count_ones() < 2 { actions.push(Action::Place(Piece::Horse)); }
+        if (self.dog_board & curr_player_pieces).count_ones() < 2 { actions.push(Action::Place(Piece::Dog)); }
+        if (self.cat_board & curr_player_pieces).count_ones() < 2 { actions.push(Action::Place(Piece::Cat)); }
+        if (self.rabbit_board & curr_player_pieces).count_ones() < 8 { actions.push(Action::Place(Piece::Rabbit)); }
+
+        actions
     }
 
     fn extend_with_valid_curr_player_piece_moves(&self, valid_actions: &mut Vec<Action>, all_piece_bits: u64) {
@@ -1034,6 +1043,92 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('e', 8), Direction::Down));
 
         assert_eq!(game_state.unwrap_play_phase().push_pull_state, PushPullState::MustCompletePush(Square::new('e', 8), Piece::Elephant));
+    }
+
+    #[test]
+    fn test_action_place_initial() {
+        let game_state = GameState::initial();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, d, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_elephant() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::Place(Piece::Elephant));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[m, h, d, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_camel() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::Place(Piece::Camel));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, h, d, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_horse() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::Place(Piece::Horse));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, d, c, r]");
+
+        let game_state = game_state.take_action(&Action::Place(Piece::Horse));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, d, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_dog() {
+        let game_state = GameState::initial();
+        let game_state = game_state.take_action(&Action::Place(Piece::Dog));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, d, c, r]");
+
+        let game_state = game_state.take_action(&Action::Place(Piece::Dog));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_rabbits() {
+        let game_state = GameState::initial();
+
+        let game_state = place_8_rabbits(&game_state);
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, d, c]");
+    }
+
+    #[test]
+    fn test_action_place_majors() {
+        let game_state = GameState::initial();
+
+        let game_state = place_major_pieces(&game_state);
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[r]");
+    }
+
+    #[test]
+    fn test_action_place_p2_initial() {
+        let game_state = GameState::initial();
+
+        let game_state = place_major_pieces(&game_state);
+        let game_state = place_8_rabbits(&game_state);
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, m, h, d, c, r]");
+    }
+
+    #[test]
+    fn test_action_place_p2_camel() {
+        let game_state = GameState::initial();
+
+        let game_state = place_major_pieces(&game_state);
+        let game_state = place_8_rabbits(&game_state);
+        let game_state = game_state.take_action(&Action::Place(Piece::Camel));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e, h, d, c, r]");
     }
 
     #[test]
