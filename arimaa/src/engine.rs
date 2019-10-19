@@ -45,7 +45,6 @@ Out:
 1 pass bit
 */
 
-// @TODO: Don't push and pull on the same move.
 // @TODO: ... but may not pass the whole turn or make a move equivalent to passing the whole turn.
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -240,9 +239,9 @@ impl GameState {
 
         let mut valid_actions = vec![];
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-            let pushing_piece_bit = shift_in_direction(curr_player_piece_mask, &direction) & square_bit;
+            let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction) & curr_player_piece_mask;
             if pushing_piece_bit != 0 && self.get_piece_type_at_bit(pushing_piece_bit) > *pushed_piece {
-                valid_actions.push(Action::Move(*square, *direction));
+                valid_actions.push(Action::Move(Square::from_bit_board(pushing_piece_bit), *direction));
             }
         }
 
@@ -1826,22 +1825,75 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, a8s, d5w, d4e, d4s, d4w, p]");
-
-        //@TODO: two possible pushers
-        // @TODO: two possible pushers supported piece
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, a8s, d4s, d4w, p, e4n, e4e, e4s]");
     }
 
     #[test]
-    fn test_valid_actions_supported_piece_p1_1() {
+    fn test_valid_actions_frozen_push_p2_3() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       R         |
+             3|     x c   x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w, d4e, d4w]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d3n, d5s]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, d3e, a8s, d3s, d4w, d3w, p, e4n, e4e, e4s]");
+    }
+
+    #[test]
+    fn test_valid_actions_frozen_push_p2_4() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|     E R         |
+             3|     x c   x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w, d4e]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d3n, d5s]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, d3e, a8s, d3s, d3w, p, e4n, e4e, e4s]");
+    }
+
+    #[test]
+    fn test_valid_actions_supported_piece_p2_1() {
         let game_state: GameState = "
              1s
               +-----------------+
              8|                 |
              7|                 |
              6|     x     x     |
-             5|       m         |
-             4|       M         |
+             5|     r m         |
+             4|     C E         |
              3|     x     x     |
              2|                 |
              1| R               |
@@ -1849,7 +1901,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, c5w]");
     }
 
     #[test]
