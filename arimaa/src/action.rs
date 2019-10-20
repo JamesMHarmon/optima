@@ -84,7 +84,7 @@ impl FromStr for Square {
     }
 }
 
-#[derive(Clone,Copy,Eq,PartialEq)]
+#[derive(Clone,Copy,Eq,Hash,PartialEq)]
 pub enum Direction {
     Up,
     Right,
@@ -195,7 +195,7 @@ impl FromStr for Piece {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Hash, Clone, Eq, PartialEq)]
 pub enum Action {
     Place(Piece),
     Move(Square,Direction),
