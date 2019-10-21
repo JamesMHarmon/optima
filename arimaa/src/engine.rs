@@ -35,15 +35,6 @@ In:
 Where next piece is placed
 Out:
 6 pieces
-
-6 curr piece boards
-6 opp piece boards
-3 num action boards
-1 must push board?
-1 enemy piece which can be moved through push/pull?
-Out:
-4 directional boards (substract irrelevant squares)
-1 pass bit
 */
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -83,6 +74,19 @@ struct PieceBoardState {
     dogs: u64,
     cats: u64,
     rabbits: u64
+}
+
+impl PieceBoardState {
+    fn get_bits_by_piece_type(&self, piece: &Piece) -> u64 {
+        match piece {
+            Piece::Elephant => self.elephants,
+            Piece::Camel => self.camels,
+            Piece::Horse => self.horses,
+            Piece::Dog => self.dogs,
+            Piece::Cat => self.cats,
+            Piece::Rabbit => self.rabbits,
+        }
+    }
 }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -268,6 +272,13 @@ impl GameState {
         } else {
             self.valid_placement()
         }
+    }
+
+    pub fn get_piece_board_for_player(&self, piece: &Piece, player_to_move: bool) -> u64 {
+        let piece_board = self.get_piece_board();
+        let player_piece_mask = if player_to_move { self.get_curr_player_piece_mask(&piece_board) } else { self.get_opponent_piece_mask(&piece_board) };
+        piece_board.get_bits_by_piece_type(piece) & player_piece_mask
+
     }
 
     fn can_pass(&self) -> bool {

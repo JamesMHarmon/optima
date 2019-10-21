@@ -1,7 +1,8 @@
+#![feature(toowned_clone_into)]
 
 #[macro_use]
 mod bits;
-// mod board;
+mod board;
 
 pub mod action;
 pub mod engine;
