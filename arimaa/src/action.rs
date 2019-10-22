@@ -28,6 +28,10 @@ impl Square {
         1 << self.0
     }
 
+    pub fn get_index(&self) -> usize {
+        self.0 as usize
+    }
+
     pub fn invert(&self) -> Self {
         Square((BOARD_HEIGHT * BOARD_WIDTH) as u8 - 1 - self.0)
     }

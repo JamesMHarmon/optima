@@ -141,7 +141,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     }
 
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        let player_to_move = if game_state.p1_turn_to_move { 0 } else { 1 };
+        let player_to_move = if game_state.p1_turn_to_move { 1 } else { 2 };
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
     }

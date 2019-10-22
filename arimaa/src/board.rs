@@ -1,11 +1,8 @@
 use super::constants::{BOARD_WIDTH,BOARD_HEIGHT};
 use common::bits::single_bit_index_u64;
 
-pub fn map_board_to_arr_invertable(board: u64, invert: bool) -> Vec<f32> {
-    let size = BOARD_HEIGHT * BOARD_WIDTH;
+pub fn set_board_bits_invertable(arr: &mut [f32], board: u64, invert: bool) {
     let mut board = board;
-    let mut result: Vec<f32> = Vec::with_capacity(size);
-    result.extend(std::iter::repeat(0.0).take(size));
 
     while board != 0 {
         let board_without_first_bit = board & (board - 1);
@@ -13,12 +10,10 @@ pub fn map_board_to_arr_invertable(board: u64, invert: bool) -> Vec<f32> {
         let removed_bit_idx = single_bit_index_u64(removed_bit);
         let removed_bit_vec_idx = if invert { invert_idx(removed_bit_idx) } else { removed_bit_idx };
 
-        result[removed_bit_vec_idx] = 1.0;
+        arr[removed_bit_vec_idx] = 1.0;
 
         board = board_without_first_bit;
     }
-
-    result
 }
 
 fn invert_idx(idx: usize) -> usize {
@@ -28,7 +23,7 @@ fn invert_idx(idx: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::action::{Square};
+    use super::super::action::{Piece,Square};
     use super::super::engine::GameState;
 
     fn square_to_idx(square: Square) -> usize {
@@ -63,26 +58,32 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'a', 1), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'a', 1), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'h', 8), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'h', 8), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_b8() {
+    fn test_set_board_bits_invertable_pawn_b8() {
         let game_state: GameState = "
              1g
               +-----------------+
@@ -98,26 +99,32 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'b', 8), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'b', 8), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'g', 1), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'g', 1), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_d4() {
+    fn test_set_board_bits_invertable_pawn_d4() {
         let game_state: GameState = "
              1g
               +-----------------+
@@ -133,21 +140,27 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'd', 4), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'd', 4), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
-            game_state.get_piece_board_for_player(&Piece::Rabbit, true),
+        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
+        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        set_board_bits_invertable(
+            &mut result,
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
-        assert_eq!(num_values_set(&arr), 1);
-        assert_eq!(value_at_square(&arr, 'e', 5), 1.0);
+        assert_eq!(num_values_set(&result), 1);
+        assert_eq!(value_at_square(&result, 'e', 5), 1.0);
     }
 }

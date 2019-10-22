@@ -6,6 +6,6 @@ mod board;
 
 pub mod action;
 pub mod engine;
-// pub mod model;
+pub mod play_model;
 pub mod constants;
 pub mod value;
