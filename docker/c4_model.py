@@ -52,14 +52,24 @@ def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch
           callbacks=callbacks)
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size):
-    K.clear_session()
-    K.set_learning_phase(0)
     model = tf.keras.models.load_model(model_path)
+    model_weights = model.get_weights()
+
+    dtype='float16'
+    K.clear_session()
+    K.set_floatx(dtype)
+    K.set_epsilon(1e-4)
+    K.set_learning_phase(0)
+
+    model_weights = [w.astype(K.floatx()) for w in model_weights]
+
+    model = create(num_filters, num_blocks, input_shape, output_size)
+    model.set_weights(model_weights)
 
     # Fetch the Keras session and save the model
     # The signature definition is defined by the input and output tensors
     # And stored with the default serving key
-    with tf.keras.backend.get_session() as sess:
+    with K.get_session() as sess:
         tf.saved_model.simple_save(
             sess,
             export_model_path,

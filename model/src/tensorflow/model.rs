@@ -16,6 +16,7 @@ use failure::Error;
 use itertools::{izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
+use half::f16;
 
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
@@ -241,7 +242,7 @@ impl Predictor {
 
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let flattened_inputs: Vec<f32> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| f32::from(*v)).collect();
+        let flattened_inputs: Vec<_> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| f16::from_f32(*v)).collect();
         let mut value_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
         let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
 
@@ -255,13 +256,13 @@ impl Predictor {
 
         session.session.run(&mut output_step).unwrap();
 
-        let value_head_output: Tensor<f32> = output_step.fetch(value_head_fetch_token).unwrap();
-        let policy_head_output: Tensor<f32> = output_step.fetch(policy_head_fetch_token).unwrap();
+        let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
+        let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
 
         let policy_dimension = policy_head_output.dims()[1];
 
-        value_head_outputs.extend(value_head_output.into_iter().map::<f32,_>(|v| (*v).into()));
-        policy_head_outputs.extend(policy_head_output.into_iter().map::<f32,_>(|c| (*c).into()));
+        value_head_outputs.extend(value_head_output.into_iter().map(|v| v.to_f32()));
+        policy_head_outputs.extend(policy_head_output.into_iter().map(|c| c.to_f32()));
         
         let analysis_results: Vec<_> = izip!(
             policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),

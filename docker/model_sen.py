@@ -2,7 +2,6 @@
 # https://towardsdatascience.com/understanding-residual-networks-9add4b664b03
 import numpy as np
 import keras
-from keras import backend as K
 from keras.models import Sequential, Model
 from keras.layers import Reshape, Dense, Conv2D, Flatten, LeakyReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
 from keras.layers.core import Activation, Layer

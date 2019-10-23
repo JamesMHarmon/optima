@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:1.15.0rc2-gpu-py3
+FROM tensorflow/tensorflow:1.15.0-gpu-py3
 
 WORKDIR /usr/local/bin
 
