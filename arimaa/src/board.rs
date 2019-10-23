@@ -16,6 +16,21 @@ pub fn set_board_bits_invertable(arr: &mut [f32], board: u64, invert: bool) {
     }
 }
 
+pub fn set_placement_board_bits(arr: &mut [f32], board: u64) {
+    let mut board = board;
+
+    while board != 0 {
+        let board_without_first_bit = board & (board - 1);
+        let removed_bit = board ^ board_without_first_bit;
+        let removed_bit_idx = single_bit_index_u64(removed_bit);
+        let removed_bit_vec_idx = if removed_bit_idx < 16 { removed_bit_idx } else { removed_bit_idx - 32 };
+
+        arr[removed_bit_vec_idx] = 1.0;
+
+        board = board_without_first_bit;
+    }
+}
+
 fn invert_idx(idx: usize) -> usize {
     (BOARD_WIDTH * BOARD_HEIGHT) - idx - 1
 }

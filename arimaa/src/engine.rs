@@ -25,18 +25,6 @@ const LAST_P2_PLACEMENT_MASK: u64 = 0b__00000000__00000000__00000000__00000000__
 
 const TRAP_MASK: u64 =              0b__00000000__00000000__00100100__00000000__00000000__00100100__00000000__00000000;
 
-/*
-Layers:
-In:
-1 player
-6 curr piece boards
-6 opp piece boards
-6 curr pieces remaining temp board
-Where next piece is placed
-Out:
-6 pieces
-*/
-
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum PushPullState {
     /*
@@ -82,7 +70,11 @@ impl PieceBoardState {
         self.get_bits_by_piece_type(piece) & player_piece_mask
     }
 
-    fn get_bits_by_piece_type(&self, piece: &Piece) -> u64 {
+    pub fn get_player_piece_mask(&self, p1_pieces: bool) -> u64 {
+        if p1_pieces { self.p1_pieces } else { !self.p1_pieces & self.all_pieces }
+    }
+
+    pub fn get_bits_by_piece_type(&self, piece: &Piece) -> u64 {
         match piece {
             Piece::Elephant => self.elephants,
             Piece::Camel => self.camels,
@@ -91,6 +83,13 @@ impl PieceBoardState {
             Piece::Cat => self.cats,
             Piece::Rabbit => self.rabbits,
         }
+    }
+
+    pub fn get_placement_bit(&self) -> u64 {
+        let placement_mask = if self.p1_pieces == P1_PLACEMENT_MASK { P1_PLACEMENT_MASK } else { P2_PLACEMENT_MASK };
+        let squares_to_place = !self.all_pieces & placement_mask;
+
+        first_set_bit(squares_to_place)
     }
 }
 
@@ -288,12 +287,29 @@ impl GameState {
         self.piece_board.get_piece_board(actions)
     }
 
+    pub fn get_piece_board(&self) -> PieceBoardState {
+        let actions = if let Some(play_phase) = self.as_play_phase() {
+            &play_phase.actions_this_turn[..]
+        } else {
+            &[] as &[Action]
+        };
+
+        self.piece_board.get_piece_board(actions)
+    }
+
     pub fn is_p1_turn_to_move(&self) -> bool {
         self.p1_turn_to_move
     }
 
     pub fn get_current_step(&self) -> usize {
         self.unwrap_play_phase().actions_this_turn.len()
+    }
+
+    pub fn is_play_state(&self) -> bool {
+        match &self.phase {
+            Phase::PlayPhase(_) => true,
+            _ => false
+        }
     }
 
     fn can_pass(&self) -> bool {
@@ -363,16 +379,6 @@ impl GameState {
         }
     }
 
-    fn get_piece_board(&self) -> PieceBoardState{
-        let actions = if let Some(play_phase) = self.as_play_phase() {
-            &play_phase.actions_this_turn[..]
-        } else {
-            &[] as &[Action]
-        };
-
-        self.piece_board.get_piece_board(actions)
-    }
-
     fn get_must_complete_push_actions(&self, piece_board: &PieceBoardState) -> Vec<Action> {
         let play_phase = self.unwrap_play_phase();
         let (square, pushed_piece) = play_phase.push_pull_state.unwrap_must_complete_push();
@@ -393,7 +399,7 @@ impl GameState {
 
     fn place(&self, piece: &Piece) -> Self {
         let piece_board = &self.get_piece_board();
-        let placement_bit = self.get_placement_bit(piece_board);
+        let placement_bit = piece_board.get_placement_bit();
 
         let mut new_elephants = piece_board.elephants;
         let mut new_camels = piece_board.camels;
@@ -548,13 +554,6 @@ impl GameState {
     fn is_their_piece(&self, square_bit: u64, piece_board: &PieceBoardState) -> bool {
         let is_p1_piece = square_bit & piece_board.p1_pieces != 0;
         self.p1_turn_to_move ^ is_p1_piece
-    }
-
-    fn get_placement_bit(&self, piece_board: &PieceBoardState) -> u64 {
-        let placement_mask = if self.p1_turn_to_move { P1_PLACEMENT_MASK } else { P2_PLACEMENT_MASK };
-        let squares_to_place = !piece_board.all_pieces & placement_mask;
-
-        first_set_bit(squares_to_place)
     }
 
     fn get_curr_player_non_frozen_pieces(&self, piece_board: &PieceBoardState) -> u64 {
@@ -725,50 +724,14 @@ fn map_bit_board_to_squares(board: u64) -> Vec<Square> {
     squares
 }
 
-fn place_major_pieces(game_state: &GameState) -> GameState {
-    let game_state = game_state.take_action(&Action::Place(Piece::Horse));
-    let game_state = game_state.take_action(&Action::Place(Piece::Cat));
-    let game_state = game_state.take_action(&Action::Place(Piece::Dog));
-    let game_state = game_state.take_action(&Action::Place(Piece::Camel));
-    let game_state = game_state.take_action(&Action::Place(Piece::Elephant));
-    let game_state = game_state.take_action(&Action::Place(Piece::Dog));
-    let game_state = game_state.take_action(&Action::Place(Piece::Cat));
-    game_state.take_action(&Action::Place(Piece::Horse))
-}
-
-fn place_8_rabbits(game_state: &GameState) -> GameState {
-    let mut game_state = game_state.take_action(&Action::Place(Piece::Rabbit));
-    for _ in 0..7 {
-        game_state = game_state.take_action(&Action::Place(Piece::Rabbit));
-    }
-    game_state
-}
-
-fn initial_play_state() -> GameState {
-    let game_state = GameState {
+impl GameStateTrait for GameState {
+    fn initial() -> Self {
+        GameState {
             p1_turn_to_move: true,
             move_number: 1,
             piece_board: Arc::new(PieceBoard::initial()),
             phase: Phase::PlacePhase
-        };
-    let game_state = place_8_rabbits(&game_state);
-    let game_state = place_major_pieces(&game_state);
-
-    let game_state = place_major_pieces(&game_state);
-    place_8_rabbits(&game_state)
-}
-
-impl GameStateTrait for GameState {
-    fn initial() -> Self {
-
-        initial_play_state()
-        // @TODO: PUT BACK
-        // GameState {
-        //     p1_turn_to_move: true,
-        //     move_number: 1,
-        //     piece_board: Arc::new(PieceBoard::initial()),
-        //     phase: Phase::PlacePhase
-        // }
+        }
     }
 }
 
