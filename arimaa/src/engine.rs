@@ -86,7 +86,7 @@ impl PieceBoardState {
     }
 
     pub fn get_placement_bit(&self) -> u64 {
-        let placement_mask = if self.p1_pieces == P1_PLACEMENT_MASK { P1_PLACEMENT_MASK } else { P2_PLACEMENT_MASK };
+        let placement_mask = if self.p1_pieces & P1_PLACEMENT_MASK == P1_PLACEMENT_MASK { P2_PLACEMENT_MASK } else { P1_PLACEMENT_MASK };
         let squares_to_place = !self.all_pieces & placement_mask;
 
         first_set_bit(squares_to_place)
@@ -238,12 +238,12 @@ impl GameState {
 
     pub fn is_terminal(&self) -> Option<Value> {
         self.as_play_phase().and_then(|play_phase| {
+            let piece_board = &self.get_piece_board();
+
             // The order of checking for win/lose conditions is as follows assuming player A just made the move and player B now needs to move:
             if play_phase.actions_this_turn.len() > 0 {
-                return None;
+                return self.has_move(piece_board);
             }
-
-            let piece_board = &self.get_piece_board();
 
             // Check if a rabbit of player A reached goal. If so player A wins.
             // Check if a rabbit of player B reached goal. If so player B wins.
@@ -252,11 +252,44 @@ impl GameState {
             // Check if player A lost all rabbits. If so player B wins.
             .or_else(|| self.lost_all_rabbits(piece_board))
             // Check if player B has no possible move (all pieces are frozen or have no place to move). If so player A wins.
-            // @TODO
-            //.or_else(|| self.has_move())
+            .or_else(|| self.has_move(piece_board))
             // Check if the only moves player B has are 3rd time repetitions. If so player A wins.
             // @TODO
+            .or_else(|| self.max_moves_reached())
         })
+    }
+
+    pub fn has_move(&self, piece_board: &PieceBoardState) -> Option<Value> {
+        let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {
+            let mut valid_actions = Vec::new();
+            if play_phase.push_pull_state.is_must_complete_push() {
+                self.get_must_complete_push_actions(piece_board).len() != 0
+            } else if self.can_pass() {
+                true
+            } else if { self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+                true
+            } else if { self.extend_with_pull_piece_actions(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+                true
+            } else if { self.extend_with_push_piece_actions(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        };
+
+        if has_move {
+            None
+        } else if self.p1_turn_to_move {
+            Some(Value([0.0, 1.0]))
+        } else {
+            Some(Value([1.0, 0.0]))
+        }
+    }
+
+    pub fn max_moves_reached(&self) -> Option<Value> {
+        if self.move_number > MAX_NUMBER_OF_MOVES { Some(Value([0.0, 0.0])) } else { None }
     }
 
     pub fn valid_actions(&self) -> Vec<Action> {
@@ -339,8 +372,10 @@ impl GameState {
             let invalid_rabbit_moves = self.get_invalid_rabbit_moves(direction, piece_board);
             let valid_curr_piece_moves = unoccupied_directions & non_frozen_pieces & !invalid_rabbit_moves;
 
-            let squares = map_bit_board_to_squares(valid_curr_piece_moves);
-            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+            if valid_curr_piece_moves != 0 {
+                let squares = map_bit_board_to_squares(valid_curr_piece_moves);
+                valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+            }
         }
     }
 
@@ -364,16 +399,18 @@ impl GameState {
     fn extend_with_push_piece_actions(&self, valid_actions: &mut Vec<Action>, piece_board: &PieceBoardState) {
         if let Some(play_phase) = self.as_play_phase() {
             if play_phase.push_pull_state.can_push() && play_phase.actions_this_turn.len() < 3 {
+                let predator_piece_mask = self.get_curr_player_non_frozen_pieces(piece_board);
                 let opp_piece_mask = self.get_opponent_piece_mask(piece_board);
-                let predator_piece_mask = !opp_piece_mask & piece_board.all_pieces;
                 let opp_threatened_pieces = self.get_threatened_pieces(predator_piece_mask, opp_piece_mask, piece_board);
 
                 for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
                     let unoccupied_directions = can_move_in_direction(direction, piece_board);
                     let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
 
-                    let squares = map_bit_board_to_squares(valid_push_moves);
-                    valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                    if valid_push_moves != 0 {
+                        let squares = map_bit_board_to_squares(valid_push_moves);
+                        valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                    }
                 }
             }
         }
@@ -1984,6 +2021,25 @@ mod tests {
             .parse().unwrap();
 
         assert_eq!(game_state.is_terminal(), Some(Value([0.0, 1.0])));
+    }
+
+    #[test]
+    fn test_action_cant_push_while_frozen() {
+        let game_state: GameState = "
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|       e         |
+             4|       M r       |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e]");
     }
 
     #[test]

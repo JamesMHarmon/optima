@@ -7,18 +7,18 @@
 * **Multi-Player** - Most implementations of AZ only allow for two player games.
 
 ## TODO:
-* Allow for multiple players
+* -Allow for multiple players-
 * Make learning distributed
 * Add WASM support
-* Add better debug printing
-* Add better error handling
-* Add max moves
+* -Add better debug printing-
+* -Add better error handling-
+* -Add max moves-
 * Document Code
 * Document READMEs
 * Add instructions on how to get it working
-* Convert reqwest http calls to use std::futures
+* -Convert reqwest http calls to use std::futures-
 * Mask policy head
-* Create multi-threaded MCTS
+* -Create multi-threaded MCTS-
 
 
 ## References
