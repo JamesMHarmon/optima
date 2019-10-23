@@ -3,8 +3,8 @@
 #[macro_use]
 mod bits;
 mod board;
-pub mod place_model;
-pub mod play_model;
+mod place_model;
+mod play_model;
 
 pub mod action;
 pub mod engine;

@@ -20,7 +20,14 @@ pub struct ModelFactory {
     place_model_factory: PlaceModelFactory
 }
 
-impl ModelFactory {}
+impl ModelFactory {
+    pub fn new() -> Self {
+        ModelFactory {
+            play_model_factory: PlayModelFactory::new(),
+            place_model_factory: PlaceModelFactory::new()
+        }
+    }
+}
 
 impl model::model::ModelFactory for ModelFactory {
     type M = Model;

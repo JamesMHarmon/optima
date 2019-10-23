@@ -15,7 +15,7 @@ use connect4::model::{ModelFactory as Connect4ModelFactory};
 use quoridor::engine::{Engine as QuoridorEngine};
 use quoridor::model::{ModelFactory as QuoridorModelFactory};
 use arimaa::engine::{Engine as ArimaaEngine};
-use arimaa::play_model::{ModelFactory as ArimaaModelFactory};
+use arimaa::model::{ModelFactory as ArimaaModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 use self_evaluate::self_evaluate::{SelfEvaluateOptions};
 use ponder::ponder::{Ponder,PonderOptions};

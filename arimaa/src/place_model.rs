@@ -79,20 +79,13 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
-    fn policy_metrics_to_expected_output(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
+    fn policy_metrics_to_expected_output(&self, _game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let invert = !game_state.is_p1_turn_to_move();
         let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
         inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
 
         policy_metrics.children_visits.iter().fold(inputs, |mut r, (action, visits)| {
-            // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
-            // at the board from the perspective of player 1, but with the pieces inverted.
-            let policy_index = if invert {
-                map_action_to_policy_output_idx(&action.invert())
-            } else {
-                map_action_to_policy_output_idx(action)
-            };
+            let policy_index = map_action_to_policy_output_idx(action);
 
             r[policy_index] = *visits as f32 / total_visits;
             r
@@ -100,20 +93,9 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     }
 
     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
-        let invert = !game_state.is_p1_turn_to_move();
-
         let valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
-            .map(|action|
-            {
-                // Policy scores coming from the model are always from the perspective of player 1.
-                // This means that if we are p2, we need to flip the actions coming back and translate them
-                // to be actions in the p2 perspective.
-                let policy_index = if invert {
-                    map_action_to_policy_output_idx(&action.invert())
-                } else {
-                    map_action_to_policy_output_idx(&action)
-                };
-
+            .map(|action| {
+                let policy_index = map_action_to_policy_output_idx(&action);
                 let policy_score = policy_scores[policy_index];
 
                 ActionWithPolicy::new(
