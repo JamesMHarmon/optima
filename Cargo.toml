@@ -10,6 +10,7 @@ members = [
     "self-learn",
     "self-learn-client",
 
+    "arimaa",
     "connect4",
     "quoridor"
 ]

@@ -10,6 +10,7 @@ self-learn = { path = "../self-learn" }
 self-evaluate = { path = "../self-evaluate" }
 ponder = { path = "../ponder" }
 model = { path = "../model" }
+arimaa = { path = "../arimaa" }
 connect4 = { path = "../connect4" }
 quoridor = { path = "../quoridor" }
 

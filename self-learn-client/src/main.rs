@@ -14,6 +14,8 @@ use connect4::engine::{Engine as Connect4Engine};
 use connect4::model::{ModelFactory as Connect4ModelFactory};
 use quoridor::engine::{Engine as QuoridorEngine};
 use quoridor::model::{ModelFactory as QuoridorModelFactory};
+use arimaa::engine::{Engine as ArimaaEngine};
+use arimaa::model::{ModelFactory as ArimaaModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 use self_evaluate::self_evaluate::{SelfEvaluateOptions};
 use ponder::ponder::{Ponder,PonderOptions};
@@ -22,6 +24,7 @@ use failure::{Error,format_err};
 
 const C4_NAME: &str = "Connect4";
 const QUORIDOR_NAME: &str = "Quoridor";
+const ARIMAA_NAME: &str = "Arimaa";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Options {
@@ -52,6 +55,8 @@ async fn main() -> Result<(), Error> {
             return create_connect4(run_name, &options.model);
         } else if game_name == QUORIDOR_NAME {
             return create_quoridor(run_name, &options.model);
+        } else if game_name == ARIMAA_NAME {
+            return create_arimaa(run_name, &options.model);
         } else {
             panic!("Game name not recognized");
         }
@@ -64,6 +69,8 @@ async fn main() -> Result<(), Error> {
             return run_connect4(run_name, &options.self_learn, &options.self_evaluate);
         } else if game_name == QUORIDOR_NAME {
             return run_quoridor(run_name, &options.self_learn, &options.self_evaluate);
+        } else if game_name == ARIMAA_NAME {
+            return run_arimaa(run_name, &options.self_learn, &options.self_evaluate);
         } else {
             panic!("Game name not recognized");
         }
@@ -79,6 +86,8 @@ async fn main() -> Result<(), Error> {
             return evaluate_connect4(run_name, model_1_num, model_2_num, &options);
         } else if game_name == QUORIDOR_NAME {
             return evaluate_quoridor(run_name, model_1_num, model_2_num, &options);
+        } else if game_name == ARIMAA_NAME {
+            return evaluate_arimaa(run_name, model_1_num, model_2_num, &options);
         } else {
             panic!("Game name not recognized");
         }
@@ -93,6 +102,8 @@ async fn main() -> Result<(), Error> {
             return ponder_connect4(run_name, model_num, &options).await;
         } else if game_name == QUORIDOR_NAME {
             return ponder_quoridor(run_name, model_num, &options).await;
+        } else if game_name == ARIMAA_NAME {
+            return ponder_arimaa(run_name, model_num, &options).await;
         } else {
             panic!("Game name not recognized");
         }
@@ -253,6 +264,81 @@ async fn ponder_quoridor(run_name: &str, model_num: Option<usize>, options: &Pon
     let model_num = model_num.unwrap_or_else(|| latest_model_info.get_model_num());
 
     let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), model_num);
+
+    let model = model_factory.get(&model_info);
+
+    Ponder::ponder(
+        &model,
+        &game_engine,
+        options
+    ).await?;
+
+    Ok(())
+}
+
+fn create_arimaa(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
+    let model_factory = ArimaaModelFactory::new();
+
+    SelfLearn::<_,_,_,ArimaaEngine>::create(
+        ARIMAA_NAME.to_owned(),
+        run_name.to_owned(),
+        &model_factory,
+        options
+    )
+}
+
+fn run_arimaa(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<(), Error> {
+    let model_factory = ArimaaModelFactory::new();
+    let game_engine = ArimaaEngine::new();
+    let run_directory = get_run_directory(ARIMAA_NAME, run_name);
+
+    let mut runner = SelfLearn::from(
+        ARIMAA_NAME.to_owned(),
+        run_name.to_owned(),
+        &game_engine,
+        &run_directory,
+        self_learn_options,
+        self_evaluate_options
+    )?;
+
+    runner.learn(&model_factory)?;
+
+    Ok(())
+}
+
+fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+    let model_factory = ArimaaModelFactory::new();
+    let game_engine = ArimaaEngine::new();
+    let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), 1);
+    let latest_model_num = model_factory.get_latest(&model_info)?;
+
+    let model_1_num = model_1_num.unwrap_or_else(|| latest_model_num.get_model_num() - 1);
+    let model_2_num = model_2_num.unwrap_or_else(|| latest_model_num.get_model_num());
+
+    let model_1_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), model_1_num);
+    let model_2_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), model_2_num);
+
+    let model_1 = model_factory.get(&model_1_info);
+    let model_2 = model_factory.get(&model_2_info);
+
+    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+        &vec!(model_1, model_2),
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
+async fn ponder_arimaa(run_name: &str, model_num: Option<usize>, options: &PonderOptions) -> Result<(), Error> {
+    let model_factory = ArimaaModelFactory::new();
+    let game_engine = ArimaaEngine::new();
+    let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), 1);
+    let latest_model_info = model_factory.get_latest(&model_info)?;
+
+    let model_num = model_num.unwrap_or_else(|| latest_model_info.get_model_num());
+
+    let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), model_num);
 
     let model = model_factory.get(&model_info);
 
