@@ -15,7 +15,7 @@ pub struct SelfPlayMetrics<A,V> {
     score: V
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SelfPlayOptions {
     pub temperature: f32,
     pub temperature_max_actions: usize,

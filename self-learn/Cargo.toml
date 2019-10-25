@@ -17,5 +17,5 @@ crossbeam="0.7"
 rand="0.7"
 serde={version="1.0",features=["derive"]}
 serde_json="1.0"
-futures-preview = "=0.3.0-alpha.18"
-tokio-executor = "=0.2.0-alpha.4"
+futures-preview = "=0.3.0-alpha.19"
+tokio-executor = "=0.2.0-alpha.6"
