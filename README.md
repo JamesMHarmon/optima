@@ -20,6 +20,12 @@
 * Mask policy head
 * -Create multi-threaded MCTS-
 
+## FAQ
+
+Q: I get the error `Op type not registered 'FusedBatchNormV3' in binary`
+A: Use `cargo build --release` as opposed to `cargo run`
+
+
 
 ## References
 
