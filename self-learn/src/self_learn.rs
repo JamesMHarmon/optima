@@ -115,7 +115,7 @@ where
         M: Model<Action=A,State=S,Analyzer=T,Value=V>,
         T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
         F: ModelFactory<M=M>,
-        V: Clone + Send
+        V: Clone + Send + Debug
     {
         let self_learn_options = self.self_learn_options;
         let self_evaluate_options = self.self_evaluate_options;
@@ -181,7 +181,7 @@ where
     where
         M: Model<State=S,Action=A,Analyzer=T,Value=V>,
         T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
-        V: Send
+        V: Send + Debug
     {
         let self_play_batch_size = options.self_play_batch_size;
         let starting_run_time = Instant::now();
@@ -220,7 +220,7 @@ where
                         self_play_batch_size,
                         game_results_tx,
                         engine,
-                        analyzer,
+                        &analyzer,
                         &self_play_options
                     ).map(|_| ());
 
@@ -243,6 +243,11 @@ where
                         num_games_to_play,
                         num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
                     );
+
+                    println!("Number of Actions: {}, Score: {:?}",
+                        self_play_metric.get_analysis().len(),
+                        self_play_metric.get_score()
+                    );
                 }
 
                 Ok(())
@@ -257,7 +262,7 @@ where
         self_play_batch_size: usize,
         results_channel: mpsc::Sender<SelfPlayMetrics<A,V>>,
         game_engine: &E,
-        analyzer: T,
+        analyzer: &T,
         self_play_options: &SelfPlayOptions
     ) -> Result<(), Error>
     where
@@ -270,7 +275,7 @@ where
 
         for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
             self_play_metric_stream.push(
-                self_play::self_play(game_engine, &analyzer, &self_play_options)
+                self_play::self_play(game_engine, analyzer, &self_play_options)
             );
         }
 
@@ -282,7 +287,7 @@ where
 
             if num_games_to_play - self_play_metric_stream.len() > 0 {
                 self_play_metric_stream.push(
-                    self_play::self_play(game_engine, &analyzer, &self_play_options)
+                    self_play::self_play(game_engine, analyzer, &self_play_options)
                 );
             }
         }

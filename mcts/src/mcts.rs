@@ -23,7 +23,7 @@ pub struct DirichletOptions {
     pub epsilon: f32
 }
 
-pub struct MCTSOptions<S, A, C, T>
+pub struct MCTSOptions<S,A,C,T>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -40,7 +40,7 @@ where
     _phantom_state: PhantomData<*const S>
 }
 
-impl<S, A, C, T> MCTSOptions<S, A, C, T>
+impl<S,A,C,T> MCTSOptions<S,A,C,T>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -68,7 +68,7 @@ where
     }
 }
 
-pub struct MCTS<'a, S, A, E, M, C, T, V>
+pub struct MCTS<'a,S,A,E,M,C,T,V>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -78,18 +78,18 @@ where
     C: Fn(&S, usize, &A, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
-    options: MCTSOptions<S, A, C, T>,
+    options: MCTSOptions<S,A,C,T>,
     game_engine: &'a E,
     analyzer: &'a M,
     starting_game_state: Option<S>,
     starting_num_actions: Option<usize>,
     root: Option<Index>,
-    arena: RefCell<Arena<MCTSNode<S, A, V>>>
+    arena: RefCell<Arena<MCTSNode<S,A,V>>>
 }
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-struct MCTSNode<S, A, V> {
+struct MCTSNode<S,A,V> {
     value_score: V,
     W: Cell<f32>,
     game_state: S,
@@ -121,7 +121,7 @@ struct NodePUCT<'a, A> {
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, C, T, V> MCTS<'a, S, A, E, M, C, T, V>
+impl<'a,S,A,E,M,C,T,V> MCTS<'a,S,A,E,M,C,T,V>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -136,7 +136,7 @@ where
         actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S, A, C, T>
+        options: MCTSOptions<S,A,C,T>
     ) -> Self {
         MCTS {
             options,
@@ -154,7 +154,7 @@ where
         actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S, A, C, T>,
+        options: MCTSOptions<S,A,C,T>,
         capacity: usize
     ) -> Self {
         MCTS {
@@ -164,7 +164,7 @@ where
             starting_game_state: Some(game_state),
             starting_num_actions: Some(actions),
             root: None,
-            arena: RefCell::new(Arena::with_capacity(capacity))
+            arena: RefCell::new(Arena::with_capacity(capacity * 2))
         }
     }
 
@@ -354,8 +354,9 @@ where
 
         let (chosen_node, other_nodes) = split_nodes.unwrap();
 
-        let other_node_indexes: Vec<_> = other_nodes.iter().filter_map(|n| n.get_index()).collect();
-        Self::remove_nodes_from_arena(&other_node_indexes, arena_borrow_mut);
+        for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
+            Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
+        }
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {
             if clear {
@@ -379,11 +380,11 @@ where
         Ok(())
     }
 
-    fn remove_nodes_from_arena(node_indexes: &[Index], arena: &mut Arena<MCTSNode<S,A,V>>) {
-        for node_index in node_indexes {
-            let child_node = &arena[*node_index];
-            let child_node_indexes: Vec<_> = child_node.children.iter().filter_map(|n| n.state.get_index()).collect();
-            Self::remove_nodes_from_arena(&child_node_indexes, arena);
+    fn remove_nodes_from_arena(node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>) {
+        let child_node = arena.remove(node_index).unwrap();
+
+        for child_node_index in child_node.children.into_iter().filter_map(|n| n.state.get_index()) {
+            Self::remove_nodes_from_arena(child_node_index, arena);
         }
     }
 
@@ -396,7 +397,6 @@ where
         }
 
         let child_indexes: Vec<_> = node.children.iter().filter_map(|c| c.state.get_index()).collect();
-
         for child_index in child_indexes {
             Self::clear_node_visits(child_index, arena);
         }

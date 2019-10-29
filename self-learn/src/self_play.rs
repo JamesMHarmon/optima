@@ -36,6 +36,14 @@ impl<A,V> SelfPlayMetrics<A,V> {
     pub fn take(self) -> (Vec<(A, NodeMetrics<A>)>, V) {
         (self.analysis, self.score)
     }
+
+    pub fn get_analysis(&self) -> &[(A, NodeMetrics<A>)] {
+        &self.analysis
+    }
+
+    pub fn get_score(&self) -> &V {
+        &self.score
+    }
 }
 
 #[allow(non_snake_case)]

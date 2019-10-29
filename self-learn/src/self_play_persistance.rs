@@ -12,14 +12,14 @@ pub struct SelfPlayPersistance
 {
     file: File,
     games_dir: PathBuf,
-    name: String
+    model_name: String
 }
 
 impl SelfPlayPersistance
 {
-    pub fn new(run_directory: &Path, name: String) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, model_name: String) -> Result<Self, Error> {
         let games_dir = run_directory.join("games");
-        let file_path = Self::get_file_path(&games_dir, &name);
+        let file_path = Self::get_file_path(&games_dir, &model_name);
 
         fs::create_dir_all(&games_dir)?;
 
@@ -31,7 +31,7 @@ impl SelfPlayPersistance
         Ok(Self {
             games_dir,
             file,
-            name
+            model_name
         })
     }
 
@@ -44,7 +44,7 @@ impl SelfPlayPersistance
     }
 
     pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
-        let file_path = Self::get_file_path(&self.games_dir, &self.name);
+        let file_path = Self::get_file_path(&self.games_dir, &self.model_name);
         Self::read_metrics_from_file(&file_path)
     }
 
@@ -55,6 +55,7 @@ impl SelfPlayPersistance
     }
 
     fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
+        println!("Reading File: {:?}", file_path);
         let file = File::open(file_path);
 
         match file {
