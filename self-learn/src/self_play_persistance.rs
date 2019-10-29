@@ -5,6 +5,7 @@ use serde::{Serialize};
 use std::fs;
 use std::io::{BufReader,BufRead,Write};
 use std::fs::{File,OpenOptions};
+use model::model_info::ModelInfo;
 
 use super::self_play::{SelfPlayMetrics};
 
@@ -49,7 +50,9 @@ impl SelfPlayPersistance
     }
 
     pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A,V>, Error> {
-        let file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
+        let mut file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
+
+        file_paths.sort();
 
         Ok(SelfPlayMetricsIterator::new(file_paths))
     }
@@ -80,11 +83,21 @@ impl SelfPlayPersistance
     fn get_game_files_in_dir(games_dir: &Path) -> Result<Vec<PathBuf>, Error> {
         let file_paths: Vec<PathBuf> = fs::read_dir(games_dir)?
             .filter_map(|e| e.map(|e| e.path()).ok())
-            .filter(|p| p.is_file())
+            .filter(|p| p.is_file() && file_path_is_valid_game_file(p))
             .collect();
 
         Ok(file_paths)
     }
+}
+
+fn file_path_is_valid_game_file(path: &PathBuf) -> bool {
+    if let Some(game_name) = path.file_stem() {
+        if let Some(game_name) = game_name.to_str() {
+            return ModelInfo::is_model_name(game_name)
+        }
+    }
+
+    false
 }
 
 pub struct SelfPlayMetricsIterator<A,V>
