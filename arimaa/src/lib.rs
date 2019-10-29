@@ -1,4 +1,5 @@
 #![feature(toowned_clone_into)]
+#![feature(vec_remove_item)]
 
 #[macro_use]
 mod bits;

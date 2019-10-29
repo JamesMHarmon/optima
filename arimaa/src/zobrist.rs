@@ -2,7 +2,7 @@ use super::engine::{GameState,PieceBoardState};
 use super::action::{Piece,Square,map_bit_board_to_squares};
 use super::zobrist_values::*;
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Zobrist {
     hash: u64
 }
@@ -54,6 +54,12 @@ impl Zobrist {
 
     pub fn pass(&self, step: usize) -> Self {
         let hash = self.hash ^ PLAYER_TO_MOVE ^ STEP_VALUES[0] ^ STEP_VALUES[step];
+
+        Zobrist { hash }
+    }
+
+    pub fn exclude_step(&self, step: usize) -> Self {
+        let hash = self.hash ^ STEP_VALUES[0] ^ STEP_VALUES[step];
 
         Zobrist { hash }
     }
