@@ -302,6 +302,22 @@ impl FromStr for Action {
     }
 }
 
+pub fn map_bit_board_to_squares(board: u64) -> Vec<Square> {
+    let mut board = board;
+    let mut squares = Vec::with_capacity(board.count_ones() as usize);
+
+    while board != 0 {
+        let board_without_first_bit = board & (board - 1);
+        let removed_bit = board_without_first_bit ^ board;
+        let square = Square::from_bit_board(removed_bit);
+        squares.push(square);
+
+        board = board_without_first_bit;
+    }
+
+    squares
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

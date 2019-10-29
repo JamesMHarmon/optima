@@ -5,6 +5,8 @@ mod bits;
 mod board;
 mod place_model;
 mod play_model;
+mod zobrist;
+mod zobrist_values;
 
 pub mod action;
 pub mod engine;
