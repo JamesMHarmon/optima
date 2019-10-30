@@ -264,9 +264,8 @@ impl GameState {
             // Check if player A lost all rabbits. If so player B wins.
             .or_else(|| self.lost_all_rabbits(piece_board))
             // Check if player B has no possible move (all pieces are frozen or have no place to move). If so player A wins.
-            .or_else(|| self.has_move(piece_board))
             // Check if the only moves player B has are 3rd time repetitions. If so player A wins.
-            // @TODO
+            .or_else(|| self.has_move(piece_board))
             .or_else(|| self.max_moves_reached())
         })
     }
@@ -274,18 +273,23 @@ impl GameState {
     pub fn has_move(&self, piece_board: &PieceBoardState) -> Option<Value> {
         let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {
             let mut valid_actions = Vec::new();
+            // If this is the last move, then verify that there are at least two actions to ensure that the action taken will make progress, not resulting in a pass like move.
+            let required_number_of_valid_actions = if play_phase.get_step() == 3 { 2 } else { 1 };
             if play_phase.push_pull_state.is_must_complete_push() {
-                self.get_must_complete_push_actions(piece_board).len() != 0
+                let mut valid_actions = self.get_must_complete_push_actions(piece_board);
+                self.remove_passing_like_actions(&mut valid_actions);
+                valid_actions.len() > 0
             } else if self.can_pass() {
                 true
-            } else if { self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+            } else if { self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
                 true
-            } else if { self.extend_with_pull_piece_actions(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+            } else if { self.extend_with_pull_piece_actions(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
                 true
-            } else if { self.extend_with_push_piece_actions(&mut valid_actions, piece_board); valid_actions.len() > 0 } {
+            } else if { self.extend_with_push_piece_actions(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
                 true
             } else {
-                false
+                self.remove_passing_like_actions(&mut valid_actions);
+                valid_actions.len() > 0
             }
         } else {
             true
