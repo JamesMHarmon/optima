@@ -1,3 +1,6 @@
+use std::hash::Hasher;
+use std::hash::Hash;
+use common::linked_list::List;
 use std::sync::Arc;
 use std::str::FromStr;
 use std::fmt::{self,Display,Formatter};
@@ -41,20 +44,21 @@ pub enum PushPullState {
     MustCompletePush(Square, Piece)
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlayPhase {
     actions_this_turn: Vec<Action>,
     push_pull_state: PushPullState,
-    first_step_hash: Zobrist
+    first_step_hash: Zobrist,
+    hash_history: List<Zobrist>
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Phase {
     PlacePhase,
     PlayPhase(PlayPhase)
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PieceBoardState {
     p1_pieces: u64,
     all_pieces: u64,
@@ -108,7 +112,7 @@ impl PieceBoardState {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct PieceBoard(PieceBoardState);
 
 impl PieceBoard {
@@ -195,7 +199,7 @@ impl PieceBoard {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct GameState {
     p1_turn_to_move: bool,
     move_number: usize,
@@ -203,6 +207,21 @@ pub struct GameState {
     piece_board: Arc<PieceBoard>,
     hash: Zobrist
 }
+
+impl Hash for GameState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash.hash());
+        state.finish();
+    }
+}
+
+impl PartialEq for GameState {
+    fn eq(&self, other: &GameState) -> bool {
+        self.hash.hash() == other.hash.hash()
+    }
+}
+
+impl Eq for GameState {}
 
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -491,7 +510,13 @@ impl GameState {
         let switch_phases = placement_bit == LAST_P2_PLACEMENT_MASK;
         let new_p1_turn_to_move = if switch_players { false } else if switch_phases { true } else { self.p1_turn_to_move };
         let new_hash = self.hash.place_piece(piece, &Square::from_bit_board(placement_bit), self.p1_turn_to_move, switch_players, switch_phases);
-        let new_phase = if switch_phases { Phase::PlayPhase(PlayPhase::initial(new_hash)) } else { Phase::PlacePhase };
+        let new_phase = if switch_phases {
+            let hash_history = List::new();
+            let hash_history = hash_history.append(new_hash);
+            Phase::PlayPhase(PlayPhase::initial(new_hash, hash_history))
+        } else {
+            Phase::PlacePhase
+        };
 
         Self {
             p1_turn_to_move: new_p1_turn_to_move,
@@ -504,12 +529,14 @@ impl GameState {
 
     fn pass(&self) -> Self {
         let hash = self.hash.pass(self.get_current_step());
+        let play_phase = self.unwrap_play_phase();
+        let hash_history = play_phase.hash_history.append(hash);
 
         GameState {
-            phase: Phase::PlayPhase(PlayPhase::initial(hash)),
+            phase: Phase::PlayPhase(PlayPhase::initial(hash, hash_history)),
             p1_turn_to_move: !self.p1_turn_to_move,
             move_number: self.move_number + if self.p1_turn_to_move { 0 } else { 1 },
-            piece_board: Arc::new(self.piece_board.clone_with_actions(&self.unwrap_play_phase().actions_this_turn)),
+            piece_board: Arc::new(self.piece_board.clone_with_actions(&play_phase.actions_this_turn)),
             hash
         }
     }
@@ -524,14 +551,17 @@ impl GameState {
         let new_actions = if is_last_step { vec![] } else { next_actions };
         let new_piece_board_state = &new_piece_board.get_piece_board(&new_actions);
         let new_hash = self.hash.move_piece(self, new_piece_board_state, new_step, new_p1_turn_to_move);
+        let curr_play_phase = self.unwrap_play_phase();
 
         let new_play_phase = if is_last_step {
-            PlayPhase::initial(new_hash)
-        } else { 
+            let hash_history = curr_play_phase.hash_history.append(new_hash);
+            PlayPhase::initial(new_hash, hash_history)
+        } else {
             PlayPhase {
                 actions_this_turn: new_actions,
-                first_step_hash: self.unwrap_play_phase().first_step_hash,
-                push_pull_state: self.get_next_push_pull_state(square, direction)
+                first_step_hash: curr_play_phase.first_step_hash,
+                push_pull_state: self.get_next_push_pull_state(square, direction),
+                hash_history: curr_play_phase.hash_history.clone()
             }
         };
 
@@ -896,11 +926,13 @@ impl FromStr for GameState {
 
         let piece_board = PieceBoard::new(p1_pieces, elephants, camels, horses, dogs, cats, rabbits);
         let hash = Zobrist::from_piece_board(&piece_board.0, p1_turn_to_move, 0);
+        let hash_history = List::new();
+        let hash_history = hash_history.append(hash);
 
         Ok(GameState {
             p1_turn_to_move,
             move_number,
-            phase: Phase::PlayPhase(PlayPhase::initial(hash)),
+            phase: Phase::PlayPhase(PlayPhase::initial(hash, hash_history)),
             hash,
             piece_board: Arc::new(piece_board)
         })
@@ -937,11 +969,12 @@ fn convert_piece_to_letter(piece: Piece, is_p1: bool) -> String {
 }
 
 impl PlayPhase {
-    fn initial(first_step_hash: Zobrist) -> Self {
+    fn initial(first_step_hash: Zobrist, hash_history: List<Zobrist>) -> Self {
         PlayPhase {
             actions_this_turn: vec![],
             push_pull_state: PushPullState::None,
-            first_step_hash
+            first_step_hash,
+            hash_history
         }
     }
 

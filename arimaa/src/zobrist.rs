@@ -63,6 +63,10 @@ impl Zobrist {
 
         Zobrist { hash }
     }
+
+    pub fn hash(&self) -> u64 {
+        self.hash
+    }
 }
 
 fn get_step_value(prev_step: usize, new_step: usize) -> u64 {

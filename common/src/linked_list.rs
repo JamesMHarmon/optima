@@ -1,11 +1,11 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct List<T> {
     head: Link<T>,
 }
 
-type Link<T> = Option<Rc<Node<T>>>;
+type Link<T> = Option<Arc<Node<T>>>;
 
 #[derive(Debug)]
 struct Node<T> {
@@ -23,7 +23,7 @@ impl<T> List<T> {
         let len = self.len() + 1;
 
         List {
-            head: Some(Rc::new(Node {
+            head: Some(Arc::new(Node {
                 elem,
                 next: self.head.clone(),
                 len
