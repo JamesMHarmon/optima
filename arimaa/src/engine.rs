@@ -244,7 +244,7 @@ impl Display for GameState {
                 let square = Square::from_index(idx);
                 let letter = if let Some(piece) = self.get_piece_type_at_square(&square, piece_board) {
                     let is_p1_piece = self.is_p1_piece(square.as_bit_board(), piece_board);
-                    convert_piece_to_letter(piece, is_p1_piece)
+                    convert_piece_to_letter(&piece, is_p1_piece)
                 } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
                     "x".to_string()
                 } else {
@@ -385,6 +385,15 @@ impl GameState {
         match &self.phase {
             Phase::PlayPhase(_) => true,
             _ => false
+        }
+    }
+
+    pub fn get_piece_type_at_square(&self, square: &Square, piece_board: &PieceBoardState) -> Option<Piece> {
+        let square_bit = square.as_bit_board();
+        if square_bit & piece_board.all_pieces != 0 {
+            Some(self.get_piece_type_at_bit(square_bit, piece_board))
+        } else {
+            None
         }
     }
 
@@ -642,15 +651,6 @@ impl GameState {
         }
 
         false
-    }
-
-    fn get_piece_type_at_square(&self, square: &Square, piece_board: &PieceBoardState) -> Option<Piece> {
-        let square_bit = square.as_bit_board();
-        if square_bit & piece_board.all_pieces != 0 {
-            Some(self.get_piece_type_at_bit(square_bit, piece_board))
-        } else {
-            None
-        }
     }
 
     fn get_piece_type_at_bit(&self, square_bit: u64, piece_board: &PieceBoardState) -> Piece {
@@ -971,7 +971,7 @@ fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
     piece.map(|p| (p, is_p1))
 }
 
-fn convert_piece_to_letter(piece: Piece, is_p1: bool) -> String {
+pub fn convert_piece_to_letter(piece: &Piece, is_p1: bool) -> String {
     let letter = match piece {
         Piece::Elephant => "E",
         Piece::Camel => "M",
