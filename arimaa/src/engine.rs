@@ -49,7 +49,8 @@ pub struct PlayPhase {
     actions_this_turn: Vec<Action>,
     push_pull_state: PushPullState,
     first_step_hash: Zobrist,
-    hash_history: List<Zobrist>
+    hash_history: List<Zobrist>,
+    piece_trapped_this_turn: bool
 }
 
 #[derive(Clone, Debug)]
@@ -151,21 +152,22 @@ impl PieceBoard {
     }
 
     fn clone_with_actions(&self, move_actions: &[Action]) -> PieceBoard {
-        let new_piece_board = self.get_piece_board(move_actions);
+        let (new_piece_board, _) = self.get_piece_board(move_actions);
         PieceBoard(new_piece_board.clone())
     }
 
-    fn get_piece_board(&self, move_actions: &[Action]) -> PieceBoardState {
+    fn get_piece_board(&self, move_actions: &[Action]) -> (PieceBoardState, bool) {
         let mut piece_board_state = self.0.clone();
+        let mut animal_was_trapped = false;
 
         for move_action in move_actions {
             if let Action::Move(square, direction) = move_action {
                 Self::move_piece(&mut piece_board_state, square, direction);
-                Self::remove_trapped_pieces(&mut piece_board_state);
+                animal_was_trapped = Self::remove_trapped_pieces(&mut piece_board_state);
             }
         }
 
-        piece_board_state
+        (piece_board_state, animal_was_trapped)
     }
 
     fn move_piece(piece_board_state: &mut PieceBoardState, square: &Square, direction: &Direction) {
@@ -182,10 +184,11 @@ impl PieceBoard {
         piece_board.all_pieces = shift_piece_in_direction(piece_board.all_pieces, source_square_bit, direction);
     }
 
-    fn remove_trapped_pieces(piece_board_state: &mut PieceBoardState) {
+    fn remove_trapped_pieces(piece_board_state: &mut PieceBoardState) -> bool {
         let trapped_animal_bits = piece_board_state.get_trapped_piece_bits();
+        let animal_is_trapped = trapped_animal_bits != 0;
 
-        if trapped_animal_bits != 0 {
+        if animal_is_trapped {
             let untrapped_animal_bits = !trapped_animal_bits;
             piece_board_state.elephants &= untrapped_animal_bits;
             piece_board_state.camels &= untrapped_animal_bits;
@@ -196,6 +199,8 @@ impl PieceBoard {
             piece_board_state.p1_pieces &= untrapped_animal_bits;
             piece_board_state.all_pieces &= untrapped_animal_bits;
         }
+
+        animal_is_trapped
     }
 }
 
@@ -239,7 +244,7 @@ impl Display for GameState {
                 let square = Square::from_index(idx);
                 let letter = if let Some(piece) = self.get_piece_type_at_square(&square, piece_board) {
                     let is_p1_piece = self.is_p1_piece(square.as_bit_board(), piece_board);
-                    convert_piece_to_letter(piece, is_p1_piece)
+                    convert_piece_to_letter(&piece, is_p1_piece)
                 } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
                     "x".to_string()
                 } else {
@@ -293,7 +298,7 @@ impl GameState {
         let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {
             let mut valid_actions = Vec::new();
             // If this is the last move, then verify that there are at least two actions to ensure that the action taken will make progress, not resulting in a pass like move.
-            let required_number_of_valid_actions = if play_phase.get_step() == 3 { 2 } else { 1 };
+            let required_number_of_valid_actions = if play_phase.get_step() == 3 && !play_phase.piece_trapped_this_turn { 2 } else { 1 };
             if play_phase.push_pull_state.is_must_complete_push() {
                 let mut valid_actions = self.get_must_complete_push_actions(piece_board);
                 self.remove_passing_like_actions(&mut valid_actions);
@@ -355,7 +360,7 @@ impl GameState {
 
     pub fn get_piece_board_for_step(&self, step: usize) -> PieceBoardState {
         let actions = &self.unwrap_play_phase().actions_this_turn[0..step];
-        self.piece_board.get_piece_board(actions)
+        self.piece_board.get_piece_board(actions).0
     }
 
     pub fn get_piece_board(&self) -> PieceBoardState {
@@ -365,7 +370,7 @@ impl GameState {
             &[] as &[Action]
         };
 
-        self.piece_board.get_piece_board(actions)
+        self.piece_board.get_piece_board(actions).0
     }
 
     pub fn is_p1_turn_to_move(&self) -> bool {
@@ -376,18 +381,41 @@ impl GameState {
         self.unwrap_play_phase().get_step()
     }
 
-    pub fn is_play_state(&self) -> bool {
+    pub fn is_play_phase(&self) -> bool {
         match &self.phase {
             Phase::PlayPhase(_) => true,
             _ => false
         }
     }
 
+    pub fn get_piece_type_at_square(&self, square: &Square, piece_board: &PieceBoardState) -> Option<Piece> {
+        let square_bit = square.as_bit_board();
+        if square_bit & piece_board.all_pieces != 0 {
+            Some(self.get_piece_type_at_bit(square_bit, piece_board))
+        } else {
+            None
+        }
+    }
+
+    pub fn get_trapped_animal_for_action(&self, action: &Action) -> Option<Square> {
+        let mut piece_board_state = self.get_piece_board();
+        if let Action::Move(square, direction) = action {
+            PieceBoard::move_piece(&mut piece_board_state, square, direction);
+            let trapped_animal_bits = piece_board_state.get_trapped_piece_bits();
+            if trapped_animal_bits != 0 {
+                return Some(Square::from_bit_board(trapped_animal_bits));
+            }
+        }
+
+        None
+    }
+
     fn can_pass(&self) -> bool {
         self.as_play_phase().map_or(false, |play_phase|
             play_phase.get_step() >= 1 &&
             !play_phase.push_pull_state.is_must_complete_push() &&
-            play_phase.first_step_hash != self.hash.exclude_step(play_phase.get_step())
+            play_phase.first_step_hash != self.hash.exclude_step(play_phase.get_step()) &&
+            !hash_history_contains_hash_twice(&play_phase.hash_history, &self.hash.pass(play_phase.get_step()))
         )
     }
 
@@ -530,10 +558,11 @@ impl GameState {
     fn pass(&self) -> Self {
         let hash = self.hash.pass(self.get_current_step());
         let play_phase = self.unwrap_play_phase();
-        let hash_history = play_phase.hash_history.append(hash);
+        let new_hash_history = if play_phase.piece_trapped_this_turn { List::new() } else { play_phase.hash_history.clone() };
+        let new_hash_history = new_hash_history.append(hash);
 
         GameState {
-            phase: Phase::PlayPhase(PlayPhase::initial(hash, hash_history)),
+            phase: Phase::PlayPhase(PlayPhase::initial(hash, new_hash_history)),
             p1_turn_to_move: !self.p1_turn_to_move,
             move_number: self.move_number + if self.p1_turn_to_move { 0 } else { 1 },
             piece_board: Arc::new(self.piece_board.clone_with_actions(&play_phase.actions_this_turn)),
@@ -542,6 +571,7 @@ impl GameState {
     }
 
     fn move_piece(&self, square: &Square, direction: &Direction) -> Self {
+        let curr_play_phase = self.unwrap_play_phase();
         let next_actions = self.get_next_actions(square, direction);
         let is_last_step = next_actions.len() >= 4;
         let new_piece_board = self.get_next_piece_board(&next_actions);
@@ -549,19 +579,20 @@ impl GameState {
         let new_step = if is_last_step { 0 } else { next_actions.len() };
         let new_move_number = self.move_number + if is_last_step && new_p1_turn_to_move { 1 } else { 0 };
         let new_actions = if is_last_step { vec![] } else { next_actions };
-        let new_piece_board_state = &new_piece_board.get_piece_board(&new_actions);
+        let (new_piece_board_state, new_animal_was_trapped) = &new_piece_board.get_piece_board(&new_actions);
         let new_hash = self.hash.move_piece(self, new_piece_board_state, new_step, new_p1_turn_to_move);
-        let curr_play_phase = self.unwrap_play_phase();
+        let new_hash_history = if *new_animal_was_trapped { List::new() } else { curr_play_phase.hash_history.clone() };
 
         let new_play_phase = if is_last_step {
-            let hash_history = curr_play_phase.hash_history.append(new_hash);
+            let hash_history = new_hash_history.append(new_hash);
             PlayPhase::initial(new_hash, hash_history)
         } else {
             PlayPhase {
                 actions_this_turn: new_actions,
                 first_step_hash: curr_play_phase.first_step_hash,
                 push_pull_state: self.get_next_push_pull_state(square, direction),
-                hash_history: curr_play_phase.hash_history.clone()
+                hash_history: new_hash_history,
+                piece_trapped_this_turn: curr_play_phase.piece_trapped_this_turn | new_animal_was_trapped
             }
         };
 
@@ -633,15 +664,6 @@ impl GameState {
         }
 
         false
-    }
-
-    fn get_piece_type_at_square(&self, square: &Square, piece_board: &PieceBoardState) -> Option<Piece> {
-        let square_bit = square.as_bit_board();
-        if square_bit & piece_board.all_pieces != 0 {
-            Some(self.get_piece_type_at_bit(square_bit, piece_board))
-        } else {
-            None
-        }
     }
 
     fn get_piece_type_at_bit(&self, square_bit: u64, piece_board: &PieceBoardState) -> Piece {
@@ -767,16 +789,19 @@ impl GameState {
 
     fn remove_passing_like_actions(&self, valid_actions: &mut Vec<Action>) {
         let play_phase = self.unwrap_play_phase();
-        if play_phase.get_step() == 3 {
+        if play_phase.get_step() == 3 && !play_phase.piece_trapped_this_turn {
             let first_step_hash = play_phase.first_step_hash;
             let mut actions_to_remove = Vec::with_capacity(0);
+            let hash_history = &play_phase.hash_history;
+
             for action in valid_actions.iter() {
                 if let Action::Move(square, direction) = action {
                     let next_actions = self.get_next_actions(&square, &direction);
                     let new_piece_board = &self.get_next_piece_board(&next_actions).0;
-                    let new_hash = self.hash.move_piece(self, new_piece_board, 0, self.is_p1_turn_to_move());
+                    let new_hash_no_player_switch = self.hash.move_piece(self, new_piece_board, 0, self.is_p1_turn_to_move());
+                    let new_hash_switch_players = self.hash.move_piece(self, new_piece_board, 0, !self.is_p1_turn_to_move());
 
-                    if new_hash == first_step_hash {
+                    if new_hash_no_player_switch == first_step_hash || hash_history_contains_hash_twice(hash_history, &new_hash_switch_players) {
                         actions_to_remove.push(action.clone());
                     }
                 }
@@ -842,6 +867,10 @@ fn shift_in_direction(bits: u64, direction: &Direction) -> u64 {
         Direction::Down => shift_down!(bits),
         Direction::Left => shift_left!(bits)
     }
+}
+
+fn hash_history_contains_hash_twice(hash_history: &List<Zobrist>, hash: &Zobrist) -> bool {
+    hash_history.iter().filter(|h| *h == hash).count() >= 2
 }
 
 impl GameStateTrait for GameState {
@@ -955,7 +984,7 @@ fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
     piece.map(|p| (p, is_p1))
 }
 
-fn convert_piece_to_letter(piece: Piece, is_p1: bool) -> String {
+pub fn convert_piece_to_letter(piece: &Piece, is_p1: bool) -> String {
     let letter = match piece {
         Piece::Elephant => "E",
         Piece::Camel => "M",
@@ -974,7 +1003,8 @@ impl PlayPhase {
             actions_this_turn: vec![],
             push_pull_state: PushPullState::None,
             first_step_hash,
-            hash_history
+            hash_history,
+            piece_trapped_this_turn: false
         }
     }
 
@@ -2749,6 +2779,72 @@ mod tests {
         assert_eq!(game_state.is_terminal(), Some(Value([0.0,1.0])));
 
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[]");
+    }
+
+    #[test]
+    fn test_valid_actions_repeated_positions() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8|               r |
+             7|               d |
+             6|     x     x     |
+             5|       m         |
+             4|                 |
+             3|     x E   x     |
+             2|                 |
+             1|               R |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w, p]");
+        let game_state = game_state.take_action(&Action::Pass);
+
+        // First occurance of position
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('h', 7), Direction::Down));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('h', 6), Direction::Up));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d3n, h1n, d3e, d3s, d3w, h1w]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w, p]");
+        let game_state = game_state.take_action(&Action::Pass);
+
+        // Second occurance of position
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('h', 7), Direction::Down));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Down));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('h', 6), Direction::Up));
+        let game_state = game_state.take_action(&Action::Pass);
+
+        // Would be third occurance of position
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
+
+        // Should not allow pass here
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w]");
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
+
+        // Should not allow last move to be the final repeat
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d3e, d3w, h1w, d5s, p]");
     }
 
     #[test]

@@ -84,7 +84,7 @@ impl model::model::Model for Model {
         let mut play_samples = Vec::with_capacity(upper.unwrap_or(0));
         let mut place_samples = Vec::with_capacity(upper.unwrap_or(0));
         for sample_metric in sample_metrics {
-            if sample_metric.game_state.is_play_state() {
+            if sample_metric.game_state.is_play_phase() {
                 play_samples.push(sample_metric);
             } else {
                 place_samples.push(sample_metric);
@@ -116,7 +116,7 @@ impl model::analytics::GameAnalyzer for Analyzer {
     type Value = Value;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
-        if game_state.is_play_state() {
+        if game_state.is_play_phase() {
             Either::Left(self.play_analyzer.get_state_analysis(game_state))
         } else {
             Either::Right(self.place_analyzer.get_state_analysis(game_state))

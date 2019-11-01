@@ -7,7 +7,7 @@ use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Vi
 use common::bits::single_bit_index;
 use failure::{format_err};
 
-#[derive(Hash, Eq, PartialEq, Clone, Copy)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Ord, PartialOrd)]
 pub struct Square(u8);
 
 impl Square {
@@ -180,12 +180,12 @@ impl FromStr for Piece {
         if chars.len() == 1 {
             if let Some(c) = chars.get(0) {
                 let piece = match c {
-                    'e' => Some(Piece::Elephant),
-                    'm' => Some(Piece::Camel),
-                    'h' => Some(Piece::Horse),
-                    'd' => Some(Piece::Dog),
-                    'c' => Some(Piece::Cat),
-                    'r' => Some(Piece::Rabbit),
+                    'E' | 'e' => Some(Piece::Elephant),
+                    'M' | 'm' => Some(Piece::Camel),
+                    'H' | 'h' => Some(Piece::Horse),
+                    'D' | 'd' => Some(Piece::Dog),
+                    'C' | 'c' => Some(Piece::Cat),
+                    'R' | 'r' => Some(Piece::Rabbit),
                     _ => None
                 };
 
