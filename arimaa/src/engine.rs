@@ -381,7 +381,7 @@ impl GameState {
         self.unwrap_play_phase().get_step()
     }
 
-    pub fn is_play_state(&self) -> bool {
+    pub fn is_play_phase(&self) -> bool {
         match &self.phase {
             Phase::PlayPhase(_) => true,
             _ => false
@@ -395,6 +395,19 @@ impl GameState {
         } else {
             None
         }
+    }
+
+    pub fn get_trapped_animal_for_action(&self, action: &Action) -> Option<Square> {
+        let mut piece_board_state = self.get_piece_board();
+        if let Action::Move(square, direction) = action {
+            PieceBoard::move_piece(&mut piece_board_state, square, direction);
+            let trapped_animal_bits = piece_board_state.get_trapped_piece_bits();
+            if trapped_animal_bits != 0 {
+                return Some(Square::from_bit_board(trapped_animal_bits));
+            }
+        }
+
+        None
     }
 
     fn can_pass(&self) -> bool {

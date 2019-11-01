@@ -270,7 +270,7 @@ where
         self.get_node_details(*root_index, true).await
     }
 
-    pub async fn get_principal_variation(&mut self) -> Result<Vec<(A, PUCT)>, Error> {
+    pub async fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>, Error> {
         let arena_borrow = &self.arena.borrow();
 
         let mut node_index = *self.root.as_ref().ok_or(format_err!("No root node found!"))?;
