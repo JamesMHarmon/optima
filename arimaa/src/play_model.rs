@@ -1,3 +1,4 @@
+use model::analysis_cache_queue::{cache,AnalysisCacheQueueModel};
 use model::model::ModelOptions;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
@@ -174,7 +175,7 @@ fn map_coord_to_policy_output_idx_left(square: &Square) -> usize {
 
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<Engine,Mapper>;
+    type M = AnalysisCacheQueueModel<TensorflowModel<Engine,Mapper>>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
@@ -197,10 +198,12 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowModel::new(
-            model_info.clone(),
-            Engine::new(),
-            mapper
+        cache(
+            TensorflowModel::new(
+                model_info.clone(),
+                Engine::new(),
+                mapper
+            )
         )
     }
 

@@ -1,5 +1,5 @@
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
 use chashmap::CHashMap;
 use crossbeam_queue::ArrayQueue;
 use std::hash::{Hash,Hasher};
@@ -73,7 +73,9 @@ where
         AnalysisCacheAnalyzer {
             analyzer,
             cache: self.cache.clone(),
-            queue: self.queue.clone()
+            queue: self.queue.clone(),
+            hits: AtomicUsize::new(0),
+            misses: AtomicUsize::new(0)
         }
     }
 }
@@ -87,7 +89,9 @@ where
 {
     analyzer: Analyzer,
     cache: Arc<CHashMap<u64,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>,
-    queue: Arc<ArrayQueue<u64>>
+    queue: Arc<ArrayQueue<u64>>,
+    hits: AtomicUsize,
+    misses: AtomicUsize
 }
 
 impl<Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<Analyzer>
@@ -109,7 +113,15 @@ where
 
         if let Some(analysis) = cache.get(&game_state_hash) {
             let analysis = analysis.clone();
+            self.hits.fetch_add(1, Ordering::SeqCst);
             return futures::future::ready(analysis).boxed();
+        }
+
+        let misses = self.misses.fetch_add(1, Ordering::SeqCst);
+
+        if misses % 1_000_000 == 0 {
+            let hits = self.hits.load(Ordering::SeqCst);
+            println!("Cache hits: {}", hits as f64 / (misses + hits) as f64);
         }
 
         let cache = cache.clone();
@@ -144,7 +156,7 @@ impl Hasher for IdentityHasher {
         self.hash
     }
 
-    fn write(&mut self, bytes: &[u8]) {
+    fn write(&mut self, _bytes: &[u8]) {
         panic!("Not Supported: write for identity hash")
     }
 
