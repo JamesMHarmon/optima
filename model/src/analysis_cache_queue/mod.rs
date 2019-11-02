@@ -1,7 +1,8 @@
 use std::pin::Pin;
 use std::sync::Arc;
 use chashmap::CHashMap;
-use std::hash::Hash;
+use crossbeam_queue::ArrayQueue;
+use std::hash::{Hash,Hasher};
 use super::analytics::GameStateAnalysis;
 use super::analytics::GameAnalyzer;
 use super::model::TrainOptions;
@@ -9,52 +10,45 @@ use super::position_metrics::PositionMetrics;
 use super::model::Model;
 use super::model_info::ModelInfo;
 use futures::future::FutureExt;
-use std::marker::PhantomData;
 use std::future::Future;
 
 use failure::Error;
 
-pub trait ShouldCache {
-    type State;
+const CACHE_SIZE: usize = 5_000_000;
+const CACHE_BUFFER: usize = 5_000;
 
-    fn should_cache(game_state: &Self::State) -> bool;
-}
-
-pub struct AnalysisCacheModel<C,M>
+pub struct AnalysisCacheQueueModel<M>
 where
     M: Model,
-    C: ShouldCache<State=M::State> + Send,
-    <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash,
+    <<M as Model>::Analyzer as GameAnalyzer>::State: Hash,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone,
     <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
     model: M,
-    phantom: PhantomData<C>,
-    cache: Arc<CHashMap<<<M as Model>::Analyzer as GameAnalyzer>::State,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action,<<M as Model>::Analyzer as GameAnalyzer>::Value>>>
+    cache: Arc<CHashMap<u64,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action,<<M as Model>::Analyzer as GameAnalyzer>::Value>>>,
+    queue: Arc<ArrayQueue<u64>>
 }
 
-pub fn cache<C,M>(model: M) -> AnalysisCacheModel<C,M>
+pub fn cache<M>(model: M) -> AnalysisCacheQueueModel<M>
 where
     M: Model,
-    C: ShouldCache<State=M::State> + Send,
-    <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash,
+    <<M as Model>::Analyzer as GameAnalyzer>::State: Hash,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone,
     <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
-    AnalysisCacheModel {
+    AnalysisCacheQueueModel {
         model,
-        cache: Arc::new(CHashMap::with_capacity(5_000_000)),
-        phantom: PhantomData
+        cache: Arc::new(CHashMap::with_capacity(CACHE_SIZE)),
+        queue: Arc::new(ArrayQueue::new(CACHE_SIZE))
     }
 }
 
-impl<C,M> Model for AnalysisCacheModel<C,M>
+impl<M> Model for AnalysisCacheQueueModel<M>
 where
     M: Model,
     M::State: Send + Sync + 'static,
     M::Action: Clone + Send + Sync + 'static,
     M::Value: Clone + Send + Sync + 'static,
-    C: ShouldCache<State=M::State> + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::State: PartialEq + Hash + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone + Send + Sync,
     <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone + Send + Sync + 'static,
@@ -63,7 +57,7 @@ where
     type State = M::State;
     type Action = M::Action;
     type Value = M::Value;
-    type Analyzer = AnalysisCacheAnalyzer<C,M::Analyzer>;
+    type Analyzer = AnalysisCacheAnalyzer<M::Analyzer>;
 
     fn get_model_info(&self) -> &ModelInfo {
         self.model.get_model_info()
@@ -79,30 +73,28 @@ where
         AnalysisCacheAnalyzer {
             analyzer,
             cache: self.cache.clone(),
-            phantom: PhantomData
+            queue: self.queue.clone()
         }
     }
 }
 
-pub struct AnalysisCacheAnalyzer<C,Analyzer>
+pub struct AnalysisCacheAnalyzer<Analyzer>
 where
     Analyzer: GameAnalyzer,
-    C: ShouldCache + Send,
-    Analyzer::State: PartialEq + Hash,
+    Analyzer::State: Hash,
     Analyzer::Action: Clone,
     Analyzer::Value: Clone
 {
     analyzer: Analyzer,
-    phantom: PhantomData<C>,
-    cache: Arc<CHashMap<Analyzer::State,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>
+    cache: Arc<CHashMap<u64,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>,
+    queue: Arc<ArrayQueue<u64>>
 }
 
-impl<C,Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<C,Analyzer>
+impl<Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<Analyzer>
 where
     Analyzer: GameAnalyzer,
-    C: ShouldCache<State=Analyzer::State> + Send,
     Analyzer::Future: Send + 'static,
-    Analyzer::State: Clone + PartialEq + Hash + Send + Sync + 'static,
+    Analyzer::State: Hash + Send + Sync + 'static,
     Analyzer::Action: Clone + Send + Sync + 'static,
     Analyzer::Value: Clone + Send + Sync + 'static
 {
@@ -112,24 +104,59 @@ where
     type Future = Pin<Box<dyn Future<Output=GameStateAnalysis<Self::Action,Analyzer::Value>> + Send>>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
-        let should_cache = C::should_cache(&game_state);
         let cache = &self.cache;
+        let game_state_hash = calculate_hash(game_state);
 
-        if should_cache {
-            if let Some(analysis) = cache.get(&game_state) {
-                let analysis = analysis.clone();
-                return futures::future::ready(analysis).boxed();
-            }
+        if let Some(analysis) = cache.get(&game_state_hash) {
+            let analysis = analysis.clone();
+            return futures::future::ready(analysis).boxed();
         }
 
         let cache = cache.clone();
-        let game_state = game_state.clone();
+        let queue = self.queue.clone();
         Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
-            if should_cache {
-                cache.insert(game_state, analysis.clone());
+            if cache.len() >= CACHE_SIZE - CACHE_BUFFER {
+                if let Ok(item_to_remove) = queue.pop() {
+                    cache.remove(&item_to_remove);
+                }
             }
+
+            cache.insert(game_state_hash, analysis.clone());
+            queue.push(game_state_hash).unwrap();
 
             analysis
         }).boxed()
+    }
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = IdentityHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
+struct IdentityHasher {
+    hash: u64
+}
+
+impl Hasher for IdentityHasher {
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        panic!("Not Supported: write for identity hash")
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.hash = i;
+    }
+}
+
+impl IdentityHasher {
+    fn new() -> Self {
+        Self {
+            hash: 0
+        }
     }
 }
