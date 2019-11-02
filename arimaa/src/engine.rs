@@ -111,6 +111,15 @@ impl PieceBoardState {
             0
         }
     }
+
+    pub fn get_piece_type_at_square(&self, square: &Square) -> Option<Piece> {
+        let square_bit = square.as_bit_board();
+        if square_bit & self.all_pieces != 0 {
+            Some(get_piece_type_at_bit(square_bit, self))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -242,8 +251,8 @@ impl Display for GameState {
             for col_idx in 0..BOARD_WIDTH {
                 let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
                 let square = Square::from_index(idx);
-                let letter = if let Some(piece) = self.get_piece_type_at_square(&square, piece_board) {
-                    let is_p1_piece = self.is_p1_piece(square.as_bit_board(), piece_board);
+                let letter = if let Some(piece) = piece_board.get_piece_type_at_square(&square) {
+                    let is_p1_piece = is_p1_piece(square.as_bit_board(), piece_board);
                     convert_piece_to_letter(&piece, is_p1_piece)
                 } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
                     "x".to_string()
@@ -388,22 +397,17 @@ impl GameState {
         }
     }
 
-    pub fn get_piece_type_at_square(&self, square: &Square, piece_board: &PieceBoardState) -> Option<Piece> {
-        let square_bit = square.as_bit_board();
-        if square_bit & piece_board.all_pieces != 0 {
-            Some(self.get_piece_type_at_bit(square_bit, piece_board))
-        } else {
-            None
-        }
-    }
-
-    pub fn get_trapped_animal_for_action(&self, action: &Action) -> Option<Square> {
+    pub fn get_trapped_animal_for_action(&self, action: &Action) -> Option<(Square,Piece,bool)> {
         let mut piece_board_state = self.get_piece_board();
         if let Action::Move(square, direction) = action {
             PieceBoard::move_piece(&mut piece_board_state, square, direction);
             let trapped_animal_bits = piece_board_state.get_trapped_piece_bits();
             if trapped_animal_bits != 0 {
-                return Some(Square::from_bit_board(trapped_animal_bits));
+                let square = Square::from_bit_board(trapped_animal_bits);
+                let piece = piece_board_state.get_piece_type_at_square(&square).unwrap();
+                let is_p1_piece = piece_board_state.get_bits_for_piece(&piece, true) & square.as_bit_board() != 0;
+
+                return Some((square, piece, is_p1_piece));
             }
         }
 
@@ -496,7 +500,7 @@ impl GameState {
         let mut valid_actions = vec![];
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
             let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction) & curr_player_piece_mask;
-            if pushing_piece_bit != 0 && self.get_piece_type_at_bit(pushing_piece_bit, piece_board) > *pushed_piece {
+            if pushing_piece_bit != 0 && get_piece_type_at_bit(pushing_piece_bit, piece_board) > *pushed_piece {
                 valid_actions.push(Action::Move(Square::from_bit_board(pushing_piece_bit), *direction));
             }
         }
@@ -644,9 +648,9 @@ impl GameState {
         // Check if previous move can count as a pull, if so, do that.
         // Otherwise state that it must be followed with a push.
         if is_opponent_piece && !self.move_can_be_counted_as_pull(source_square_bit, direction, piece_board) {
-            PushPullState::MustCompletePush(*square, self.get_piece_type_at_bit(source_square_bit, piece_board))
+            PushPullState::MustCompletePush(*square, get_piece_type_at_bit(source_square_bit, piece_board))
         } else if !is_opponent_piece && !play_phase.push_pull_state.is_must_complete_push() {
-            PushPullState::PossiblePull(*square, self.get_piece_type_at_bit(source_square_bit, piece_board))
+            PushPullState::PossiblePull(*square, get_piece_type_at_bit(source_square_bit, piece_board))
         } else {
             PushPullState::None
         }
@@ -656,7 +660,7 @@ impl GameState {
         let play_phase = self.unwrap_play_phase();
         if let PushPullState::PossiblePull(prev_move_square, my_piece) = &play_phase.push_pull_state {
             if prev_move_square.as_bit_board() == shift_in_direction(new_move_square_bit, direction) {
-                let their_piece = self.get_piece_type_at_bit(new_move_square_bit, piece_board);
+                let their_piece = get_piece_type_at_bit(new_move_square_bit, piece_board);
                 if my_piece > &their_piece {
                     return true;
                 }
@@ -664,26 +668,6 @@ impl GameState {
         }
 
         false
-    }
-
-    fn get_piece_type_at_bit(&self, square_bit: u64, piece_board: &PieceBoardState) -> Piece {
-        if piece_board.rabbits & square_bit != 0 {
-            Piece::Rabbit
-        } else if piece_board.elephants & square_bit != 0 {
-            Piece::Elephant
-        } else if piece_board.camels & square_bit != 0 {
-            Piece::Camel
-        } else if piece_board.horses & square_bit != 0 {
-            Piece::Horse
-        } else if piece_board.dogs & square_bit != 0 {
-            Piece::Dog
-        } else {
-            Piece::Cat
-        }
-    }
-
-    fn is_p1_piece(&self, square_bit: u64, piece_board: &PieceBoardState) -> bool {
-        (square_bit & piece_board.p1_pieces) != 0
     }
 
     fn is_their_piece(&self, square_bit: u64, piece_board: &PieceBoardState) -> bool {
@@ -812,6 +796,26 @@ impl GameState {
             }
         }
     }
+}
+
+fn get_piece_type_at_bit(square_bit: u64, piece_board: &PieceBoardState) -> Piece {
+    if piece_board.rabbits & square_bit != 0 {
+        Piece::Rabbit
+    } else if piece_board.elephants & square_bit != 0 {
+        Piece::Elephant
+    } else if piece_board.camels & square_bit != 0 {
+        Piece::Camel
+    } else if piece_board.horses & square_bit != 0 {
+        Piece::Horse
+    } else if piece_board.dogs & square_bit != 0 {
+        Piece::Dog
+    } else {
+        Piece::Cat
+    }
+}
+
+fn is_p1_piece(square_bit: u64, piece_board: &PieceBoardState) -> bool {
+    (square_bit & piece_board.p1_pieces) != 0
 }
 
 fn animal_is_on_trap(piece_board: &PieceBoardState) -> bool {
