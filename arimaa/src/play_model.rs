@@ -52,26 +52,28 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
         let current_step = game_state.get_current_step();
         let invert = !is_p1_turn_to_move;
-        let mut result_idx = 0;
 
-        for step in (0..=current_step).rev() {
+        for (i, step) in (0..=current_step).rev().enumerate() {
             let piece_board = game_state.get_piece_board_for_step(step);
+            let step_offset = i * BOARDS_PER_STATE;
 
-            for player in &[is_p1_turn_to_move, !is_p1_turn_to_move] {
-                for piece in &[Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit] {
+            for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].into_iter().enumerate() {
+                let player_offset = j * NUM_PIECE_TYPES;
+
+                for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
                     let piece_bits = piece_board.get_bits_for_piece(piece, *player);
 
-                    let end_idx = result_idx + BOARD_SIZE;
-                    set_board_bits_invertable(&mut result[result_idx..end_idx], piece_bits, invert);
-                    result_idx = end_idx;
+                    let offset = step_offset + player_offset + piece_offset;
+                    set_board_bits_invertable(&mut result, offset, piece_bits, invert);
                 }
             }
         }
 
-        let end_idx = result_idx + BOARD_SIZE;
         let step_num_normalized = (current_step as f32) / (MAX_NUM_STEPS - 1) as f32;
-        for cell in &mut result[result_idx..end_idx] {
-            *cell = step_num_normalized;
+        let offset = BOARDS_PER_STATE * MAX_NUM_STEPS;
+        for board_idx in 0..BOARD_SIZE {
+            let cell_idx = board_idx * PLAY_INPUT_C + offset;
+            result[cell_idx] = step_num_normalized;
         }
 
         result
@@ -214,8 +216,11 @@ impl model::model::ModelFactory for ModelFactory {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+
     use super::*;
     use model::tensorflow::model::{Mapper as MapperTrait};
+    use test::Bencher;
 
     #[test]
     fn test_map_action_to_policy_output_idx_pawn_a7_up() {
@@ -393,9 +398,18 @@ mod tests {
         assert_eq!(game_state_to_input, game_state_to_input_inverted);
     }
 
+    const NUM_CHANNELS_PER_STEP: usize = 12;
+    fn get_step_as_vec(input: &[f32], step: usize) -> Vec<f32> {
+        let mut output = Vec::new();
+        for offset in ((step - 1) * NUM_CHANNELS_PER_STEP)..(step * NUM_CHANNELS_PER_STEP) {
+            output.extend(input.iter().skip(offset).step_by(INPUT_C).map(|i| *i));
+        }
+
+        output
+    }
+
     #[test]
     fn test_game_state_to_input_steps() {
-        const STEP_SIZE: usize = BOARD_SIZE * 12;
         let game_state_step1: GameState = "
              1g
               +-----------------+
@@ -434,8 +448,8 @@ mod tests {
         let game_state_to_input_step2_as_first_step = mapper.game_state_to_input(&game_state_step2_as_first_step);
         let game_state_to_input_step2 = mapper.game_state_to_input(&game_state_step2);
 
-        assert_eq!(game_state_to_input_step1[..STEP_SIZE], game_state_to_input_step2[STEP_SIZE..STEP_SIZE * 2]);
-        assert_eq!(game_state_to_input_step2_as_first_step[..STEP_SIZE], game_state_to_input_step2[..STEP_SIZE]);
+        assert_eq!(get_step_as_vec(&game_state_to_input_step1, 1), get_step_as_vec(&game_state_to_input_step2, 2));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step2_as_first_step, 1), get_step_as_vec(&game_state_to_input_step2, 1));
 
         let game_state_step3 = game_state_step2.take_action(&Action::Move(Square::new('a', 2), Direction::Up));
 
@@ -457,9 +471,9 @@ mod tests {
         let game_state_to_input_step3_as_first_step = mapper.game_state_to_input(&game_state_step3_as_first_step);
         let game_state_to_input_step3 = mapper.game_state_to_input(&game_state_step3);
 
-        assert_eq!(game_state_to_input_step1[..STEP_SIZE], game_state_to_input_step3[STEP_SIZE * 2..STEP_SIZE * 3]);
-        assert_eq!(game_state_to_input_step2[..STEP_SIZE], game_state_to_input_step3[STEP_SIZE..STEP_SIZE * 2]);
-        assert_eq!(game_state_to_input_step3_as_first_step[..STEP_SIZE], game_state_to_input_step3[..STEP_SIZE]);
+        assert_eq!(get_step_as_vec(&game_state_to_input_step1, 1), get_step_as_vec(&game_state_to_input_step3, 3));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step2, 1), get_step_as_vec(&game_state_to_input_step3, 2));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step3_as_first_step, 1), get_step_as_vec(&game_state_to_input_step3, 1));
 
         let game_state_step4 = game_state_step3.take_action(&Action::Move(Square::new('a', 3), Direction::Right));
 
@@ -481,10 +495,30 @@ mod tests {
         let game_state_to_input_step4_as_first_step = mapper.game_state_to_input(&game_state_step4_as_first_step);
         let game_state_to_input_step4 = mapper.game_state_to_input(&game_state_step4);
 
-        assert_eq!(game_state_to_input_step1[..STEP_SIZE], game_state_to_input_step4[STEP_SIZE * 3..STEP_SIZE * 4]);
-        assert_eq!(game_state_to_input_step2[..STEP_SIZE], game_state_to_input_step4[STEP_SIZE * 2..STEP_SIZE * 3]);
-        assert_eq!(game_state_to_input_step3[..STEP_SIZE], game_state_to_input_step4[STEP_SIZE..STEP_SIZE * 2]);
-        assert_eq!(game_state_to_input_step4_as_first_step[..STEP_SIZE], game_state_to_input_step4[..STEP_SIZE]);
+        assert_eq!(get_step_as_vec(&game_state_to_input_step1, 1), get_step_as_vec(&game_state_to_input_step4, 4));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step2, 1), get_step_as_vec(&game_state_to_input_step4, 3));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step3, 1), get_step_as_vec(&game_state_to_input_step4, 2));
+        assert_eq!(get_step_as_vec(&game_state_to_input_step4_as_first_step, 1), get_step_as_vec(&game_state_to_input_step4, 1));
+    }
 
+    #[bench]
+    fn bench_game_state_to_input(b: &mut Bencher) {
+        let mapper = Mapper::new();
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| h c d m r d c h |
+             7| r r r r e r r r |
+             6|     x     x     |
+             5|                 |
+             4|                 |
+             3|     x     x     |
+             2| R R R R E R R R |
+             1| H C D M R D C H |
+              +-----------------+
+                a b c d e f g h
+            ".parse().unwrap();
+
+        b.iter(|| mapper.game_state_to_input(&game_state));
     }
 }

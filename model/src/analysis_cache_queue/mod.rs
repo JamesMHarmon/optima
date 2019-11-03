@@ -1,5 +1,5 @@
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
 use chashmap::CHashMap;
 use crossbeam_queue::ArrayQueue;
 use std::hash::{Hash,Hasher};
@@ -26,7 +26,7 @@ where
 {
     model: M,
     cache: Arc<CHashMap<u64,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action,<<M as Model>::Analyzer as GameAnalyzer>::Value>>>,
-    queue: Arc<ArrayQueue<u64>>
+    queue: Arc<(ArrayQueue<u64>, AtomicUsize)>,
 }
 
 pub fn cache<M>(model: M) -> AnalysisCacheQueueModel<M>
@@ -39,7 +39,7 @@ where
     AnalysisCacheQueueModel {
         model,
         cache: Arc::new(CHashMap::with_capacity(CACHE_SIZE)),
-        queue: Arc::new(ArrayQueue::new(CACHE_SIZE))
+        queue: Arc::new((ArrayQueue::new(CACHE_SIZE), AtomicUsize::new(0)))
     }
 }
 
@@ -87,7 +87,7 @@ where
 {
     analyzer: Analyzer,
     cache: Arc<CHashMap<u64,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>,
-    queue: Arc<ArrayQueue<u64>>
+    queue: Arc<(ArrayQueue<u64>, AtomicUsize)>,
 }
 
 impl<Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<Analyzer>
@@ -115,10 +115,13 @@ where
         let cache = cache.clone();
         let queue = self.queue.clone();
         Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
-            if cache.len() >= CACHE_SIZE - CACHE_BUFFER {
+            let (queue, queue_size) = &*queue;
+            if queue_size.load(Ordering::SeqCst) >= CACHE_SIZE - CACHE_BUFFER {
                 if let Ok(item_to_remove) = queue.pop() {
                     cache.remove(&item_to_remove);
                 }
+            } else {
+                queue_size.fetch_add(1, Ordering::SeqCst);
             }
 
             cache.insert(game_state_hash, analysis.clone());

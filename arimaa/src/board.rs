@@ -1,45 +1,46 @@
-use super::constants::{BOARD_WIDTH,BOARD_HEIGHT};
-use common::bits::single_bit_index_u64;
+use super::constants::{BOARD_SIZE,PLAY_INPUT_C,PLACE_INPUT_C};
 
-pub fn set_board_bits_invertable(arr: &mut [f32], board: u64, invert: bool) {
+pub fn set_board_bits_invertable(arr: &mut [f32], offset: usize, board: u64, invert: bool) {
     let mut board = board;
 
     while board != 0 {
-        let board_without_first_bit = board & (board - 1);
-        let removed_bit = board ^ board_without_first_bit;
-        let removed_bit_idx = single_bit_index_u64(removed_bit);
-        let removed_bit_vec_idx = if invert { invert_idx(removed_bit_idx) } else { removed_bit_idx };
+        let bit_idx = board.trailing_zeros() as usize;
+        let removed_bit_board_idx = if invert { invert_idx(bit_idx) } else { bit_idx };
 
-        arr[removed_bit_vec_idx] = 1.0;
+        let cell_idx = removed_bit_board_idx * PLAY_INPUT_C + offset;
 
-        board = board_without_first_bit;
+        arr[cell_idx] = 1.0;
+
+        board = board ^ 1 << bit_idx;
     }
 }
 
-pub fn set_placement_board_bits(arr: &mut [f32], board: u64) {
+pub fn set_placement_board_bits(arr: &mut [f32], offset: usize, board: u64) {
     let mut board = board;
 
     while board != 0 {
-        let board_without_first_bit = board & (board - 1);
-        let removed_bit = board ^ board_without_first_bit;
-        let removed_bit_idx = single_bit_index_u64(removed_bit);
-        let removed_bit_vec_idx = if removed_bit_idx < 16 { removed_bit_idx } else { removed_bit_idx - 32 };
+        let bit_idx = board.trailing_zeros() as usize;
+        let removed_bit_board_idx = if bit_idx < 16 { bit_idx } else { bit_idx - 32 };
 
-        arr[removed_bit_vec_idx] = 1.0;
+        let cell_idx = removed_bit_board_idx * PLACE_INPUT_C + offset;
 
-        board = board_without_first_bit;
+        arr[cell_idx] = 1.0;
+
+        board = board ^ 1 << bit_idx;
     }
 }
 
 fn invert_idx(idx: usize) -> usize {
-    (BOARD_WIDTH * BOARD_HEIGHT) - idx - 1
+    BOARD_SIZE - idx - 1
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::constants::{PLAY_INPUT_SIZE};
     use super::super::action::{Piece,Square};
     use super::super::engine::GameState;
+    use common::bits::single_bit_index_u64;
 
     fn square_to_idx(square: Square) -> usize {
         let bit_board = square.as_bit_board();
@@ -47,8 +48,8 @@ mod tests {
         bit_index
     }
 
-    fn value_at_square(vec: &[f32], col: char, row: usize) -> f32 {
-        let idx = square_to_idx(Square::new(col, row));
+    fn value_at_square(vec: &[f32], offset: usize, col: char, row: usize) -> f32 {
+        let idx = square_to_idx(Square::new(col, row)) * PLAY_INPUT_C + offset;
         vec[idx]
     }
 
@@ -73,28 +74,31 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'a', 1), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'a', 1), 1.0);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'h', 8), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'h', 8), 1.0);
     }
 
     #[test]
@@ -114,28 +118,31 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'b', 8), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'b', 8), 1.0);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'g', 1), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'g', 1), 1.0);
     }
 
     #[test]
@@ -155,27 +162,30 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             false
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'd', 4), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'd', 4), 1.0);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(BOARD_WIDTH * BOARD_HEIGHT);
-        result.extend(std::iter::repeat(0.0).take(BOARD_WIDTH * BOARD_HEIGHT));
+        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
+            rabbit_offset,
             game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
             true
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, 'e', 5), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'e', 5), 1.0);
     }
 }

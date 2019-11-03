@@ -46,14 +46,14 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         input.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
 
         let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
-        let mut input_idx = 0;
         let piece_board = game_state.get_piece_board();
         let player_piece_board = piece_board.get_player_piece_mask(is_p1_turn_to_move);
 
-        for piece in &[Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit] {
+        for (i, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
             let piece_bits = piece_board.get_bits_by_piece_type(piece);
+            let offset = i;
 
-            input_idx = insert_input_channel_bits(&mut input, input_idx, piece_bits);
+            insert_input_channel_bits(&mut input, offset, piece_bits);
 
             let num_pieces_placed = (piece_bits & player_piece_board).count_ones();
             let num_pieces_to_place = match piece {
@@ -62,15 +62,18 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
                 Piece::Rabbit => 8
             };
 
+            let offset = NUM_PIECE_TYPES + i;
             let num_piece_remaining = num_pieces_placed as f32 / num_pieces_to_place as f32;
-            input_idx = insert_input_channel_bit(&mut input, input_idx, num_piece_remaining);
+            insert_input_channel_bit(&mut input, offset, num_piece_remaining);
         }
 
+        let offset = NUM_PIECE_TYPES + NUM_PIECE_TYPES;
         let placement_bit = piece_board.get_placement_bit();
-        input_idx = insert_input_channel_bits(&mut input, input_idx, placement_bit);
+        insert_input_channel_bits(&mut input, offset, placement_bit);
 
+        let offset = NUM_PIECE_TYPES + NUM_PIECE_TYPES + PLACEMENT_BIT_CHANNEL;
         let is_p1_turn_value = if is_p1_turn_to_move { 0.0 } else { 1.0 };
-        insert_input_channel_bit(&mut input, input_idx, is_p1_turn_value);
+        insert_input_channel_bit(&mut input, offset, is_p1_turn_value);
 
         input
     }
@@ -134,19 +137,15 @@ fn map_action_to_policy_output_idx(action: &Action) -> usize {
     }
 }
 
-fn insert_input_channel_bit(input: &mut [f32], start_idx: usize, value: f32) -> usize {
-    let end_idx = start_idx + PLACE_BOARD_SIZE;
-    for cell in &mut input[start_idx..end_idx] {
-        *cell = value;
+fn insert_input_channel_bit(input: &mut [f32], offset: usize, value: f32) {
+    for board_idx in 0..PLACE_BOARD_SIZE {
+        let cell_idx = board_idx * INPUT_C + offset;
+        input[cell_idx] = value;
     }
-
-    end_idx
 }
 
-fn insert_input_channel_bits(input: &mut [f32], start_idx: usize, bits: u64) -> usize {
-    let end_idx = start_idx + PLACE_BOARD_SIZE;
-    set_placement_board_bits(&mut input[start_idx..end_idx], bits);
-    end_idx
+fn insert_input_channel_bits(input: &mut [f32], offset: usize, bits: u64) {
+    set_placement_board_bits(input, offset, bits);
 }
 
 impl model::model::ModelFactory for ModelFactory {
