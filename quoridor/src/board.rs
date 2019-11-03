@@ -1,5 +1,4 @@
 use super::constants::{BOARD_WIDTH,BOARD_HEIGHT};
-use common::bits::single_bit_index;
 
 #[derive(PartialEq)]
 pub enum BoardType {
@@ -20,10 +19,8 @@ pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: b
     }
 
     while board != 0 {
-        let board_without_first_bit = board & (board - 1);
-        let removed_bit = board ^ board_without_first_bit;
-        let removed_bit_idx = single_bit_index(removed_bit as u128);
-        let removed_bit_vec_idx = if invert { removed_bit_idx } else { map_board_idx_to_vec_idx(removed_bit_idx) };
+        let bit_idx = board.trailing_zeros() as usize;
+        let removed_bit_vec_idx = if invert { bit_idx } else { map_board_idx_to_vec_idx(bit_idx) };
 
         result[removed_bit_vec_idx] = 1.0;
 
@@ -36,7 +33,7 @@ pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: b
             result[removed_bit_vec_idx + 1] = 1.0;
         }
 
-        board = board_without_first_bit;
+        board = board ^ 1 << bit_idx;
     }
 
     result
@@ -75,6 +72,7 @@ mod tests {
     use super::super::action::{Action,Coordinate};
     use super::super::engine::GameState;
     use engine::game_state::GameState as GameStateTrait;
+    use common::bits::single_bit_index;
 
     fn coordinate_to_idx(coord: Coordinate) -> usize {
         let bit_board = coord.as_bit_board();

@@ -1,16 +1,12 @@
-use common::bits::single_bit_index;
-
 pub fn map_board_to_arr(board: u64) -> [f32; 42] {
     let mut board = board;
     let mut result:[f32; 42] = [0.0; 42];
     while board != 0 {
-        let board_without_first_bit = board & (board - 1);
-        let removed_bit = board ^ board_without_first_bit;
-        let removed_bit_idx = single_bit_index(removed_bit as u128);
-        let removed_bit_vec_idx = map_board_idx_to_vec_idx(removed_bit_idx);
+        let bit_idx = board.trailing_zeros() as usize;
+        let removed_bit_vec_idx = map_board_idx_to_vec_idx(bit_idx);
     
         result[removed_bit_vec_idx] = 1.0;
-        board = board_without_first_bit;
+        board = board ^ 1 << bit_idx;
     }
 
     result

@@ -435,12 +435,12 @@ impl GameState {
         let mut coordinates = Vec::new();
 
         while board != 0 {
-            let board_without_first_bit = board & (board - 1);
-            let removed_bit = board_without_first_bit ^ board;
+            let bit_idx = board.trailing_zeros();
+            let removed_bit = 1 << bit_idx;
             let coordinate = Coordinate::from_bit_board(removed_bit);
             coordinates.push(coordinate);
 
-            board = board_without_first_bit;
+            board = board ^ removed_bit;
         }
 
         coordinates

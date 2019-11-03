@@ -307,12 +307,11 @@ pub fn map_bit_board_to_squares(board: u64) -> Vec<Square> {
     let mut squares = Vec::with_capacity(board.count_ones() as usize);
 
     while board != 0 {
-        let board_without_first_bit = board & (board - 1);
-        let removed_bit = board_without_first_bit ^ board;
-        let square = Square::from_bit_board(removed_bit);
+        let bit_idx = board.trailing_zeros();
+        let square = Square::from_index(bit_idx as u8);
         squares.push(square);
 
-        board = board_without_first_bit;
+        board = board ^ 1 << bit_idx;
     }
 
     squares

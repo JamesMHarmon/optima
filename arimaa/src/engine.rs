@@ -461,7 +461,7 @@ impl GameState {
                 let square_bit = square.as_bit_board();
 
                 for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-                    if shift_in_direction(lesser_opp_pieces, &direction) & square_bit != 0 {
+                    if shift_pieces_in_direction(lesser_opp_pieces, &direction) & square_bit != 0 {
                         let source_opp_piece_square = Square::from_bit_board(shift_pieces_in_opp_direction(square_bit, direction));
                         valid_actions.push(Action::Move(source_opp_piece_square, *direction));
                     }
@@ -861,6 +861,15 @@ fn shift_pieces_in_opp_direction(bits: u64, direction: &Direction) -> u64 {
         Direction::Right => shift_pieces_left!(bits),
         Direction::Down => shift_pieces_up!(bits),
         Direction::Left => shift_pieces_right!(bits)
+    }
+}
+
+fn shift_pieces_in_direction(bits: u64, direction: &Direction) -> u64 {
+    match direction {
+        Direction::Up => shift_pieces_up!(bits),
+        Direction::Right => shift_pieces_right!(bits),
+        Direction::Down => shift_pieces_down!(bits),
+        Direction::Left => shift_pieces_left!(bits)
     }
 }
 
