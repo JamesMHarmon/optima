@@ -233,7 +233,7 @@ where
                 best_action
             } else {
                 let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
-                let chosen_index = Self::select_path_using_temperature(&candidates, temp)?;
+                let chosen_index = Self::select_action_using_temperature(&candidates, temp)?;
                 candidates[chosen_index].0
             };
 
@@ -410,27 +410,32 @@ where
     }
 
     fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
-        let mut pucts = Self::get_PUCT_for_nodes_mut(nodes, arena, Nsb, game_state, is_root, prior_num_actions, fpu, fpu_root, cpuct);
+        let fpu = if is_root { fpu_root } else { fpu };
+        let root_Nsb = (Nsb as f32).sqrt();
+        let mut best_node = &nodes[0];
+        let mut best_puct = std::f32::MIN;
 
-        let chosen_puct_idx = Self::get_max_PUCT_score_index(&pucts)?;
+        for child in nodes {
+            let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
+            let Nsa = child.visits.get();
+            let Psa = child.policy_score;
+            let cpuct = cpuct(game_state, prior_num_actions, &child.action, Nsb, is_root);
+            let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
+            let virtual_loss = child.in_flight.get() as f32;
+            let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
 
-        Ok(pucts.swap_remove(chosen_puct_idx).node)
-    }
+            let PUCT = Qsa + Usa;
 
-    fn get_max_PUCT_score_index(pucts: &[NodePUCT<A>]) -> Result<usize, Error> {
-        let max_puct = pucts.iter().fold(std::f32::MIN, |acc, puct| f32::max(acc, puct.score));
-        let mut max_nodes: Vec<usize> = pucts.into_iter().enumerate()
-            .filter_map(|(i, puct)| if puct.score >= max_puct { Some(i) } else { None })
-            .collect();
-    
-        match max_nodes.len() {
-            0 => Err(format_err!("No candidate moves available: {:?}", pucts)),
-            1 => Ok(max_nodes.swap_remove(0)),
-            len => Ok(max_nodes.swap_remove(thread_rng().gen_range(0, len)))
+            if PUCT > best_puct {
+                best_puct = PUCT;
+                best_node = child;
+            }
         }
+
+        Ok(best_node)
     }
 
-    fn select_path_using_temperature(action_visits: &[(&A, usize)], temp: f32) -> Result<usize, Error> {
+    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32) -> Result<usize, Error> {
         let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32).powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(normalized_visits);
@@ -446,25 +451,17 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes_mut<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<NodePUCT<'b, A>>
-    {
-        let pucts = Self::get_PUCT_for_nodes(nodes, arena, Nsb, game_state, is_root, prior_num_actions, fpu, fpu_root, cpuct);
-        nodes.iter().zip(pucts).map(|(node, puct)| {
-            NodePUCT::<A> { node, score: puct.PUCT }
-        }).collect()
-    }
-
     fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
     {
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
+        let root_Nsb = (Nsb as f32).sqrt();
 
         for child in nodes {
             let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let cpuct = cpuct(game_state, prior_num_actions, &child.action, Nsb, is_root);
-            let root_Nsb = (Nsb as f32).sqrt();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
