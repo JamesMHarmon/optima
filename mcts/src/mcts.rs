@@ -23,11 +23,10 @@ pub struct DirichletOptions {
     pub epsilon: f32
 }
 
-pub struct MCTSOptions<S,A,C,T>
+pub struct MCTSOptions<S,C,T>
 where
     S: GameState,
-    A: Clone + Eq + Debug,
-    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    C: Fn(&S, usize, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
     dirichlet: Option<DirichletOptions>,
@@ -36,15 +35,13 @@ where
     cpuct: C,
     temperature: T,
     parallelism: usize,
-    _phantom_action: PhantomData<*const A>,
     _phantom_state: PhantomData<*const S>
 }
 
-impl<S,A,C,T> MCTSOptions<S,A,C,T>
+impl<S,C,T> MCTSOptions<S,C,T>
 where
     S: GameState,
-    A: Clone + Eq + Debug,
-    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    C: Fn(&S, usize, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
     pub fn new(
@@ -62,7 +59,6 @@ where
             cpuct,
             temperature,
             parallelism,
-            _phantom_action: PhantomData,
             _phantom_state: PhantomData
         }
     }
@@ -75,10 +71,10 @@ where
     V: Value,
     E: GameEngine,
     M: GameAnalyzer,
-    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    C: Fn(&S, usize, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
-    options: MCTSOptions<S,A,C,T>,
+    options: MCTSOptions<S,C,T>,
     game_engine: &'a E,
     analyzer: &'a M,
     starting_game_state: Option<S>,
@@ -128,7 +124,7 @@ where
     V: Value,
     E: 'a + GameEngine<State=S,Action=A,Value=V>,
     M: 'a + GameAnalyzer<State=S,Action=A,Value=V>,
-    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    C: Fn(&S, usize, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
     pub fn new(
@@ -136,7 +132,7 @@ where
         actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S,A,C,T>
+        options: MCTSOptions<S,C,T>
     ) -> Self {
         MCTS {
             options,
@@ -154,7 +150,7 @@ where
         actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S,A,C,T>,
+        options: MCTSOptions<S,C,T>,
         capacity: usize
     ) -> Self {
         MCTS {
@@ -414,12 +410,12 @@ where
         let root_Nsb = (Nsb as f32).sqrt();
         let mut best_node = &nodes[0];
         let mut best_puct = std::f32::MIN;
+        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
 
         for child in nodes {
             let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
-            let cpuct = cpuct(game_state, prior_num_actions, &child.action, Nsb, is_root);
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
@@ -456,12 +452,12 @@ where
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
         let root_Nsb = (Nsb as f32).sqrt();
+        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
 
         for child in nodes {
             let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
-            let cpuct = cpuct(game_state, prior_num_actions, &child.action, Nsb, is_root);
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
@@ -584,7 +580,7 @@ where
     V: Value,
     E: GameEngine<State=S,Action=A,Value=V>,
     M: GameAnalyzer<State=S,Action=A,Value=V>,
-    C: Fn(&S, usize, &A, usize, bool) -> f32,
+    C: Fn(&S, usize, usize, bool) -> f32,
     T: Fn(&S, usize) -> f32
 {
     let mut depth = 0;
@@ -799,7 +795,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -808,7 +804,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -833,7 +829,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -855,7 +851,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -879,7 +875,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -898,7 +894,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -929,7 +925,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -960,7 +956,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -991,7 +987,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -1022,7 +1018,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 0.1,
+            |_,_,_,_| 0.1,
             |_,_| 0.0,
             1
         ));
@@ -1053,7 +1049,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -1084,7 +1080,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -1116,7 +1112,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -1132,7 +1128,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));
@@ -1148,7 +1144,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_,_| 1.0,
+            |_,_,_,_| 1.0,
             |_,_| 0.0,
             1
         ));

@@ -70,14 +70,14 @@ pub async fn self_play<'a, S, A, E, M, V>(
         num_actions,
         game_engine,
         analytics,
-        MCTSOptions::<S,A,_,_>::new(
+        MCTSOptions::<S,_,_>::new(
             Some(DirichletOptions {
                 alpha: options.alpha,
                 epsilon: options.epsilon
             }),
             0.0,
             1.0,
-            |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+            |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
             |_,num_actions| if num_actions < options.temperature_max_actions { options.temperature } else { options.temperature_post_max_actions },
             options.parallelism
         ),

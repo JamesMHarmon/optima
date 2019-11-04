@@ -52,11 +52,11 @@ impl Ponder
             0,
             game_engine,
             &analyzer,
-            MCTSOptions::<S,A,_,_>::new(
+            MCTSOptions::<S,_,_>::new(
                 None,
                 fpu,
                 fpu_root,
-                |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+                |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,_| 0.0,
                 options.parallelism
             ),

@@ -225,11 +225,11 @@ impl SelfEvaluate
             0,
             game_engine,
             *analyzer,
-            MCTSOptions::<S,A,_,_>::new(
+            MCTSOptions::<S,_,_>::new(
                 None,
                 fpu,
                 fpu_root,
-                |_,_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+                |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,num_actions| if num_actions < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 options.parallelism
             ),
