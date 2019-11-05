@@ -1,7 +1,6 @@
 use std::pin::Pin;
-use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
-use chashmap::CHashMap;
-use crossbeam_queue::ArrayQueue;
+use std::sync::{Arc,RwLock};
+use std::collections::{HashMap,VecDeque};
 use std::hash::{Hash,Hasher};
 use super::analytics::GameStateAnalysis;
 use super::analytics::GameAnalyzer;
@@ -24,9 +23,7 @@ where
     <<M as Model>::Analyzer as GameAnalyzer>::Action: Clone,
     <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
-    model: M,
-    cache: Arc<CHashMap<u64,GameStateAnalysis<<<M as Model>::Analyzer as GameAnalyzer>::Action,<<M as Model>::Analyzer as GameAnalyzer>::Value>>>,
-    queue: Arc<(ArrayQueue<u64>, AtomicUsize)>,
+    model: M
 }
 
 pub fn cache<M>(model: M) -> AnalysisCacheQueueModel<M>
@@ -37,9 +34,7 @@ where
     <<M as Model>::Analyzer as GameAnalyzer>::Value: Clone
 {
     AnalysisCacheQueueModel {
-        model,
-        cache: Arc::new(CHashMap::with_capacity(CACHE_SIZE)),
-        queue: Arc::new((ArrayQueue::new(CACHE_SIZE), AtomicUsize::new(0)))
+        model
     }
 }
 
@@ -72,8 +67,7 @@ where
 
         AnalysisCacheAnalyzer {
             analyzer,
-            cache: self.cache.clone(),
-            queue: self.queue.clone(),
+            cache: Arc::new(RwLock::new((IdentityHashmap::with_capacity_and_hasher(CACHE_SIZE, Default::default()), VecDeque::with_capacity(CACHE_SIZE))))
         }
     }
 }
@@ -86,8 +80,7 @@ where
     Analyzer::Value: Clone
 {
     analyzer: Analyzer,
-    cache: Arc<CHashMap<u64,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>>,
-    queue: Arc<(ArrayQueue<u64>, AtomicUsize)>,
+    cache: Arc<RwLock<(IdentityHashmap<u64,GameStateAnalysis<Analyzer::Action,Analyzer::Value>>,VecDeque<u64>)>>
 }
 
 impl<Analyzer> GameAnalyzer for AnalysisCacheAnalyzer<Analyzer>
@@ -106,26 +99,28 @@ where
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let cache = &self.cache;
         let game_state_hash = calculate_hash(game_state);
-
-        if let Some(analysis) = cache.get(&game_state_hash) {
+        
+        let cache_rl = cache.read().unwrap();
+        let (analysis_map, _) = &*cache_rl;
+        if let Some(analysis) = analysis_map.get(&game_state_hash) {
             let analysis = analysis.clone();
+            drop(cache_rl);
             return futures::future::ready(analysis).boxed();
         }
+        drop(cache_rl);
 
         let cache = cache.clone();
-        let queue = self.queue.clone();
         Analyzer::get_state_analysis(&self.analyzer, &game_state).map(move |analysis| {
-            let (queue, queue_size) = &*queue;
-            if queue_size.load(Ordering::SeqCst) >= CACHE_SIZE - CACHE_BUFFER {
-                if let Ok(item_to_remove) = queue.pop() {
-                    cache.remove(&item_to_remove);
+            let mut cache_wl = cache.write().unwrap();
+            let (analysis_map, queue) = &mut *cache_wl;
+            if queue.len() >= CACHE_SIZE - CACHE_BUFFER {
+                if let Some(item_to_remove) = queue.pop_front() {
+                    analysis_map.remove(&item_to_remove);
                 }
-            } else {
-                queue_size.fetch_add(1, Ordering::SeqCst);
             }
 
-            cache.insert(game_state_hash, analysis.clone());
-            queue.push(game_state_hash).unwrap();
+            analysis_map.insert(game_state_hash, analysis.clone());
+            queue.push_back(game_state_hash);
 
             analysis
         }).boxed()
@@ -137,6 +132,8 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     t.hash(&mut s);
     s.finish()
 }
+
+type IdentityHashmap<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<IdentityHasher>>;
 
 struct IdentityHasher {
     hash: u64
@@ -153,6 +150,12 @@ impl Hasher for IdentityHasher {
 
     fn write_u64(&mut self, i: u64) {
         self.hash = i;
+    }
+}
+
+impl Default for IdentityHasher {
+    fn default() -> IdentityHasher {
+        IdentityHasher::new()
     }
 }
 
