@@ -1,1 +1,1 @@
-pub const SELF_EVALUATE_PARALLELISM: usize = 4;
+pub const SELF_EVALUATE_PARALLELISM: usize = 10;
