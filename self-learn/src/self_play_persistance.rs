@@ -44,7 +44,7 @@ impl SelfPlayPersistance
         Ok(())
     }
 
-    pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
+    pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>, Error> {
         let file_path = Self::get_file_path(&self.games_dir, &self.model_name);
         Self::read_metrics_from_file(&file_path)
     }
@@ -57,21 +57,20 @@ impl SelfPlayPersistance
         Ok(SelfPlayMetricsIterator::new(file_paths))
     }
 
-    fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Vec<SelfPlayMetrics<A,V>>, Error> {
+    fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>, Error> {
         println!("Reading File: {:?}", file_path);
         let file = File::open(file_path);
+        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
 
         match file {
-            Err(_) => Ok(Vec::new()),
+            Err(_) => Ok(Box::new(empty_iter)),
             Ok(file) => {
                 let buf = BufReader::new(file);
-                let games: Vec<SelfPlayMetrics<A,V>> = buf.lines()
-                    .enumerate()
-                    .filter_map(|(i,l)| l.ok().map(|l| (i,l)))
-                    .map(|(_,l)| serde_json::from_str(&l).unwrap())
-                    .collect();
+                let games = buf.lines()
+                    .filter_map(|l| l.ok())
+                    .map(|l| serde_json::from_str(&l).unwrap());
 
-                Ok(games)
+                Ok(Box::new(games))
             }
         }
     }
@@ -106,7 +105,7 @@ where
     V: DeserializeOwned
 {
     file_paths: Vec<PathBuf>,
-    metrics: Vec<SelfPlayMetrics<A,V>>
+    metrics: Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>
 }
 
 impl<A,V> SelfPlayMetricsIterator<A,V>
@@ -115,7 +114,8 @@ where
     V: DeserializeOwned
 {
     pub fn new(file_paths: Vec<PathBuf>) -> Self {
-        Self { file_paths, metrics: Vec::new() }
+        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
+        Self { file_paths, metrics: Box::new(empty_iter) }
     }
 }
 
@@ -128,7 +128,7 @@ where
 
     fn next(&mut self) -> Option<SelfPlayMetrics<A,V>> {
         loop {
-            let metric = self.metrics.pop();
+            let metric = self.metrics.next();
 
             if metric.is_some() {
                 return metric;

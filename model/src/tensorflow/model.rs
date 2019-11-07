@@ -13,7 +13,7 @@ use std::io::{BufReader,Write};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
-use itertools::{izip,Itertools};
+use itertools::{chain,izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
@@ -333,31 +333,23 @@ where
     let mut train_data_file_names = vec!();
 
     for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
-        let sample_metrics: Vec<_> = sample_metrics.collect();
-
-        let dimensions = mapper.get_input_dimensions();
-        let X: Vec<_> = sample_metrics.iter().map(|v| {
-            let X: Vec<_> = mapper.game_state_to_input(&v.game_state);
-            let X: Vec<_> = X.chunks_exact(dimensions[2] as usize).map(|v| NumVec(v.to_owned())).collect();
-            let X: Vec<_> = X.chunks_exact(dimensions[1] as usize).map(|v| NumVec(v.to_owned())).collect();
-            NumVec(X)
-        }).collect();
-
-        let yv: Vec<_> = sample_metrics.iter().map(|v| mapper.map_value_to_value_output(&v.game_state, &v.score)).collect();
-        let yp: Vec<_> = sample_metrics.iter().map(|v| NumVec(mapper.policy_metrics_to_expected_output(&v.game_state, &v.policy))).collect();
-
-        // Note that we are no longer using serde_json here due to the way that it elongates floats.
-        // Perhaps there is a way to override the way that serde_json formats floats?
-        let json = format!("{{\"x\":{},\"yv\":{},\"yp\":{}}}", NumVec(X), NumVec(yv), NumVec(yp));
-
-        let train_data_file_name = format!("training_data_{}.json", i);
+        let train_data_file_name = format!("training_data_{}.csv", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
-
         println!("Writing data to {:?}", &train_data_path);
-
-        fs::write(train_data_path, json)?;
-
+        let mut wtr = csv::Writer::from_path(train_data_path)?;
         train_data_file_names.push(train_data_file_name);
+
+        for metric in sample_metrics {
+            let record = 
+                mapper.game_state_to_input(&metric.game_state).into_iter().chain(
+                mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
+                std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
+            )).map(|v| v.to_string());
+
+            wtr.write_record(record)?;
+        }
+
+        wtr.flush()?;
     }
 
     let train_data_paths = train_data_file_names.iter().map(|file_name| format!(

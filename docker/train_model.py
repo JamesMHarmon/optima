@@ -2,6 +2,7 @@ import os
 import json
 from keras.callbacks import TensorBoard
 import c4_model as c4
+import numpy as np
 
 if __name__== "__main__":
 
@@ -26,37 +27,24 @@ if __name__== "__main__":
     num_filters         = int(os.environ['NUM_FILTERS'])
     num_blocks          = int(os.environ['NUM_BLOCKS'])
 
+    input_size = input_h * input_w * input_c
+
     print(data_paths)
     c4.clear()
-    
-    i = 0
-    X = []
-    yv = []
-    yp = []
-    first_run = True
-    while i < len(data_paths):
-        path = data_paths[i]
-        with open(path, "r") as read_file:
-            print("Loading Data: " + path)
-            data = json.load(read_file)
-            X = X + data["x"]
-            yv = yv + data["yv"]
-            yp = yp + data["yp"]
 
-        if ((i + 1) % 10 == 0 or i == len(data_paths) - 1):
-            model = c4.load_model(source_model_path)
+    for (i, path) in enumerate(data_paths):
+        print("Loading Data: " + path)
+        dataset = np.loadtxt(path, delimiter=",")
+        X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
+        yp = dataset[:,input_size:-1]
+        yv = dataset[:,-1]
 
-            tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
-            callbacks = [tensor_board] if first_run else []
+        model = c4.load_model(source_model_path)
 
-            c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
+        tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
+        callbacks = [tensor_board] if i == 0 else []
 
-            X = []
-            yv = []
-            yp = []
-            first_run = False
-
-        i += 1
+        c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
 
     model.save(target_model_path)
 

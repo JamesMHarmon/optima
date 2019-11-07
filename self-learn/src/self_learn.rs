@@ -132,7 +132,7 @@ where
                     model_name.to_owned()
                 )?;
 
-                let num_games_this_net = self_play_persistance.read::<A,V>()?.len();
+                let num_games_this_net = self_play_persistance.read::<A,V>()?.count();
                 let number_of_games_per_net = self_learn_options.number_of_games_per_net;
                 let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
                 drop(self_play_persistance);

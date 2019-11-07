@@ -82,19 +82,20 @@ impl model::model::Model for Model {
     where
         I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>
     {
-        let (_, upper) = sample_metrics.size_hint();
-        let mut play_samples = Vec::with_capacity(upper.unwrap_or(0));
-        let mut place_samples = Vec::with_capacity(upper.unwrap_or(0));
-        for sample_metric in sample_metrics {
+        let mut place_samples = Vec::new();
+
+        let play_sample_iter = sample_metrics.filter_map(|sample_metric| {
             if sample_metric.game_state.is_play_phase() {
-                play_samples.push(sample_metric);
+                Some(sample_metric)
             } else {
                 place_samples.push(sample_metric);
+                None
             }
-        }
+        });
+
+        self.play_model.train(target_model_info, play_sample_iter, options)?;
 
         let place_model_info = map_to_place_model_info(target_model_info);
-        self.play_model.train(target_model_info, play_samples.into_iter(), options)?;
         self.place_model.train(&place_model_info, place_samples.into_iter(), options)
     }
     
