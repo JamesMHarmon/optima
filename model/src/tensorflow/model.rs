@@ -13,7 +13,7 @@ use std::io::{BufReader,Write};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::Error;
-use itertools::{chain,izip,Itertools};
+use itertools::{izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
