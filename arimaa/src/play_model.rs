@@ -1,4 +1,3 @@
-use model::analysis_cache_queue::{cache,AnalysisCacheQueueModel};
 use model::model::ModelOptions;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
@@ -22,6 +21,7 @@ use failure::Error;
     6 opp piece boards
     x 4 (position at start of move, position after first action, second action, third action take)
     1 current step
+    1 trap squares
 
     Out:
     4 directional boards (substract irrelevant squares)
@@ -49,32 +49,11 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
 
-        let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
-        let current_step = game_state.get_current_step();
-        let invert = !is_p1_turn_to_move;
+        set_board_state_squares(&mut result, game_state);
 
-        for (i, step) in (0..=current_step).rev().enumerate() {
-            let piece_board = game_state.get_piece_board_for_step(step);
-            let step_offset = i * BOARDS_PER_STATE;
+        set_step_num_squares(&mut result, game_state);
 
-            for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].into_iter().enumerate() {
-                let player_offset = j * NUM_PIECE_TYPES;
-
-                for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
-                    let piece_bits = piece_board.get_bits_for_piece(piece, *player);
-
-                    let offset = step_offset + player_offset + piece_offset;
-                    set_board_bits_invertable(&mut result, offset, piece_bits, invert);
-                }
-            }
-        }
-
-        let step_num_normalized = (current_step as f32) / (MAX_NUM_STEPS - 1) as f32;
-        let offset = BOARDS_PER_STATE * MAX_NUM_STEPS;
-        for board_idx in 0..BOARD_SIZE {
-            let cell_idx = board_idx * PLAY_INPUT_C + offset;
-            result[cell_idx] = step_num_normalized;
-        }
+        set_trap_squares(&mut result);
 
         result
     }
@@ -142,6 +121,46 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     }
 }
 
+fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
+    let current_step_num = game_state.get_current_step();
+    let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
+    let invert = !is_p1_turn_to_move;
+
+    for (i, step) in (0..=current_step_num).rev().enumerate() {
+        let piece_board = game_state.get_piece_board_for_step(step);
+        let step_offset = i * BOARDS_PER_STATE;
+
+        for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].into_iter().enumerate() {
+            let player_offset = j * NUM_PIECE_TYPES;
+
+            for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
+                let piece_bits = piece_board.get_bits_for_piece(piece, *player);
+
+                let offset = step_offset + player_offset + piece_offset;
+                set_board_bits_invertable(input, offset, piece_bits, invert);
+            }
+        }
+    }
+}
+
+fn set_step_num_squares(input: &mut [f32], game_state: &GameState) {
+    let current_step_num = game_state.get_current_step();
+    let step_num_normalized = (current_step_num as f32) / (MAX_NUM_STEPS - 1) as f32;
+    let step_num_offset = STEP_NUM_CHANNEL_IDX;
+    for board_idx in 0..BOARD_SIZE {
+        let cell_idx = board_idx * PLAY_INPUT_C + step_num_offset;
+        input[cell_idx] = step_num_normalized;
+    }
+}
+
+fn set_trap_squares(input: &mut [f32]) {
+    input[INPUT_C * 18 + TRAP_CHANNEL_IDX] = 1.0;
+    input[INPUT_C * 21 + TRAP_CHANNEL_IDX] = 1.0;
+    input[INPUT_C * 42 + TRAP_CHANNEL_IDX] = 1.0;
+    input[INPUT_C * 45 + TRAP_CHANNEL_IDX] = 1.0;
+}
+
+
 fn map_action_to_policy_output_idx(action: &Action) -> usize {
     match action {
         Action::Move(square, direction) => match direction {
@@ -177,7 +196,7 @@ fn map_coord_to_policy_output_idx_left(square: &Square) -> usize {
 
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = AnalysisCacheQueueModel<TensorflowModel<Engine,Mapper>>;
+    type M = TensorflowModel<Engine,Mapper>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
@@ -200,13 +219,13 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        cache(
+        //cache(
             TensorflowModel::new(
                 model_info.clone(),
                 Engine::new(),
                 mapper
             )
-        )
+        //)
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {

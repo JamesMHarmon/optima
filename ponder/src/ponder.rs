@@ -86,20 +86,27 @@ impl Ponder
                 continue;
             }
 
-            let action = input.parse::<A>();
+            let inputs = input.split(&[',', ' '][..]).filter_map(|v| {
+                let trimmed = v.trim();
+                if trimmed.len() > 0 { Some(trimmed) } else { None }
+            });
 
-            match action {
-                Ok(action) => {
-                    if let Err(_) = mcts.advance_to_action(action.clone()).await {
-                        println!("Illegal Action: {:?}", &action);
-                        continue;
-                    }
-
-                    println!("Taking Action: {:?}", &action);
-                    state = game_engine.take_action(&state, &action);
-                    total_visits = 0;
-                },
-                Err(_) => println!("{}", "Error parsing action")
+            for input in inputs {       
+                let action = input.parse::<A>();
+                
+                match action {
+                    Ok(action) => {
+                        if let Err(_) = mcts.advance_to_action(action.clone()).await {
+                            println!("Illegal Action: {:?}", &action);
+                            continue;
+                        }
+                        
+                        println!("Taking Action: {:?}", &action);
+                        state = game_engine.take_action(&state, &action);
+                        total_visits = 0;
+                    },
+                    Err(_) => println!("{}", "Error parsing action")
+                }
             }
         };
 

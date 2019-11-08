@@ -11,9 +11,12 @@ pub const BOARDS_PER_STATE: usize = NUM_PIECE_TYPES * 2;
 pub const MAX_NUM_STEPS: usize = 4;
 
 pub const STEP_NUM_CHANNEL: usize = 1;
+pub const STEP_NUM_CHANNEL_IDX: usize = BOARDS_PER_STATE * MAX_NUM_STEPS;
+pub const TRAP_CHANNEL: usize = 1;
+pub const TRAP_CHANNEL_IDX: usize = STEP_NUM_CHANNEL_IDX + 1;
 pub const PLAY_INPUT_H: usize = BOARD_HEIGHT;
 pub const PLAY_INPUT_W: usize = BOARD_WIDTH;
-pub const PLAY_INPUT_C: usize = BOARDS_PER_STATE * MAX_NUM_STEPS + STEP_NUM_CHANNEL;
+pub const PLAY_INPUT_C: usize = BOARDS_PER_STATE * MAX_NUM_STEPS + STEP_NUM_CHANNEL + TRAP_CHANNEL;
 pub const PLAY_INPUT_SIZE: usize = BOARD_SIZE * PLAY_INPUT_C;
 
 
