@@ -417,11 +417,15 @@ mod tests {
         assert_eq!(game_state_to_input, game_state_to_input_inverted);
     }
 
+    fn get_channel_as_vec(input: &[f32], channel_idx: usize) -> Vec<f32> {
+        input.iter().skip(channel_idx).step_by(INPUT_C).map(|i| *i).collect()
+    }
+
     const NUM_CHANNELS_PER_STEP: usize = 12;
     fn get_step_as_vec(input: &[f32], step: usize) -> Vec<f32> {
         let mut output = Vec::new();
         for offset in ((step - 1) * NUM_CHANNELS_PER_STEP)..(step * NUM_CHANNELS_PER_STEP) {
-            output.extend(input.iter().skip(offset).step_by(INPUT_C).map(|i| *i));
+            output.extend(get_channel_as_vec(input, offset));
         }
 
         output
@@ -518,6 +522,91 @@ mod tests {
         assert_eq!(get_step_as_vec(&game_state_to_input_step2, 1), get_step_as_vec(&game_state_to_input_step4, 3));
         assert_eq!(get_step_as_vec(&game_state_to_input_step3, 1), get_step_as_vec(&game_state_to_input_step4, 2));
         assert_eq!(get_step_as_vec(&game_state_to_input_step4_as_first_step, 1), get_step_as_vec(&game_state_to_input_step4, 1));
+    }
+
+    #[test]
+    fn test_game_state_to_input_step_num() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+        
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_step_num_channel = std::iter::repeat(0.0).take(BOARD_SIZE).collect::<Vec<_>>();
+
+        let actual_step_channel = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
+
+        assert_eq!(actual_step_channel, expected_step_num_channel);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_step_num_channel = std::iter::repeat(1.0 / 3.0).take(BOARD_SIZE).collect::<Vec<_>>();
+
+        let actual_step_channel = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
+
+        assert_eq!(actual_step_channel, expected_step_num_channel);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Up));
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_step_num_channel = std::iter::repeat(2.0 / 3.0).take(BOARD_SIZE).collect::<Vec<_>>();
+
+        let actual_step_channel = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
+
+        assert_eq!(actual_step_channel, expected_step_num_channel);
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 3), Direction::Up));
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_step_num_channel = std::iter::repeat(1.0).take(BOARD_SIZE).collect::<Vec<_>>();
+
+        let actual_step_channel = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
+
+        assert_eq!(actual_step_channel, expected_step_num_channel);
+    }
+
+    #[test]
+    fn test_game_state_to_input_traps() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+        
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_channel_traps: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,1,0,0,1,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,1,0,0,1,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual_trap_channel = get_channel_as_vec(&input, TRAP_CHANNEL_IDX);
+
+        assert_eq!(actual_trap_channel, expected_channel_traps);
     }
 
     #[bench]
