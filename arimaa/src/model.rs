@@ -1,5 +1,4 @@
 use std::future::Future;
-use model::analysis_cache_queue::{AnalysisCacheQueueModel,AnalysisCacheAnalyzer};
 use model::position_metrics::PositionMetrics;
 use model::model::TrainOptions;
 use model::model::ModelOptions;
@@ -64,7 +63,7 @@ impl model::model::ModelFactory for ModelFactory {
 }
 
 pub struct Model {
-    play_model: AnalysisCacheQueueModel<TensorflowModel<Engine,PlayMapper>>,
+    play_model: TensorflowModel<Engine,PlayMapper>,
     place_model: TensorflowModel<Engine,PlaceMapper>
 }
 
@@ -108,13 +107,13 @@ impl model::model::Model for Model {
 }
 
 pub struct Analyzer {
-    play_analyzer: AnalysisCacheAnalyzer<GameAnalyzer<Engine,PlayMapper>>,
+    play_analyzer: GameAnalyzer<Engine,PlayMapper>,
     place_analyzer: GameAnalyzer<Engine,PlaceMapper>
 }
 
 impl model::analytics::GameAnalyzer for Analyzer {
     type Future = Either<
-        std::pin::Pin<std::boxed::Box<(dyn Future<Output = model::analytics::GameStateAnalysis<Action, Value>> + Send + 'static)>>,
+        GameStateAnalysisFuture<Self::State,Engine,PlayMapper>,
         GameStateAnalysisFuture<Self::State,Engine,PlaceMapper>
     >;
     type Action = Action;
