@@ -1,6 +1,6 @@
 pub const ASCII_LETTER_A: u8 = 97;
 
-pub const MAX_NUMBER_OF_MOVES: usize = 128;
+pub const MAX_NUMBER_OF_MOVES: usize = 512;
 pub const BOARD_WIDTH: usize = 8;
 pub const BOARD_HEIGHT: usize = 8;
 pub const BOARD_SIZE: usize = BOARD_WIDTH * BOARD_HEIGHT;
