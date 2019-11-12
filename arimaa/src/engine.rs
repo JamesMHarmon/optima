@@ -415,14 +415,12 @@ impl GameState {
     }
 
     fn can_pass(&self) -> bool {
-        // @TODO: TEMP
-        return false;
-        // self.as_play_phase().map_or(false, |play_phase|
-        //     play_phase.get_step() >= 1 &&
-        //     !play_phase.push_pull_state.is_must_complete_push() &&
-        //     play_phase.first_step_hash != self.hash.exclude_step(play_phase.get_step()) &&
-        //     !hash_history_contains_hash_twice(&play_phase.hash_history, &self.hash.pass(play_phase.get_step()))
-        // )
+        self.as_play_phase().map_or(false, |play_phase|
+            play_phase.get_step() >= 1 &&
+            !play_phase.push_pull_state.is_must_complete_push() &&
+            play_phase.first_step_hash != self.hash.exclude_step(play_phase.get_step()) &&
+            !hash_history_contains_hash_twice(&play_phase.hash_history, &self.hash.pass(play_phase.get_step()))
+        )
     }
 
     fn valid_placement(&self) -> Vec<Action> {
