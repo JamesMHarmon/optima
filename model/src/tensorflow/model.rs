@@ -77,11 +77,19 @@ where
         mapper: Map
     ) -> Self
     {
+        let analysis_request_threads = std::env::var("ANALYSIS_REQUEST_THREADS")
+            .map(|v| v.parse::<usize>().expect("ANALYSIS_REQUEST_THREADS must be a valid int"))
+            .unwrap_or(ANALYSIS_REQUEST_THREADS);
+
+        let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
+            .map(|v| v.parse::<usize>().expect("ANALYSIS_REQUEST_BATCH_SIZE must be a valid int"))
+            .unwrap_or(ANALYSIS_REQUEST_BATCH_SIZE);
+
         let mapper = Arc::new(mapper);
-        let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone()));
+        let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), analysis_request_threads, batch_size));
         let alive = Arc::new(AtomicBool::new(true));
 
-        for i in 0..ANALYSIS_REQUEST_THREADS {
+        for i in 0..analysis_request_threads {
             let batching_model_ref = batching_model.clone();
             let alive_ref = alive.clone();
             let model_info = model_info.clone();
@@ -545,7 +553,8 @@ pub struct BatchingModel<E,Map> {
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
     engine: E,
-    mapper: Arc<Map>
+    mapper: Arc<Map>,
+    batch_size: usize
 }
 
 impl<S,A,V,E,Map> BatchingModel<E,Map>
@@ -556,10 +565,10 @@ where
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V>
 {
-    fn new(engine: E, mapper: Arc<Map>) -> Self
+    fn new(engine: E, mapper: Arc<Map>, analysis_request_threads: usize, batch_size: usize) -> Self
     {
         let states_to_analyse = SegQueue::new();
-        let states_analysed = IncrementingMap::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE * ANALYSIS_REQUEST_THREADS);
+        let states_analysed = IncrementingMap::with_capacity(batch_size * analysis_request_threads);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -571,18 +580,19 @@ where
             min_batch_size,
             max_batch_size,
             engine,
-            mapper
+            mapper,
+            batch_size
         }
     }
 
     fn get_states_to_analyse(&self) -> Vec<(usize, Vec<f32>, Waker)> {
         let states_to_analyse_queue = &self.states_to_analyse;
 
-        let mut states_to_analyse: Vec<_> = Vec::with_capacity(ANALYSIS_REQUEST_BATCH_SIZE);
+        let mut states_to_analyse: Vec<_> = Vec::with_capacity(self.batch_size);
         while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
             states_to_analyse.push(state_to_analyse);
 
-            if states_to_analyse.len() >= ANALYSIS_REQUEST_BATCH_SIZE {
+            if states_to_analyse.len() >= self.batch_size {
                 break;
             }
         }
