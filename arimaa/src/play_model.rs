@@ -607,6 +607,305 @@ mod tests {
         let actual_trap_channel = get_channel_as_vec(&input, TRAP_CHANNEL_IDX);
 
         assert_eq!(actual_trap_channel, expected_channel_traps);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 7.0);
+    }
+
+    #[test]
+    fn test_game_state_to_input_elephants() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+        
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected_elephants: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 0);
+
+        assert_eq!(actual, expected_elephants);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 7.0);
+    }
+
+    #[test]
+    fn test_game_state_to_input_rabbits_step_1() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+        
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            1,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 5);
+
+        assert_eq!(actual, expected);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 7.0);
+    }
+
+    #[test]
+    fn test_game_state_to_input_opp_rabbits() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+        
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected: Vec<_> = vec!(
+            1,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 11);
+
+        assert_eq!(actual, expected);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 7.0);
+    }
+
+    #[test]
+    fn test_game_state_to_input_rabbits_step_2() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
+
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            1,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 5);
+        assert_eq!(actual, expected);
+
+        let prev_step_expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            1,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let prev_step_actual = get_channel_as_vec(&input, 17);
+
+        assert_eq!(prev_step_actual, prev_step_expected);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 10.0);
+    }
+
+    #[test]
+    fn test_game_state_to_input_rabbits_step_4() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x r   x     |
+             5|       E         |
+             4|                 |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Left));
+
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state);
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 0);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 12);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 24);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 36);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            1,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 11);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            1,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 23);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            1,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 35);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = vec!(
+            1,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,1,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+            0,0,0,0,0,0,0,0,
+        ).iter().map(|i| *i as f32).collect();
+
+        let actual = get_channel_as_vec(&input, 47);
+
+        assert_eq!(actual, expected);
+        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 83.0);
     }
 
     #[bench]
@@ -628,5 +927,52 @@ mod tests {
             ".parse().unwrap();
 
         b.iter(|| mapper.game_state_to_input(&game_state));
+    }
+
+    #[bench]
+    fn bench_game_state_to_input_multiple_actions(b: &mut Bencher) {
+        let mapper = Mapper::new();
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| h c d m r d c h |
+             7| r r r r e r r r |
+             6|     x     x     |
+             5|                 |
+             4|                 |
+             3|     x     x     |
+             2| R R R R E R R R |
+             1| H C D M R D C H |
+              +-----------------+
+                a b c d e f g h
+            ".parse().unwrap();
+
+        
+
+        b.iter(|| {
+            let game_state = game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('e', 2), Direction::Up));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('f', 7), Direction::Down));
+            mapper.game_state_to_input(&game_state);
+
+            let game_state = game_state.take_action(&Action::Move(Square::new('g', 7), Direction::Down));
+            mapper.game_state_to_input(&game_state)
+        });
     }
 }
