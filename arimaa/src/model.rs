@@ -1,4 +1,3 @@
-use std::future::Future;
 use model::position_metrics::PositionMetrics;
 use model::model::TrainOptions;
 use model::model::ModelOptions;
