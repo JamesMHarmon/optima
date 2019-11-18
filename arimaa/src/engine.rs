@@ -2194,6 +2194,30 @@ mod tests {
     }
 
     #[test]
+    fn test_action_cant_push_while_frozen_2() {
+        let game_state: GameState = "
+            35s
+             +-----------------+
+            8|     d           |
+            7| r e r r h c r r |
+            6| H R m r r X c R |
+            5| d R E R R h R r |
+            4| R         M   C |
+            3|     X     X     |
+            2|   D       D   H |
+            1|             C   |
+             +-----------------+
+               a b c d e f g h
+            "
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 8), Direction::Left));
+        let game_state = game_state.take_action(&Action::Move(Square::new('g', 5), Direction::Down));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[g6s]");
+    }
+
+    #[test]
     fn test_action_move_possible_pull_with_valid_pull() {
         let game_state: GameState = "
               +-----------------+
