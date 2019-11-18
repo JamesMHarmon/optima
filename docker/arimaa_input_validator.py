@@ -8,7 +8,7 @@ FILE_NAME = '/tmp/sample.csv'
 
 input_h = 8
 input_w = 8
-input_c = 49
+input_c = 50
 input_size = input_h * input_w * input_c
 channels_per_step = 12
 steps = 4
