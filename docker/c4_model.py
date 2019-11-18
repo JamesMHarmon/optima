@@ -23,10 +23,6 @@ def create(num_filters, num_blocks, input_shape, output_size):
     return model
 
 def train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks):
-    X = np.asarray(X)
-    yv = np.asarray(yv)
-    yp = np.asarray(yp)
-
     X_train, X_test, yv_train, yv_test, yp_train, yp_test = train_test_split(
         X,
         yv,
