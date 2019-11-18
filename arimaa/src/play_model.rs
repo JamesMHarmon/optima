@@ -39,7 +39,7 @@ impl ModelFactory {
 pub struct Mapper {}
 
 impl Mapper {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {}
     }
 }

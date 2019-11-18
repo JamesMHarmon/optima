@@ -494,12 +494,12 @@ impl GameState {
         let play_phase = self.unwrap_play_phase();
         let (square, pushed_piece) = play_phase.push_pull_state.unwrap_must_complete_push();
 
-        let curr_player_piece_mask = self.get_curr_player_piece_mask(piece_board);
+        let curr_player_non_frozen_piece_mask = self.get_curr_player_non_frozen_pieces(piece_board);
         let square_bit = square.as_bit_board();
 
         let mut valid_actions = vec![];
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-            let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction) & curr_player_piece_mask;
+            let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction) & curr_player_non_frozen_piece_mask;
             if pushing_piece_bit != 0 && get_piece_type_at_bit(pushing_piece_bit, piece_board) > *pushed_piece {
                 valid_actions.push(Action::Move(Square::from_bit_board(pushing_piece_bit), *direction));
             }
@@ -2191,6 +2191,30 @@ mod tests {
             .parse().unwrap();
 
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e]");
+    }
+
+    #[test]
+    fn test_action_cant_push_while_frozen_2() {
+        let game_state: GameState = "
+            35s
+             +-----------------+
+            8|     d           |
+            7| r e r r h c r r |
+            6| H R m r r X c R |
+            5| d R E R R h R r |
+            4| R         M   C |
+            3|     X     X     |
+            2|   D       D   H |
+            1|             C   |
+             +-----------------+
+               a b c d e f g h
+            "
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('c', 8), Direction::Left));
+        let game_state = game_state.take_action(&Action::Move(Square::new('g', 5), Direction::Down));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[g6s]");
     }
 
     #[test]
