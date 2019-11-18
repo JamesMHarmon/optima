@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas
 from numpy import genfromtxt
 
 POSITION = 0
@@ -19,7 +20,8 @@ output_w = 7
 outputs = 4
 output_names = ["n","e","s","w"]
 
-sample_data = genfromtxt(FILE_NAME, delimiter=',')
+df = pandas.read_csv(FILE_NAME, header=None, sep=",", dtype='float32')
+sample_data = df.to_numpy()
 X = sample_data[:,:input_size].reshape(-1, input_h, input_w, input_c)
 yp = sample_data[:,input_size:-1]
 yv = sample_data[:,-1]
