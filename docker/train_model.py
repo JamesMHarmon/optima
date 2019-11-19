@@ -3,6 +3,7 @@ import json
 from keras.callbacks import TensorBoard
 import c4_model as c4
 import numpy as np
+import pandas
 
 if __name__== "__main__":
 
@@ -31,17 +32,17 @@ if __name__== "__main__":
 
     print(data_paths)
     c4.clear()
+    model = c4.load_model(source_model_path)
+    tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
 
     for (i, path) in enumerate(data_paths):
         print("Loading Data: " + path)
-        dataset = np.loadtxt(path, delimiter=",")
+        df = pandas.read_csv(path, header=None, sep=",", dtype='float32')
+        dataset = df.to_numpy()
         X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
         yp = dataset[:,input_size:-1]
         yv = dataset[:,-1]
 
-        model = c4.load_model(source_model_path)
-
-        tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
         callbacks = [tensor_board] if i == 0 else []
 
         c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
