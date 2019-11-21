@@ -32,6 +32,9 @@ pub struct SelfPlayOptions {
 }
 
 impl<A,V> SelfPlayMetrics<A,V> {
+    pub fn new(analysis: Vec<(A, NodeMetrics<A>)>, score: V) -> Self {
+        Self { analysis, score }
+    }
 
     pub fn take(self) -> (Vec<(A, NodeMetrics<A>)>, V) {
         (self.analysis, self.score)
