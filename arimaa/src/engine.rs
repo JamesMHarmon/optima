@@ -477,13 +477,15 @@ impl GameState {
                 let opp_piece_mask = self.get_opponent_piece_mask(piece_board);
                 let opp_threatened_pieces = self.get_threatened_pieces(predator_piece_mask, opp_piece_mask, piece_board);
 
-                for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-                    let unoccupied_directions = can_move_in_direction(direction, piece_board);
-                    let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
-
-                    if valid_push_moves != 0 {
-                        let squares = map_bit_board_to_squares(valid_push_moves);
-                        valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                if opp_threatened_pieces != 0 {
+                    for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
+                        let unoccupied_directions = can_move_in_direction(direction, piece_board);
+                        let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
+                        
+                        if valid_push_moves != 0 {
+                            let squares = map_bit_board_to_squares(valid_push_moves);
+                            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                        }
                     }
                 }
             }
