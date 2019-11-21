@@ -479,13 +479,15 @@ impl GameState {
                 let opp_piece_mask = self.get_opponent_piece_mask(piece_board);
                 let opp_threatened_pieces = self.get_threatened_pieces(predator_piece_mask, opp_piece_mask, piece_board);
 
-                for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
-                    let unoccupied_directions = can_move_in_direction(direction, piece_board);
-                    let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
-
-                    if valid_push_moves != 0 {
-                        let squares = map_bit_board_to_squares(valid_push_moves);
-                        valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                if opp_threatened_pieces != 0 {
+                    for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
+                        let unoccupied_directions = can_move_in_direction(direction, piece_board);
+                        let valid_push_moves = unoccupied_directions & opp_threatened_pieces;
+                        
+                        if valid_push_moves != 0 {
+                            let squares = map_bit_board_to_squares(valid_push_moves);
+                            valid_actions.extend(squares.into_iter().map(|s| Action::Move(s, *direction)));
+                        }
                     }
                 }
             }
@@ -3265,16 +3267,16 @@ mod tests {
     #[bench]
     fn bench_valid_actions(b: &mut Bencher) {
         let game_state: GameState = "
-             1s
+             1g
               +-----------------+
              8| h c d m r d c h |
-             7| r r r r e r r r |
+             7|   r r r e r r r |
              6|     x     x     |
              5|                 |
-             4|                 |
+             4| r C             |
              3|     x     x     |
              2| R R R R E R R R |
-             1| H C D M R D C H |
+             1| H   D M R D C H |
               +-----------------+
                 a b c d e f g h
             ".parse().unwrap();
@@ -3282,26 +3284,34 @@ mod tests {
         
 
         b.iter(|| {
-            let game_state = game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
-            game_state.valid_actions();
+            let game_state = game_state.clone();
+            let game_state = game_state.take_action(&Action::Move(Square::new('b', 4), Direction::Up));
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('e', 2), Direction::Up));
-            game_state.valid_actions();
+            let game_state = game_state.take_action(&Action::Move(Square::new('a', 4), Direction::Right));
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
-            game_state.valid_actions();
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
-            game_state.valid_actions();
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
-            game_state.valid_actions();
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
-            game_state.valid_actions();
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('f', 7), Direction::Down));
-            game_state.valid_actions();
+            let valid_actions = game_state.valid_actions();
+            if valid_actions.len() <= 0 { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('g', 7), Direction::Down));
             game_state.valid_actions()

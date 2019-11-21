@@ -6,6 +6,7 @@ from keras.models import Sequential, Model
 from keras.layers import Reshape, Dense, Conv2D, Flatten, LeakyReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
+from keras import regularizers
 
 def Block(x, filters):
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(x)
@@ -37,7 +38,7 @@ def ValueHead(x):
     out = LeakyReLU()(out)
 
     out = Flatten()(out)
-    out = Dense(256, activation='linear')(out)
+    out = Dense(256, kernel_regularizer=regularizers.l2(0.01), activation='linear')(out)
     out = LeakyReLU()(out)
 
     out = Dense(1, name='value_head', activation='tanh')(out)
@@ -63,7 +64,7 @@ def ResNet(num_filters, num_blocks, input_shape, output_size):
 
     for _ in range(0, num_blocks):
         net = Block(net, num_filters)
-    
+
     value_head = ValueHead(net)
     policy_head = PolicyHead(net, num_filters, output_size)
 
