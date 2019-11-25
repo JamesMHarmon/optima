@@ -85,7 +85,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
         let invert = !game_state.is_p1_turn_to_move();
 
-        let valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
+        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
             .map(|action|
             {
                 // Policy scores coming from the model are always from the perspective of player 1.
@@ -104,6 +104,14 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
                     policy_score
                 )
             }).collect();
+
+        let policy_sum: f32 = valid_actions_with_policies.iter().map(|v| v.policy_score).sum();
+
+        let policy_scale = 1.0 / policy_sum;
+
+        for awp in valid_actions_with_policies.iter_mut() {
+            awp.policy_score = awp.policy_score * policy_scale;
+        }
 
         valid_actions_with_policies
     }
