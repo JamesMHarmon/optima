@@ -16,4 +16,9 @@ Run-6
 
 11-20-19: model 20: Updating remote to kill games immediately on a new model as well as discard games that are too long.
 
+11-21-19: appx model 28? - Lowered cpuct from 2.5 to 1.25 - Capped game length, lowered moving window size from 250k to 125k
+
+11-22-19: appx model 31? -
+
+11-24-19: model 43 - Update policies to be re-normalized to sum to 1.
 
