@@ -65,7 +65,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     }
 
     fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
-         let valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
+         let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
             .zip(policy_scores).enumerate()
             .filter_map(|(i, (v, p))|
             {
@@ -78,6 +78,14 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
                     None
                 }
             }).collect();
+
+        let policy_sum: f32 = valid_actions_with_policies.iter().map(|v| v.policy_score).sum();
+
+        let policy_scale = 1.0 / policy_sum;
+
+        for awp in valid_actions_with_policies.iter_mut() {
+            awp.policy_score = awp.policy_score * policy_scale;
+        }
 
         valid_actions_with_policies
     }

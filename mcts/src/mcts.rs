@@ -224,6 +224,13 @@ where
             drop(arena_borrow);
             let child_node_details = self.get_root_node_details().await?.children;
 
+            if child_node_details.len() == 0 {
+                let arena_borrow = self.arena.borrow();
+                let root_node = &arena_borrow[*root_node_index];
+                let game_state = &root_node.game_state;
+                return Err(format_err!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
+            }
+
             let best_action = if temp == 0.0 {
                 let (best_action, _) = child_node_details.first().ok_or_else(|| format_err!("No available actions"))?;
                 best_action
@@ -439,6 +446,7 @@ where
         let chosen_idx = match weighted_index {
             Err(_) => {
                 println!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
+                println!("{:?}", action_visits);
                 thread_rng().gen_range(0, action_visits.len())
             },
             Ok(weighted_index) => weighted_index.sample(&mut thread_rng())
