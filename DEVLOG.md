@@ -22,3 +22,4 @@ Run-6
 
 11-24-19: model 43 - Update policies to be re-normalized to sum to 1.
 
+11-29-19: model 68 - Updated training data to be run in reverse, so that newest games are trained last.
