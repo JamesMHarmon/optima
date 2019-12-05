@@ -99,9 +99,11 @@ impl SelfEvaluate
                         game_engine,
                         &model_info_and_analyzers,
                         options
-                    ).map(|_| ());
+                    );
 
-                    current_thread::block_on_all(f);
+                    let res = current_thread::block_on_all(f);
+
+                    res.unwrap();
                 });
             }
 

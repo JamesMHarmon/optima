@@ -222,9 +222,11 @@ where
                         engine,
                         &analyzer,
                         &self_play_options
-                    ).map(|_| ());
+                    );
 
-                    current_thread::block_on_all(f);
+                    let res = current_thread::block_on_all(f);
+
+                    res.unwrap();
                 });
             }
 
