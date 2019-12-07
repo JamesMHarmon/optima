@@ -12,6 +12,8 @@ Run-6
 
 11-17-19: model 40: Introduced new always training mode. increased moving_window_size from 125k to 250k. Increased position samples from 0.0128 to 0.0256.
 
+Run-7
+
 11-18-19: model 0: Starting run-7. Bug fixed w/ push as well as an issue w/ the model only being update w/ the last batch of data.
 
 11-20-19: model 20: Updating remote to kill games immediately on a new model as well as discard games that are too long.
@@ -23,3 +25,7 @@ Run-6
 11-24-19: model 43 - Update policies to be re-normalized to sum to 1.
 
 11-29-19: model 68 - Updated training data to be run in reverse, so that newest games are trained last.
+
+12-5-19: model 67 - Cleared all models back to model 67. An issue was found where fpu was switched w/ fpu_root.
+
+12-6-19: model 74 - Introducing fast visits.
