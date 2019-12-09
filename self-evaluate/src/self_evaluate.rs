@@ -6,7 +6,6 @@ use std::iter::{repeat,repeat_with};
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
-use futures::future::FutureExt;
 use failure::{Error,format_err};
 use tokio_executor::current_thread;
 use permutohedron::{Heap as Permute};
