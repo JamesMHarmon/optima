@@ -138,9 +138,9 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
 - change flag when running docker to not use environment = nvidia.
 
 * Consider adding a pool for vectors/slices. https://github.com/CJP10/object-pool , https://carllerche.github.io/pool/pool/ , https://crates.io/crates/lifeguard
-* TensorRT or f16 the networks
-* Add multiple players
-* Add multiple moves
+* -TensorRT or f16 the networks-
+* -Add multiple players-
+* -Add multiple moves-
 * Create ponder cli
 * Use proper logging
 * Calculate the p values from logits only on legal actions. Inverse calculation for training? // https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
