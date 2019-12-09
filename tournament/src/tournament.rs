@@ -22,7 +22,6 @@ use super::constants::TOURNAMENT_PARALLELISM;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TournamentOptions {
-    pub num_games: usize,
     pub batch_size: usize,
     pub parallelism: usize,
     pub temperature: f32,
