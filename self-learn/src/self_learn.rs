@@ -5,7 +5,6 @@ use std::sync::mpsc;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
-use futures::future::FutureExt;
 use failure::{Error};
 use tokio_executor::current_thread;
 
@@ -56,6 +55,8 @@ pub struct SelfLearnOptions {
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f32,
     pub visits: usize,
+    pub fast_visits: usize,
+    pub full_visits_probability: f32,
     pub fpu: f32,
     pub fpu_root: f32,
     pub cpuct_base: f32,
@@ -210,6 +211,8 @@ where
                     temperature_max_actions: options.temperature_max_actions,
                     temperature_post_max_actions: options.temperature_post_max_actions,
                     visits: options.visits,
+                    fast_visits: options.fast_visits,
+                    full_visits_probability: options.full_visits_probability,
                     parallelism: options.parallelism
                 };
 
@@ -222,9 +225,11 @@ where
                         engine,
                         &analyzer,
                         &self_play_options
-                    ).map(|_| ());
+                    );
 
-                    current_thread::block_on_all(f);
+                    let res = current_thread::block_on_all(f);
+
+                    res.unwrap();
                 });
             }
 

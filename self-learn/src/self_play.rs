@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use failure::{Error,format_err};
+use rand::Rng;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
@@ -21,6 +22,8 @@ pub struct SelfPlayOptions {
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f32,
     pub visits: usize,
+    pub fast_visits: usize,
+    pub full_visits_probability: f32,
     pub parallelism: usize,
     pub fpu: f32,
     pub fpu_root: f32,
@@ -89,10 +92,17 @@ pub async fn self_play<'a, S, A, E, M, V>(
 
     let mut state: S = S::initial();
     let mut analysis = Vec::new();
+    let mut rng = rand::thread_rng();
 
     while game_engine.is_terminal_state(&state).is_none() {
-        mcts.search(options.visits).await?;
-        let action = mcts.select_action().await?;
+        let action = if rng.gen::<f32>() <= options.full_visits_probability {
+            mcts.search(options.visits).await?;
+            mcts.select_action().await?
+        } else {
+            mcts.search_no_noise(options.fast_visits).await?;
+            mcts.select_action_no_temp().await?
+        };
+
         let metrics = mcts.get_root_node_metrics().await?;
 
         mcts.advance_to_action(action.to_owned()).await?;

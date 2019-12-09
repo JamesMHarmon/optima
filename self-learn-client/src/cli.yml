@@ -103,6 +103,16 @@ subcommands:
                 takes_value: true
                 help: "[Default: 800] The number of visits of the root node as part of the mcts before deciding on a move to take. AZ used 800."
                 value_name: VISITS
+            - fast_visits:
+                long: fast_visits
+                takes_value: true
+                help: "[Default: 150] The number of visits of the root node as part of the mcts before deciding on a move to take."
+                value_name: VISITS
+            - full_visits_probability:
+                long: full_visits_probability
+                takes_value: true
+                help: "[Default: 0.25] The probability of the full visits for a search being used as opposed to fast_visits."
+                value_name: PROBABILITY
             - fpu:
                 long: fpu
                 takes_value: true

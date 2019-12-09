@@ -451,6 +451,8 @@ fn get_default_options() -> Result<Options, Error> {
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
         visits: 800,
+        fast_visits: 150,
+        full_visits_probability: 0.25,
         parallelism: 32,
         fpu: 0.0,
         fpu_root: 1.0,
@@ -532,6 +534,8 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse()? };
     if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
+    if let Some(fast_visits) = matches.value_of("fast_visits") { options.fast_visits = fast_visits.parse()? };
+    if let Some(full_visits_probability) = matches.value_of("full_visits_probability") { options.full_visits_probability = full_visits_probability.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };

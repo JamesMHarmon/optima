@@ -305,25 +305,32 @@ impl GameState {
     }
 
     pub fn has_move(&self, piece_board: &PieceBoardState) -> Option<Value> {
-        let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {
-            let mut valid_actions = Vec::new();
-            // If this is the last move, then verify that there are at least two actions to ensure that the action taken will make progress, not resulting in a pass like move.
-            let required_number_of_valid_actions = if play_phase.get_step() == 3 && !play_phase.piece_trapped_this_turn { 2 } else { 1 };
+        let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {   
             if play_phase.push_pull_state.is_must_complete_push() {
-                let mut valid_actions = self.get_must_complete_push_actions(piece_board);
-                self.remove_passing_like_actions(&mut valid_actions);
-                valid_actions.len() > 0
+                let valid_actions = self.get_must_complete_push_actions(piece_board);
+                self.has_non_passing_like_action(valid_actions)
             } else if self.can_pass() {
                 true
-            } else if { self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
+            } else if {
+                let mut valid_actions = Vec::new();
+                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board);
+                self.has_non_passing_like_action(valid_actions)
+            } {
                 true
-            } else if { self.extend_with_pull_piece_actions(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
+            } else if {
+                let mut valid_actions = Vec::new();
+                self.extend_with_pull_piece_actions(&mut valid_actions, piece_board);
+                self.has_non_passing_like_action(valid_actions)
+            } {
                 true
-            } else if { self.extend_with_push_piece_actions(&mut valid_actions, piece_board); valid_actions.len() >= required_number_of_valid_actions } {
+            } else if {
+                let mut valid_actions = Vec::new();
+                self.extend_with_push_piece_actions(&mut valid_actions, piece_board);
+                self.has_non_passing_like_action(valid_actions)
+            } {
                 true
             } else {
-                self.remove_passing_like_actions(&mut valid_actions);
-                valid_actions.len() > 0
+                false
             }
         } else {
             true
@@ -770,19 +777,11 @@ impl GameState {
     fn remove_passing_like_actions(&self, valid_actions: &mut Vec<Action>) {
         let play_phase = self.unwrap_play_phase();
         if play_phase.get_step() == 3 && !play_phase.piece_trapped_this_turn {
-            let initial_hash_of_move = play_phase.initial_hash_of_move;
             let mut actions_to_remove = Vec::with_capacity(0);
-            let hash_history = &play_phase.hash_history;
 
             for action in valid_actions.iter() {
-                if let Action::Move(_, _) = action {
-                    let new_piece_board = &self.piece_board.take_action(&action).0;
-                    let new_hash_no_player_switch = self.hash.move_piece(self, new_piece_board, 0, self.is_p1_turn_to_move());
-                    let new_hash_switch_players = self.hash.move_piece(self, new_piece_board, 0, !self.is_p1_turn_to_move());
-
-                    if new_hash_no_player_switch == initial_hash_of_move || hash_history_contains_hash_twice(hash_history, &new_hash_switch_players) {
-                        actions_to_remove.push(action.clone());
-                    }
+                if self.is_passing_like_action(action) {
+                    actions_to_remove.push(action.clone());
                 }
             }
 
@@ -790,6 +789,43 @@ impl GameState {
                 valid_actions.remove_item(&action_to_remove);
             }
         }
+    }
+
+    fn is_passing_like_action(&self, action: &Action) -> bool {
+        let play_phase = self.unwrap_play_phase();
+        let initial_hash_of_move = play_phase.initial_hash_of_move;
+        let hash_history = &play_phase.hash_history;
+
+        if let Action::Move(_, _) = action {
+            let new_piece_board = &self.piece_board.take_action(&action).0;
+            let new_hash_no_player_switch = self.hash.move_piece(self, new_piece_board, 0, self.is_p1_turn_to_move());
+            let new_hash_switch_players = self.hash.move_piece(self, new_piece_board, 0, !self.is_p1_turn_to_move());
+
+            if new_hash_no_player_switch == initial_hash_of_move || hash_history_contains_hash_twice(hash_history, &new_hash_switch_players) {
+               return true;
+            }
+        }
+
+        false
+    }
+
+    fn has_non_passing_like_action(&self, valid_actions: Vec<Action>) -> bool {
+        if valid_actions.len() == 0 {
+            return false;
+        }
+
+        let play_phase = self.unwrap_play_phase();
+        if play_phase.get_step() < 3 || play_phase.piece_trapped_this_turn {
+            return true;
+        }
+
+        for action in valid_actions.iter() {
+            if !self.is_passing_like_action(action) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
