@@ -52,7 +52,7 @@ def PolicyHead(x, filters, output_size):
     out = LeakyReLU()(out)
 
     out = Flatten()(out)
-    out = Dense(output_size, name='policy_head', activation='softmax')(out)
+    out = Dense(output_size, name='policy_head', kernel_regularizer=regularizers.l2(0.01), activation='softmax')(out)
     return out
     
 
