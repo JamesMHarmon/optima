@@ -98,6 +98,11 @@ subcommands:
                 takes_value: true
                 help: "[Default: 0.45] The temperature to use during self play games after the temperature_max_actions threshold has been met. The higher the temp, the more exploration."
                 value_name: TEMP
+            - temperature_visit_offset:
+                long: temperature_visit_offset
+                takes_value: true
+                help: "[Default: -0.9] An offset applied to the number of visits when selecting an action using temperature."
+                value_name: OFFSET
             - visits:
                 long: visits
                 takes_value: true

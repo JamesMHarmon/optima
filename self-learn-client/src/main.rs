@@ -450,6 +450,7 @@ fn get_default_options() -> Result<Options, Error> {
         temperature: 1.2,
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
+        temperature_visit_offset: -0.9,
         visits: 800,
         fast_visits: 150,
         full_visits_probability: 0.25,

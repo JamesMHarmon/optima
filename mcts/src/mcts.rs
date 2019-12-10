@@ -34,6 +34,7 @@ where
     fpu_root: f32,
     cpuct: C,
     temperature: T,
+    temperature_visit_offset: f32,
     parallelism: usize,
     _phantom_state: PhantomData<*const S>
 }
@@ -50,6 +51,7 @@ where
         fpu_root: f32,
         cpuct: C,
         temperature: T,
+        temperature_visit_offset: f32,
         parallelism: usize
     ) -> Self {
         MCTSOptions {
@@ -58,6 +60,7 @@ where
             fpu_root,
             cpuct,
             temperature,
+            temperature_visit_offset,
             parallelism,
             _phantom_state: PhantomData
         }
@@ -290,6 +293,7 @@ where
             let arena_borrow = self.arena.borrow();
             let root_node = &arena_borrow[*root_node_index];
             let temp = &self.options.temperature;
+            let temperature_visit_offset = self.options.temperature_visit_offset;
             let game_state = &root_node.game_state;
             let temp = temp(game_state, root_node.num_actions);
             drop(arena_borrow);
@@ -307,7 +311,7 @@ where
                 best_action
             } else {
                 let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
-                let chosen_index = Self::select_action_using_temperature(&candidates, temp)?;
+                let chosen_index = Self::select_action_using_temperature(&candidates, temp, temperature_visit_offset)?;
                 candidates[chosen_index].0
             };
 
@@ -454,8 +458,8 @@ where
         Ok(best_node)
     }
 
-    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32) -> Result<usize, Error> {
-        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32).powf(1.0 / temp));
+    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
+        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32 + temperature_visit_offset).min(0.0).powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(normalized_visits);
 
@@ -821,6 +825,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -830,6 +835,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -855,6 +861,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -877,6 +884,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -901,6 +909,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -920,6 +929,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -951,6 +961,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -982,6 +993,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1013,6 +1025,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1044,6 +1057,7 @@ mod tests {
             0.0,
             |_,_,_,_| 0.1,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1075,6 +1089,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1106,6 +1121,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1138,6 +1154,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1154,6 +1171,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1170,6 +1188,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
