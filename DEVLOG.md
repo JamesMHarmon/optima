@@ -29,3 +29,5 @@ Run-7
 12-5-19: model 67 - Cleared all models back to model 67. An issue was found where fpu was switched w/ fpu_root.
 
 12-6-19: model 74 - Introducing fast visits.
+
+12-9-19: model 163 - Added -0.9 temp offset. Pass action is now working.

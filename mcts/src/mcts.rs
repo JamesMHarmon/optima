@@ -459,7 +459,7 @@ where
     }
 
     fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
-        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32 + temperature_visit_offset).min(0.0).powf(1.0 / temp));
+        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32 + temperature_visit_offset).max(0.0).powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(normalized_visits);
 
