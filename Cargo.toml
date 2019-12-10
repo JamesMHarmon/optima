@@ -9,6 +9,7 @@ members = [
     "self-evaluate",
     "self-learn",
     "self-learn-client",
+    "tournament",
 
     "arimaa",
     "connect4",

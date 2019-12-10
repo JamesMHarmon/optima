@@ -49,24 +49,29 @@ where
         .take(num_games)
         .flat_map(|m| {
             let (analysis, score) = m.take();
+            let mut num_actions = 0;
 
             let (_, positions_metrics) = analysis.into_iter().fold(
                 (S::initial(), vec!()),
                 |(prev_game_state, mut samples), (action, metrics)| {
                     let next_game_state = game_engine.take_action(&prev_game_state, &action);
 
-                    samples.push(PositionMetrics {
-                        game_state: prev_game_state,
-                        score: score.clone(),
-                        policy: metrics
-                    });
+                    if metrics.visits > options.fast_visits {
+                        samples.push(PositionMetrics {
+                            game_state: prev_game_state,
+                            score: score.clone(),
+                            policy: metrics
+                        });
+                    }
+
+                    num_actions += 1;
 
                     (next_game_state, samples)
                 }
             );
 
-            let num_positions = positions_metrics.len();
-            let num_samples = ((num_positions as f32) * position_sample_percentage).ceil() as usize;
+            let num_samples = ((num_actions as f32) * position_sample_percentage).ceil() as usize;
+            let num_samples = num_samples.min(positions_metrics.len());
             positions_metrics.into_iter().choose_multiple(&mut rng, num_samples)
         });
 

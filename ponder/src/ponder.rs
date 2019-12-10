@@ -58,6 +58,7 @@ impl Ponder
                 fpu_root,
                 |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,_| 0.0,
+                0.0,
                 options.parallelism
             ),
             visits

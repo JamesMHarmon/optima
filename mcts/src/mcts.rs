@@ -34,6 +34,7 @@ where
     fpu_root: f32,
     cpuct: C,
     temperature: T,
+    temperature_visit_offset: f32,
     parallelism: usize,
     _phantom_state: PhantomData<*const S>
 }
@@ -50,6 +51,7 @@ where
         fpu_root: f32,
         cpuct: C,
         temperature: T,
+        temperature_visit_offset: f32,
         parallelism: usize
     ) -> Self {
         MCTSOptions {
@@ -58,6 +60,7 @@ where
             fpu_root,
             cpuct,
             temperature,
+            temperature_visit_offset,
             parallelism,
             _phantom_state: PhantomData
         }
@@ -165,85 +168,19 @@ where
     }
 
     pub async fn search(&mut self, visits: usize) -> Result<usize, Error> {
-        let game_engine = &self.game_engine;
-        let fpu = self.options.fpu;
-        let fpu_root = self.options.fpu_root;
-        let cpuct = &self.options.cpuct;
-        let dirichlet = &self.options.dirichlet;
-        let analyzer = &mut self.analyzer;
-        let root = &mut self.root;
-        let starting_num_actions = &mut self.starting_num_actions;
-        let starting_game_state = &mut self.starting_game_state;
-        let arena_cell = &self.arena;
+        self._search(visits, true).await
+    }
 
-        let mut arena_borrow_mut = arena_cell.borrow_mut();
-        let root_node_index = MCTS::<S,A,E,M,C,T,V>::get_or_create_root_node(
-            root,
-            starting_game_state,
-            starting_num_actions,
-            analyzer,
-            &mut *arena_borrow_mut,
-            dirichlet
-        ).await;
-
-        let current_visits = arena_borrow_mut[root_node_index].get_node_visits();
-        drop(arena_borrow_mut);
-
-        let mut max_depth: usize = 0;
-        let mut searches_remaining = visits - current_visits;
-        let initial_searches = self.options.parallelism.min(searches_remaining);
-
-        let mut searches = FuturesOrdered::new();
-        for _ in 0..initial_searches {
-            searches_remaining -= 1;
-            let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
-
-            searches.push(future);
-        }
-
-        while let Some(search_depth) = searches.next().await {
-            if searches_remaining > 0 {
-                searches_remaining -= 1;
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
-                searches.push(future);
-            }
-
-            max_depth = max_depth.max(search_depth?);
-        }
-
-        Ok(max_depth)
+    pub async fn search_no_noise(&mut self, visits: usize) -> Result<usize, Error> {
+        self._search(visits, false).await
     }
 
     pub async fn select_action(&mut self) -> Result<A, Error> {
-        if let Some(root_node_index) = &self.root {
-            let arena_borrow = self.arena.borrow();
-            let root_node = &arena_borrow[*root_node_index];
-            let temp = &self.options.temperature;
-            let game_state = &root_node.game_state;
-            let temp = temp(game_state, root_node.num_actions);
-            drop(arena_borrow);
-            let child_node_details = self.get_root_node_details().await?.children;
+        self._select_action(true).await
+    }
 
-            if child_node_details.len() == 0 {
-                let arena_borrow = self.arena.borrow();
-                let root_node = &arena_borrow[*root_node_index];
-                let game_state = &root_node.game_state;
-                return Err(format_err!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
-            }
-
-            let best_action = if temp == 0.0 {
-                let (best_action, _) = child_node_details.first().ok_or_else(|| format_err!("No available actions"))?;
-                best_action
-            } else {
-                let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
-                let chosen_index = Self::select_action_using_temperature(&candidates, temp)?;
-                candidates[chosen_index].0
-            };
-
-            return Ok(best_action.clone());
-        }
-
-        return Err(format_err!("Root node does not exist. Run search first."));
+    pub async fn select_action_no_temp(&mut self) -> Result<A, Error> {
+        self._select_action(false).await
     }
 
     pub async fn advance_to_action(&mut self, action: A) -> Result<(), Error> {
@@ -299,6 +236,89 @@ where
         }
 
         Ok(nodes)
+    }
+
+    async fn _search(&mut self, visits: usize, apply_noise: bool) -> Result<usize, Error> {
+        let game_engine = &self.game_engine;
+        let fpu = self.options.fpu;
+        let fpu_root = self.options.fpu_root;
+        let cpuct = &self.options.cpuct;
+        let dirichlet = if apply_noise { &self.options.dirichlet } else { &None };
+        let analyzer = &mut self.analyzer;
+        let root = &mut self.root;
+        let starting_num_actions = &mut self.starting_num_actions;
+        let starting_game_state = &mut self.starting_game_state;
+        let arena_cell = &self.arena;
+
+        let mut arena_borrow_mut = arena_cell.borrow_mut();
+        let root_node_index = MCTS::<S,A,E,M,C,T,V>::get_or_create_root_node(
+            root,
+            starting_game_state,
+            starting_num_actions,
+            analyzer,
+            &mut *arena_borrow_mut,
+            dirichlet
+        ).await;
+
+        let current_visits = arena_borrow_mut[root_node_index].get_node_visits();
+        drop(arena_borrow_mut);
+
+        let mut max_depth: usize = 0;
+        let mut searches_remaining = visits - current_visits;
+        let initial_searches = self.options.parallelism.min(searches_remaining);
+
+        let mut searches = FuturesOrdered::new();
+        for _ in 0..initial_searches {
+            searches_remaining -= 1;
+            let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
+
+            searches.push(future);
+        }
+
+        while let Some(search_depth) = searches.next().await {
+            if searches_remaining > 0 {
+                searches_remaining -= 1;
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
+                searches.push(future);
+            }
+
+            max_depth = max_depth.max(search_depth?);
+        }
+
+        Ok(max_depth)
+    }
+
+    async fn _select_action(&mut self, use_temp: bool) -> Result<A, Error> {
+        if let Some(root_node_index) = &self.root {
+            let arena_borrow = self.arena.borrow();
+            let root_node = &arena_borrow[*root_node_index];
+            let temp = &self.options.temperature;
+            let temperature_visit_offset = self.options.temperature_visit_offset;
+            let game_state = &root_node.game_state;
+            let temp = temp(game_state, root_node.num_actions);
+            drop(arena_borrow);
+            let child_node_details = self.get_root_node_details().await?.children;
+
+            if child_node_details.len() == 0 {
+                let arena_borrow = self.arena.borrow();
+                let root_node = &arena_borrow[*root_node_index];
+                let game_state = &root_node.game_state;
+                return Err(format_err!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
+            }
+
+            let best_action = if temp == 0.0 || !use_temp {
+                let (best_action, _) = child_node_details.first().ok_or_else(|| format_err!("No available actions"))?;
+                best_action
+            } else {
+                let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
+                let chosen_index = Self::select_action_using_temperature(&candidates, temp, temperature_visit_offset)?;
+                candidates[chosen_index].0
+            };
+
+            return Ok(best_action.clone());
+        }
+
+        return Err(format_err!("Root node does not exist. Run search first."));
     }
 
     async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>, Error> {
@@ -438,8 +458,8 @@ where
         Ok(best_node)
     }
 
-    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32) -> Result<usize, Error> {
-        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32).powf(1.0 / temp));
+    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
+        let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32 + temperature_visit_offset).min(0.0).powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(normalized_visits);
 
@@ -805,6 +825,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -814,6 +835,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -839,6 +861,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -861,6 +884,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -885,6 +909,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -904,6 +929,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -935,6 +961,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -966,6 +993,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -997,6 +1025,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1028,6 +1057,7 @@ mod tests {
             0.0,
             |_,_,_,_| 0.1,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1059,6 +1089,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1090,6 +1121,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1122,6 +1154,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1138,6 +1171,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 
@@ -1154,6 +1188,7 @@ mod tests {
             0.0,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
+            0.0,
             1
         ));
 

@@ -17,8 +17,9 @@ use quoridor::model::{ModelFactory as QuoridorModelFactory};
 use arimaa::engine::{Engine as ArimaaEngine};
 use arimaa::model::{ModelFactory as ArimaaModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
-use self_evaluate::self_evaluate::{SelfEvaluateOptions};
+use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
 use ponder::ponder::{Ponder,PonderOptions};
+use tournament::tournament::{Tournament,TournamentOptions};
 
 use failure::{Error,format_err};
 
@@ -31,7 +32,8 @@ pub struct Options {
     pub self_learn: SelfLearnOptions,
     pub self_evaluate: SelfEvaluateOptions,
     pub model: ModelOptions,
-    pub ponder: PonderOptions
+    pub ponder: PonderOptions,
+    pub tournament: TournamentOptions
 }
 
 #[tokio::main]
@@ -88,6 +90,32 @@ async fn main() -> Result<(), Error> {
             return evaluate_quoridor(run_name, model_1_num, model_2_num, &options);
         } else if game_name == ARIMAA_NAME {
             return evaluate_arimaa(run_name, model_1_num, model_2_num, &options);
+        } else {
+            panic!("Game name not recognized");
+        }
+    } else if let Some(matches) = matches.subcommand_matches("tournament") {
+        let game_name = matches.value_of("game").unwrap();
+        let run_name = matches.value_of("run").unwrap();
+        let mut options = get_options(game_name, run_name)?.tournament;
+        let model_ranges = update_tournament_options_from_matches(&mut options, matches)?;
+        let models_or_ranges = model_ranges.split(",").collect::<Vec<&str>>();
+        let model_nums = models_or_ranges.iter().map(|s| {
+            let split = s.split("-").collect::<Vec<&str>>();
+            if split.len() >= 2 {
+                let start = split[0].parse::<usize>().unwrap();
+                let end = split[1].parse::<usize>().unwrap();
+                (start..=end).collect::<Vec<usize>>()
+            } else {
+                vec![s.parse::<usize>().unwrap()]
+            }
+        }).flatten().collect::<Vec<_>>();
+
+        if game_name == C4_NAME {
+            return tournament_connect4(run_name, &model_nums, &options);
+        } else if game_name == QUORIDOR_NAME {
+            return tournament_quoridor(run_name, &model_nums, &options);
+        } else if game_name == ARIMAA_NAME {
+            return tournament_arimaa(run_name, &model_nums, &options);
         } else {
             panic!("Game name not recognized");
         }
@@ -157,8 +185,26 @@ fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_1 = model_factory.get(&model_1_info);
     let model_2 = model_factory.get(&model_2_info);
 
-    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+    SelfEvaluate::evaluate(
         &vec!(model_1, model_2),
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
+fn tournament_connect4(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+    let model_factory = Connect4ModelFactory::new();
+    let game_engine = Connect4Engine::new();
+
+    let models = models.iter().map(|model_num| {
+        let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), *model_num);
+        model_factory.get(&model_info)
+    }).collect::<Vec<_>>();
+
+    Tournament::tournament(
+        &models,
         &game_engine,
         options
     )?;
@@ -246,8 +292,26 @@ fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_1 = model_factory.get(&model_1_info);
     let model_2 = model_factory.get(&model_2_info);
 
-    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+    SelfEvaluate::evaluate(
         &vec!(model_1, model_2),
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
+fn tournament_quoridor(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+    let model_factory = QuoridorModelFactory::new();
+    let game_engine = QuoridorEngine::new();
+
+    let models = models.iter().map(|model_num| {
+        let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), *model_num);
+        model_factory.get(&model_info)
+    }).collect::<Vec<_>>();
+
+    Tournament::tournament(
+        &models,
         &game_engine,
         options
     )?;
@@ -321,8 +385,26 @@ fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Opti
     let model_1 = model_factory.get(&model_1_info);
     let model_2 = model_factory.get(&model_2_info);
 
-    self_evaluate::self_evaluate::SelfEvaluate::evaluate(
+    SelfEvaluate::evaluate(
         &vec!(model_1, model_2),
+        &game_engine,
+        options
+    )?;
+
+    Ok(())
+}
+
+fn tournament_arimaa(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+    let model_factory = ArimaaModelFactory::new();
+    let game_engine = ArimaaEngine::new();
+
+    let models = models.iter().map(|model_num| {
+        let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), *model_num);
+        model_factory.get(&model_info)
+    }).collect::<Vec<_>>();
+
+    Tournament::tournament(
+        &models,
         &game_engine,
         options
     )?;
@@ -368,7 +450,10 @@ fn get_default_options() -> Result<Options, Error> {
         temperature: 1.2,
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
+        temperature_visit_offset: -0.9,
         visits: 800,
+        fast_visits: 150,
+        full_visits_probability: 0.25,
         parallelism: 32,
         fpu: 0.0,
         fpu_root: 1.0,
@@ -409,11 +494,27 @@ fn get_default_options() -> Result<Options, Error> {
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling
     };
 
+    let tournament_options = TournamentOptions {
+        num_players: 2,
+        batch_size: self_learn_options.self_play_batch_size,
+        visits: self_learn_options.visits * 50,
+        parallelism: self_learn_options.parallelism * 4,
+        fpu: self_learn_options.fpu,
+        fpu_root: self_learn_options.fpu_root,
+        cpuct_base: self_learn_options.cpuct_base,
+        cpuct_init: self_learn_options.cpuct_init,
+        cpuct_root_scaling: self_learn_options.cpuct_root_scaling,
+        temperature: self_learn_options.temperature,
+        temperature_max_actions: self_learn_options.temperature_max_actions,
+        temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
+    };
+
     Ok(Options {
         self_learn: self_learn_options,
         self_evaluate: self_evaluate_options,
         model: model_options,
-        ponder: ponder_options
+        ponder: ponder_options,
+        tournament: tournament_options
     })
 }
 
@@ -434,6 +535,8 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse()? };
     if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
+    if let Some(fast_visits) = matches.value_of("fast_visits") { options.fast_visits = fast_visits.parse()? };
+    if let Some(full_visits_probability) = matches.value_of("full_visits_probability") { options.full_visits_probability = full_visits_probability.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
@@ -476,6 +579,17 @@ fn update_ponder_options_from_matches(options: &mut PonderOptions, matches: &cla
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
 
     Ok(matches.value_of("model").map(|s| s.to_owned()))
+}
+
+fn update_tournament_options_from_matches(options: &mut TournamentOptions, matches: &clap::ArgMatches) -> Result<String, Error> {
+    if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
+    if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
+    if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
+    if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
+    if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
+    if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
+
+    Ok(matches.value_of("models").ok_or(format_err!("model ranges not specified"))?.to_owned())
 }
 
 fn get_options(game_name: &str, run_name: &str) -> Result<Options, Error> {

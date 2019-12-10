@@ -2,13 +2,12 @@ use std::path::PathBuf;
 use std::fmt::Debug;
 use std::time::Instant;
 use std::sync::mpsc;
-use std::iter::{repeat,repeat_with};
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
 use tokio_executor::current_thread;
-use permutohedron::{Heap as Permute};
+use itertools::Itertools;
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -18,12 +17,11 @@ use engine::value::Value;
 use model::model::{Model};
 use model::model_info::{ModelInfo};
 
-use super::self_evaluate_persistance::SelfEvaluatePersistance;
-use super::constants::SELF_EVALUATE_PARALLELISM;
+use super::tournament_persistance::TournamentPersistance;
+use super::constants::TOURNAMENT_PARALLELISM;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SelfEvaluateOptions {
-    pub num_games: usize,
+pub struct TournamentOptions {
     pub batch_size: usize,
     pub parallelism: usize,
     pub temperature: f32,
@@ -34,10 +32,11 @@ pub struct SelfEvaluateOptions {
     pub fpu_root: f32,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
-    pub cpuct_root_scaling: f32
+    pub cpuct_root_scaling: f32,
+    pub num_players: usize
 }
 
-pub struct SelfEvaluate {}
+pub struct Tournament {}
 
 #[derive(Debug,Serialize)]
 pub struct GameResult<A> {
@@ -46,18 +45,17 @@ pub struct GameResult<A> {
 }
 
 #[derive(Debug,Serialize)]
-pub struct MatchResult {
-    model_scores: Vec<(ModelInfo, f32)>,
-    player_scores: Vec<f32>,
-    num_of_games_played: usize
+pub struct ModelScore {
+    model: ModelInfo,
+    score: f32
 }
 
-impl SelfEvaluate
+impl Tournament
 {
-    pub fn evaluate<S,A,E,M,T>(
+    pub fn tournament<S,A,E,M,T>(
         models: &[M],
         game_engine: &E,
-        options: &SelfEvaluateOptions
+        options: &TournamentOptions
     ) -> Result<(), Error> 
     where
         S: GameState,
@@ -66,43 +64,41 @@ impl SelfEvaluate
         M: Model<State=S,Action=A,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
     {
-        let num_players = models.len();
         let starting_time = Instant::now();
 
         let starting_run_time = Instant::now();
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
-        let num_games_to_play = options.num_games;
         let batch_size = options.batch_size;
 
         crossbeam::scope(move |s| {
-            let num_games_per_thread = num_games_to_play / SELF_EVALUATE_PARALLELISM;
-            let num_games_per_thread_remainder = num_games_to_play % SELF_EVALUATE_PARALLELISM;
+            let games_to_play = generate_games_to_play(models, options.num_players).iter()
+                .map(|models| models.iter().map(|m| (m.get_model_info(), m.get_game_state_analyzer())).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
 
-            for thread_num in 0..SELF_EVALUATE_PARALLELISM {
+            let num_games_to_play = games_to_play.len();
+            let num_games_per_thread = num_games_to_play / TOURNAMENT_PARALLELISM;
+            let games_to_play_chunks = games_to_play.into_iter()
+                .chunks(num_games_per_thread)
+                .into_iter().map(|c| c.collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+
+            for (thread_num, games_to_play) in games_to_play_chunks.into_iter().enumerate() {
                 let game_results_tx = game_results_tx.clone();
-
-                let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
-                let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
-                let analyzers: Vec<_> = models.iter().map(|m| m.get_game_state_analyzer()).collect();
+                let num_games_to_play_this_thread = games_to_play.len();
 
                 s.spawn(move |_| {
-                    let model_info_and_analyzers: Vec<_> = model_info.iter().zip(analyzers.iter()).map(|(m, a)| (m, a)).collect();
                     println!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
 
                     let f = Self::play_games(
-                        num_games_to_play_this_thread,
-                        num_players,
+                        games_to_play,
                         batch_size,
                         game_results_tx,
                         game_engine,
-                        &model_info_and_analyzers,
                         options
                     );
 
-                    let res = current_thread::block_on_all(f);
-
-                    res.unwrap();
+                    current_thread::block_on_all(f).unwrap();
                 });
             }
 
@@ -110,12 +106,11 @@ impl SelfEvaluate
             s.spawn(move |_| -> Result<(), Error> {
                 let mut num_of_games_played: usize = 0;
                 let mut model_scores: Vec<_> = model_info.iter().map(|m| (m.to_owned(), 0.0)).collect();
-                let mut player_scores: Vec<_> = repeat(0.0).take(num_players).collect();
 
                 let game_name = model_info[0].get_game_name();
                 let run_name = model_info[0].get_run_name();
 
-                let mut presistance = SelfEvaluatePersistance::new(
+                let mut presistance = TournamentPersistance::new(
                     &get_run_directory(game_name, run_name),
                     &model_info
                 )?;
@@ -123,8 +118,7 @@ impl SelfEvaluate
                 while let Ok(game_result) = game_results_rx.recv() {
                     num_of_games_played += 1;
 
-                    for (i, (model_info, score)) in game_result.scores.iter().enumerate() {
-                        player_scores[i] += score;
+                    for (model_info, score) in game_result.scores.iter() {
                         model_scores.iter_mut().find(|(m, _s)| *m == *model_info).unwrap().1 += score;
                     }
 
@@ -140,11 +134,7 @@ impl SelfEvaluate
                     presistance.write_game(&game_result)?;
                 }
 
-                presistance.write_match(&MatchResult {
-                    num_of_games_played,
-                    model_scores,
-                    player_scores
-                })?;
+                presistance.write_model_scores(&model_scores)?;
 
                 Ok(())
             });
@@ -154,13 +144,11 @@ impl SelfEvaluate
     }
 
     async fn play_games<S, A, E, T>(
-        num_games_to_play: usize,
-        num_players: usize,
+        games_to_play: Vec<Vec<(&ModelInfo, T)>>,
         batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         game_engine: &E,
-        models: &[(&ModelInfo, &T)],
-        options: &SelfEvaluateOptions
+        options: &TournamentOptions
     ) -> Result<(), Error>
     where
         S: GameState,
@@ -168,15 +156,8 @@ impl SelfEvaluate
         E: GameEngine<State=S,Action=A,Value=T::Value> + Sync,
         T: GameAnalyzer<Action=A,State=S> + Send
     {
+        let mut games_to_play = games_to_play;
         let mut game_result_stream = FuturesUnordered::new();
-        let repeated_models: Vec<_> = repeat_with(|| models.iter().map(|(m, a)| (*m, *a))).flatten().take(num_players).collect();
-
-        let mut games_to_play: Vec<Vec<(&ModelInfo, &T)>> =
-            repeat_with(|| repeated_models.clone())
-            .map::<Vec<_>,_>(|mut d| Permute::new(&mut d).collect())
-            .flatten()
-            .take(num_games_to_play)
-            .collect();
 
         for _ in 0..batch_size {
             if let Some(players) = games_to_play.pop() {
@@ -202,8 +183,8 @@ impl SelfEvaluate
     #[allow(non_snake_case)]
     async fn play_game<S, A, E, T>(
         game_engine: &E,
-        players: Vec<(&ModelInfo, &T)>,
-        options: &SelfEvaluateOptions
+        players: Vec<(&ModelInfo, T)>,
+        options: &TournamentOptions
     ) -> Result<GameResult<A>, Error>
     where
         S: GameState,
@@ -225,7 +206,7 @@ impl SelfEvaluate
             S::initial(),
             0,
             game_engine,
-            *analyzer,
+            analyzer,
             MCTSOptions::<S,_,_>::new(
                 None,
                 fpu,
@@ -268,6 +249,22 @@ impl SelfEvaluate
             scores
         })
     }
+}
+
+fn generate_games_to_play<S,A,M,T>(
+    models: &[M],
+    num_players: usize
+) -> Vec<Vec<&M>>
+where
+    S: engine::game_state::GameState,
+    M: Model<State=S,Action=A,Analyzer=T>,
+    T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
+{
+    let games_to_play: Vec<Vec<(&M)>> = models.iter()
+        .permutations(num_players)
+        .collect();
+
+    games_to_play
 }
 
 fn get_run_directory(game_name: &str, run_name: &str) -> PathBuf {
