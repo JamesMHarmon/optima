@@ -12,7 +12,7 @@ use std::path::{PathBuf};
 use std::io::{BufReader,Write};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
-use failure::Error;
+use failure::{format_err,Error};
 use itertools::{izip,Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
@@ -163,7 +163,7 @@ impl<S,A,V,E,Map> ModelTrait for TensorflowModel<E,Map>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
-    V: Value,
+    V: Value + Send + 'static,
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V> + Send + Sync + 'static
 {
@@ -185,9 +185,7 @@ where
     where
         I: Iterator<Item=PositionMetrics<S,A,V>>
     {
-        let mapper = &*self.mapper;
-
-        train(&self.model_info, target_model_info, sample_metrics, mapper, options)
+        train(&self.model_info, target_model_info, sample_metrics, self.mapper.clone(), options)
     }
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer
@@ -324,14 +322,15 @@ fn train<S,A,V,I,Map>(
     source_model_info: &ModelInfo,
     target_model_info: &ModelInfo,
     sample_metrics: I,
-    mapper: &Map,
+    mapper: Arc<Map>,
     options: &TrainOptions
 ) -> Result<(), Error>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
+    V: Send + 'static,
     I: Iterator<Item=PositionMetrics<S,A,V>>,
-    Map: Mapper<S,A,V>
+    Map: Mapper<S,A,V> + Send + Sync + 'static
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
@@ -339,25 +338,35 @@ where
     let source_base_path = source_paths.get_base_path();
 
     let mut train_data_file_names = vec!();
+    let mut handles = vec!();
 
     for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
         let train_data_file_name = format!("training_data_{}.csv", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
         println!("Writing data to {:?}", &train_data_path);
-        let mut wtr = csv::Writer::from_path(train_data_path)?;
         train_data_file_names.push(train_data_file_name);
+        let sample_metrics_chunk = sample_metrics.collect::<Vec<_>>();
+        let mapper = mapper.clone();
 
-        for metric in sample_metrics {
-            let record = 
-                mapper.game_state_to_input(&metric.game_state).into_iter().chain(
-                mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
-                std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
-            )).map(|v| v.to_string());
+        handles.push(std::thread::spawn(move || {
+            let mut wtr = csv::Writer::from_path(train_data_path).unwrap();
 
-            wtr.write_record(record)?;
-        }
+            for metric in sample_metrics_chunk {
+                let record = 
+                    mapper.game_state_to_input(&metric.game_state).into_iter().chain(
+                    mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
+                    std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
+                )).map(|v| v.to_string());
 
-        wtr.flush()?;
+                wtr.write_record(record).unwrap();
+            }
+
+            wtr.flush().unwrap();
+        }));
+    }
+
+    for handle in handles {
+        handle.join().map_err(|_| format_err!("Thread failed to write training data"))?;
     }
 
     let mut train_data_paths = train_data_file_names.iter().map(|file_name| format!(
