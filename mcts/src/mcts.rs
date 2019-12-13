@@ -178,23 +178,23 @@ where
             alive_clone.store(false, Ordering::SeqCst);
         });
 
-        self._search(|_| alive.load(Ordering::SeqCst)).await
+        self.search(|_| alive.load(Ordering::SeqCst)).await
     }
 
     pub async fn search_visits(&mut self, visits: usize) -> Result<usize, Error> {
         let mut searches = 0;
 
-        self._search(|initial_visits| {
-            let prev_searches = searches;
+        self.search(|initial_visits| {
+            let prevsearches = searches;
 
             searches += 1;
 
-            initial_visits + prev_searches < visits
+            initial_visits + prevsearches < visits
         }).await
     }
 
     pub async fn ponder(&mut self, alive: &mut bool) -> Result<usize, Error> {
-        self._search(|_| *alive).await
+        self.search(|_| *alive).await
     }
 
     pub async fn select_action(&mut self) -> Result<A, Error> {
@@ -271,7 +271,7 @@ where
         Ok(nodes)
     }
 
-    async fn _search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
+    async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
         let root_node_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
