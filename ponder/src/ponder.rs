@@ -80,7 +80,7 @@ impl Ponder
             if input == "" {
                 println!("PONDERING: {}", visits);
                 total_visits += visits;
-                mcts.search(total_visits).await?;
+                mcts.search_visits(total_visits).await?;
                 println!("{}", mcts.get_root_node_details().await?);
                 let pvs: Vec<_> = mcts.get_principal_variation().await?.iter().map(|n| format!("\n\t{:?}", n)).collect();
                 println!("{}", pvs.join(""));
@@ -97,7 +97,7 @@ impl Ponder
                 
                 match action {
                     Ok(action) => {
-                        if let Err(_) = mcts.advance_to_action(action.clone()).await {
+                        if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
                             println!("Illegal Action: {:?}", &action);
                             continue;
                         }

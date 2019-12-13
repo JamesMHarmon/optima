@@ -1,7 +1,9 @@
 use std::cell::{Cell,RefCell};
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::{Arc};
+use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+use std::time::Duration;
+use std::thread;
 use futures::stream::{FuturesOrdered,StreamExt};
 use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
@@ -167,12 +169,32 @@ where
         }
     }
 
-    pub async fn search(&mut self, visits: usize) -> Result<usize, Error> {
-        self._search(visits, true).await
+    pub async fn search_time(&mut self, duration: Duration) -> Result<usize, Error> {
+        let alive = Arc::new(AtomicBool::new(true));
+
+        let alive_clone = alive.clone();
+        thread::spawn(move || {
+            thread::sleep(duration);
+            alive_clone.store(false, Ordering::SeqCst);
+        });
+
+        self._search(|_| alive.load(Ordering::SeqCst)).await
     }
 
-    pub async fn search_no_noise(&mut self, visits: usize) -> Result<usize, Error> {
-        self._search(visits, false).await
+    pub async fn search_visits(&mut self, visits: usize) -> Result<usize, Error> {
+        let mut searches = 0;
+
+        self._search(|initial_visits| {
+            let prev_searches = searches;
+
+            searches += 1;
+
+            initial_visits + prev_searches < visits
+        }).await
+    }
+
+    pub async fn ponder(&mut self, alive: &mut bool) -> Result<usize, Error> {
+        self._search(|_| *alive).await
     }
 
     pub async fn select_action(&mut self) -> Result<A, Error> {
@@ -189,6 +211,17 @@ where
 
     pub async fn advance_to_action_retain(&mut self, action: A) -> Result<(), Error> {
         self.advance_to_action_clearable(action, false).await
+    }
+
+    pub async fn apply_noise_at_root(&mut self) {
+        let root_node_index = self.get_or_create_root_node().await;
+
+        if let Some(dirichlet) = &self.options.dirichlet { 
+            let mut arena_borrow_mut = self.arena.borrow_mut();
+            let root_node = &mut arena_borrow_mut[root_node_index];
+
+            Self::apply_dirichlet_noise_to_node(root_node, dirichlet);
+        }
     }
 
     pub async fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>, Error> {
@@ -238,48 +271,40 @@ where
         Ok(nodes)
     }
 
-    async fn _search(&mut self, visits: usize, apply_noise: bool) -> Result<usize, Error> {
+    async fn _search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
+        let root_node_index = self.get_or_create_root_node().await;
+
         let game_engine = &self.game_engine;
         let fpu = self.options.fpu;
         let fpu_root = self.options.fpu_root;
         let cpuct = &self.options.cpuct;
-        let dirichlet = if apply_noise { &self.options.dirichlet } else { &None };
-        let analyzer = &mut self.analyzer;
-        let root = &mut self.root;
-        let starting_num_actions = &mut self.starting_num_actions;
-        let starting_game_state = &mut self.starting_game_state;
         let arena_cell = &self.arena;
-
-        let mut arena_borrow_mut = arena_cell.borrow_mut();
-        let root_node_index = MCTS::<S,A,E,M,C,T,V>::get_or_create_root_node(
-            root,
-            starting_game_state,
-            starting_num_actions,
-            analyzer,
-            &mut *arena_borrow_mut,
-            dirichlet
-        ).await;
-
-        let current_visits = arena_borrow_mut[root_node_index].get_node_visits();
-        drop(arena_borrow_mut);
-
         let mut max_depth: usize = 0;
-        let mut searches_remaining = visits - current_visits;
-        let initial_searches = self.options.parallelism.min(searches_remaining);
+        let mut alive_flag = true;
+        let mut alive = alive;
 
+        let arena_borrow = arena_cell.borrow();
+        let initial_visits = arena_borrow[root_node_index].get_node_visits();
+        drop(arena_borrow);
+        
+        let analyzer = &mut self.analyzer;
         let mut searches = FuturesOrdered::new();
-        for _ in 0..initial_searches {
-            searches_remaining -= 1;
-            let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
 
-            searches.push(future);
+        for _ in 0..self.options.parallelism {
+            if alive_flag && alive(initial_visits) {
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
+                searches.push(future);
+            } else {
+                alive_flag = false;
+            }
         }
 
         while let Some(search_depth) = searches.next().await {
-            if searches_remaining > 0 {
-                searches_remaining -= 1;
+            if alive_flag && alive(initial_visits) {
                 let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
                 searches.push(future);
+            } else {
+                alive_flag = false;
             }
 
             max_depth = max_depth.max(search_depth?);
@@ -355,17 +380,12 @@ where
     }
 
     async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<(), Error> {
-        let mut root = self.root.take();
-        let analyzer = &mut self.analyzer;
-        let starting_game_state = &mut self.starting_game_state;
-        let starting_num_actions = &mut self.starting_num_actions;
+        let root_index = self.get_or_create_root_node().await;
+
         let game_engine = &self.game_engine;
-        let dirichlet = &self.options.dirichlet;
 
         let arena_borrow_mut = &mut *self.arena.borrow_mut();
-        let root_index = MCTS::<S,A,E,M,C,T,V>::get_or_create_root_node(&mut root, starting_game_state, starting_num_actions, analyzer, arena_borrow_mut, dirichlet).await;
-
-        let root_node = arena_borrow_mut.remove(root_index).expect("Root node should exist in arena.");
+        let root_node = arena_borrow_mut.remove(root_index).ok_or(format_err!("Root node should exist in arena."))?;
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
         if let Err(err) = split_nodes {
@@ -394,6 +414,7 @@ where
         } else {
             let prior_num_actions = root_node.num_actions;
             let new_game_state = game_engine.take_action(&root_node.game_state, &action);
+            let analyzer = &mut self.analyzer;
             let node = MCTS::<S,A,E,M,C,T,V>::expand_leaf(new_game_state, prior_num_actions, analyzer).await;
             arena_borrow_mut.insert(node)
         };
@@ -502,30 +523,27 @@ where
         MCTS::<S,A,E,M,C,T,V>::analyse_and_create_node(game_state, num_actions, analyzer).await
     }
 
-    async fn get_or_create_root_node(
-        root: &mut Option<Index>,
-        starting_game_state: &mut Option<S>,
-        starting_num_actions: &mut Option<usize>,
-        analyzer: &M,
-        arena: &mut Arena<MCTSNode<S,A,V>>,
-        dirichlet: &Option<DirichletOptions>
-    ) -> Index {
+    async fn get_or_create_root_node(&mut self) -> Index {
+        let root = &mut self.root;
+
         if let Some(root_node_index) = root.as_ref() {
             return *root_node_index;
         }
 
+        let analyzer = &mut self.analyzer;
+        let starting_num_actions = &mut self.starting_num_actions;
+        let starting_game_state = &mut self.starting_game_state;
+
         let starting_game_state = starting_game_state.take().expect("Tried to use the same starting game state twice");
         let starting_num_actions = starting_num_actions.take().expect("Tried to use the same starting actions twice");
 
-        let mut root_node = MCTS::<S,A,E,M,C,T,V>::analyse_and_create_node(
+        let root_node = MCTS::<S,A,E,M,C,T,V>::analyse_and_create_node(
             starting_game_state,
             starting_num_actions,
             analyzer
         ).await;
 
-        Self::apply_dirichlet_noise_to_node(&mut root_node, dirichlet);
-
-        let root_node_index = arena.insert(root_node);
+        let root_node_index = self.arena.borrow_mut().insert(root_node);
 
         root.replace(root_node_index);
 
@@ -539,21 +557,19 @@ where
         MCTSNode::new(game_state, actions, value_score, analysis_result.policy_scores)
     }
 
-    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S,A,V>, dirichlet: &Option<DirichletOptions>) {
-        if let Some(dirichlet) = dirichlet {
-            let policy_scores: Vec<f32> = node.children.iter().map(|child_node| {
-                child_node.policy_score
-            }).collect();
+    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S,A,V>, dirichlet: &DirichletOptions) {
+        let policy_scores: Vec<f32> = node.children.iter().map(|child_node| {
+            child_node.policy_score
+        }).collect();
 
-            let updated_policy_scores = MCTS::<S,A,E,M,C,T,V>::apply_dirichlet_noise(policy_scores, dirichlet);
+        let noisy_policy_scores = MCTS::<S,A,E,M,C,T,V>::generate_noise(policy_scores, dirichlet);
 
-            for (child, policy_score) in node.children.iter_mut().zip(updated_policy_scores.into_iter()) {
-                child.policy_score = policy_score;
-            }
+        for (child, policy_score) in node.children.iter_mut().zip(noisy_policy_scores.into_iter()) {
+            child.policy_score = policy_score;
         }
     }
 
-    fn apply_dirichlet_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32>
+    fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32>
     {
         // Do not apply noise if there is only one action.
         if policy_scores.len() < 2 {
@@ -839,8 +855,8 @@ mod tests {
             1
         ));
 
-        mcts.search(800).await.unwrap();
-        mcts2.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
+        mcts2.search_visits(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
         let metrics2 = mcts.get_root_node_metrics().await.unwrap();
@@ -865,7 +881,7 @@ mod tests {
             1
         ));
 
-        mcts.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
         let action = mcts.select_action().await.unwrap();
 
         assert_eq!(action, CountingAction::Increment);
@@ -890,7 +906,7 @@ mod tests {
 
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
-        mcts.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
         let action = mcts.select_action().await.unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
@@ -933,7 +949,7 @@ mod tests {
             1
         ));
 
-        mcts.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -965,7 +981,7 @@ mod tests {
             1
         ));
 
-        mcts.search(100).await.unwrap();
+        mcts.search_visits(100).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -997,7 +1013,7 @@ mod tests {
             1
         ));
 
-        mcts.search(1).await.unwrap();
+        mcts.search_visits(1).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -1029,7 +1045,7 @@ mod tests {
             1
         ));
 
-        mcts.search(2).await.unwrap();
+        mcts.search_visits(2).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -1061,7 +1077,7 @@ mod tests {
             1
         ));
 
-        mcts.search(8000).await.unwrap();
+        mcts.search_visits(8000).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -1093,7 +1109,7 @@ mod tests {
             1
         ));
 
-        mcts.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -1125,7 +1141,7 @@ mod tests {
             1
         ));
 
-        mcts.search(800).await.unwrap();
+        mcts.search_visits(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().await.unwrap();
 
@@ -1158,10 +1174,10 @@ mod tests {
             1
         ));
 
-        non_clear_mcts.search(search_num_visits).await.unwrap();
+        non_clear_mcts.search_visits(search_num_visits).await.unwrap();
         let action = non_clear_mcts.select_action().await.unwrap();
         non_clear_mcts.advance_to_action_retain(action).await.unwrap();
-        non_clear_mcts.search(search_num_visits).await.unwrap();
+        non_clear_mcts.search_visits(search_num_visits).await.unwrap();
 
         let non_clear_metrics = non_clear_mcts.get_root_node_metrics().await.unwrap();
 
@@ -1175,10 +1191,10 @@ mod tests {
             1
         ));
 
-        clear_mcts.search(search_num_visits).await.unwrap();
+        clear_mcts.search_visits(search_num_visits).await.unwrap();
         let action = clear_mcts.select_action().await.unwrap();
         clear_mcts.advance_to_action(action.clone()).await.unwrap();
-        clear_mcts.search(search_num_visits).await.unwrap();
+        clear_mcts.search_visits(search_num_visits).await.unwrap();
 
         let clear_metrics = clear_mcts.get_root_node_metrics().await.unwrap();
 
@@ -1193,7 +1209,7 @@ mod tests {
         ));
 
         initial_mcts.advance_to_action(action).await.unwrap();
-        initial_mcts.search(search_num_visits).await.unwrap();
+        initial_mcts.search_visits(search_num_visits).await.unwrap();
 
         let initial_metrics = initial_mcts.get_root_node_metrics().await.unwrap();
 
