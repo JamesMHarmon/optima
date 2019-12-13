@@ -31,3 +31,7 @@ Run-7
 12-6-19: model 74 - Introducing fast visits.
 
 12-9-19: model 163 - Added -0.9 temp offset. Pass action is now working.
+
+12-10-19: model 190 - Started training 8x96 model
+
+12-10-19: model 192 - Raise LR from 0.05 to 0.1
