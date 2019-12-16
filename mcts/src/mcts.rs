@@ -572,13 +572,16 @@ where
 
 fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32>
 {
+    let num_actions = policy_scores.len();
+
     // Do not apply noise if there is only one action.
-    if policy_scores.len() < 2 {
+    if num_actions < 2 {
         return policy_scores;
     }
 
     let e = dirichlet.epsilon;
-    let dirichlet_noise = Dirichlet::new_with_size(dirichlet.alpha, policy_scores.len())
+    let alpha = 8.0 / num_actions as f32;
+    let dirichlet_noise = Dirichlet::new_with_size(alpha, num_actions)
         .expect("Error creating dirichlet distribution")
         .sample(&mut thread_rng());
 
