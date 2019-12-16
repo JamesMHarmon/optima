@@ -562,29 +562,29 @@ where
             child_node.policy_score
         }).collect();
 
-        let noisy_policy_scores = MCTS::<S,A,E,M,C,T,V>::generate_noise(policy_scores, dirichlet);
+        let noisy_policy_scores = generate_noise(policy_scores, dirichlet);
 
         for (child, policy_score) in node.children.iter_mut().zip(noisy_policy_scores.into_iter()) {
             child.policy_score = policy_score;
         }
     }
+}
 
-    fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32>
-    {
-        // Do not apply noise if there is only one action.
-        if policy_scores.len() < 2 {
-            return policy_scores;
-        }
-
-        let e = dirichlet.epsilon;
-        let dirichlet_noise = Dirichlet::new_with_size(dirichlet.alpha, policy_scores.len())
-            .expect("Error creating dirichlet distribution")
-            .sample(&mut thread_rng());
-
-        dirichlet_noise.into_iter().zip(policy_scores).map(|(noise, policy_score)|
-            (1.0 - e) * policy_score + e * noise
-        ).collect()
+fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32>
+{
+    // Do not apply noise if there is only one action.
+    if policy_scores.len() < 2 {
+        return policy_scores;
     }
+
+    let e = dirichlet.epsilon;
+    let dirichlet_noise = Dirichlet::new_with_size(dirichlet.alpha, policy_scores.len())
+        .expect("Error creating dirichlet distribution")
+        .sample(&mut thread_rng());
+
+    dirichlet_noise.into_iter().zip(policy_scores).map(|(noise, policy_score)|
+        (1.0 - e) * policy_score + e * noise
+    ).collect()
 }
 
 #[allow(non_snake_case)]
