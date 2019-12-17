@@ -1,31 +1,64 @@
 # Alpha Zero General
 
-## Features
-* **General** - Alpha Zero General exposes trait for any game to be able to plug into.
-* **Performant** - Alpha Zer
-* **Distributed**
-* **Multi-Player** - Most implementations of AZ only allow for two player games.
+AZG is a program designed to master a variety of abstract strategy board games from scratch. AZG achieves this mastery by a process known as reinforcement learning. AZG starts off by playing random moves to explore its environment, then it trains a neural network on that newly acquired information. The newly trained neural network is then used to play additional games. This process is repeated until the AZG has mastered the game. AZG is based on DeepMind's Alpha Zero and implements some novel improvements pioneered by lczero, lc0 and KataGo.
 
-## TODO:
-* -Allow for multiple players-
-* Make learning distributed
-* Add WASM support
-* -Add better debug printing-
-* -Add better error handling-
-* -Add max moves-
-* Document Code
-* Document READMEs
-* Add instructions on how to get it working
-* -Convert reqwest http calls to use std::futures-
-* Mask policy head
-* -Create multi-threaded MCTS-
+## Features
+
+* **General** - AZG exposes traits which allows AZG to play a variety of games.
+* **Performant** - By utilizing rust's async await, thousands of games can be played in parrallel. This allows for games to be learned w/ much less computation required than the original Alpha Zero.
+* **Multi-Player** - Most implementations of Alpha Zero only allow for two player games. AZG abstracts out the players and allows for games of N players to be played.
+* **Non-alternating actions** - Most implementations of Alpha Zero only allow for games where turns are alternating. AZG abstracts out the actions and allows for games which require players to take multiple actions in a row.
+* **Parallelism** - AZG implements a concept known as virtual loss which allows many threads to search the game tree simultaniously. This allows for high utilization of the machines available resources.
+* **Tensorflow & TensorRT** - Tensorflow combined with TensorRT allows for relatively fast neural network inference. Any NVIDIA RTX series card will allow for the best experience in self-learning and play speeds.
+
+## Setup and Play
+
+AZG includes some pre-trained networks that allow for immediate play. To learn from scratch, reference the section [Self-Learn].
+
+It is recommended to try running the CPU version initially due to the relative ease of setup. The GPU version requires some additional dependencies.
+
+### CPU
+
+```bash
+# clone the repo
+git clone AZG
+
+# Build the package
+cd ./AZG && cargo build --release
+
+# Run the client
+./target/release/self-learn-client play game -g <C4|Quoridor|Arimaa> -r run-1
+```
+
+### GPU
+
+* Change train.Dockerfile to use cpu
+* change flag when running docker to not use environment = nvidia.
+
+## Games
+
+AZG can play a variety of games as well as allows support for implementing additional games beyond what is listed below.
+
+### Arimaa
+
+### Quoridor
+
+### Connect4
+
+## Self-Learn
+
+AZG
+
+## TODO
+
+* Masking of the policy head.
+* Update Models to support PyTorch.
+* Add LogitQ as defined by Lc0.
 
 ## FAQ
 
 Q: I get the error `Op type not registered 'FusedBatchNormV3' in binary`
-A: Use `cargo build --release` as opposed to `cargo run`
-
-
+A: Use `cargo build --release` as opposed to `cargo run`. Otherwise build `libtensorflow.so` for your specific machine.
 
 ## References
 
@@ -34,145 +67,3 @@ A: Use `cargo build --release` as opposed to `cargo run`
 * https://medium.com/oracledevs/lessons-from-alpha-zero-part-6-hyperparameter-tuning-b1cfcbe4ca9a
 * https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
 * http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html
-
-pb_c = math.log((parent.visit_count + config.pb_c_base + 1) /
-                  config.pb_c_base) + config.pb_c_init
-
-
-* Create server client
-            
-            
-            // https://github.com/evg-tyurin/alpha-nagibator/blob/master/MCTS.py
-            // p = (1-e) * p + e * noise[i] // + 1
-            // Checkers
-            // 'dirAlpha': 0.3,
-            // 'epsilon': 0.25, 
-
-
-            // https://github.com/dylandjian/SuperGo/blob/master/models/mcts.py
-            // (1 - EPS) * probas + EPS * np.random.dirichlet(np.full(dim, ALPHA))
-            // ## Epsilon for Dirichlet noise
-            // EPS = 0.25
-            // ## Alpha for Dirichlet noise
-            // ALPHA = 0.03
-
-            // https://github.com/AppliedDataSciencePartners/DeepReinforcementLearning/blob/master/MCTS.py
-            // nu = np.random.dirichlet([config.ALPHA] * len(currentNode.edges))
-            // (1-epsilon) * edge.stats['P'] + epsilon * nu[idx] )
-            // EPSILON = 0.2
-            // ALPHA = 0.8
-
-
-            // https://medium.com/oracledevs/lessons-from-alphazero-part-3-parameter-tweaking-4dceb78ed1e5
-            // p = (1-x) * d + x * p
-            // In the paper, x is set to 0.75
-            // It’s hard to know how to optimally extrapolate, but a reasonable first guess looks to be choosing ɑ = 10/n
-            // Since there are approximately four legal moves in a Connect Four position, this gives us ɑ=2.5. It’s true that this is greater than one while the rest are less, and yet this number seemed to do well in our testing. With a little playing around, we found that 1.75 did even better.
-            // UPDATE: while early versions of our training did best with a=1.75, we ultimately settled on a=1.0 as the optimal value for our training.
-
-learning rates
-// - 0.1
-// - 0.01
-// - 0.001
-// - 0.0001
-
-
-until ./quoridor run -g "Connect4" -r "Run-1"; do echo "Server 'myserver' crashed with exit code $?.  Respawning.." >&2;     sleep 1; done
-
-until docker run --rm     --runtime=nvidia     -p 8501:8501     --mount type=bind,source="$(pwd)/Quoridor_runs/run-1",target=/models     --mount type=bind,source="$(pwd)/Quoridor_runs/run-1/models.config",target=/models/models.config     --env-file "$(pwd)/Quoridor_runs/run-1/env.list"     -t     tensorflow/serving:latest-gpu --model_config_file=/models/models.config; do echo "Server 'myserver' crashed with exit code $?.  Respawning.." >&2;     sleep 10; done
-
-
-## Commands
-
-sudo docker run --rm \
-    --runtime=nvidia \
-    -p 8501:8501 \
-    --mount type=bind,source=$(pwd)/Connect4_runs/run-1,target=/models \
-    --mount type=bind,source=$(pwd)/Connect4_runs/run-1/models.config,target=/models/models.config \
-    --env-file $(pwd)/Connect4_runs/run-1/env.list \
-    -t \
-    tensorflow/serving:latest-gpu --model_config_file=/models/models.config
-
-https://github.com/tensorflow/serving/issues/1077
-
-sudo docker run --rm \
-    --runtime=nvidia -it \
-    -v $(pwd):/tmp tensorflow/tensorflow:latest-gpu \
-    /usr/local/bin/saved_model_cli convert \
-    --dir /tmp/export_model/1 \
-    --output_dir /tmp/export_model_trt/1 \
-    --tag_set serve \
-    tensorrt --precision_mode FP16 --max_batch_size 512
-
-Time Elapsed: 0.20h, Number of Games Played: 1024
-
-curl -d '{"instances": [[[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],[[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]]]}'     -X POST http://localhost:8501/v1/models/exported_models/versions/2:predict
-
-
-
-@Alvaro.  Here is a repost: "
-So do I understand this correctly? 4096 positions are sampled randomly from the window of 1M games and any number of positions. These 4096 positions are feed to the network with the outcome. Then again 4096 randomly selected positions are selected and feed to the network and training it. This is repeated 250 times. After that the new network is uploaded.
-During selection of 4096 games, 250 times, the set of the games and positions in the window is "frozen", nothing is changed?
-So each time a new network is generated, it has been trained with 250 * 4096 = 1 024 000 positions randomly selected from the window of 1 000 000 games (and unknown number of positions), while no altering of the window occurred.
-
-
----------------------------
-aartToday at 2:39 PM
-as far as I know that is all true
-
-
-
-fischerandomToday at 2:55 PM
-And then after the new network has been uploaded, all positions from all self-play games generated by all clients sent to the server is pushed into the game pool window of 1 000 000 games, and at the same time the oldest games in the 1M window are removed. So if 32000 games are pushed into the window, then first the 32000 oldest games are removed from the window?
-aartToday at 2:56 PM
-I think so
-
-
-export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/cuda-10.0/lib64
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.0/lib64
-
-
-
-# Update readme with proper GPU vs CPU changes. Potentially add feature flag
-- Change train.Dockerfile to use cpu
-- change flag when running docker to not use environment = nvidia.
-
-* Consider adding a pool for vectors/slices. https://github.com/CJP10/object-pool , https://carllerche.github.io/pool/pool/ , https://crates.io/crates/lifeguard
-* -TensorRT or f16 the networks-
-* -Add multiple players-
-* -Add multiple moves-
-* Create ponder cli
-* Use proper logging
-* Calculate the p values from logits only on legal actions. Inverse calculation for training? // https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
-* Sampling of action when using temp to select should be softmax
-
-Hey Omar,
-
-I recently discovered the game of Arimaa and am loving it. I am enjoying how simple it has been to learn yet how deep and complex the strategy can become.
-
-I have also been a fan of and following the Alpha Zero project along with the open source versions like Leela Zero Chess.
-
-Someone mentioned to me that you have offered a challenge to recreate Alpha Zero for Arimaa.
-
-"If anyone is interested in reproducing these results for Arimaa and making the bot and bot generation code open source (along with a published paper describing the work), I would be willing to award a prize of $10,000. The program has to win a 10 game match against bot_Sharp2015CC to prove superior human level play. "
-
-I would love to take on this challenge if you are interested.
-
-Thanks!
-James
-
-docker run --rm --runtime=nvidia -it -v /home/james/quoridor_engine/Connect4_runs/run-4/exported_models/:/tmp/exported_models tensorflow/tensorflow:latest-gpu /usr/local/bin/saved_model_cli convert --dir /tmp/exported_models/75 --output_dir /tmp/exported_models/78 --tag_set serve tensorrt --precision_mode FP16 --max_batch_size 512 --is_dynamic_op False
-
-freeze_graph.freeze_graph(
-     None,
-     None,
-     None,
-     None,
-     [output.op.name for output in model.outputs],
-     None,
-     None,
-     frozen_model_path,
-     False,
-     "",
-     saved_model_tags=tag_constants.SERVING,
-     input_saved_model_dir=export_model_path)
