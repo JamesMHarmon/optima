@@ -193,7 +193,7 @@ where
         }).await
     }
 
-    pub async fn ponder(&mut self, alive: &mut bool) -> Result<usize, Error> {
+    pub async fn play(&mut self, alive: &mut bool) -> Result<usize, Error> {
         self.search(|_| *alive).await
     }
 

@@ -328,8 +328,8 @@ subcommands:
                 takes_value: true
                 help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM
-    - ponder:
-        about: Ponders on positions as the user select which moves to play.
+    - play:
+        about: Plays on positions as the user select which moves to play.
         args:
             - game:
                 required: true

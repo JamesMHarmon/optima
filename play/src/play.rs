@@ -12,7 +12,7 @@ use engine::game_state::GameState;
 use model::model::Model;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PonderOptions {
+pub struct PlayOptions {
     pub visits: usize,
     pub parallelism: usize,
     pub fpu: f32,
@@ -22,15 +22,15 @@ pub struct PonderOptions {
     pub cpuct_root_scaling: f32
 }
 
-pub struct Ponder {}
+pub struct Play {}
 
-impl Ponder
+impl Play
 {
     #[allow(non_snake_case)]
-    pub async fn ponder<S, A, E, M, T>(
+    pub async fn play<S, A, E, M, T>(
         model: &M,
         game_engine: &E,
-        options: &PonderOptions
+        options: &PlayOptions
     ) -> Result<(), Error> 
     where
         S: GameState + Display,
@@ -70,7 +70,7 @@ impl Ponder
         while game_engine.is_terminal_state(&state).is_none() {
             println!("{}", state);
 
-            println!("Input action or Enter to ponder");
+            println!("Input action or Enter to play");
             let reader = std::io::stdin();
             let mut input = String::new();
             reader.read_line(&mut input)?;
@@ -78,7 +78,7 @@ impl Ponder
             println!("Read: {}", input);
 
             if input == "" {
-                println!("PONDERING: {}", visits);
+                println!("PLAYING: {}", visits);
                 total_visits += visits;
                 mcts.search_visits(total_visits).await?;
                 println!("{}", mcts.get_root_node_details().await?);

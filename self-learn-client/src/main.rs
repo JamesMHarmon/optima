@@ -18,7 +18,7 @@ use arimaa::engine::{Engine as ArimaaEngine};
 use arimaa::model::{ModelFactory as ArimaaModelFactory};
 use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
-use ponder::ponder::{Ponder,PonderOptions};
+use play::play::{Play,PlayOptions};
 use tournament::tournament::{Tournament,TournamentOptions};
 
 use failure::{Error,format_err};
@@ -32,7 +32,7 @@ pub struct Options {
     pub self_learn: SelfLearnOptions,
     pub self_evaluate: SelfEvaluateOptions,
     pub model: ModelOptions,
-    pub ponder: PonderOptions,
+    pub play: PlayOptions,
     pub tournament: TournamentOptions
 }
 
@@ -48,7 +48,7 @@ async fn main() -> Result<(), Error> {
         update_model_options_from_matches(&mut default_options.model, matches)?;
         update_self_learn_options_from_matches(&mut default_options.self_learn, matches)?;
         update_self_evaluate_options_from_matches(&mut default_options.self_evaluate, matches)?;
-        update_ponder_options_from_matches(&mut default_options.ponder, matches)?;
+        update_play_options_from_matches(&mut default_options.play, matches)?;
         let options = default_options;
 
         create(game_name, run_name, &options)?;
@@ -119,19 +119,19 @@ async fn main() -> Result<(), Error> {
         } else {
             panic!("Game name not recognized");
         }
-    } else if let Some(matches) = matches.subcommand_matches("ponder") {
+    } else if let Some(matches) = matches.subcommand_matches("play") {
         let game_name = matches.value_of("game").unwrap();
         let run_name = matches.value_of("run").unwrap();
-        let mut options = get_options(game_name, run_name)?.ponder;
-        let model_num = update_ponder_options_from_matches(&mut options, matches)?;
+        let mut options = get_options(game_name, run_name)?.play;
+        let model_num = update_play_options_from_matches(&mut options, matches)?;
         let model_num: Option<usize> = model_num.map(|v| v.parse().expect("Model number not a valid int"));
 
         if game_name == C4_NAME {
-            return ponder_connect4(run_name, model_num, &options).await;
+            return play_connect4(run_name, model_num, &options).await;
         } else if game_name == QUORIDOR_NAME {
-            return ponder_quoridor(run_name, model_num, &options).await;
+            return play_quoridor(run_name, model_num, &options).await;
         } else if game_name == ARIMAA_NAME {
-            return ponder_arimaa(run_name, model_num, &options).await;
+            return play_arimaa(run_name, model_num, &options).await;
         } else {
             panic!("Game name not recognized");
         }
@@ -212,7 +212,7 @@ fn tournament_connect4(run_name: &str, models: &[usize], options: &TournamentOpt
     Ok(())
 }
 
-async fn ponder_connect4(run_name: &str, model_num: Option<usize>, options: &PonderOptions) -> Result<(), Error> {
+async fn play_connect4(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
     let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), 1);
@@ -224,7 +224,7 @@ async fn ponder_connect4(run_name: &str, model_num: Option<usize>, options: &Pon
 
     let model = model_factory.get(&model_info);
 
-    Ponder::ponder(
+    Play::play(
         &model,
         &game_engine,
         options
@@ -319,7 +319,7 @@ fn tournament_quoridor(run_name: &str, models: &[usize], options: &TournamentOpt
     Ok(())
 }
 
-async fn ponder_quoridor(run_name: &str, model_num: Option<usize>, options: &PonderOptions) -> Result<(), Error> {
+async fn play_quoridor(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
     let model_factory = QuoridorModelFactory::new();
     let game_engine = QuoridorEngine::new();
     let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), 1);
@@ -331,7 +331,7 @@ async fn ponder_quoridor(run_name: &str, model_num: Option<usize>, options: &Pon
 
     let model = model_factory.get(&model_info);
 
-    Ponder::ponder(
+    Play::play(
         &model,
         &game_engine,
         options
@@ -412,7 +412,7 @@ fn tournament_arimaa(run_name: &str, models: &[usize], options: &TournamentOptio
     Ok(())
 }
 
-async fn ponder_arimaa(run_name: &str, model_num: Option<usize>, options: &PonderOptions) -> Result<(), Error> {
+async fn play_arimaa(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
     let model_factory = ArimaaModelFactory::new();
     let game_engine = ArimaaEngine::new();
     let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), 1);
@@ -424,7 +424,7 @@ async fn ponder_arimaa(run_name: &str, model_num: Option<usize>, options: &Ponde
 
     let model = model_factory.get(&model_info);
 
-    Ponder::ponder(
+    Play::play(
         &model,
         &game_engine,
         options
@@ -484,7 +484,7 @@ fn get_default_options() -> Result<Options, Error> {
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling
     };
 
-    let ponder_options = PonderOptions {
+    let play_options = PlayOptions {
         visits: self_learn_options.visits * 50,
         parallelism: self_learn_options.parallelism * 4,
         fpu: self_learn_options.fpu,
@@ -513,7 +513,7 @@ fn get_default_options() -> Result<Options, Error> {
         self_learn: self_learn_options,
         self_evaluate: self_evaluate_options,
         model: model_options,
-        ponder: ponder_options,
+        play: play_options,
         tournament: tournament_options
     })
 }
@@ -570,7 +570,7 @@ fn update_self_evaluate_options_from_matches(options: &mut SelfEvaluateOptions, 
     Ok((matches.value_of("model_1").map(|s| s.to_owned()), matches.value_of("model_2").map(|s| s.to_owned())))
 }
 
-fn update_ponder_options_from_matches(options: &mut PonderOptions, matches: &clap::ArgMatches) -> Result<Option<String>, Error> {
+fn update_play_options_from_matches(options: &mut PlayOptions, matches: &clap::ArgMatches) -> Result<Option<String>, Error> {
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };

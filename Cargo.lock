@@ -1188,7 +1188,7 @@ version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "ponder"
+name = "play"
 version = "0.1.0"
 dependencies = [
  "common 0.1.0",
@@ -1603,7 +1603,7 @@ dependencies = [
  "connect4 0.1.0",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "model 0.1.0",
- "ponder 0.1.0",
+ "play 0.1.0",
  "quoridor 0.1.0",
  "self-evaluate 0.1.0",
  "self-learn 0.1.0",

@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 self-learn = { path = "../self-learn" }
 self-evaluate = { path = "../self-evaluate" }
-ponder = { path = "../ponder" }
+play = { path = "../play" }
 tournament = { path = "../tournament" }
 model = { path = "../model" }
 arimaa = { path = "../arimaa" }
