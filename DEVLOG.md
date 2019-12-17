@@ -46,6 +46,8 @@ Run-7
 
 12-13-19: model 318 - Lowered moving window size from 225k to 125k
 
-12-16-19: model 344 - Reset model back to 242 after discovery an issue w/ too much dirichlet noise. Changed noise to be relative to the current number of valid actions.
+12-16-19: model 344 - Reset model back to 242 after discovery an issue w/ too much dirichlet noise.
+
+12-16-19: model 244 - Changed self play batch size from 32 to 96, parallelism from 16 to 8, temp max actions from 160 to 96. Changed noise to be relative to the current number of valid actions.
 
 
