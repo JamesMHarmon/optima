@@ -10,6 +10,7 @@ AZG is a program designed to master a variety of abstract strategy board games f
 * **Non-alternating actions** - Most implementations of Alpha Zero only allow for games where turns are alternating. AZG abstracts out the actions and allows for games which require players to take multiple actions in a row.
 * **Parallelism** - AZG implements a concept known as virtual loss which allows many threads to search the game tree simultaniously. This allows for high utilization of the machines available resources.
 * **Tensorflow & TensorRT** - Tensorflow combined with TensorRT allows for relatively fast neural network inference. Any NVIDIA RTX series card will allow for the best experience in self-learning and play speeds.
+* **Componentized** - One of the goals of AZG is to not only allow an assortment of games to be implemented, but also to allow for the different pieces in the system to be changed. For example, a model can be changed to use pytorch vs tensorflow. This is to allow for greater flexibility and experimentation of novel ideas. Furthermore, adhering to rust's idea of zero cost abstractions, this approach does not impact performance in any way.
 
 ## Setup and Play
 
