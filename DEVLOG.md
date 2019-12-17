@@ -35,3 +35,17 @@ Run-7
 12-10-19: model 190 - Started training 8x96 model
 
 12-10-19: model 192 - Raise LR from 0.05 to 0.1
+
+12-12-19: model 252 - Updated code to fix bug w/ noise not always being applied to root
+
+12-12-19: model 253 - Updated to start using 8x96 net
+
+12-13-19: model 270 - Raised moving window size from 125k to 225k
+
+12-13-19: model 282 - Changed tensorboard to calculate loss on the most recent training data batch
+
+12-13-19: model 318 - Lowered moving window size from 225k to 125k
+
+12-16-19: model 344 - Reset model back to 242 after discovery an issue w/ too much dirichlet noise. Changed noise to be relative to the current number of valid actions.
+
+
