@@ -271,7 +271,7 @@ where
         Ok(nodes)
     }
 
-    async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
+    pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
         let root_node_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
