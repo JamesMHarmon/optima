@@ -5,7 +5,7 @@ use std::fs::{self,File};
 use std::future::Future;
 use std::pin::Pin;
 use std::process::{Command,Stdio};
-use std::sync::{Arc,atomic::{AtomicBool,AtomicUsize,Ordering}};
+use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
 use std::task::{Context,Poll,Waker};
 use std::time::Instant;
 use std::path::{PathBuf};
@@ -39,9 +39,11 @@ pub struct TensorflowModel<E,Map>
 {
     model_info: ModelInfo,
     batching_model: Arc<BatchingModel<E,Map>>,
-    alive: Arc<AtomicBool>,
+    active_analyzers: Arc<AtomicUsize>,
+    active_threads: Arc<AtomicUsize>,
     id_generator: Arc<AtomicUsize>,
-    mapper: Arc<Map>
+    mapper: Arc<Map>,
+    analysis_request_threads: usize
 }
 
 #[derive(Serialize,Deserialize)]
@@ -87,64 +89,15 @@ where
 
         let mapper = Arc::new(mapper);
         let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), analysis_request_threads, batch_size));
-        let alive = Arc::new(AtomicBool::new(true));
-
-        for i in 0..analysis_request_threads {
-            let batching_model_ref = batching_model.clone();
-            let alive_ref = alive.clone();
-            let model_info = model_info.clone();
-            let mapper = mapper.clone();
-
-            std::thread::spawn(move || {
-                let mut last_report = Instant::now();
-                let input_dim = mapper.get_input_dimensions();
-                let predictor = Predictor::new(&model_info, input_dim);
-
-                loop {
-                    let states_to_analyse = batching_model_ref.get_states_to_analyse();
-                    let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
-
-                    if states_to_analyse.len() == 0 {
-                        std::thread::sleep(std::time::Duration::from_micros(100));
-                    }
-
-                    let predictions = predictor.predict(game_states_to_predict).unwrap();
-                    let predictions: Vec<_> = predictions.into_iter()
-                        .zip(states_to_analyse.into_iter())
-                        .map(|(prediction,(id,_,waker))| (id, prediction, waker))
-                        .collect();
-
-                    batching_model_ref.provide_analysis(predictions);
-
-                    let elapsed_mills = last_report.elapsed().as_millis();
-                    if i == 0 && elapsed_mills >= 5_000 {
-                        let num_nodes = batching_model_ref.take_num_nodes_analysed();
-                        let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
-                        let nps = num_nodes as f32 * 1000.0 / elapsed_mills as f32;
-                        let now = Utc::now().format("%H:%M:%S").to_string();
-                        println!(
-                            "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
-                            now,
-                            nps,
-                            min_batch_size,
-                            max_batch_size
-                        );
-                        last_report = Instant::now();
-                    }
-
-                    if !alive_ref.load(Ordering::SeqCst) {
-                        break;
-                    }
-                }
-            });
-        }
 
         Self {
             model_info,
             batching_model,
-            alive,
+            active_analyzers: Arc::new(AtomicUsize::new(0)),
+            active_threads: Arc::new(AtomicUsize::new(0)),
             id_generator: Arc::new(AtomicUsize::new(0)),
-            mapper
+            mapper,
+            analysis_request_threads
         }
     }
 
@@ -156,6 +109,82 @@ where
             model_info,
             options
         )
+    }
+}
+
+fn create_analysis_threads<S,A,V,E,Map>(
+    active_threads: &Arc<AtomicUsize>,
+    active_analyzers: &Arc<AtomicUsize>,
+    batching_model: &Arc<BatchingModel<E,Map>>,
+    model_info: &ModelInfo,
+    mapper: &Arc<Map>,
+    analysis_request_threads: usize
+)
+where
+    S: PartialEq + Hash + Send + Sync + 'static,
+    A: Clone + Send + Sync + 'static,
+    V: Value,
+    E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
+    Map: Mapper<S,A,V> + Send + Sync + 'static
+{
+    loop {
+        let thread_num = active_threads.fetch_add(1, Ordering::SeqCst);
+
+        if thread_num >= analysis_request_threads {
+            active_threads.fetch_sub(1, Ordering::SeqCst);
+            break;
+        }
+
+        let batching_model_ref = batching_model.clone();
+        let model_info = model_info.clone();
+        let mapper = mapper.clone();
+        let active_analyzers = active_analyzers.clone();
+        let active_threads = active_threads.clone();
+
+        std::thread::spawn(move || {
+            let mut last_report = Instant::now();
+            let input_dim = mapper.get_input_dimensions();
+            let predictor = Predictor::new(&model_info, input_dim);
+
+            loop {
+                let states_to_analyse = batching_model_ref.get_states_to_analyse();
+                let game_states_to_predict: Vec<&Vec<f32>> = states_to_analyse.iter().map(|(_,input,_)| input).collect();
+
+                if states_to_analyse.len() == 0 {
+                    std::thread::sleep(std::time::Duration::from_micros(100));
+
+                    if active_analyzers.load(Ordering::SeqCst) == 0 {
+                        break;
+                    }
+                }
+
+                let predictions = predictor.predict(game_states_to_predict).unwrap();
+                let predictions: Vec<_> = predictions.into_iter()
+                    .zip(states_to_analyse.into_iter())
+                    .map(|(prediction,(id,_,waker))| (id, prediction, waker))
+                    .collect();
+
+                batching_model_ref.provide_analysis(predictions);
+
+                let elapsed_mills = last_report.elapsed().as_millis();
+                if thread_num == 0 && elapsed_mills >= 5_000 {
+                    let num_nodes = batching_model_ref.take_num_nodes_analysed();
+                    let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
+                    let nps = num_nodes as f32 * 1000.0 / elapsed_mills as f32;
+                    let now = Utc::now().format("%H:%M:%S").to_string();
+                    println!(
+                        "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
+                        now,
+                        nps,
+                        min_batch_size,
+                        max_batch_size
+                    );
+                    last_report = Instant::now();
+                }
+            }
+
+            active_threads.fetch_sub(1, Ordering::SeqCst);
+        });
     }
 }
 
@@ -190,9 +219,14 @@ where
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer
     {
+        self.active_analyzers.fetch_add(1, Ordering::SeqCst);
+
+        create_analysis_threads(&self.active_threads, &self.active_analyzers, &self.batching_model, &self.model_info, &self.mapper, self.analysis_request_threads);
+
         Self::Analyzer {
             batching_model: self.batching_model.clone(),
-            id_generator: self.id_generator.clone()
+            id_generator: self.id_generator.clone(),
+            active_analyzers: self.active_analyzers.clone()
         }
     }
 }
@@ -248,9 +282,11 @@ impl Predictor {
 
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let flattened_inputs: Vec<_> = game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| f16::from_f32(*v)).collect();
+        let mut flattened_inputs = Vec::with_capacity((input_dim[0] * input_dim[1] * input_dim[2]) as usize * batch_size);
         let mut value_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
         let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
+        
+        flattened_inputs.extend(game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| f16::from_f32(*v)));
 
         let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
         let session = &self.session;
@@ -288,6 +324,7 @@ pub struct SessionAndOps {
 
 pub struct GameAnalyzer<E,Map> {
     batching_model: Arc<BatchingModel<E,Map>>,
+    active_analyzers: Arc<AtomicUsize>,
     id_generator: Arc<AtomicUsize>
 }
 
@@ -314,6 +351,12 @@ where
             self.id_generator.fetch_add(1, Ordering::SeqCst),
             self.batching_model.clone()
         )
+    }
+}
+
+impl<E,Map> Drop for GameAnalyzer<E,Map> {
+    fn drop(&mut self) {
+        self.active_analyzers.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -551,12 +594,6 @@ fn run_cmd(cmd: &str) -> Result<(), Error> {
     println!("OUTPUT: {:?}", result);
 
     Ok(())
-}
-
-impl<E,Map> Drop for TensorflowModel<E,Map> {
-    fn drop(&mut self) {
-        self.alive.store(false, Ordering::SeqCst);
-    }
 }
 
 pub struct BatchingModel<E,Map> {
