@@ -1,16 +1,13 @@
 use std::hash::Hasher;
 use std::hash::Hash;
 use common::linked_list::List;
-use std::str::FromStr;
-use std::fmt::{self,Display,Formatter};
-use super::constants::{BOARD_WIDTH,BOARD_HEIGHT,MAX_NUMBER_OF_MOVES};
+use super::constants::{BOARD_WIDTH,MAX_NUMBER_OF_MOVES};
 use super::action::{Action,Direction,Piece,Square,map_bit_board_to_squares};
 use super::value::Value;
 use super::zobrist::Zobrist;
 use engine::engine::GameEngine;
 use engine::game_state::{GameState as GameStateTrait};
 use common::bits::first_set_bit;
-use failure::Error;
 
 const LEFT_COLUMN_MASK: u64 =       0b__00000001__00000001__00000001__00000001__00000001__00000001__00000001__00000001;
 const RIGHT_COLUMN_MASK: u64 =      0b__10000000__10000000__10000000__10000000__10000000__10000000__10000000__10000000;
@@ -50,11 +47,6 @@ pub struct PlayPhase {
     initial_hash_of_move: Zobrist,
     hash_history: List<Zobrist>,
     piece_trapped_this_turn: bool
-    /*
-        threatened_pieces: u64,
-        supported_pieces: u64,
-        can_push_squares: [u64; 4]
-    */
 }
 
 #[derive(Clone, Debug)]
@@ -127,10 +119,10 @@ impl PieceBoardState {
 }
 
 #[derive(Clone, Debug)]
-struct PieceBoard(PieceBoardState);
+pub struct PieceBoard(PieceBoardState);
 
 impl PieceBoard {
-    fn initial() -> Self {
+    pub fn initial() -> Self {
         Self(PieceBoardState {
             p1_pieces: 0,
             all_pieces: 0,
@@ -143,7 +135,7 @@ impl PieceBoard {
         })
     }
 
-    fn new(
+    pub fn new(
         p1_pieces: u64,
         elephants: u64,
         camels: u64,
@@ -164,7 +156,7 @@ impl PieceBoard {
         })
     }
 
-    fn get_piece_board(&self) -> &PieceBoardState {
+    pub fn get_piece_board(&self) -> &PieceBoardState {
         &self.0
     }
 
@@ -238,42 +230,23 @@ impl PartialEq for GameState {
 
 impl Eq for GameState {}
 
-impl Display for GameState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let move_number = self.move_number;
-        let curr_player = if self.p1_turn_to_move { "g" } else { "s" };
-        let piece_board = &self.get_piece_board();
-        writeln!(f, "{}{}", move_number, curr_player)?;
-
-        writeln!(f, " +-----------------+")?;
-
-        for row_idx in 0..BOARD_HEIGHT {
-            write!(f, "{}|", BOARD_HEIGHT - row_idx)?;
-            for col_idx in 0..BOARD_WIDTH {
-                let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
-                let square = Square::from_index(idx);
-                let letter = if let Some(piece) = piece_board.get_piece_type_at_square(&square) {
-                    let is_p1_piece = is_p1_piece(square.as_bit_board(), piece_board);
-                    convert_piece_to_letter(&piece, is_p1_piece)
-                } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
-                    "x".to_string()
-                } else {
-                    " ".to_string()
-                };
-
-                write!(f, " {}", letter)?;
-            }
-            writeln!(f, " |")?;
-        }
-
-        writeln!(f, " +-----------------+")?;
-        writeln!(f, "   a b c d e f g h")?;
-
-        Ok(())
-    }
-}
-
 impl GameState {
+    pub fn new(
+        p1_turn_to_move: bool,
+        move_number: usize,
+        phase: Phase,
+        piece_board: PieceBoard,
+        hash: Zobrist
+    ) -> Self {
+        GameState {
+            p1_turn_to_move,
+            move_number,
+            phase,
+            piece_board,
+            hash
+        }
+    }
+
     pub fn take_action(&self, action: &Action) -> Self {
         match action {
             Action::Pass => self.pass(),
@@ -391,6 +364,10 @@ impl GameState {
 
     pub fn is_p1_turn_to_move(&self) -> bool {
         self.p1_turn_to_move
+    }
+
+    pub fn get_move_number(&self) -> usize {
+        self.move_number
     }
 
     pub fn get_current_step(&self) -> usize {
@@ -559,11 +536,13 @@ impl GameState {
             Phase::PlacePhase
         };
 
+        let new_move_number = if switch_phases { 2 } else { 1 };
+
         Self {
             p1_turn_to_move: new_p1_turn_to_move,
             phase: new_phase,
             piece_board: new_piece_board,
-            move_number: 1,
+            move_number: new_move_number,
             hash: new_hash
         }
     }
@@ -625,7 +604,7 @@ impl GameState {
         self.as_play_phase().expect("Expected phase to be PlayPhase")
     }
 
-    fn as_play_phase(&self) -> Option<&PlayPhase> {
+    pub fn as_play_phase(&self) -> Option<&PlayPhase> {
         match &self.phase {
             Phase::PlayPhase(play_phase) => Some(play_phase),
             _ => None
@@ -845,10 +824,6 @@ fn get_piece_type_at_bit(square_bit: u64, piece_board: &PieceBoardState) -> Piec
     }
 }
 
-fn is_p1_piece(square_bit: u64, piece_board: &PieceBoardState) -> bool {
-    (square_bit & piece_board.p1_pieces) != 0
-}
-
 fn animal_is_on_trap(piece_board: &PieceBoardState) -> bool {
     (piece_board.all_pieces & TRAP_MASK) != 0
 }
@@ -960,89 +935,8 @@ impl PushPullState {
     }
 }
 
-impl FromStr for GameState {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let lines: Vec<_> = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
-        let regex = regex::Regex::new(r"^\s*(\d+)([gswb])").unwrap();
-
-        let (move_number, p1_turn_to_move) = regex.captures(s.split("|").find(|_| true).unwrap()).map_or((1, true), |c| (
-            c.get(1).unwrap().as_str().parse().unwrap(),
-            c.get(2).unwrap().as_str() != "s" && c.get(2).unwrap().as_str() != "b"
-        ));
-
-        let mut p1_pieces = 0; let mut elephants = 0; let mut camels = 0; let mut horses = 0; let mut dogs = 0; let mut cats = 0; let mut rabbits = 0;
-
-        for (row_idx, line) in lines.iter().enumerate() {
-            for (col_idx, charr) in line.chars().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).enumerate() {
-                let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
-                let square = Square::from_index(idx);
-                if let Some((piece, is_p1)) = convert_char_to_piece(charr) {
-                    let square_bit = square.as_bit_board();
-
-                    match piece {
-                        Piece::Elephant => elephants |= square_bit,
-                        Piece::Camel => camels |= square_bit,
-                        Piece::Horse => horses |= square_bit,
-                        Piece::Dog => dogs |= square_bit,
-                        Piece::Cat => cats |= square_bit,
-                        Piece::Rabbit => rabbits |= square_bit,
-                    }
-
-                    if is_p1 {
-                        p1_pieces |= square_bit;
-                    }
-                }
-            }
-        }
-
-        let piece_board = PieceBoard::new(p1_pieces, elephants, camels, horses, dogs, cats, rabbits);
-        let hash = Zobrist::from_piece_board(&piece_board.0, p1_turn_to_move, 0);
-        let hash_history = List::new();
-        let hash_history = hash_history.append(hash);
-
-        Ok(GameState {
-            p1_turn_to_move,
-            move_number,
-            phase: Phase::PlayPhase(PlayPhase::initial(hash, hash_history)),
-            hash,
-            piece_board: piece_board
-        })
-    }
-}
-
-fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
-    let is_p1 = c.is_uppercase();
-
-    let piece = match c {
-        'E' | 'e' => Some(Piece::Elephant),
-        'M' | 'm' => Some(Piece::Camel),
-        'H' | 'h' => Some(Piece::Horse),
-        'D' | 'd' => Some(Piece::Dog),
-        'C' | 'c' => Some(Piece::Cat),
-        'R' | 'r' => Some(Piece::Rabbit),
-        _ => None
-    };
-
-    piece.map(|p| (p, is_p1))
-}
-
-pub fn convert_piece_to_letter(piece: &Piece, is_p1: bool) -> String {
-    let letter = match piece {
-        Piece::Elephant => "E",
-        Piece::Camel => "M",
-        Piece::Horse => "H",
-        Piece::Dog => "D",
-        Piece::Cat => "C",
-        Piece::Rabbit => "R"
-    };
-
-    if is_p1 { letter.to_string()} else { letter.to_lowercase() }
-}
-
 impl PlayPhase {
-    fn initial(initial_hash_of_move: Zobrist, hash_history: List<Zobrist>) -> Self {
+    pub fn initial(initial_hash_of_move: Zobrist, hash_history: List<Zobrist>) -> Self {
         PlayPhase {
             previous_piece_boards_this_move: Vec::with_capacity(0),
             push_pull_state: PushPullState::None,
@@ -2916,156 +2810,6 @@ mod tests {
 
         // Should not allow last move to be the final repeat
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d3e, d3w, h1w, d5s, p]");
-    }
-
-    #[test]
-    fn test_gamestate_fromstr() {
-        let game_state: GameState = "
-              +-----------------+
-             8|   r   r r   r   |
-             7| m   h     e   c |
-             6|   r x r r x r   |
-             5| h   d     c   d |
-             4| E   H         M |
-             3|   R x R R H R   |
-             2| D   C     C   D |
-             1|   R   R R   R   |
-              +-----------------+
-                a b c d e f g h"
-            .parse().unwrap();
-
-        let piece_board = game_state.get_piece_board();
-        assert_eq!(piece_board.rabbits,         0b__01011010__00000000__01011010__00000000__00000000__01011010__00000000__01011010);
-        assert_eq!(piece_board.cats,            0b__00000000__00100100__00000000__00000000__00100000__00000000__10000000__00000000);
-        assert_eq!(piece_board.dogs,            0b__00000000__10000001__00000000__00000000__10000100__00000000__00000000__00000000);
-        assert_eq!(piece_board.horses,          0b__00000000__00000000__00100000__00000100__00000001__00000000__00000100__00000000);
-        assert_eq!(piece_board.camels,          0b__00000000__00000000__00000000__10000000__00000000__00000000__00000001__00000000);
-        assert_eq!(piece_board.elephants,       0b__00000000__00000000__00000000__00000001__00000000__00000000__00100000__00000000);
-        assert_eq!(piece_board.p1_pieces,       0b__01011010__10100101__01111010__10000101__00000000__00000000__00000000__00000000);
-    }
-
-    #[test]
-    fn test_gamestate_fromstr_move_number_default() {
-        let game_state: GameState = "
-              +-----------------+
-             8|   r   r r   r   |
-             7| m   h     e   c |
-             6|   r x r r x r   |
-             5| h   d     c   d |
-             4| E   H         M |
-             3|   R x R R H R   |
-             2| D   C     C   D |
-             1|   R   R R   R   |
-              +-----------------+
-                a b c d e f g h"
-            .parse().unwrap();
-
-        assert_eq!(game_state.move_number, 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
-    }
-
-    #[test]
-    fn test_gamestate_fromstr_move_number() {
-        let game_state: GameState = "
-              5s
-              +-----------------+
-             8|   r   r r   r   |
-             7| m   h     e   c |
-             6|   r x r r x r   |
-             5| h   d     c   d |
-             4| E   H         M |
-             3|   R x R R H R   |
-             2| D   C     C   D |
-             1|   R   R R   R   |
-              +-----------------+
-                a b c d e f g h"
-            .parse().unwrap();
-
-        assert_eq!(game_state.move_number, 5);
-        assert_eq!(game_state.p1_turn_to_move, false);
-    }
-
-    #[test]
-    fn test_gamestate_fromstr_player() {
-        let game_state: GameState = "
-              176b
-              +-----------------+
-             8|   r   r r   r   |
-             7| m   h     e   c |
-             6|   r x r r x r   |
-             5| h   d     c   d |
-             4| E   H         M |
-             3|   R x R R H R   |
-             2| D   C     C   D |
-             1|   R   R R   R   |
-              +-----------------+
-                a b c d e f g h"
-            .parse().unwrap();
-
-        assert_eq!(game_state.move_number, 176);
-        assert_eq!(game_state.p1_turn_to_move, false);
-    }
-
-    #[test]
-    fn test_gamestate_fromstr_player_w() {
-        let game_state: GameState = "
-              13w
-              +-----------------+
-             8|   r   r r   r   |
-             7| m   h     e   c |
-             6|   r x r r x r   |
-             5| h   d     c   d |
-             4| E   H         M |
-             3|   R x R R H R   |
-             2| D   C     C   D |
-             1|   R   R R   R   |
-              +-----------------+
-                a b c d e f g h"
-            .parse().unwrap();
-
-        assert_eq!(game_state.move_number, 13);
-        assert_eq!(game_state.p1_turn_to_move, true);
-    }
-
-    #[test]
-    fn test_gamestate_to_str() {
-        let expected_output = "1g
- +-----------------+
-8| h c d m e d c h |
-7| r r r r r r r r |
-6|     x     x     |
-5|                 |
-4|                 |
-3|     x     x     |
-2| R R R R R R R R |
-1| H C D M E D C H |
- +-----------------+
-   a b c d e f g h
-";
-
-        assert_eq!(format!("{}", initial_play_state()), expected_output);
-    }
-
-    #[test]
-    fn test_gamestate_from_str_and_to_str() {
-        let orig_str = "14g
- +-----------------+
-8|   r   r r   r   |
-7| m   h     e   c |
-6|   r x r r x r   |
-5| h   d     c   d |
-4| E   H         M |
-3|   R x R R x R   |
-2| D   C     C   D |
-1|   R   R R   R   |
- +-----------------+
-   a b c d e f g h
-";
-
-        let game_state: GameState = orig_str.parse().unwrap();
-        let new_str = format!("{}", game_state);
-
-        assert_eq!(new_str, orig_str);
     }
 
     #[test]
