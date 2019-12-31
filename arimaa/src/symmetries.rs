@@ -75,3 +75,219 @@ fn get_bit_board_horizontal_symmetry(bit_board: u64) -> u64 {
         .map(|s| s.invert_horizontal())
         .fold(0, |r, s| r | s.as_bit_board())
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+
+    use super::*;
+    use super::super::action::{Action,Direction,Piece,Square};
+
+    fn step_num_symmetry_to_string(game_state: GameState, step_num: usize) -> String {
+        let symmetries = get_symmetries(game_state);
+        let game_state = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+        let piece_board = game_state_symmetry.get_piece_board_for_step(step_num);
+        let game_state_symmetry_step = GameState::new(
+            game_state.is_p1_turn_to_move(),
+            game_state.get_move_number(),
+            Phase::PlayPhase(PlayPhase::initial(Zobrist::initial(), List::new())),
+            PieceBoard::new(
+                piece_board.get_player_piece_mask(true), 
+                piece_board.get_bits_by_piece_type(Piece::Elephant), 
+                piece_board.get_bits_by_piece_type(Piece::Camel), 
+                piece_board.get_bits_by_piece_type(Piece::Horse), 
+                piece_board.get_bits_by_piece_type(Piece::Dog), 
+                piece_board.get_bits_by_piece_type(Piece::Cat), 
+                piece_board.get_bits_by_piece_type(Piece::Rabbit)
+            ),
+            Zobrist::initial()
+        );
+
+        game_state_symmetry_step.to_string()
+    }
+
+    #[test]
+    fn test_game_state_symmetry_step_0() {
+        let game_state: GameState = "
+            5g
+             +-----------------+
+            8|   r     r   r   |
+            7|                 |
+            6|     x     x     |
+            5|     E r         |
+            4|                 |
+            3|     x     x     |
+            2|                 |
+            1| R         M     |
+             +-----------------+
+               a b c d e f g h"
+            .parse().unwrap();
+
+        let symmetries = get_symmetries(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_eq!(game_state_original.to_string(), "5g
+ +-----------------+
+8|   r     r   r   |
+7|                 |
+6|     x     x     |
+5|     E r         |
+4|                 |
+3|     x     x     |
+2|                 |
+1| R         M     |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(game_state_symmetry.to_string(), "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|                 |
+1|     M         R |
+ +-----------------+
+   a b c d e f g h
+");
+    }
+
+    #[test]
+    fn test_game_state_symmetry_step_1() {
+        let game_state: GameState = "
+            5g
+             +-----------------+
+            8|   r     r   r   |
+            7|                 |
+            6|     x     x     |
+            5|     E r         |
+            4|                 |
+            3|     x     x     |
+            2|                 |
+            1| R         M     |
+             +-----------------+
+               a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
+
+        let game_state_symmetry_step_0 = step_num_symmetry_to_string(game_state.clone(), 0);
+        let game_state_symmetry_step_1 = step_num_symmetry_to_string(game_state, 1);
+
+assert_eq!(game_state_symmetry_step_0, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|                 |
+1|     M         R |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(game_state_symmetry_step_1, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|               R |
+1|     M           |
+ +-----------------+
+   a b c d e f g h
+");
+    }
+
+    #[test]
+    fn test_game_state_symmetry_step_4() {
+        let game_state: GameState = "
+            5g
+             +-----------------+
+            8|   r     r   r   |
+            7|                 |
+            6|     x     x     |
+            5|     E r         |
+            4|                 |
+            3|     x     x     |
+            2|                 |
+            1| R         M     |
+             +-----------------+
+               a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Right));
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Right));
+
+        let game_state_symmetry_step_0 = step_num_symmetry_to_string(game_state.clone(), 0);
+        let game_state_symmetry_step_1 = step_num_symmetry_to_string(game_state.clone(), 1);
+        let game_state_symmetry_step_2 = step_num_symmetry_to_string(game_state.clone(), 2);
+        let game_state_symmetry_step_3 = step_num_symmetry_to_string(game_state, 3);
+
+assert_eq!(game_state_symmetry_step_0, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|                 |
+1|     M         R |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(game_state_symmetry_step_1, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|               R |
+1|     M           |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(game_state_symmetry_step_2, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|             R   |
+1|     M           |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(game_state_symmetry_step_3, "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|           R     |
+1|     M           |
+ +-----------------+
+   a b c d e f g h
+");
+    }
+}
