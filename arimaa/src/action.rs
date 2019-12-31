@@ -266,7 +266,15 @@ impl Action {
         match self {
             Action::Move(square,direction) => Action::Move(square.invert(),direction.invert()),
             Action::Place(_) => panic!("Cannot invert placement"),
-            _ => self.clone()
+            Action::Pass => Action::Pass
+        }
+    }
+
+    pub fn invert_horizontal(&self) -> Self {
+        match self {
+            Action::Move(square,direction) => Action::Move(square.invert_horizontal(), direction.invert_horizontal()),
+            Action::Place(_) => panic!("Cannot invert placement"),
+            Action::Pass => Action::Pass
         }
     }
 }

@@ -61,8 +61,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
     }
 
     fn get_symmetries(&self, metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
-        panic!()
-        // get_symmetries(metrics)
+        get_symmetries(metrics)
     }
 
     fn get_input_dimensions(&self) -> [u64; 3] {

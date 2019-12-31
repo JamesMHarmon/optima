@@ -1,10 +1,40 @@
+use model::node_metrics::NodeMetrics;
+use model::position_metrics::PositionMetrics;
 use common::linked_list::List;
 
+use super::value::Value;
 use super::zobrist::Zobrist;
 use super::engine::{GameState,Phase,PlayPhase,PushPullState,PieceBoard,PieceBoardState};
-use super::action::{Piece,map_bit_board_to_squares};
+use super::action::{Action,Piece,map_bit_board_to_squares};
 
-pub fn get_symmetries(game_state: GameState) -> Vec<GameState> {
+pub fn get_symmetries(metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
+    let PositionMetrics { game_state, policy, score } = metrics;
+
+    get_symmetries_game_state(game_state).into_iter()
+        .zip(get_symmetries_node_metrics(policy))
+        .map(|(game_state, policy)| PositionMetrics {
+            game_state,
+            policy,
+            score: score.clone(),
+        })
+        .collect()
+}
+
+fn get_symmetries_node_metrics(metrics: NodeMetrics<Action>) -> Vec<NodeMetrics<Action>> {
+    let children_visits_symmetry = metrics.children_visits.iter()
+        .map(|(a, visits)| (a.invert_horizontal(), *visits))
+        .collect();
+
+    let metrics_symmetry = NodeMetrics {
+        W: metrics.W,
+        visits: metrics.visits,
+        children_visits: children_visits_symmetry
+    };
+
+    vec!(metrics, metrics_symmetry)
+}
+
+fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
     match game_state.as_play_phase() {
         Some(_) => {
             let transposition = get_horizontal_symmetry(&game_state);
@@ -84,7 +114,7 @@ mod tests {
     use super::super::action::{Action,Direction,Piece,Square};
 
     fn step_num_symmetry_to_string(game_state: GameState, step_num: usize) -> String {
-        let symmetries = get_symmetries(game_state);
+        let symmetries = get_symmetries_game_state(game_state);
         let game_state = symmetries.first().unwrap();
         let game_state_symmetry = symmetries.last().unwrap();
         let piece_board = game_state_symmetry.get_piece_board_for_step(step_num);
@@ -124,7 +154,7 @@ mod tests {
                a b c d e f g h"
             .parse().unwrap();
 
-        let symmetries = get_symmetries(game_state);
+        let symmetries = get_symmetries_game_state(game_state);
         let game_state_original = symmetries.first().unwrap();
         let game_state_symmetry = symmetries.last().unwrap();
 
