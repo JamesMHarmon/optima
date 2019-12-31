@@ -1,3 +1,4 @@
+use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
@@ -49,8 +50,8 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let piece_board = game_state.get_piece_board();
         let player_piece_board = piece_board.get_player_piece_mask(is_p1_turn_to_move);
 
-        for (i, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
-            let piece_bits = piece_board.get_bits_by_piece_type(piece);
+        for (i, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
+            let piece_bits = piece_board.get_bits_by_piece_type(*piece);
             let offset = i;
 
             insert_input_channel_bits(&mut input, offset, piece_bits);
@@ -76,6 +77,10 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         insert_input_channel_bit(&mut input, offset, is_p1_turn_value);
 
         input
+    }
+
+    fn get_symmetries(&self, metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
+        vec!(metrics)
     }
 
     fn get_input_dimensions(&self) -> [u64; 3] {

@@ -1,3 +1,4 @@
+use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
@@ -5,6 +6,7 @@ use model::model_info::ModelInfo;
 use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use engine::value::{Value as ValueTrait};
+use super::symmetries::get_symmetries;
 use super::board::set_board_bits_invertable;
 use super::value::Value;
 use super::action::{Action,Square,Direction,Piece};
@@ -56,6 +58,11 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         set_trap_squares(&mut result);
 
         result
+    }
+
+    fn get_symmetries(&self, metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
+        panic!()
+        // get_symmetries(metrics)
     }
 
     fn get_input_dimensions(&self) -> [u64; 3] {
@@ -142,7 +149,7 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
             let player_offset = j * NUM_PIECE_TYPES;
 
             for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
-                let piece_bits = piece_board.get_bits_for_piece(piece, *player);
+                let piece_bits = piece_board.get_bits_for_piece(*piece, *player);
 
                 let offset = step_offset + player_offset + piece_offset;
                 set_board_bits_invertable(input, offset, piece_bits, invert);

@@ -59,6 +59,7 @@ pub struct TensorflowModelOptions {
 pub trait Mapper<S,A,V> {
     fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
     fn get_input_dimensions(&self) -> [u64; 3];
+    fn get_symmetries(&self, metric: PositionMetrics<S,A,V>) -> Vec<PositionMetrics<S,A,V>>;
     fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
     fn policy_to_valid_actions(&self, game_state: &S, policy_scores: &[f32]) -> Vec<ActionWithPolicy<A>>;
     fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
@@ -395,13 +396,15 @@ where
             let mut wtr = csv::Writer::from_path(train_data_path).unwrap();
 
             for metric in sample_metrics_chunk {
-                let record = 
-                    mapper.game_state_to_input(&metric.game_state).into_iter().chain(
-                    mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
-                    std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
-                )).map(|v| v.to_string());
-
-                wtr.write_record(record).unwrap();
+                for metric in mapper.get_symmetries(metric) {
+                    let record = 
+                        mapper.game_state_to_input(&metric.game_state).into_iter().chain(
+                        mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
+                            std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
+                        )).map(|v| v.to_string());
+                        
+                        wtr.write_record(record).unwrap();
+                }
             }
 
             wtr.flush().unwrap();

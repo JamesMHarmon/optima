@@ -1,3 +1,4 @@
+use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
 use model::analysis_cache::{cache,AnalysisCacheModel};
 use model::analytics::ActionWithPolicy;
@@ -81,6 +82,11 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
 
     fn get_input_dimensions(&self) -> [u64; 3] {
         [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
+    }
+
+    fn get_symmetries(&self, metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
+        //@TODO: Add symmetries for Quoridor
+        vec!(metrics)
     }
 
     fn policy_metrics_to_expected_output(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {

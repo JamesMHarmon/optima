@@ -182,19 +182,19 @@ mod tests {
             .parse().unwrap();
 
         let piece_board = game_state.get_piece_board();
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Rabbit, true),    0b__01011010__00000000__01011010__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Cat, true),       0b__00000000__00100100__00000000__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Dog, true),       0b__00000000__10000001__00000000__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Horse, true),     0b__00000000__00000000__00100000__00000100__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Camel, true),     0b__00000000__00000000__00000000__10000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Elephant, true),  0b__00000000__00000000__00000000__00000001__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Rabbit, true),    0b__01011010__00000000__01011010__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Cat, true),       0b__00000000__00100100__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Dog, true),       0b__00000000__10000001__00000000__00000000__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Horse, true),     0b__00000000__00000000__00100000__00000100__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Camel, true),     0b__00000000__00000000__00000000__10000000__00000000__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Elephant, true),  0b__00000000__00000000__00000000__00000001__00000000__00000000__00000000__00000000);
 
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Rabbit, false),   0b__00000000__00000000__00000000__00000000__00000000__01011010__00000000__01011010);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Cat, false),      0b__00000000__00000000__00000000__00000000__00100000__00000000__10000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Dog, false),      0b__00000000__00000000__00000000__00000000__10000100__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Horse, false),    0b__00000000__00000000__00000000__00000000__00000001__00000000__00000100__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Camel, false),    0b__00000000__00000000__00000000__00000000__00000000__00000000__00000001__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(&Piece::Elephant, false), 0b__00000000__00000000__00000000__00000000__00000000__00000000__00100000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Rabbit, false),   0b__00000000__00000000__00000000__00000000__00000000__01011010__00000000__01011010);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Cat, false),      0b__00000000__00000000__00000000__00000000__00100000__00000000__10000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Dog, false),      0b__00000000__00000000__00000000__00000000__10000100__00000000__00000000__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Horse, false),    0b__00000000__00000000__00000000__00000000__00000001__00000000__00000100__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Camel, false),    0b__00000000__00000000__00000000__00000000__00000000__00000000__00000001__00000000);
+        assert_eq!(piece_board.get_bits_for_piece(Piece::Elephant, false), 0b__00000000__00000000__00000000__00000000__00000000__00000000__00100000__00000000);
     }
 
     #[test]

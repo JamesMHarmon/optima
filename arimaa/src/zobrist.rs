@@ -22,9 +22,9 @@ impl Zobrist {
 
         for is_p1 in [true, false].into_iter() {
             for piece in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter() {
-                let piece_bits = piece_board.get_bits_for_piece(piece, *is_p1);
+                let piece_bits = piece_board.get_bits_for_piece(*piece, *is_p1);
                 for square in map_bit_board_to_squares(piece_bits) {
-                    hash ^= get_piece_value(&square, piece, *is_p1);
+                    hash ^= get_piece_value(square, *piece, *is_p1);
                 }
             }
         }
@@ -42,7 +42,7 @@ impl Zobrist {
         Zobrist { hash }
     }
 
-    pub fn place_piece(&self, piece: &Piece, square: &Square, place_is_p1: bool, switch_players: bool, switch_phases: bool) -> Self {
+    pub fn place_piece(&self, piece: Piece, square: Square, place_is_p1: bool, switch_players: bool, switch_phases: bool) -> Self {
         let player_to_move_value = if switch_players | switch_phases { PLAYER_TO_MOVE } else { 0 };
         let place_piece_value = get_piece_value(square, piece, place_is_p1);
         let step_value = if switch_phases { STEP_VALUES[0] } else { 0 };
@@ -78,13 +78,13 @@ fn get_piece_board_value(prev_piece_board: &PieceBoardState, new_piece_board: &P
 
     for is_p1 in [true, false].into_iter() {
         for piece in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter() {
-            let prev_piece_bits = prev_piece_board.get_bits_for_piece(piece, *is_p1);
-            let new_piece_bits = new_piece_board.get_bits_for_piece(piece, *is_p1);
+            let prev_piece_bits = prev_piece_board.get_bits_for_piece(*piece, *is_p1);
+            let new_piece_bits = new_piece_board.get_bits_for_piece(*piece, *is_p1);
             let diff_bits = prev_piece_bits ^ new_piece_bits;
 
             if diff_bits != 0 {
                 for square in map_bit_board_to_squares(diff_bits) {
-                    value ^= get_piece_value(&square, piece, *is_p1);
+                    value ^= get_piece_value(square, *piece, *is_p1);
                 }
             }
         }
@@ -93,7 +93,7 @@ fn get_piece_board_value(prev_piece_board: &PieceBoardState, new_piece_board: &P
     value
 }
 
-fn get_piece_value(square: &Square, piece: &Piece, is_p1: bool) -> u64 {
+fn get_piece_value(square: Square, piece: Piece, is_p1: bool) -> u64 {
     let piece_idx = match piece {
         Piece::Elephant => 0,
         Piece::Camel => 1,

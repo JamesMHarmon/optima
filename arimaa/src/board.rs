@@ -80,7 +80,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             false
         );
 
@@ -93,7 +93,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             true
         );
 
@@ -124,7 +124,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             false
         );
 
@@ -137,7 +137,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             true
         );
 
@@ -168,7 +168,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             false
         );
 
@@ -181,7 +181,7 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(&Piece::Rabbit, true),
+            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
             true
         );
 

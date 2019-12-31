@@ -25,7 +25,7 @@ const LAST_P2_PLACEMENT_MASK: u64 = 0b__00000000__00000000__00000000__00000000__
 
 const TRAP_MASK: u64 =              0b__00000000__00000000__00100100__00000000__00000000__00100100__00000000__00000000;
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum PushPullState {
     /*
         Either:
@@ -68,7 +68,7 @@ pub struct PieceBoardState {
 }
 
 impl PieceBoardState {
-    pub fn get_bits_for_piece(&self, piece: &Piece, p1_pieces: bool) -> u64 {
+    pub fn get_bits_for_piece(&self, piece: Piece, p1_pieces: bool) -> u64 {
         let player_piece_mask = if p1_pieces { self.p1_pieces } else { !self.p1_pieces & self.all_pieces };
         self.get_bits_by_piece_type(piece) & player_piece_mask
     }
@@ -77,7 +77,7 @@ impl PieceBoardState {
         if p1_pieces { self.p1_pieces } else { !self.p1_pieces & self.all_pieces }
     }
 
-    pub fn get_bits_by_piece_type(&self, piece: &Piece) -> u64 {
+    pub fn get_bits_by_piece_type(&self, piece: Piece) -> u64 {
         match piece {
             Piece::Elephant => self.elephants,
             Piece::Camel => self.camels,
@@ -250,7 +250,7 @@ impl GameState {
     pub fn take_action(&self, action: &Action) -> Self {
         match action {
             Action::Pass => self.pass(),
-            Action::Place(piece) => self.place(piece),
+            Action::Place(piece) => self.place(*piece),
             Action::Move(square,direction) => self.move_piece(square,direction)
         }
     }
@@ -389,7 +389,7 @@ impl GameState {
             if trapped_animal_bits != 0 {
                 let square = Square::from_bit_board(trapped_animal_bits);
                 let piece = piece_board_state.get_piece_type_at_square(&square).unwrap();
-                let is_p1_piece = piece_board_state.get_bits_for_piece(&piece, true) & square.as_bit_board() != 0;
+                let is_p1_piece = piece_board_state.get_bits_for_piece(piece, true) & square.as_bit_board() != 0;
 
                 return Some((square, piece, is_p1_piece));
             }
@@ -486,7 +486,7 @@ impl GameState {
         let mut valid_actions = vec![];
         for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
             let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction) & curr_player_non_frozen_piece_mask;
-            if pushing_piece_bit != 0 && get_piece_type_at_bit(pushing_piece_bit, piece_board) > *pushed_piece {
+            if pushing_piece_bit != 0 && get_piece_type_at_bit(pushing_piece_bit, piece_board) > pushed_piece {
                 valid_actions.push(Action::Move(Square::from_bit_board(pushing_piece_bit), *direction));
             }
         }
@@ -494,7 +494,7 @@ impl GameState {
         valid_actions
     }
 
-    fn place(&self, piece: &Piece) -> Self {
+    fn place(&self, piece: Piece) -> Self {
         let piece_board = &self.get_piece_board();
         let placement_bit = piece_board.get_placement_bit();
 
@@ -527,7 +527,7 @@ impl GameState {
         let switch_players = placement_bit == LAST_P1_PLACEMENT_MASK;
         let switch_phases = placement_bit == LAST_P2_PLACEMENT_MASK;
         let new_p1_turn_to_move = if switch_players { false } else if switch_phases { true } else { self.p1_turn_to_move };
-        let new_hash = self.hash.place_piece(piece, &Square::from_bit_board(placement_bit), self.p1_turn_to_move, switch_players, switch_phases);
+        let new_hash = self.hash.place_piece(piece, Square::from_bit_board(placement_bit), self.p1_turn_to_move, switch_players, switch_phases);
         let new_phase = if switch_phases {
             let hash_history = List::new();
             let hash_history = hash_history.append(new_hash);
@@ -742,7 +742,7 @@ impl GameState {
         }
     }
 
-    fn get_lesser_pieces(&self, piece: &Piece, piece_board: &PieceBoardState) -> u64 {
+    fn get_lesser_pieces(&self, piece: Piece, piece_board: &PieceBoardState) -> u64 {
         match piece {
             Piece::Rabbit => 0,
             Piece::Cat => piece_board.rabbits,
@@ -912,16 +912,16 @@ impl PushPullState {
         }
     }
 
-    fn unwrap_must_complete_push(&self) -> (&Square, &Piece) {
+    fn unwrap_must_complete_push(&self) -> (Square, Piece) {
         match self {
-            PushPullState::MustCompletePush(square, piece) => (square, piece),
+            PushPullState::MustCompletePush(square, piece) => (*square, *piece),
             _ => panic!("Expected PushPullState to be MustCompletePush")
         }
     }
 
-    fn as_possible_pull(&self) -> Option<(&Square, &Piece)> {
+    fn as_possible_pull(&self) -> Option<(Square, Piece)> {
         match self {
-            PushPullState::PossiblePull(square, piece) => Some((square, piece)),
+            PushPullState::PossiblePull(square, piece) => Some((*square, *piece)),
             _ => None
         }
     }
@@ -944,6 +944,34 @@ impl PlayPhase {
             hash_history,
             piece_trapped_this_turn: false
         }
+    }
+
+    pub fn new(
+        initial_hash_of_move: Zobrist,
+        hash_history: List<Zobrist>,
+        previous_piece_boards_this_move: Vec<PieceBoard>,
+        push_pull_state: PushPullState,
+        piece_trapped_this_turn: bool
+    ) -> Self {
+        PlayPhase {
+            previous_piece_boards_this_move,
+            push_pull_state,
+            initial_hash_of_move,
+            hash_history,
+            piece_trapped_this_turn
+        }
+    }
+
+    pub fn get_previous_piece_boards(&self) -> &[PieceBoard] {
+        &self.previous_piece_boards_this_move
+    }
+
+    pub fn get_push_pull_state(&self) -> PushPullState {
+        self.push_pull_state
+    }
+
+    pub fn get_piece_trapped_this_turn(&self) -> bool {
+        self.piece_trapped_this_turn
     }
 
     fn get_step(&self) -> usize {
@@ -1410,7 +1438,7 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (&Square::new('c', 5), &Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e, d5w, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
@@ -1478,7 +1506,7 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (&Square::new('c', 5), &Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1e, d5w, a2n, a2e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
@@ -1563,7 +1591,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
-        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (&Square::new('c', 5), &Piece::Elephant));
+        assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1e, d5w, a2n, a2e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+

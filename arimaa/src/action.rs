@@ -36,6 +36,10 @@ impl Square {
         Square((BOARD_HEIGHT * BOARD_WIDTH) as u8 - 1 - self.0)
     }
 
+    pub fn invert_horizontal(&self) -> Self {
+        Square(self.0 ^ 7)
+    }
+
     pub fn column_char(&self) -> char {
         let index = self.0 as usize;
         let column = index % BOARD_WIDTH;
@@ -105,6 +109,15 @@ impl Direction {
             Direction::Left => Direction::Right
         }
     }
+
+    pub fn invert_horizontal(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Up,
+            Direction::Right => Direction::Left,
+            Direction::Down => Direction::Down,
+            Direction::Left => Direction::Right
+        }
+    }
 }
 
 impl fmt::Display for Direction {
@@ -146,7 +159,7 @@ impl FromStr for Direction {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Debug)]
+#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Piece {
     Rabbit,
     Cat,
@@ -443,7 +456,7 @@ mod tests {
     fn test_invert_square_a1() {
         let square = Square::new('a', 1);
         let expected = Square::new('h', 8);
-        
+
         assert_eq!(square.invert(), expected);
     }
 
@@ -451,7 +464,7 @@ mod tests {
     fn test_invert_square_h8() {
         let square = Square::new('h', 8);
         let expected = Square::new('a', 1);
-        
+
         assert_eq!(square.invert(), expected);
     }
 
@@ -459,7 +472,7 @@ mod tests {
     fn test_invert_square_e5() {
         let square = Square::new('e', 5);
         let expected = Square::new('d', 4);
-        
+
         assert_eq!(square.invert(), expected);
     }
 
@@ -467,15 +480,47 @@ mod tests {
     fn test_invert_square_d3() {
         let square = Square::new('d', 3);
         let expected = Square::new('e', 6);
-        
+
         assert_eq!(square.invert(), expected);
     }
 
     #[test]
-    fn test_invert_square_double_invert() {
+    fn test_invert_square_horizontal_a1() {
+        let square = Square::new('a', 1);
+        let expected = Square::new('h', 1);
+
+        assert_eq!(square.invert_horizontal(), expected);
+    }
+
+    #[test]
+    fn test_invert_square_horizontal_h8() {
+        let square = Square::new('h', 8);
+        let expected = Square::new('a', 8);
+
+        assert_eq!(square.invert_horizontal(), expected);
+    }
+
+    #[test]
+    fn test_invert_square_horizontal_e5() {
+        let square = Square::new('e', 5);
+        let expected = Square::new('d', 5);
+
+        assert_eq!(square.invert_horizontal(), expected);
+    }
+
+    #[test]
+    fn test_invert_square_horizontal_d3() {
         let square = Square::new('d', 3);
-        
-        assert_eq!(square.invert().invert(), square);
+        let expected = Square::new('e', 3);
+
+        assert_eq!(square.invert_horizontal(), expected);
+    }
+
+    #[test]
+    fn test_invert_square_horizontal_double_invert() {
+        let square = Square::new('d', 3);
+
+        assert_eq!(square.invert_horizontal().invert_horizontal(), square);
     }
 
     #[test]
