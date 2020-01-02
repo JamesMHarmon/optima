@@ -1,11 +1,9 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import pandas
-from numpy import genfromtxt
 
 POSITION = 0
-FILE_NAME = '/tmp/sample.csv'
+FILE_NAME = '/tmp/sample.npy'
 
 input_h = 8
 input_w = 8
@@ -18,10 +16,12 @@ pieces = np.asarray([" ", "E","M","H","D","C","R","e","m","h","d","c","r"])
 output_h = 8
 output_w = 7
 outputs = 4
+output_size = output_h * output_w * outputs + 1 # + 1 is for pass action
 output_names = ["n","e","s","w"]
 
-df = pandas.read_csv(FILE_NAME, header=None, sep=",", dtype='float32')
-sample_data = df.to_numpy()
+yv_size = 1
+
+sample_data = np.load(FILE_NAME).reshape(-1, input_size + output_size + yv_size)
 X = sample_data[:,:input_size].reshape(-1, input_h, input_w, input_c)
 yp = sample_data[:,input_size:-1]
 yv = sample_data[:,-1]

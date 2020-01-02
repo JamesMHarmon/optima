@@ -1,5 +1,3 @@
-use std::fmt::Formatter;
-use std::fmt::Display;
 use std::hash::Hash;
 use std::fs::{self,File};
 use std::future::Future;
@@ -385,7 +383,7 @@ where
     let mut handles = vec!();
 
     for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
-        let train_data_file_name = format!("training_data_{}.csv", i);
+        let train_data_file_name = format!("training_data_{}.npy", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
         println!("Writing data to {:?}", &train_data_path);
         train_data_file_names.push(train_data_file_name);
@@ -393,21 +391,22 @@ where
         let mapper = mapper.clone();
 
         handles.push(std::thread::spawn(move || {
-            let mut wtr = csv::Writer::from_path(train_data_path).unwrap();
+            let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
             for metric in sample_metrics_chunk {
                 for metric in mapper.get_symmetries(metric) {
-                    let record = 
+                    for record in 
                         mapper.game_state_to_input(&metric.game_state).into_iter().chain(
                         mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
                             std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
-                        )).map(|v| v.to_string());
-                        
-                        wtr.write_record(record).unwrap();
+                        )) {
+
+                        wtr.push(&record).unwrap();
+                    }
                 }
             }
 
-            wtr.flush().unwrap();
+            wtr.close().unwrap();
         }));
     }
 
@@ -763,24 +762,5 @@ where
                 Poll::Pending => Poll::Pending
             }
         }
-    }
-}
-
-#[derive(Clone)]
-struct NumVec<T>(Vec<T>);
-
-impl<T> Display for NumVec<T>
-    where T: Display
-{
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let mut comma_separated = String::new();
-
-        for num in &self.0[0..self.0.len() - 1] {
-            comma_separated.push_str(&num.to_string());
-            comma_separated.push_str(",");
-        }
-
-        comma_separated.push_str(&self.0[self.0.len() - 1].to_string());
-        write!(f, "[{}]", comma_separated)
     }
 }

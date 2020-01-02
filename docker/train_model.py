@@ -3,7 +3,6 @@ import json
 from keras.callbacks import TensorBoard
 import c4_model as c4
 import numpy as np
-import pandas
 
 if __name__== "__main__":
 
@@ -29,6 +28,7 @@ if __name__== "__main__":
     num_blocks          = int(os.environ['NUM_BLOCKS'])
 
     input_size = input_h * input_w * input_c
+    yv_size = 1
 
     print(data_paths)
     c4.clear()
@@ -37,9 +37,8 @@ if __name__== "__main__":
 
     for (i, path) in enumerate(data_paths):
         print("Loading Data: " + path)
-        df = pandas.read_csv(path, header=None, sep=",", dtype='float32')
+        dataset = np.load(path).reshape(-1, input_size + output_size + yv_size)
         print("Data Loaded: " + path)
-        dataset = df.to_numpy()
         X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
         yp = dataset[:,input_size:-1]
         yv = dataset[:,-1]
