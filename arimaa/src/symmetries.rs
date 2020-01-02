@@ -320,4 +320,112 @@ assert_eq!(game_state_symmetry_step_3, "5g
    a b c d e f g h
 ");
     }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_symmetries() {
+        let game_state: GameState = "
+            5g
+             +-----------------+
+            8|   r     r   r   |
+            7|                 |
+            6|     x     x     |
+            5|     E r         |
+            4|                 |
+            3|     x     x     |
+            2|                 |
+            1| R         M     |
+             +-----------------+
+               a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
+        let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Right));
+        let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Right));
+
+        let mut symmetries = get_symmetries(PositionMetrics {
+            score: Value([0.0,1.0]),
+            game_state: game_state,
+            policy: NodeMetrics {
+                visits: 800,
+                W: 0.3,
+                children_visits: vec!(
+                    (Action::Move(Square::new('c', 2), Direction::Up), 500),
+                    (Action::Move(Square::new('c', 2), Direction::Right), 250),
+                    (Action::Move(Square::new('c', 2), Direction::Left), 50),
+                )
+            }
+        });
+
+        let PositionMetrics {
+            score: symmetrical_score,
+            game_state: symmetrical_game_state,
+            policy: NodeMetrics {
+                visits: symmetrical_visits,
+                W: symmetrical_W,
+                children_visits: symmetrical_children_visits
+            }
+        } = symmetries.pop().unwrap();
+
+        let PositionMetrics {
+            score: original_score,
+            game_state: original_game_state,
+            policy: NodeMetrics {
+                visits: original_visits,
+                W: original_W,
+                children_visits: original_children_visits
+            }
+        } = symmetries.pop().unwrap();
+
+        assert_eq!(symmetrical_score, original_score);
+        assert_eq!(symmetrical_W, original_W);
+        assert_eq!(symmetrical_visits, original_visits);
+        assert_eq!(original_children_visits.len(), symmetrical_children_visits.len());
+
+        for ((original_action, original_visits), (symmetrical_action, symmetrical_visits)) in original_children_visits.into_iter().zip(symmetrical_children_visits) {
+            match original_action {
+                Action::Move(original_square, original_direction) => {
+                    match symmetrical_action {
+                        Action::Move(symmetrical_square, symmetrical_direction) => {
+                            assert_eq!(original_square, symmetrical_square.invert_horizontal());
+                            assert_eq!(original_direction, symmetrical_direction.invert_horizontal());
+                        },
+                        _ => panic!()
+                    }
+                },
+                _ => panic!()
+            }
+            
+            assert_eq!(original_visits, symmetrical_visits);
+        }
+
+assert_eq!(original_game_state.to_string(), "5g
+ +-----------------+
+8|   r     r   r   |
+7|                 |
+6|     x     x     |
+5|     E r         |
+4|                 |
+3|     x     x     |
+2|     R           |
+1|           M     |
+ +-----------------+
+   a b c d e f g h
+");
+
+assert_eq!(symmetrical_game_state.to_string(), "5g
+ +-----------------+
+8|   r   r     r   |
+7|                 |
+6|     x     x     |
+5|         r E     |
+4|                 |
+3|     x     x     |
+2|           R     |
+1|     M           |
+ +-----------------+
+   a b c d e f g h
+");
+
+    }
 }

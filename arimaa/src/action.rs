@@ -92,7 +92,7 @@ impl FromStr for Square {
     }
 }
 
-#[derive(Clone,Copy,Eq,Hash,PartialEq)]
+#[derive(Clone,Copy,Debug,Eq,Hash,PartialEq)]
 pub enum Direction {
     Up,
     Right,
