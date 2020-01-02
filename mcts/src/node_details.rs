@@ -26,6 +26,7 @@ impl<A: Display> Display for NodeDetails<A> {
 pub struct PUCT {
     pub Nsa: usize,
     pub Qsa: f32,
+    pub logitQ: f32,
     pub Psa: f32,
     pub Usa: f32,
     pub cpuct: f32,
@@ -34,9 +35,10 @@ pub struct PUCT {
 
 impl Display for PUCT {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, PUCT: {PUCT}",
+        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, PUCT: {PUCT}",
             Nsa = self.Nsa,
             Qsa = self.Qsa,
+            logitQ = self.logitQ,
             Psa = self.Psa,
             Usa = self.Usa,
             cpuct = self.cpuct,
@@ -70,6 +72,7 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 2,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
@@ -79,6 +82,7 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 2.0,
+            logitQ: 1.0,
             Psa: 2.0,
             Usa: 2.0,
             cpuct: 2.0,
@@ -95,6 +99,7 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 2.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
@@ -104,6 +109,7 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 2.0,
             Usa: 2.0,
             cpuct: 2.0,
@@ -120,6 +126,7 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 2.0,
             Usa: 1.0,
             cpuct: 1.0,
@@ -129,6 +136,7 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
             cpuct: 2.0,
@@ -145,6 +153,7 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
             cpuct: 1.0,
@@ -154,6 +163,7 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 2.0,
@@ -170,6 +180,7 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 2.0,
@@ -179,6 +190,7 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
+            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,

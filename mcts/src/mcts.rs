@@ -468,7 +468,7 @@ where
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
 
-            let PUCT = Qsa + Usa;
+            let PUCT = logit(Qsa) + Usa;
 
             if PUCT > best_puct {
                 best_puct = PUCT;
@@ -510,9 +510,10 @@ where
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let logitQ = logit(Qsa);
 
-            let PUCT = Qsa + Usa;
-            pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, PUCT });
+            let PUCT = logitQ + Usa;
+            pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, logitQ, PUCT });
         }
 
         pucts
@@ -588,6 +589,16 @@ fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<
     dirichlet_noise.into_iter().zip(policy_scores).map(|(noise, policy_score)|
         (1.0 - e) * policy_score + e * noise
     ).collect()
+}
+
+fn logit(val: f32) -> f32 {
+    if val <= 0.0 {
+        -3.9855964
+    } else if val >= 1.0 {
+        3.9855964
+    } else {
+        (val / (1.0 - val)).ln() / 4.0
+    }
 }
 
 #[allow(non_snake_case)]
