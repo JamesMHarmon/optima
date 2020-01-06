@@ -853,7 +853,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -863,7 +863,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -927,6 +927,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_mcts_should_overcome_policy_through_value() {
+        let game_state = CountingGameState::initial();
+        let actions = 0;
+        let game_engine = CountingGameEngine::new();
+        let analyzer = CountingAnalyzer::new();
+
+        let mut mcts = MCTS::new(game_state, actions, &game_engine, &analyzer, MCTSOptions::new(
+            None,
+            0.0,
+            0.0,
+            |_,_,_,_| 2.5,
+            |_,_| 0.0,
+            0.0,
+            1
+        ));
+
+        mcts.advance_to_action(CountingAction::Increment).await.unwrap();
+
+        mcts.search_visits(800).await.unwrap();
+        let details = mcts.get_root_node_details().await.unwrap();
+        let (action, _) = details.children.first().unwrap();
+
+        assert_eq!(*action, CountingAction::Stay);
+
+        mcts.search_visits(8000).await.unwrap();
+        let action = mcts.select_action().await.unwrap();
+
+        assert_eq!(action, CountingAction::Decrement);
+    }
+
+    #[tokio::test]
     async fn test_mcts_advance_to_next_works_without_search() {
         let game_state = CountingGameState::initial();
         let actions = 0;
@@ -937,7 +968,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -971,8 +1002,8 @@ mod tests {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
-                (CountingAction::Increment, 316),
-                (CountingAction::Decrement, 179),
+                (CountingAction::Increment, 312),
+                (CountingAction::Decrement, 182),
                 (CountingAction::Stay, 304)
             )
         });
@@ -989,7 +1020,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1003,9 +1034,9 @@ mod tests {
             visits: 100,
             W: 0.0,
             children_visits: vec!(
-                (CountingAction::Increment, 33),
-                (CountingAction::Decrement, 27),
-                (CountingAction::Stay, 39)
+                (CountingAction::Increment, 31),
+                (CountingAction::Decrement, 29),
+                (CountingAction::Stay, 40)
             )
         });
     }
@@ -1021,7 +1052,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1053,7 +1084,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1085,7 +1116,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 0.1,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1099,9 +1130,9 @@ mod tests {
             visits: 8000,
             W: 0.0,
             children_visits: vec!(
-                (CountingAction::Increment, 6470),
-                (CountingAction::Decrement, 712),
-                (CountingAction::Stay, 817)
+                (CountingAction::Increment, 5374),
+                (CountingAction::Decrement, 798),
+                (CountingAction::Stay, 1827)
             )
         });
     }
@@ -1117,7 +1148,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1131,9 +1162,9 @@ mod tests {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
-                (CountingAction::Increment, 182),
-                (CountingAction::Decrement, 312),
-                (CountingAction::Stay, 305)
+                (CountingAction::Increment, 8),
+                (CountingAction::Decrement, 701),
+                (CountingAction::Stay, 91)
             )
         });
     }
@@ -1149,7 +1180,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1163,9 +1194,9 @@ mod tests {
             visits: 800,
             W: 0.0,
             children_visits: vec!(
-                (CountingAction::Increment, 316),
-                (CountingAction::Decrement, 178),
-                (CountingAction::Stay, 305)
+                (CountingAction::Increment, 400),
+                (CountingAction::Decrement, 122),
+                (CountingAction::Stay, 278)
             )
         });
     }
@@ -1182,7 +1213,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1199,7 +1230,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
@@ -1216,7 +1247,7 @@ mod tests {
             None,
             0.0,
             0.0,
-            |_,_,_,_| 1.0,
+            |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
             1
