@@ -34,6 +34,7 @@ where
     dirichlet: Option<DirichletOptions>,
     fpu: f32,
     fpu_root: f32,
+    logit_q: bool,
     cpuct: C,
     temperature: T,
     temperature_visit_offset: f32,
@@ -51,6 +52,7 @@ where
         dirichlet: Option<DirichletOptions>,
         fpu: f32,
         fpu_root: f32,
+        logit_q: bool,
         cpuct: C,
         temperature: T,
         temperature_visit_offset: f32,
@@ -60,6 +62,7 @@ where
             dirichlet,
             fpu,
             fpu_root,
+            logit_q,
             cpuct,
             temperature,
             temperature_visit_offset,
@@ -277,6 +280,7 @@ where
         let game_engine = &self.game_engine;
         let fpu = self.options.fpu;
         let fpu_root = self.options.fpu_root;
+        let logit_q = self.options.logit_q;
         let cpuct = &self.options.cpuct;
         let arena_cell = &self.arena;
         let mut max_depth: usize = 0;
@@ -292,7 +296,7 @@ where
 
         for _ in 0..self.options.parallelism {
             if alive_flag && alive(initial_visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, logit_q, cpuct);
                 searches.push(future);
             } else {
                 alive_flag = false;
@@ -301,7 +305,7 @@ where
 
         while let Some(search_depth) = searches.next().await {
             if alive_flag && alive(initial_visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, cpuct);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, logit_q, cpuct);
                 searches.push(future);
             } else {
                 alive_flag = false;
@@ -362,6 +366,7 @@ where
             root.num_actions,
             options.fpu,
             options.fpu_root,
+            options.logit_q,
             &options.cpuct
         );
 
@@ -453,7 +458,7 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
         let fpu = if is_root { fpu_root } else { fpu };
         let root_Nsb = (Nsb as f32).sqrt();
         let mut best_node = &nodes[0];
@@ -467,8 +472,9 @@ where
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let logit_q = if logit_q { logit(Qsa) } else { Qsa };
 
-            let PUCT = logit(Qsa) + Usa;
+            let PUCT = logit_q + Usa;
 
             if PUCT > best_puct {
                 best_puct = PUCT;
@@ -496,7 +502,7 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, cpuct: &C) -> Vec<PUCT>
+    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Vec<PUCT>
     {
         let fpu = if is_root { fpu_root } else { fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
@@ -510,7 +516,7 @@ where
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
-            let logitQ = logit(Qsa);
+            let logitQ = if logit_q { logit(Qsa) } else { Qsa };
 
             let PUCT = logitQ + Usa;
             pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, logitQ, PUCT });
@@ -630,6 +636,7 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,V>(
     analyzer: &M,
     fpu: f32,
     fpu_root: f32,
+    logit_q: bool,
     cpuct: &C
 ) -> Result<usize, Error>
 where
@@ -673,6 +680,7 @@ where
                 prior_num_actions,
                 fpu,
                 fpu_root,
+                logit_q,
                 cpuct
             )?;
 
@@ -853,6 +861,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -863,6 +872,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -889,6 +899,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
@@ -912,6 +923,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
@@ -937,6 +949,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 2.5,
             |_,_| 0.0,
             0.0,
@@ -968,6 +981,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -988,6 +1002,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
@@ -1020,6 +1035,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1052,6 +1068,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1084,6 +1101,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1116,6 +1134,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1148,6 +1167,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1180,6 +1200,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1213,6 +1234,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1230,6 +1252,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
@@ -1247,6 +1270,7 @@ mod tests {
             None,
             0.0,
             0.0,
+            true,
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,

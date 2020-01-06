@@ -457,6 +457,7 @@ fn get_default_options() -> Result<Options, Error> {
         parallelism: 32,
         fpu: 0.0,
         fpu_root: 1.0,
+        logit_q: true,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
         cpuct_root_scaling: 2.0,
@@ -479,6 +480,7 @@ fn get_default_options() -> Result<Options, Error> {
         visits: self_learn_options.visits * 5,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
+        logit_q: self_learn_options.logit_q,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling
@@ -489,6 +491,7 @@ fn get_default_options() -> Result<Options, Error> {
         parallelism: self_learn_options.parallelism * 4,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
+        logit_q: self_learn_options.logit_q,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling
@@ -501,6 +504,7 @@ fn get_default_options() -> Result<Options, Error> {
         parallelism: self_learn_options.parallelism * 4,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
+        logit_q: self_learn_options.logit_q,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling,
@@ -539,6 +543,7 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(full_visits_probability) = matches.value_of("full_visits_probability") { options.full_visits_probability = full_visits_probability.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
+    if let Some(logit_q) = matches.value_of("logit_q") { options.logit_q = logit_q.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
@@ -562,6 +567,7 @@ fn update_self_evaluate_options_from_matches(options: &mut SelfEvaluateOptions, 
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
+    if let Some(logit_q) = matches.value_of("logit_q") { options.logit_q = logit_q.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
@@ -574,6 +580,7 @@ fn update_play_options_from_matches(options: &mut PlayOptions, matches: &clap::A
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
+    if let Some(logit_q) = matches.value_of("logit_q") { options.logit_q = logit_q.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
@@ -585,6 +592,7 @@ fn update_tournament_options_from_matches(options: &mut TournamentOptions, match
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
+    if let Some(logit_q) = matches.value_of("logit_q") { options.logit_q = logit_q.parse()? };
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };

@@ -17,6 +17,7 @@ pub struct PlayOptions {
     pub parallelism: usize,
     pub fpu: f32,
     pub fpu_root: f32,
+    pub logit_q: bool,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
     pub cpuct_root_scaling: f32
@@ -44,6 +45,7 @@ impl Play
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
+        let logit_q = options.logit_q;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
 
@@ -56,6 +58,7 @@ impl Play
                 None,
                 fpu,
                 fpu_root,
+                logit_q,
                 |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,_| 0.0,
                 0.0,
