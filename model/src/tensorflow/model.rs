@@ -85,6 +85,10 @@ where
         let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
             .map(|v| v.parse::<usize>().expect("ANALYSIS_REQUEST_BATCH_SIZE must be a valid int"))
             .unwrap_or(ANALYSIS_REQUEST_BATCH_SIZE);
+        
+        if std::env::var("TF_CPP_MIN_LOG_LEVEL").is_err() {
+            std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
+        }
 
         let mapper = Arc::new(mapper);
         let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), analysis_request_threads, batch_size));

@@ -50,4 +50,10 @@ Run-7
 
 12-16-19: model 244 - Changed self play batch size from 32 to 96, parallelism from 16 to 8, temp max actions from 160 to 96. Changed noise to be relative to the current number of valid actions.
 
+12-18-19: model 319 - Lowered LR from 0.1 to 0.01
 
+12-19-19: model 354 - Raised moving window size from 125k to 225k
+
+12-23-19: model 452 - Raised moving window size from 225k to 300k, lowered sample rate from 0.0512 to 0.0384
+
+12-26-19: model 550 - Updated to continuous game generation transition between nets
