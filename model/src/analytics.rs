@@ -14,14 +14,16 @@ pub trait GameAnalyzer
 #[derive(Clone,Debug)]
 pub struct GameStateAnalysis<A,V> {
     pub policy_scores: Vec<ActionWithPolicy<A>>,
-    pub value_score: V
+    pub value_score: V,
+    pub moves_left: f32
 }
 
 impl<A,V> GameStateAnalysis<A,V> {
-    pub fn new(value_score: V, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+    pub fn new(value_score: V, policy_scores: Vec<ActionWithPolicy<A>>, moves_left: f32) -> Self {
         GameStateAnalysis {
             policy_scores,
-            value_score
+            value_score,
+            moves_left
         }
     }
 }

@@ -103,7 +103,8 @@ impl GameAnalyzer for CountingAnalyzer {
         if let Some(score) = game_state.is_terminal_state() {
             return future::ready(GameStateAnalysis {
                 policy_scores: Vec::new(),
-                value_score: score
+                value_score: score,
+                moves_left: 0.0
             });
         }
         
@@ -122,7 +123,8 @@ impl GameAnalyzer for CountingAnalyzer {
                     policy_score: 0.4
                 },
             ),
-            value_score: Value([(count as f32) / 100.0, (100.0 - count as f32) / 100.0])
+            value_score: Value([(count as f32) / 100.0, (100.0 - count as f32) / 100.0]),
+            moves_left: 0.0
         })
     }
 }

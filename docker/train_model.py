@@ -6,26 +6,28 @@ import numpy as np
 
 if __name__== "__main__":
 
-    source_model_path   = os.environ['SOURCE_MODEL_PATH']
-    target_model_path   = os.environ['TARGET_MODEL_PATH']
-    export_model_path   = os.environ['EXPORT_MODEL_PATH']
-    tensor_board_path   = os.environ['TENSOR_BOARD_PATH']
+    source_model_path       = os.environ['SOURCE_MODEL_PATH']
+    target_model_path       = os.environ['TARGET_MODEL_PATH']
+    export_model_path       = os.environ['EXPORT_MODEL_PATH']
+    tensor_board_path       = os.environ['TENSOR_BOARD_PATH']
 
-    data_paths          = os.environ['DATA_PATHS'].split(',')
-    train_ratio         = float(os.environ['TRAIN_RATIO'])
-    train_batch_size    = int(os.environ['TRAIN_BATCH_SIZE'])
-    epochs              = int(os.environ['EPOCHS'])
-    initial_epoch       = int(os.environ['INITIAL_EPOCH'])
-    learning_rate       = float(os.environ['LEARNING_RATE'])
-    policy_loss_weight  = float(os.environ['POLICY_LOSS_WEIGHT'])
-    value_loss_weight   = float(os.environ['VALUE_LOSS_WEIGHT'])
+    data_paths              = os.environ['DATA_PATHS'].split(',')
+    train_ratio             = float(os.environ['TRAIN_RATIO'])
+    train_batch_size        = int(os.environ['TRAIN_BATCH_SIZE'])
+    epochs                  = int(os.environ['EPOCHS'])
+    initial_epoch           = int(os.environ['INITIAL_EPOCH'])
+    learning_rate           = float(os.environ['LEARNING_RATE'])
+    policy_loss_weight      = float(os.environ['POLICY_LOSS_WEIGHT'])
+    value_loss_weight       = float(os.environ['VALUE_LOSS_WEIGHT'])
+    moves_left_loss_weight  = float(os.environ['MOVES_LEFT_LOSS_WEIGHT'])
 
-    input_h             = int(os.environ['INPUT_H'])
-    input_w             = int(os.environ['INPUT_W'])
-    input_c             = int(os.environ['INPUT_C'])
-    output_size         = int(os.environ['OUTPUT_SIZE'])
-    num_filters         = int(os.environ['NUM_FILTERS'])
-    num_blocks          = int(os.environ['NUM_BLOCKS'])
+    input_h                 = int(os.environ['INPUT_H'])
+    input_w                 = int(os.environ['INPUT_W'])
+    input_c                 = int(os.environ['INPUT_C'])
+    output_size             = int(os.environ['OUTPUT_SIZE'])
+    moves_left_size         = int(os.environ['MOVES_LEFT_SIZE'])
+    num_filters             = int(os.environ['NUM_FILTERS'])
+    num_blocks              = int(os.environ['NUM_BLOCKS'])
 
     input_size = input_h * input_w * input_c
     yv_size = 1
@@ -37,16 +39,19 @@ if __name__== "__main__":
 
     for (i, path) in enumerate(data_paths):
         print("Loading Data: " + path)
-        dataset = np.load(path).reshape(-1, input_size + output_size + yv_size)
-        print("Data Loaded: " + path)
+        dataset = np.load(path).reshape(-1, input_size + output_size + moves_left_size + yv_size)
         X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
-        yp = dataset[:,input_size:-1]
-        yv = dataset[:,-1]
+        start_index = input_size
+        yp = dataset[:,start_index:start_index + yp]
+        start_index += yp
+        yv = dataset[:,start_index]
+        start_index += ym
+        ym = dataset[:start_index:]
 
         callbacks = [tensor_board] if i == len(data_paths) - 1 else []
 
-        c4.train(model, X, yv, yp, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, callbacks)
+        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
 
     model.save(target_model_path)
 
-    c4.export(target_model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), output_size)
+    c4.export(target_model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), output_size, moves_left_size)

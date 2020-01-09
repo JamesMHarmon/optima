@@ -18,7 +18,7 @@ pub const PLAY_INPUT_H: usize = BOARD_HEIGHT;
 pub const PLAY_INPUT_W: usize = BOARD_WIDTH;
 pub const PLAY_INPUT_C: usize = BOARDS_PER_STATE * MAX_NUM_STEPS + STEP_NUM_CHANNEL + TRAP_CHANNEL;
 pub const PLAY_INPUT_SIZE: usize = BOARD_SIZE * PLAY_INPUT_C;
-
+pub const PLAY_MOVES_LEFT_SIZE: usize = 256;
 
 pub const PLACEMENT_BIT_CHANNEL: usize = 1;
 pub const PLAYER_CHANNEL: usize = 1;
@@ -28,6 +28,7 @@ pub const PLACE_INPUT_C: usize = NUM_PIECE_TYPES + NUM_PIECE_TYPES + PLACEMENT_B
 pub const PLACE_INPUT_SIZE: usize = PLACE_BOARD_SIZE * PLACE_INPUT_C;
 pub const PLACE_BOARD_SIZE: usize = PLACE_INPUT_W * PLACE_INPUT_H;
 pub const PLACE_OUTPUT_SIZE: usize = NUM_PIECE_TYPES;
+pub const PLACE_MOVES_LEFT_SIZE: usize = 1;
 
 pub const NUM_UP_MOVES: usize = BOARD_SIZE - BOARD_WIDTH;
 pub const NUM_RIGHT_MOVES: usize = BOARD_SIZE - BOARD_HEIGHT;

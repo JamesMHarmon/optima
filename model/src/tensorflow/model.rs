@@ -41,7 +41,8 @@ pub struct TensorflowModel<E,Map>
     active_threads: Arc<AtomicUsize>,
     id_generator: Arc<AtomicUsize>,
     mapper: Arc<Map>,
-    analysis_request_threads: usize
+    analysis_request_threads: usize,
+    options: TensorflowModelOptions
 }
 
 #[derive(Serialize,Deserialize)]
@@ -51,7 +52,8 @@ pub struct TensorflowModelOptions {
     pub channel_height: usize,
     pub channel_width: usize,
     pub channels: usize,
-    pub output_size: usize
+    pub output_size: usize,
+    pub moves_left_size: usize
 }
 
 pub trait Mapper<S,A,V> {
@@ -92,6 +94,7 @@ where
 
         let mapper = Arc::new(mapper);
         let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), analysis_request_threads, batch_size));
+        let options = get_options(&model_info).expect("Could not load model options file");
 
         Self {
             model_info,
@@ -100,7 +103,8 @@ where
             active_threads: Arc::new(AtomicUsize::new(0)),
             id_generator: Arc::new(AtomicUsize::new(0)),
             mapper,
-            analysis_request_threads
+            analysis_request_threads,
+            options
         }
     }
 
@@ -121,7 +125,9 @@ fn create_analysis_threads<S,A,V,E,Map>(
     batching_model: &Arc<BatchingModel<E,Map>>,
     model_info: &ModelInfo,
     mapper: &Arc<Map>,
-    analysis_request_threads: usize
+    analysis_request_threads: usize,
+    output_size: usize,
+    moves_left_size: usize,
 )
 where
     S: PartialEq + Hash + Send + Sync + 'static,
@@ -147,7 +153,7 @@ where
         std::thread::spawn(move || {
             let mut last_report = Instant::now();
             let input_dim = mapper.get_input_dimensions();
-            let predictor = Predictor::new(&model_info, input_dim);
+            let predictor = Predictor::new(&model_info, input_dim, output_size, moves_left_size);
 
             loop {
                 let states_to_analyse = batching_model_ref.get_states_to_analyse();
@@ -224,7 +230,16 @@ where
     {
         self.active_analyzers.fetch_add(1, Ordering::SeqCst);
 
-        create_analysis_threads(&self.active_threads, &self.active_analyzers, &self.batching_model, &self.model_info, &self.mapper, self.analysis_request_threads);
+        create_analysis_threads(
+            &self.active_threads,
+            &self.active_analyzers,
+            &self.batching_model,
+            &self.model_info,
+            &self.mapper,
+            self.analysis_request_threads,
+            self.options.output_size,
+            self.options.moves_left_size
+        );
 
         Self::Analyzer {
             batching_model: self.batching_model.clone(),
@@ -236,11 +251,13 @@ where
 
 struct Predictor {
     session: SessionAndOps,
-    input_dimensions: [u64; 3]
+    input_dimensions: [u64; 3],
+    output_size: usize,
+    moves_left_size: usize
 }
 
 impl Predictor {
-    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3]) -> Self {
+    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3], output_size: usize, moves_left_size: usize) -> Self {
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
@@ -264,6 +281,7 @@ impl Predictor {
         let op_input = graph.operation_by_name_required("input_1").unwrap();
         let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
         let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
+        let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").unwrap();
 
         Self {
             input_dimensions,
@@ -271,12 +289,15 @@ impl Predictor {
                 session,
                 op_input,
                 op_value_head,
-                op_policy_head
-            }
+                op_policy_head,
+                op_moves_left_head
+            },
+            output_size,
+            moves_left_size
         }
     }
 
-    fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32)>, Error> {
+    fn predict(&self, game_state_inputs: Vec<&Vec<f32>>) -> Result<Vec<(Vec<f32>, f32, Vec<f32>)>, Error> {
         let batch_size = game_state_inputs.len();
 
         if batch_size == 0 {
@@ -287,7 +308,8 @@ impl Predictor {
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
         let mut flattened_inputs = Vec::with_capacity((input_dim[0] * input_dim[1] * input_dim[2]) as usize * batch_size);
         let mut value_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
-        let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
+        let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size * self.output_size);
+        let mut moves_left_head_outputs: Vec<f32> = Vec::with_capacity(batch_size * self.moves_left_size);
         
         flattened_inputs.extend(game_state_inputs.iter().map(|v| v.iter()).flatten().map(|v| f16::from_f32(*v)));
 
@@ -298,20 +320,22 @@ impl Predictor {
         output_step.add_feed(&session.op_input, 0, &input_tensor);
         let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
         let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
+        let moves_left_head_fetch_token = output_step.request_fetch(&session.op_moves_left_head, 0);
 
         session.session.run(&mut output_step).unwrap();
 
         let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
         let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
-
-        let policy_dimension = policy_head_output.dims()[1];
+        let moves_left_head_output: Tensor<f16> = output_step.fetch(moves_left_head_fetch_token).unwrap();
 
         value_head_outputs.extend(value_head_output.into_iter().map(|v| v.to_f32()));
         policy_head_outputs.extend(policy_head_output.into_iter().map(|c| c.to_f32()));
+        moves_left_head_outputs.extend(moves_left_head_output.into_iter().map(|c| c.to_f32()));
         
         let analysis_results: Vec<_> = izip!(
-            policy_head_outputs.chunks_exact(policy_dimension as usize).map(|c| c.to_vec()),
-            value_head_outputs
+            policy_head_outputs.chunks_exact(self.output_size).map(|c| c.to_vec()),
+            value_head_outputs,
+            moves_left_head_outputs.chunks_exact(self.moves_left_size).map(|c| c.to_vec())
         ).collect();
 
         Ok(analysis_results)
@@ -322,7 +346,8 @@ pub struct SessionAndOps {
     session: Session,
     op_input: Operation,
     op_value_head: Operation,
-    op_policy_head: Operation
+    op_policy_head: Operation,
+    op_moves_left_head: Operation
 }
 
 pub struct GameAnalyzer<E,Map> {
@@ -449,6 +474,7 @@ where
         -e INPUT_W={input_w} \
         -e INPUT_C={input_c} \
         -e OUTPUT_SIZE={output_size} \
+        -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
@@ -469,6 +495,7 @@ where
         input_w = model_options.channel_width,
         input_c = model_options.channels,
         output_size = model_options.output_size,
+        moves_left_size = model_options.moves_left_size,
         num_filters = model_options.num_filters,
         num_blocks = model_options.num_blocks,
     );
@@ -510,6 +537,7 @@ fn create(
         -e INPUT_W={input_w} \
         -e INPUT_C={input_c} \
         -e OUTPUT_SIZE={output_size} \
+        -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
@@ -520,6 +548,7 @@ fn create(
         input_w = options.channel_width,
         input_c = options.channels,
         output_size = options.output_size,
+        moves_left_size = options.moves_left_size,
         num_filters = options.num_filters,
         num_blocks = options.num_blocks,
     );
@@ -604,7 +633,7 @@ fn run_cmd(cmd: &str) -> Result<(), Error> {
 
 pub struct BatchingModel<E,Map> {
     states_to_analyse: SegQueue<(usize, Vec<f32>, Waker)>,
-    states_analysed: IncrementingMap<(Vec<f32>,f32)>,
+    states_analysed: IncrementingMap<(Vec<f32>, f32, Vec<f32>)>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -656,7 +685,7 @@ where
         states_to_analyse
     }
 
-    fn provide_analysis(&self, analysis: Vec<(usize, (Vec<f32>,f32), Waker)>) {
+    fn provide_analysis(&self, analysis: Vec<(usize, (Vec<f32>, f32, Vec<f32>), Waker)>) {
         let analysis_len = analysis.len();
         self.min_batch_size.fetch_min(analysis_len, Ordering::SeqCst);
         self.max_batch_size.fetch_max(analysis_len, Ordering::SeqCst);
@@ -685,7 +714,7 @@ where
         )
     }
 
-    fn poll(&self, id: usize) -> Poll<(Vec<f32>,f32)> {
+    fn poll(&self, id: usize) -> Poll<(Vec<f32>, f32, Vec<f32>)> {
         let analysis = self.states_analysed.remove(id);
 
         match analysis {
@@ -702,7 +731,8 @@ where
             self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
             Poll::Ready(GameStateAnalysis::new(
                 value,
-                Vec::new()
+                Vec::new(),
+                0.0
             ))
         } else {
             self.states_to_analyse.push((
@@ -751,7 +781,7 @@ where
             self_mut.batching_model.request(self_mut.id, &self_mut.game_state, cx.waker())
         } else {
             match (*self).batching_model.poll(self.id) {
-                Poll::Ready((policy_scores, value_score)) => {
+                Poll::Ready((policy_scores, value_score, moves_left_scores)) => {
                     let mapper = &*self.batching_model.mapper;
                     let valid_actions_with_policies = mapper.policy_to_valid_actions(
                         &self.game_state,
@@ -760,11 +790,18 @@ where
 
                     Poll::Ready(GameStateAnalysis {
                         policy_scores: valid_actions_with_policies,
-                        value_score: mapper.map_value_output_to_value(&self.game_state, value_score)
+                        value_score: mapper.map_value_output_to_value(&self.game_state, value_score),
+                        moves_left: moves_left_expected_value(&moves_left_scores)
                     })
                 },
                 Poll::Pending => Poll::Pending
             }
         }
     }
+}
+
+pub fn moves_left_expected_value(moves_left_scores: &[f32]) -> f32 {
+    moves_left_scores.iter().enumerate()
+        .map(|(i, s)| (i + 1) as f32 * s)
+        .fold(0.0f32, |s, e| s + e)
 }

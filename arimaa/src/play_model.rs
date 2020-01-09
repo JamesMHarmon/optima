@@ -10,7 +10,7 @@ use super::symmetries::get_symmetries;
 use super::board::set_board_bits_invertable;
 use super::value::Value;
 use super::action::{Action,Square,Direction,Piece};
-use super::constants::{PLAY_INPUT_H as INPUT_H,PLAY_INPUT_W as INPUT_W,PLAY_INPUT_C as INPUT_C,PLAY_OUTPUT_SIZE as OUTPUT_SIZE,PLAY_INPUT_SIZE as INPUT_SIZE,* };
+use super::constants::{PLAY_INPUT_H as INPUT_H,PLAY_INPUT_W as INPUT_W,PLAY_INPUT_C as INPUT_C,PLAY_OUTPUT_SIZE as OUTPUT_SIZE,PLAY_MOVES_LEFT_SIZE as MOVES_LEFT_SIZE,PLAY_INPUT_SIZE as INPUT_SIZE,*};
 use super::engine::Engine;
 use super::engine::GameState;
 
@@ -223,7 +223,8 @@ impl model::model::ModelFactory for ModelFactory {
                 channel_height: INPUT_H,
                 channel_width: INPUT_W,
                 channels: INPUT_C,
-                output_size: OUTPUT_SIZE
+                output_size: OUTPUT_SIZE,
+                moves_left_size: MOVES_LEFT_SIZE
             }
         ).unwrap();
 

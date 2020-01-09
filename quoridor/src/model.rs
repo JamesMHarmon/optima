@@ -9,7 +9,7 @@ use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use engine::value::{Value as ValueTrait};
 use super::value::Value;
 use super::action::{Action,Coordinate};
-use super::constants::{ASCII_LETTER_A,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MAX_WALLS_PLACED_TO_CACHE,NUM_WALLS_PER_PLAYER,WALL_BOARD_SIZE,PAWN_BOARD_SIZE,BOARD_WIDTH,BOARD_HEIGHT};
+use super::constants::{ASCII_LETTER_A,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MOVES_LEFT_SIZE,MAX_WALLS_PLACED_TO_CACHE,NUM_WALLS_PER_PLAYER,WALL_BOARD_SIZE,PAWN_BOARD_SIZE,BOARD_WIDTH,BOARD_HEIGHT};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
@@ -198,7 +198,8 @@ impl model::model::ModelFactory for ModelFactory {
                 channel_height: INPUT_H,
                 channel_width: INPUT_W,
                 channels: INPUT_C,
-                output_size: OUTPUT_SIZE
+                output_size: OUTPUT_SIZE,
+                moves_left_size: MOVES_LEFT_SIZE
             }
         ).unwrap();
 

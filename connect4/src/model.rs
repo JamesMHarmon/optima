@@ -9,7 +9,7 @@ use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use model::model::ModelOptions;
 use engine::value::{Value as ValueTrait};
 use super::value::Value;
-use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE};
+use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MOVES_LEFT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
 use super::engine::GameState;
@@ -122,7 +122,8 @@ impl model::model::ModelFactory for ModelFactory {
                 channel_height: INPUT_H,
                 channel_width: INPUT_W,
                 channels: INPUT_C,
-                output_size: OUTPUT_SIZE
+                output_size: OUTPUT_SIZE,
+                moves_left_size: MOVES_LEFT_SIZE
             }
         ).unwrap();
 

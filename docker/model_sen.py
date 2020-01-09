@@ -30,10 +30,11 @@ def se_block(x, filters, ratio=16):
     out = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(out)
     return multiply([x, out])
 
-def ValueHead(x):
+def ValueHead(x, filters):
     # Value Head
     # https://github.com/glinscott/leela-chess/issues/47
-    out = Conv2D(32, kernel_size=(1,1), activation='linear', use_bias=False)(x)
+    filters = int(filters / 2)
+    out = Conv2D(filters, kernel_size=(1,1), activation='linear', use_bias=False)(x)
     out = BatchNormalization()(out)
     out = LeakyReLU()(out)
 
@@ -54,9 +55,18 @@ def PolicyHead(x, filters, output_size):
     out = Flatten()(out)
     out = Dense(output_size, name='policy_head', kernel_regularizer=regularizers.l2(0.01), activation='softmax')(out)
     return out
-    
 
-def ResNet(num_filters, num_blocks, input_shape, output_size):
+def MovesLeftHead(x, filters, moves_left_size):
+    filters = int(filters / 2)
+    out = Conv2D(filters, kernel_size=(1,1), activation='linear', use_bias=False)(x)
+    out = BatchNormalization()(out)
+    out = LeakyReLU()(out)
+
+    out = Flatten()(out)
+    out = Dense(moves_left_size, name='moves_left_head', kernel_regularizer=regularizers.l2(0.01), activation='softmax')(out)
+    return out
+
+def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     inputs = Input(input_shape)
     net = Conv2D(filters=num_filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(inputs)
     net = BatchNormalization()(net)
@@ -65,13 +75,14 @@ def ResNet(num_filters, num_blocks, input_shape, output_size):
     for _ in range(0, num_blocks):
         net = Block(net, num_filters)
 
-    value_head = ValueHead(net)
+    value_head = ValueHead(net, num_filters)
     policy_head = PolicyHead(net, num_filters, output_size)
+    moves_left_head = MovesLeftHead(net, num_filters, moves_left_size)
 
-    model = Model(inputs=inputs,outputs=[value_head, policy_head])
+    model = Model(inputs=inputs,outputs=[value_head, policy_head, moves_left_head])
 
     return model
 
-def create_model(num_filters, num_blocks, input_shape, output_size):
-    model = ResNet(num_filters, num_blocks, input_shape, output_size)
+def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_size):
+    model = ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size)
     return model

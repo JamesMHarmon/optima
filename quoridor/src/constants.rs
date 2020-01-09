@@ -11,4 +11,5 @@ pub const INPUT_C: usize = 6;
 pub const PAWN_BOARD_SIZE: usize = BOARD_WIDTH * BOARD_HEIGHT;
 pub const WALL_BOARD_SIZE: usize = (BOARD_WIDTH - 1) * (BOARD_HEIGHT - 1);
 pub const OUTPUT_SIZE: usize = PAWN_BOARD_SIZE + WALL_BOARD_SIZE * 2;
+pub const MOVES_LEFT_SIZE: usize = 48;
 pub const ASCII_LETTER_A: u8 = 97;
