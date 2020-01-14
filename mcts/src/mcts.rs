@@ -113,7 +113,6 @@ enum MCTSNodeState {
 struct MCTSChildNode<A> {
     action: A,
     visits: Cell<usize>,
-    in_flight: Cell<usize>,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -470,8 +469,7 @@ where
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let virtual_loss = child.in_flight.get() as f32;
-            let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logit_q = if logit_q { logit(Qsa) } else { Qsa };
 
             let PUCT = logit_q + Usa;
@@ -514,8 +512,7 @@ where
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let virtual_loss = child.in_flight.get() as f32;
-            let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if logit_q { logit(Qsa) } else { Qsa };
 
             let PUCT = logitQ + Usa;
@@ -618,7 +615,6 @@ impl<S,A,V> MCTSNode<S,A,V> {
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
                     visits: Cell::new(0),
-                    in_flight: Cell::new(0),
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -650,7 +646,6 @@ where
 {
     let mut depth = 0;
     let mut node_stack = vec!(root_index);
-    let mut in_flight_stack = vec!();
 
     'outer: loop {
         depth += 1;
@@ -686,8 +681,6 @@ where
 
             let prev_visits = selected_child_node.visits.get();
             selected_child_node.visits.set(prev_visits + 1);
-            selected_child_node.in_flight.set(selected_child_node.in_flight.get() + 1);
-            in_flight_stack.push((*latest_index, selected_child_node.action.clone()));
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                 let node = &arena_borrow[selected_child_node_index];
@@ -762,14 +755,6 @@ where
                 }
             }
         }
-    }
-
-    let arena_borrow = arena.borrow();
-
-    for (parent_node_index, action) in in_flight_stack {
-        let parent_node = &arena_borrow[parent_node_index];
-        let in_flight = &parent_node.get_child_of_action(&action).unwrap().in_flight;
-        in_flight.set(in_flight.get() - 1);
     }
 
     Ok(depth)
