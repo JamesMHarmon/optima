@@ -42,11 +42,11 @@ if __name__== "__main__":
         dataset = np.load(path).reshape(-1, input_size + output_size + moves_left_size + yv_size)
         X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
         start_index = input_size
-        yp = dataset[:,start_index:start_index + yp]
-        start_index += yp
+        yp = dataset[:,start_index:start_index + output_size]
+        start_index += output_size
         yv = dataset[:,start_index]
-        start_index += ym
-        ym = dataset[:start_index:]
+        start_index += yv_size
+        ym = dataset[:,start_index:]
 
         callbacks = [tensor_board] if i == len(data_paths) - 1 else []
 

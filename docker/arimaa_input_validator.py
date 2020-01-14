@@ -19,12 +19,17 @@ outputs = 4
 output_size = output_h * output_w * outputs + 1 # + 1 is for pass action
 output_names = ["n","e","s","w"]
 
+moves_left_size = 128
 yv_size = 1
 
-sample_data = np.load(FILE_NAME).reshape(-1, input_size + output_size + yv_size)
-X = sample_data[:,:input_size].reshape(-1, input_h, input_w, input_c)
-yp = sample_data[:,input_size:-1]
-yv = sample_data[:,-1]
+sample_data = np.load(FILE_NAME).reshape(-1, input_size + output_size + moves_left_size + yv_size)
+X = sample_data[:,0:input_size].reshape(sample_data.shape[0],input_h,input_w,input_c)
+start_index = input_size
+yp = sample_data[:,start_index:start_index + output_size]
+start_index += output_size
+yv = sample_data[:,start_index]
+start_index += yv_size
+ym = sample_data[:,start_index:]
 
 X = X[POSITION]
 yp = yp[POSITION]
