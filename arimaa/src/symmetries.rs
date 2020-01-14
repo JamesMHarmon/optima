@@ -8,7 +8,7 @@ use super::engine::{GameState,Phase,PlayPhase,PushPullState,PieceBoard,PieceBoar
 use super::action::{Action,Piece,map_bit_board_to_squares};
 
 pub fn get_symmetries(metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
-    let PositionMetrics { game_state, policy, score } = metrics;
+    let PositionMetrics { game_state, policy, score, moves_left } = metrics;
 
     get_symmetries_game_state(game_state).into_iter()
         .zip(get_symmetries_node_metrics(policy))
@@ -16,6 +16,7 @@ pub fn get_symmetries(metrics: PositionMetrics<GameState,Action,Value>) -> Vec<P
             game_state,
             policy,
             score: score.clone(),
+            moves_left
         })
         .collect()
 }
@@ -354,7 +355,8 @@ assert_eq!(game_state_symmetry_step_3, "5g
                     (Action::Move(Square::new('c', 2), Direction::Right), 250),
                     (Action::Move(Square::new('c', 2), Direction::Left), 50),
                 )
-            }
+            },
+            moves_left: 0
         });
 
         let PositionMetrics {
@@ -363,8 +365,9 @@ assert_eq!(game_state_symmetry_step_3, "5g
             policy: NodeMetrics {
                 visits: symmetrical_visits,
                 W: symmetrical_W,
-                children_visits: symmetrical_children_visits
-            }
+                children_visits: symmetrical_children_visits,
+            },
+            ..
         } = symmetries.pop().unwrap();
 
         let PositionMetrics {
@@ -374,7 +377,8 @@ assert_eq!(game_state_symmetry_step_3, "5g
                 visits: original_visits,
                 W: original_W,
                 children_visits: original_children_visits
-            }
+            },
+            ..
         } = symmetries.pop().unwrap();
 
         assert_eq!(symmetrical_score, original_score);

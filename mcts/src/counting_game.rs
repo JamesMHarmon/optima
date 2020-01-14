@@ -80,6 +80,10 @@ impl GameEngine for CountingGameEngine {
     fn get_player_to_move(&self, game_state: &Self::State) -> usize {
         if game_state.p1_turn { 1 } else { 2 }
     }
+
+    fn get_move_number(&self, _game_state: &Self::State) -> usize {
+        0
+    }
 }
 
 pub struct CountingAnalyzer {

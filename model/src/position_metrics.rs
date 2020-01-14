@@ -4,5 +4,6 @@ use super::node_metrics::NodeMetrics;
 pub struct PositionMetrics<S,A,V> {
     pub game_state: S,
     pub score: V,
-    pub policy: NodeMetrics<A>
+    pub policy: NodeMetrics<A>,
+    pub moves_left: usize
 }
