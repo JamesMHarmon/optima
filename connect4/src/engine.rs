@@ -171,6 +171,10 @@ impl GameEngine for Engine {
     fn get_player_to_move(&self, game_state: &Self::State) -> usize {
         if game_state.p1_turn_to_move { 1 } else { 2 }
     }
+
+    fn get_move_number(&self, game_state: &Self::State) -> usize {
+        game_state.p2_piece_board.count_ones() as usize + 1
+    }
 }
 
 #[cfg(test)]

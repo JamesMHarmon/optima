@@ -405,6 +405,8 @@ where
 {
     println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
+    let model_options = get_options(source_model_info)?;
+    let moves_left_size = model_options.moves_left_size;
     let source_paths = Paths::from_model_info(&source_model_info);
     let source_base_path = source_paths.get_base_path();
 
@@ -427,8 +429,9 @@ where
                     for record in 
                         mapper.game_state_to_input(&metric.game_state).into_iter().chain(
                         mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
-                            std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score))
-                        )) {
+                        std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score)).chain(
+                        map_moves_left_to_one_hot(metric.moves_left, moves_left_size)
+                        ))) {
 
                         wtr.push(&record).unwrap();
                     }
@@ -454,7 +457,6 @@ where
     // We want the training to happen in reverse order so that the last data trained is the most recent. AKA the most recent data has a higher weighting. 
     train_data_paths.reverse();
 
-    let model_options = get_options(source_model_info)?;
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
@@ -805,3 +807,13 @@ pub fn moves_left_expected_value(moves_left_scores: &[f32]) -> f32 {
         .map(|(i, s)| (i + 1) as f32 * s)
         .fold(0.0f32, |s, e| s + e)
 }
+
+fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
+    let moves_left = moves_left.max(0).min(moves_left_size);
+    let mut moves_left_one_hot = Vec::with_capacity(moves_left_size);
+    moves_left_one_hot.extend(std::iter::repeat(0.0).take(moves_left_size));
+    moves_left_one_hot[moves_left - 1] = 1.0;
+
+    moves_left_one_hot
+}
+
