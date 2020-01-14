@@ -20,7 +20,10 @@ pub struct PlayOptions {
     pub logit_q: bool,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
-    pub cpuct_root_scaling: f32
+    pub cpuct_root_scaling: f32,
+    pub moves_left_threshold: f32,
+    pub moves_left_scale: f32,
+    pub moves_left_factor: f32,
 }
 
 pub struct Play {}
@@ -40,12 +43,9 @@ impl Play
         M: Model<State=S,Action=A,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
     {
-        let fpu = options.fpu;
-        let fpu_root = options.fpu_root;
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
-        let logit_q = options.logit_q;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
 
@@ -56,12 +56,15 @@ impl Play
             &analyzer,
             MCTSOptions::<S,_,_>::new(
                 None,
-                fpu,
-                fpu_root,
-                logit_q,
+                options.fpu,
+                options.fpu_root,
+                options.logit_q,
                 |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,_| 0.0,
                 0.0,
+                options.moves_left_threshold,
+                options.moves_left_scale,
+                options.moves_left_factor,
                 options.parallelism
             ),
             visits

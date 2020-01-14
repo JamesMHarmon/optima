@@ -29,18 +29,20 @@ pub struct PUCT {
     pub logitQ: f32,
     pub Psa: f32,
     pub Usa: f32,
+    pub Msa: f32,
     pub cpuct: f32,
     pub PUCT: f32
 }
 
 impl Display for PUCT {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, PUCT: {PUCT}",
+        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Msa: {Msa}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, PUCT: {PUCT}",
             Nsa = self.Nsa,
             Qsa = self.Qsa,
             logitQ = self.logitQ,
             Psa = self.Psa,
             Usa = self.Usa,
+            Msa = self.Msa,
             cpuct = self.cpuct,
             PUCT = self.PUCT,
         )
@@ -75,6 +77,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -85,6 +88,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 2.0,
             Usa: 2.0,
+            Msa: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -102,6 +106,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -112,6 +117,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 2.0,
             Usa: 2.0,
+            Msa: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -129,6 +135,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 2.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -139,6 +146,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
+            Msa: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -156,6 +164,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
+            Msa: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -166,6 +175,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -183,6 +193,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 2.0,
             PUCT: 1.0,
         };
@@ -193,6 +204,7 @@ mod tests {
             logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
+            Msa: 1.0,
             cpuct: 1.0,
             PUCT: 2.0,
         };

@@ -35,7 +35,10 @@ pub struct SelfEvaluateOptions {
     pub logit_q: bool,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
-    pub cpuct_root_scaling: f32
+    pub cpuct_root_scaling: f32,
+    pub moves_left_threshold: f32,
+    pub moves_left_scale: f32,
+    pub moves_left_factor: f32,
 }
 
 pub struct SelfEvaluate {}
@@ -233,6 +236,9 @@ impl SelfEvaluate
                 |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
                 |_,num_actions| if num_actions < temperature_max_actions { temperature } else { temperature_post_max_actions },
                 0.0,
+                options.moves_left_threshold,
+                options.moves_left_scale,
+                options.moves_left_factor,
                 options.parallelism
             ),
             visits

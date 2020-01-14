@@ -38,6 +38,9 @@ where
     cpuct: C,
     temperature: T,
     temperature_visit_offset: f32,
+    moves_left_threshold: f32,
+    moves_left_scale: f32,
+    moves_left_factor: f32,
     parallelism: usize,
     _phantom_state: PhantomData<*const S>
 }
@@ -56,6 +59,9 @@ where
         cpuct: C,
         temperature: T,
         temperature_visit_offset: f32,
+        moves_left_threshold: f32,
+        moves_left_scale: f32,
+        moves_left_factor: f32,
         parallelism: usize
     ) -> Self {
         MCTSOptions {
@@ -66,6 +72,9 @@ where
             cpuct,
             temperature,
             temperature_visit_offset,
+            moves_left_threshold,
+            moves_left_scale,
+            moves_left_factor,
             parallelism,
             _phantom_state: PhantomData
         }
@@ -95,6 +104,7 @@ where
 #[derive(Debug)]
 struct MCTSNode<S,A,V> {
     value_score: V,
+    moves_left_score: f32,
     W: Cell<f32>,
     game_state: S,
     num_actions: usize,
@@ -278,10 +288,7 @@ where
         let root_node_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
-        let fpu = self.options.fpu;
-        let fpu_root = self.options.fpu_root;
-        let logit_q = self.options.logit_q;
-        let cpuct = &self.options.cpuct;
+        let options = &self.options;
         let arena_cell = &self.arena;
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
@@ -296,7 +303,7 @@ where
 
         for _ in 0..self.options.parallelism {
             if alive_flag && alive(initial_visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, logit_q, cpuct);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
                 searches.push(future);
             } else {
                 alive_flag = false;
@@ -305,7 +312,7 @@ where
 
         while let Some(search_depth) = searches.next().await {
             if alive_flag && alive(initial_visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, fpu, fpu_root, logit_q, cpuct);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
                 searches.push(future);
             } else {
                 alive_flag = false;
@@ -355,7 +362,6 @@ where
         let root = &arena_borrow[node_index];
         let root_visits = root.get_node_visits();
         let children = &root.children;
-        let options = &self.options;
 
         let metrics = Self::get_PUCT_for_nodes(
             children,
@@ -364,10 +370,7 @@ where
             &root.game_state,
             is_root,
             root.num_actions,
-            options.fpu,
-            options.fpu_root,
-            options.logit_q,
-            &options.cpuct
+            &self.options
         );
 
         let mut children: Vec<_> = children.iter().zip(metrics).map(|(n, m)| (
@@ -458,23 +461,27 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
-        let fpu = if is_root { fpu_root } else { fpu };
+    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, options: &MCTSOptions<S,C,T>) -> Result<&'b MCTSChildNode<A>, Error> {
+        let fpu = if is_root { options.fpu_root } else { options.fpu };
         let root_Nsb = (Nsb as f32).sqrt();
         let mut best_node = &nodes[0];
         let mut best_puct = std::f32::MIN;
+        let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
+        let moves_left_baseline = get_moves_left_baseline(nodes, arena, options.moves_left_threshold);
 
         for child in nodes {
-            let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
+            let node = child.state.get_index().map(|i| &arena[i]);
+            let W = node.map_or(0.0, |n| n.W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
-            let logit_q = if logit_q { logit(Qsa) } else { Qsa };
+            let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
+            let Msa = Self::get_Msa(node, moves_left_baseline, options);
 
-            let PUCT = logit_q + Usa;
+            let PUCT = Msa + logitQ + Usa;
 
             if PUCT > best_puct {
                 best_puct = PUCT;
@@ -502,24 +509,28 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Vec<PUCT>
+    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, options: &MCTSOptions<S,C,T>) -> Vec<PUCT>
     {
-        let fpu = if is_root { fpu_root } else { fpu };
+        let fpu = if is_root { options.fpu_root } else { options.fpu };
         let mut pucts = Vec::with_capacity(nodes.len());
         let root_Nsb = (Nsb as f32).sqrt();
+        let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
+        let moves_left_baseline = get_moves_left_baseline(nodes, arena, options.moves_left_threshold);
 
         for child in nodes {
-            let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
+            let node = child.state.get_index().map(|i| &arena[i]);
+            let W = node.map_or(0.0, |n| n.W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let virtual_loss = child.in_flight.get() as f32;
             let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
-            let logitQ = if logit_q { logit(Qsa) } else { Qsa };
+            let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
+            let Msa = Self::get_Msa(node, moves_left_baseline, options);
 
             let PUCT = logitQ + Usa;
-            pucts.push(PUCT { Psa, Nsa, cpuct, Usa, Qsa, logitQ, PUCT });
+            pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, PUCT });
         }
 
         pucts
@@ -559,9 +570,8 @@ where
 
     async fn analyse_and_create_node(game_state: S, actions: usize, analyzer: &M) -> MCTSNode<S,A,V> {
         let analysis_result = analyzer.get_state_analysis(&game_state).await;
-        let value_score = analysis_result.value_score;
 
-        MCTSNode::new(game_state, actions, value_score, analysis_result.policy_scores)
+        MCTSNode::new(game_state, actions, analysis_result.value_score, analysis_result.policy_scores, analysis_result.moves_left)
     }
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S,A,V>, dirichlet: &DirichletOptions) {
@@ -574,6 +584,17 @@ where
         for (child, policy_score) in node.children.iter_mut().zip(noisy_policy_scores.into_iter()) {
             child.policy_score = policy_score;
         }
+    }
+
+    fn get_Msa(node: Option<&MCTSNode<S,A,V>>, moves_left_baseline: Option<f32>, options: &MCTSOptions<S,C,T>) -> f32
+    {
+        moves_left_baseline.and_then(|moves_left_baseline| node.map(|node| {
+            let moves_left_scale = options.moves_left_scale;
+            let moves_left_clamped = (moves_left_baseline - node.moves_left_score).min(moves_left_scale).max(-moves_left_scale);
+            let moves_left_scaled = moves_left_clamped / moves_left_scale;
+            moves_left_scaled * options.moves_left_factor
+        }))
+        .unwrap_or(0.0)
     }
 }
 
@@ -608,10 +629,27 @@ fn logit(val: f32) -> f32 {
 }
 
 #[allow(non_snake_case)]
+fn get_moves_left_baseline<S,A,V>(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, moves_left_threshold: f32) -> Option<f32> {
+    nodes.iter()
+        .max_by_key(|n| n.visits.get())
+        .and_then(|best_child_node| best_child_node.state.get_index().map(|index| (best_child_node, index)))
+        .and_then(|(best_child_node, best_node_index)| {
+            let best_node = &arena[best_node_index];
+            let Qsa = best_node.W.get() / best_child_node.visits.get() as f32;
+            if Qsa >= moves_left_threshold {
+                Some(best_node.moves_left_score)
+            } else {
+                None
+            }
+        })
+}
+
+#[allow(non_snake_case)]
 impl<S,A,V> MCTSNode<S,A,V> {
-    pub fn new(game_state: S, num_actions: usize, value_score: V, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
+    pub fn new(game_state: S, num_actions: usize, value_score: V, policy_scores: Vec<ActionWithPolicy<A>>, moves_left_score: f32) -> Self {
         MCTSNode {
             value_score,
+            moves_left_score,
             W: Cell::new(0.0),
             game_state,
             num_actions,
@@ -634,10 +672,7 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,V>(
     arena: &RefCell<Arena<MCTSNode<S,A,V>>>,
     game_engine: &E,
     analyzer: &M,
-    fpu: f32,
-    fpu_root: f32,
-    logit_q: bool,
-    cpuct: &C
+    options: &MCTSOptions<S,C,T>
 ) -> Result<usize, Error>
 where
     S: GameState,
@@ -678,10 +713,7 @@ where
                 game_state,
                 is_root,
                 prior_num_actions,
-                fpu,
-                fpu_root,
-                logit_q,
-                cpuct
+                options
             )?;
 
             let prev_visits = selected_child_node.visits.get();
@@ -865,6 +897,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -876,6 +911,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -903,6 +941,9 @@ mod tests {
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -927,6 +968,9 @@ mod tests {
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -953,6 +997,9 @@ mod tests {
             |_,_,_,_| 2.5,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -985,6 +1032,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1006,6 +1056,9 @@ mod tests {
             |_,_,_,_| 1.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1039,6 +1092,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1072,6 +1128,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1105,6 +1164,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1138,6 +1200,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1171,6 +1236,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1204,6 +1272,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1238,6 +1309,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1256,6 +1330,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 
@@ -1274,6 +1351,9 @@ mod tests {
             |_,_,_,_| 3.0,
             |_,_| 0.0,
             0.0,
+            1.0,
+            10.0,
+            0.05,
             1
         ));
 

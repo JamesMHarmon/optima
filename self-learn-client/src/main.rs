@@ -461,6 +461,9 @@ fn get_default_options() -> Result<Options, Error> {
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
         cpuct_root_scaling: 2.0,
+        moves_left_threshold: 0.95,
+        moves_left_scale: 10.0,
+        moves_left_factor: 0.05,
         alpha: 0.3,
         epsilon: 0.25
     };
@@ -483,7 +486,10 @@ fn get_default_options() -> Result<Options, Error> {
         logit_q: self_learn_options.logit_q,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
-        cpuct_root_scaling: self_learn_options.cpuct_root_scaling
+        cpuct_root_scaling: self_learn_options.cpuct_root_scaling,
+        moves_left_threshold: self_learn_options.moves_left_threshold,
+        moves_left_scale: self_learn_options.moves_left_scale,
+        moves_left_factor: self_learn_options.moves_left_factor
     };
 
     let play_options = PlayOptions {
@@ -494,7 +500,10 @@ fn get_default_options() -> Result<Options, Error> {
         logit_q: self_learn_options.logit_q,
         cpuct_base: self_learn_options.cpuct_base,
         cpuct_init: self_learn_options.cpuct_init,
-        cpuct_root_scaling: self_learn_options.cpuct_root_scaling
+        cpuct_root_scaling: self_learn_options.cpuct_root_scaling,
+        moves_left_threshold: self_learn_options.moves_left_threshold,
+        moves_left_scale: self_learn_options.moves_left_scale,
+        moves_left_factor: self_learn_options.moves_left_factor
     };
 
     let tournament_options = TournamentOptions {
@@ -511,6 +520,9 @@ fn get_default_options() -> Result<Options, Error> {
         temperature: self_learn_options.temperature,
         temperature_max_actions: self_learn_options.temperature_max_actions,
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
+        moves_left_threshold: self_learn_options.moves_left_threshold,
+        moves_left_scale: self_learn_options.moves_left_scale,
+        moves_left_factor: self_learn_options.moves_left_factor
     };
 
     Ok(Options {

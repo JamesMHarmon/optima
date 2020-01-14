@@ -64,6 +64,9 @@ pub struct SelfLearnOptions {
     pub cpuct_base: f32,
     pub cpuct_init: f32,
     pub cpuct_root_scaling: f32,
+    pub moves_left_threshold: f32,
+    pub moves_left_scale: f32,
+    pub moves_left_factor: f32,
     pub alpha: f32,
     pub epsilon: f32
 }
@@ -210,6 +213,9 @@ where
                     cpuct_base: options.cpuct_base,
                     cpuct_init: options.cpuct_init,
                     cpuct_root_scaling: options.cpuct_root_scaling,
+                    moves_left_threshold: options.moves_left_threshold,
+                    moves_left_scale: options.moves_left_scale,
+                    moves_left_factor: options.moves_left_factor,
                     temperature: options.temperature,
                     temperature_max_actions: options.temperature_max_actions,
                     temperature_post_max_actions: options.temperature_post_max_actions,

@@ -57,3 +57,9 @@ Run-7
 12-23-19: model 452 - Raised moving window size from 225k to 300k, lowered sample rate from 0.0512 to 0.0384
 
 12-26-19: model 550 - Updated to continuous game generation transition between nets
+
+Run-8
+
+Continuation of Run-7 model 550.
+
+01-##-20: model 1 - Increased train_batch_size from 512 to 1024. Add gating into pipeline. Add symmetries into generated board position training data. Add moves left head. Changed cpuct_init from 2.5 to 1.25. Fix issue where positions were sampled during taining on fast_visits. Upgrade net size from 64x5 to 96x8.
