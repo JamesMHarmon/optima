@@ -281,7 +281,7 @@ impl Predictor {
         let op_input = graph.operation_by_name_required("input_1").unwrap();
         let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
         let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
-        let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").unwrap();
+        let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
 
         Self {
             input_dimensions,
@@ -320,17 +320,22 @@ impl Predictor {
         output_step.add_feed(&session.op_input, 0, &input_tensor);
         let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
         let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
-        let moves_left_head_fetch_token = output_step.request_fetch(&session.op_moves_left_head, 0);
+        let moves_left_head_fetch_token = session.op_moves_left_head.as_ref().map(|op| output_step.request_fetch(op, 0));
 
         session.session.run(&mut output_step).unwrap();
 
         let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
         let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
-        let moves_left_head_output: Tensor<f16> = output_step.fetch(moves_left_head_fetch_token).unwrap();
+        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|fetch_token| output_step.fetch(fetch_token).unwrap());
 
         value_head_outputs.extend(value_head_output.into_iter().map(|v| v.to_f32()));
         policy_head_outputs.extend(policy_head_output.into_iter().map(|c| c.to_f32()));
-        moves_left_head_outputs.extend(moves_left_head_output.into_iter().map(|c| c.to_f32()));
+
+        if let Some(moves_left_head_output) = moves_left_head_output {
+            moves_left_head_outputs.extend(moves_left_head_output.into_iter().map(|c| c.to_f32()));
+        } else {
+            moves_left_head_outputs.extend(std::iter::repeat(0.0).take(batch_size * self.moves_left_size));
+        }
         
         let analysis_results: Vec<_> = izip!(
             policy_head_outputs.chunks_exact(self.output_size).map(|c| c.to_vec()),
@@ -347,7 +352,7 @@ pub struct SessionAndOps {
     op_input: Operation,
     op_value_head: Operation,
     op_policy_head: Operation,
-    op_moves_left_head: Operation
+    op_moves_left_head: Option<Operation>
 }
 
 pub struct GameAnalyzer<E,Map> {
