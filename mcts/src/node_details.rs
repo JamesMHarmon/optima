@@ -30,19 +30,21 @@ pub struct PUCT {
     pub Psa: f32,
     pub Usa: f32,
     pub Msa: f32,
+    pub moves_left: f32,
     pub cpuct: f32,
-    pub PUCT: f32
+    pub PUCT: f32,
 }
 
 impl Display for PUCT {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Msa: {Msa}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, PUCT: {PUCT}",
+        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Msa: {Msa}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, moves_left: {moves_left}, PUCT: {PUCT}",
             Nsa = self.Nsa,
             Qsa = self.Qsa,
             logitQ = self.logitQ,
             Psa = self.Psa,
             Usa = self.Usa,
             Msa = self.Msa,
+            moves_left = self.moves_left,
             cpuct = self.cpuct,
             PUCT = self.PUCT,
         )
@@ -78,6 +80,7 @@ mod tests {
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -89,6 +92,7 @@ mod tests {
             Psa: 2.0,
             Usa: 2.0,
             Msa: 2.0,
+            moves_left: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -107,6 +111,7 @@ mod tests {
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -114,10 +119,11 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
+            logitQ: 2.0,
             Psa: 2.0,
             Usa: 2.0,
             Msa: 2.0,
+            moves_left: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -136,6 +142,7 @@ mod tests {
             Psa: 2.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -147,6 +154,7 @@ mod tests {
             Psa: 1.0,
             Usa: 2.0,
             Msa: 2.0,
+            moves_left: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -165,6 +173,7 @@ mod tests {
             Psa: 1.0,
             Usa: 2.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -176,6 +185,7 @@ mod tests {
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -194,6 +204,7 @@ mod tests {
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 2.0,
             PUCT: 1.0,
         };
@@ -205,6 +216,7 @@ mod tests {
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
+            moves_left: 1.0,
             cpuct: 1.0,
             PUCT: 2.0,
         };

@@ -109,8 +109,7 @@ struct MCTSNode<S,A,V> {
     W: f32,
     game_state: S,
     num_actions: usize,
-    children: Vec<MCTSChildNode<A>>,
-    best_child_index: Option<usize>
+    children: Vec<MCTSChildNode<A>>
 }
 
 #[derive(Debug)]
@@ -459,15 +458,15 @@ where
     fn select_path<'b>(node_index: Index, arena: &'b mut Arena<MCTSNode<S,A,V>>, is_root: bool, options: &MCTSOptions<S,C,T>) -> Result<&'b mut MCTSChildNode<A>, Error> {
         let node = &arena[node_index];
         let children = &node.children;
-        let mut best_child_index = 0;
-        let mut best_puct = std::f32::MIN;
-        
         let fpu = if is_root { options.fpu_root } else { options.fpu };
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
         let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
-        let moves_left_baseline = get_moves_left_baseline(&children, arena, options.moves_left_threshold);
+        let moves_left_baseline = get_moves_left_baseline(children, arena, options.moves_left_threshold);
+
+        let mut best_child_index = 0;
+        let mut best_puct = std::f32::MIN;
 
         for (i, child) in children.iter().enumerate() {
             let node = child.state.get_index().map(|i| &arena[i]);
@@ -487,9 +486,7 @@ where
             }
         }
 
-        let mut node = &mut arena[node_index];
-        node.best_child_index = Some(best_child_index);
-        Ok(&mut node.children[best_child_index])
+        Ok(&mut arena[node_index].children[best_child_index])
     }
 
     fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
@@ -529,10 +526,11 @@ where
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
+            let moves_left = node.map_or(0.0, |n| n.moves_left_score);
             let Msa = Self::get_Msa(node, moves_left_baseline, options);
 
             let PUCT = logitQ + Usa;
-            pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, PUCT });
+            pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, moves_left, PUCT });
         }
 
         pucts
@@ -662,8 +660,7 @@ impl<S,A,V> MCTSNode<S,A,V> {
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
                 }
-            }).collect(),
-            best_child_index: None
+            }).collect()
         }
     }
 }
