@@ -457,14 +457,17 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+    fn select_path<'b>(node: &'b MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+        let children = &node.children;
+        let mut best_node = &children[0];
+        let mut best_puct = std::f32::MIN;
+
+        let Nsb = node.get_node_visits();
         let fpu = if is_root { fpu_root } else { fpu };
         let root_Nsb = (Nsb as f32).sqrt();
-        let mut best_node = &nodes[0];
-        let mut best_puct = std::f32::MIN;
-        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
+        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
 
-        for child in nodes {
+        for child in children {
             let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
@@ -661,18 +664,12 @@ where
                 break 'outer;
             }
 
-            let game_state = &node.game_state;
-            let prior_num_actions = node.num_actions;
             let is_root = depth == 1;
-            let Nsb = node.get_node_visits();
 
             let selected_child_node = MCTS::<S,A,E,M,C,T,V>::select_path(
-                children,
+                node,
                 &*arena_borrow,
-                Nsb,
-                game_state,
                 is_root,
-                prior_num_actions,
                 fpu,
                 fpu_root,
                 logit_q,
