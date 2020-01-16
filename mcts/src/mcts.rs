@@ -1,4 +1,4 @@
-use std::cell::{Cell,RefCell};
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -96,10 +96,11 @@ where
 #[derive(Debug)]
 struct MCTSNode<S,A,V> {
     value_score: V,
-    W: Cell<f32>,
+    W: f32,
     game_state: S,
     num_actions: usize,
-    children: Vec<MCTSChildNode<A>>
+    children: Vec<MCTSChildNode<A>>,
+    best_child_index: Option<usize>
 }
 
 #[derive(Debug)]
@@ -112,7 +113,7 @@ enum MCTSNodeState {
 #[derive(Debug)]
 struct MCTSChildNode<A> {
     action: A,
-    visits: Cell<usize>,
+    visits: usize,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -232,10 +233,10 @@ where
 
         Ok(NodeMetrics {
             visits: root.get_node_visits(),
-            W: root.W.get(),
+            W: root.W,
             children_visits: root.children.iter().map(|n| (
                 n.action.clone(),
-                n.visits.get()
+                n.visits
             )).collect()
         })
     }
@@ -378,7 +379,7 @@ where
 
         Ok(NodeDetails {
             visits: root_visits,
-            W: root.W.get(),
+            W: root.W,
             children
         })
     }
@@ -411,7 +412,7 @@ where
             } else {
                 // Always clear the node's W since it is no longer relevant
                 let node = &mut arena_borrow_mut[node_index];
-                node.W.set(0.0);
+                node.W = 0.0;
             }
 
             node_index
@@ -438,10 +439,10 @@ where
 
     fn clear_node_visits(node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>) {
         let node = &mut arena[node_index];
-        node.W.set(0.0);
+        node.W = 0.0;
 
-        for child in &node.children {
-            child.visits.set(0);
+        for child in node.children.iter_mut() {
+            child.visits = 0;
         }
 
         let child_indexes: Vec<_> = node.children.iter().filter_map(|c| c.state.get_index()).collect();
@@ -457,19 +458,19 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(node: &'b MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
-        let children = &node.children;
-        let mut best_node = &children[0];
+    fn select_path<'b>(node_index: Index, arena: &'b mut Arena<MCTSNode<S,A,V>>, is_root: bool, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b mut MCTSChildNode<A>, Error> {
+        let node = &arena[node_index];
         let mut best_puct = std::f32::MIN;
+        let mut best_child_index = 0;
 
         let Nsb = node.get_node_visits();
         let fpu = if is_root { fpu_root } else { fpu };
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
 
-        for child in children {
-            let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
-            let Nsa = child.visits.get();
+        for (i, child) in node.children.iter().enumerate() {
+            let W = child.state.get_index().map_or(0.0, |index| arena[index].W);
+            let Nsa = child.visits;
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
@@ -479,11 +480,13 @@ where
 
             if PUCT > best_puct {
                 best_puct = PUCT;
-                best_node = child;
+                best_child_index = i;
             }
         }
 
-        Ok(best_node)
+        let mut node = &mut arena[node_index];
+        node.best_child_index = Some(best_child_index);
+        Ok(&mut node.children[best_child_index])
     }
 
     fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
@@ -511,8 +514,8 @@ where
         let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
 
         for child in nodes {
-            let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
-            let Nsa = child.visits.get();
+            let W = child.state.get_index().map_or(0.0, |i| arena[i].W);
+            let Nsa = child.visits;
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
@@ -612,17 +615,18 @@ impl<S,A,V> MCTSNode<S,A,V> {
     pub fn new(game_state: S, num_actions: usize, value_score: V, policy_scores: Vec<ActionWithPolicy<A>>) -> Self {
         MCTSNode {
             value_score,
-            W: Cell::new(0.0),
+            W: 0.0,
             game_state,
             num_actions,
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
-                    visits: Cell::new(0),
+                    visits: 0,
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
                 }
-            }).collect()
+            }).collect(),
+            best_child_index: None
         }
     }
 }
@@ -653,22 +657,23 @@ where
     'outer: loop {
         depth += 1;
         if let Some(latest_index) = node_stack.last() {
-            let arena_borrow = arena.borrow();
-            let node = &arena_borrow[*latest_index];
+            let mut arena_borrow_mut = arena.borrow_mut();
+            let latest_index = *latest_index;
+            let node = &mut arena_borrow_mut[latest_index];
 
             // If the node is a terminal node.
             let children = &node.children;
             if children.len() == 0 {
                 node_stack.pop();
-                update_Ws(node_stack, &node, &arena_borrow, game_engine);
+                update_Ws(&node_stack, latest_index, &mut arena_borrow_mut, game_engine);
                 break 'outer;
             }
 
             let is_root = depth == 1;
 
             let selected_child_node = MCTS::<S,A,E,M,C,T,V>::select_path(
-                node,
-                &*arena_borrow,
+                latest_index,
+                &mut *arena_borrow_mut,
                 is_root,
                 fpu,
                 fpu_root,
@@ -676,14 +681,13 @@ where
                 cpuct
             )?;
 
-            let prev_visits = selected_child_node.visits.get();
-            selected_child_node.visits.set(prev_visits + 1);
+            let prev_visits = selected_child_node.visits;
+            selected_child_node.visits += 1;
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
-                let node = &arena_borrow[selected_child_node_index];
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    update_Ws(node_stack, &node, &arena_borrow, game_engine);
+                    update_Ws(&node_stack, selected_child_node_index, &mut arena_borrow_mut, game_engine);
                     break 'outer;
                 }
 
@@ -693,11 +697,11 @@ where
             }
 
             let selected_action = selected_child_node.action.clone();
-            drop(arena_borrow);
+            drop(arena_borrow_mut);
 
             'inner: loop {
                 let arena_borrow = arena.borrow();
-                let prior_node = &arena_borrow[*latest_index];
+                let prior_node = &arena_borrow[latest_index];
                 let selected_child_node = prior_node.get_child_of_action(&selected_action).unwrap();
                 let selected_child_node_state = &selected_child_node.state;
                 if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
@@ -718,7 +722,7 @@ where
                 // It is not expanded or expanded so let's expand it.
                 drop(arena_borrow);
                 let mut arena_borrow_mut = arena.borrow_mut();
-                let prior_node = &mut arena_borrow_mut[*latest_index];
+                let prior_node = &mut arena_borrow_mut[latest_index];
                 let selected_child_node = prior_node.get_child_of_action_mut(&selected_action).unwrap();
                 let selected_child_node_state = &mut selected_child_node.state;
 
@@ -739,11 +743,12 @@ where
                         analyzer
                     ).await;
 
-                    let mut arena_borrow_mut = arena.borrow_mut();
-                    let latest_index = *latest_index;
-                    update_Ws(node_stack, &expanded_node, &arena_borrow_mut, game_engine);
+                    let arena_borrow_mut = &mut arena.borrow_mut();
 
-                    update_child_with_expanded_node(latest_index, expanded_node, &selected_action, &mut arena_borrow_mut);
+                    let expanded_node_index = update_child_with_expanded_node(latest_index, expanded_node, &selected_action, arena_borrow_mut);
+
+                    update_Ws(&node_stack, expanded_node_index, arena_borrow_mut, game_engine);
+
                     expanding_lock.wake();
 
                     break 'outer;
@@ -755,36 +760,47 @@ where
     Ok(depth)
 }
 
-fn update_child_with_expanded_node<S,A,V>(prior_index: Index, expanded_node: MCTSNode<S,A,V>, action: &A, arena: &mut Arena<MCTSNode<S,A,V>>)
+fn update_child_with_expanded_node<S,A,V>(parent_node: Index, expanded_node: MCTSNode<S,A,V>, action: &A, arena: &mut Arena<MCTSNode<S,A,V>>) -> Index
 where
     A: Eq
 {
     let expanded_node_index = arena.insert(expanded_node);
-    let prior_node = &mut arena[prior_index];
+    let prior_node = &mut arena[parent_node];
     let selected_child_node = prior_node.get_child_of_action_mut(action).unwrap();
     let selected_child_node_state = &mut selected_child_node.state;
     std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(expanded_node_index));
+
+    expanded_node_index
 }
 
 #[allow(non_snake_case)]
-fn update_Ws<S,A,V,E>(nodes: Vec<Index>, value_node: &MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, game_engine: &E)
+fn update_Ws<S,A,V,E>(node_indexes: &[Index], value_node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>, game_engine: &E)
 where
     V: Value,
     E: GameEngine<State=S,Action=A,Value=V>
 {
-    let value_score = &value_node.value_score;
-    let mut nodes: Vec<_> = nodes.into_iter().map(|node_index| &arena[node_index]).collect();
-    nodes.push(value_node);
+    let node_indexes = node_indexes.iter().map(|index| *index).chain(std::iter::once(value_node_index));
 
-    for (parent_node, child_node) in nodes.iter().zip(nodes.iter().skip(1)) {
-        let W = &child_node.W;
+    node_indexes.fold(None, |score, node_index| {
+        let node = &mut arena[node_index];
+
+        // First iteration has no score and the node is the root, the root isn't updated since there is no perspective.
+        if let Some(score) = score {
+            node.W += score;
+        }
+
         // Update value of W from the parent node's perspective.
         // This is because the parent chooses which child node to select, and as such will want the one with the
         // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
-        let player_to_move = game_engine.get_player_to_move(&parent_node.game_state);
+        let player_to_move = game_engine.get_player_to_move(&node.game_state);
+
+        // @TODO: Getting the value_score should be able to be done once, outside of the loop.
+        let value_node = &mut arena[value_node_index];
+        let value_score = &value_node.value_score;
         let score = value_score.get_value_for_player(player_to_move);
-        W.set(W.get() + score);
-    }
+
+        Some(score)
+    });
 }
 
 impl<S,A,V> MCTSNode<S,A,V>
@@ -792,7 +808,7 @@ where
     A: Eq
 {
     fn get_node_visits(&self) -> usize {
-        self.children.iter().map(|c| c.visits.get()).sum::<usize>() + 1
+        self.children.iter().map(|c| c.visits).sum::<usize>() + 1
     }
 
     fn get_child_of_action(&self, action: &A) -> Option<&MCTSChildNode<A>> {
