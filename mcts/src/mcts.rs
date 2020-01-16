@@ -1,11 +1,11 @@
 use std::cell::{Cell,RefCell};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::rc::Rc;
 use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
 use std::time::Duration;
 use std::thread;
 use futures::stream::{FuturesOrdered,StreamExt};
-use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
 use rand::{thread_rng,Rng};
 use rand::prelude::Distribution;
@@ -18,6 +18,7 @@ use engine::value::Value;
 use engine::engine::{GameEngine};
 use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
+use common::wait_for::WaitFor;
 use super::node_details::{PUCT,NodeDetails};
 
 pub struct DirichletOptions {
@@ -104,8 +105,7 @@ struct MCTSNode<S,A,V> {
 #[derive(Debug)]
 enum MCTSNodeState {
     Unexpanded,
-    // @TODO: The RwLock is to act as a notification system that the node is ready and expanded. Then the awaits know to continue. There must be a better way to achieve this.
-    Expanding(Box<Arc<RwLock<()>>>),
+    Expanding(Rc<WaitFor>),
     Expanded(Index)
 }
 
@@ -457,14 +457,17 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+    fn select_path<'b>(node: &'b MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, fpu: f32, fpu_root: f32, logit_q: bool, cpuct: &C) -> Result<&'b MCTSChildNode<A>, Error> {
+        let children = &node.children;
+        let mut best_node = &children[0];
+        let mut best_puct = std::f32::MIN;
+
+        let Nsb = node.get_node_visits();
         let fpu = if is_root { fpu_root } else { fpu };
         let root_Nsb = (Nsb as f32).sqrt();
-        let mut best_node = &nodes[0];
-        let mut best_puct = std::f32::MIN;
-        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
+        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
 
-        for child in nodes {
+        for child in children {
             let W = child.state.get_index().map_or(0.0, |i| arena[i].W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
@@ -661,18 +664,12 @@ where
                 break 'outer;
             }
 
-            let game_state = &node.game_state;
-            let prior_num_actions = node.num_actions;
             let is_root = depth == 1;
-            let Nsb = node.get_node_visits();
 
             let selected_child_node = MCTS::<S,A,E,M,C,T,V>::select_path(
-                children,
+                node,
                 &*arena_borrow,
-                Nsb,
-                game_state,
                 is_root,
-                prior_num_actions,
                 fpu,
                 fpu_root,
                 logit_q,
@@ -713,7 +710,7 @@ where
                     let expanding_lock = expanding_lock.clone();
                     drop(arena_borrow);
 
-                    expanding_lock.read().await;
+                    expanding_lock.wait().await;
 
                     continue 'inner;
                 }
@@ -728,15 +725,13 @@ where
                 // Double check that the node has not changed now that the lock has been reacquired as a write.
                 if let MCTSNodeState::Unexpanded = selected_child_node_state {
                     // Immediately replace the state with an indication that we are expanding.RwLock
-                    let expanding_lock = std::sync::Arc::new(RwLock::new(()));
-                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(Box::new(expanding_lock.clone())));
+                    let expanding_lock = Rc::new(WaitFor::new());
+                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
 
                     let new_game_state = game_engine.take_action(&prior_node.game_state, &selected_action);
                     let prior_num_actions = prior_node.num_actions;
 
                     drop(arena_borrow_mut);
-
-                    let expanding_write_lock = expanding_lock.write().await;
 
                     let expanded_node = MCTS::<S,A,E,M,C,T,V>::expand_leaf(
                         new_game_state,
@@ -749,7 +744,7 @@ where
                     update_Ws(node_stack, &expanded_node, &arena_borrow_mut, game_engine);
 
                     update_child_with_expanded_node(latest_index, expanded_node, &selected_action, &mut arena_borrow_mut);
-                    drop(expanding_write_lock);
+                    expanding_lock.wake();
 
                     break 'outer;
                 }
