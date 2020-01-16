@@ -1,11 +1,11 @@
 use std::cell::{Cell,RefCell};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::rc::Rc;
 use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
 use std::time::Duration;
 use std::thread;
 use futures::stream::{FuturesOrdered,StreamExt};
-use async_std::sync::{RwLock};
 use generational_arena::{Arena,Index};
 use rand::{thread_rng,Rng};
 use rand::prelude::Distribution;
@@ -18,6 +18,7 @@ use engine::value::Value;
 use engine::engine::{GameEngine};
 use model::analytics::{ActionWithPolicy,GameAnalyzer};
 use model::node_metrics::{NodeMetrics};
+use common::wait_for::WaitFor;
 use super::node_details::{PUCT,NodeDetails};
 
 pub struct DirichletOptions {
@@ -114,8 +115,7 @@ struct MCTSNode<S,A,V> {
 #[derive(Debug)]
 enum MCTSNodeState {
     Unexpanded,
-    // @TODO: The RwLock is to act as a notification system that the node is ready and expanded. Then the awaits know to continue. There must be a better way to achieve this.
-    Expanding(Box<Arc<RwLock<()>>>),
+    Expanding(Rc<WaitFor>),
     Expanded(Index)
 }
 
@@ -123,7 +123,6 @@ enum MCTSNodeState {
 struct MCTSChildNode<A> {
     action: A,
     visits: Cell<usize>,
-    in_flight: Cell<usize>,
     policy_score: f32,
     state: MCTSNodeState
 }
@@ -360,20 +359,15 @@ where
     async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>, Error> {
         let arena_borrow = &self.arena.borrow();
         let root = &arena_borrow[node_index];
-        let root_visits = root.get_node_visits();
-        let children = &root.children;
 
         let metrics = Self::get_PUCT_for_nodes(
-            children,
+            &root,
             &*arena_borrow,
-            root_visits,
-            &root.game_state,
             is_root,
-            root.num_actions,
             &self.options
         );
 
-        let mut children: Vec<_> = children.iter().zip(metrics).map(|(n, m)| (
+        let mut children: Vec<_> = root.children.iter().zip(metrics).map(|(n, m)| (
             n.action.clone(),
             m
         )).collect();
@@ -381,7 +375,7 @@ where
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
 
         Ok(NodeDetails {
-            visits: root_visits,
+            visits: root.get_node_visits(),
             W: root.W.get(),
             children
         })
@@ -461,23 +455,25 @@ where
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path<'b>(nodes: &'b [MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, options: &MCTSOptions<S,C,T>) -> Result<&'b MCTSChildNode<A>, Error> {
-        let fpu = if is_root { options.fpu_root } else { options.fpu };
-        let root_Nsb = (Nsb as f32).sqrt();
-        let mut best_node = &nodes[0];
+    fn select_path<'b>(node: &'b MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, options: &MCTSOptions<S,C,T>) -> Result<&'b MCTSChildNode<A>, Error> {
+        let children = &node.children;
+        let mut best_node = &children[0];
         let mut best_puct = std::f32::MIN;
+        
+        let fpu = if is_root { options.fpu_root } else { options.fpu };
+        let Nsb = node.get_node_visits();
+        let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
-        let moves_left_baseline = get_moves_left_baseline(nodes, arena, options.moves_left_threshold);
+        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
+        let moves_left_baseline = get_moves_left_baseline(&children, arena, options.moves_left_threshold);
 
-        for child in nodes {
+        for child in children {
             let node = child.state.get_index().map(|i| &arena[i]);
             let W = node.map_or(0.0, |n| n.W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let virtual_loss = child.in_flight.get() as f32;
-            let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let Msa = Self::get_Msa(node, moves_left_baseline, options);
 
@@ -509,23 +505,25 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, Nsb: usize, game_state: &S, is_root: bool, prior_num_actions: usize, options: &MCTSOptions<S,C,T>) -> Vec<PUCT>
+    fn get_PUCT_for_nodes(node: &MCTSNode<S,A,V>, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, options: &MCTSOptions<S,C,T>) -> Vec<PUCT>
     {
+        let children = &node.children;
         let fpu = if is_root { options.fpu_root } else { options.fpu };
-        let mut pucts = Vec::with_capacity(nodes.len());
+        let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(game_state, prior_num_actions, Nsb, is_root);
-        let moves_left_baseline = get_moves_left_baseline(nodes, arena, options.moves_left_threshold);
+        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
+        let moves_left_baseline = get_moves_left_baseline(&children, arena, options.moves_left_threshold);
+        
+        let mut pucts = Vec::with_capacity(children.len());
 
-        for child in nodes {
+        for child in children {
             let node = child.state.get_index().map(|i| &arena[i]);
             let W = node.map_or(0.0, |n| n.W.get());
             let Nsa = child.visits.get();
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let virtual_loss = child.in_flight.get() as f32;
-            let Qsa = if Nsa == 0 { fpu } else { (W - virtual_loss) / (Nsa as f32 + virtual_loss) };
+            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let Msa = Self::get_Msa(node, moves_left_baseline, options);
 
@@ -656,7 +654,6 @@ impl<S,A,V> MCTSNode<S,A,V> {
             children: policy_scores.into_iter().map(|action_with_policy| {
                 MCTSChildNode {
                     visits: Cell::new(0),
-                    in_flight: Cell::new(0),
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -685,7 +682,6 @@ where
 {
     let mut depth = 0;
     let mut node_stack = vec!(root_index);
-    let mut in_flight_stack = vec!();
 
     'outer: loop {
         depth += 1;
@@ -701,25 +697,17 @@ where
                 break 'outer;
             }
 
-            let game_state = &node.game_state;
-            let prior_num_actions = node.num_actions;
             let is_root = depth == 1;
-            let Nsb = node.get_node_visits();
 
             let selected_child_node = MCTS::<S,A,E,M,C,T,V>::select_path(
-                children,
+                node,
                 &*arena_borrow,
-                Nsb,
-                game_state,
                 is_root,
-                prior_num_actions,
                 options
             )?;
 
             let prev_visits = selected_child_node.visits.get();
             selected_child_node.visits.set(prev_visits + 1);
-            selected_child_node.in_flight.set(selected_child_node.in_flight.get() + 1);
-            in_flight_stack.push((*latest_index, selected_child_node.action.clone()));
 
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                 let node = &arena_borrow[selected_child_node_index];
@@ -752,7 +740,7 @@ where
                     let expanding_lock = expanding_lock.clone();
                     drop(arena_borrow);
 
-                    expanding_lock.read().await;
+                    expanding_lock.wait().await;
 
                     continue 'inner;
                 }
@@ -767,15 +755,13 @@ where
                 // Double check that the node has not changed now that the lock has been reacquired as a write.
                 if let MCTSNodeState::Unexpanded = selected_child_node_state {
                     // Immediately replace the state with an indication that we are expanding.RwLock
-                    let expanding_lock = std::sync::Arc::new(RwLock::new(()));
-                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(Box::new(expanding_lock.clone())));
+                    let expanding_lock = Rc::new(WaitFor::new());
+                    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
 
                     let new_game_state = game_engine.take_action(&prior_node.game_state, &selected_action);
                     let prior_num_actions = prior_node.num_actions;
 
                     drop(arena_borrow_mut);
-
-                    let expanding_write_lock = expanding_lock.write().await;
 
                     let expanded_node = MCTS::<S,A,E,M,C,T,V>::expand_leaf(
                         new_game_state,
@@ -788,20 +774,12 @@ where
                     update_Ws(node_stack, &expanded_node, &arena_borrow_mut, game_engine);
 
                     update_child_with_expanded_node(latest_index, expanded_node, &selected_action, &mut arena_borrow_mut);
-                    drop(expanding_write_lock);
+                    expanding_lock.wake();
 
                     break 'outer;
                 }
             }
         }
-    }
-
-    let arena_borrow = arena.borrow();
-
-    for (parent_node_index, action) in in_flight_stack {
-        let parent_node = &arena_borrow[parent_node_index];
-        let in_flight = &parent_node.get_child_of_action(&action).unwrap().in_flight;
-        in_flight.set(in_flight.get() - 1);
     }
 
     Ok(depth)
