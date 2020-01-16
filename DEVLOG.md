@@ -62,4 +62,12 @@ Run-8
 
 Continuation of Run-7 model 550.
 
-01-##-20: model 1 - Increased train_batch_size from 512 to 1024. Add gating into pipeline. Add symmetries into generated board position training data. Add moves left head. Changed cpuct_init from 2.5 to 1.25. Fix issue where positions were sampled during taining on fast_visits. Upgrade net size from 64x5 to 96x8.
+01-##-20: model 1 -
+    Increased train_batch_size from 512 to 1024.
+    Add gating into pipeline.
+    Add symmetries into generated board position training data.
+    Add moves left head.
+    Changed cpuct_init from 2.5 to 1.25.
+    Fix issue where positions were sampled during taining on fast_visits.
+    Upgrade net size from 64x5 to 96x8.
+    Removed explicit virtual loss for existing implicit implimentation. This has an affect of virtual loss being lowered from 2.0 to 1.0
