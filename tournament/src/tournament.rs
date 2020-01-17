@@ -259,7 +259,7 @@ where
     M: Model<State=S,Action=A,Analyzer=T>,
     T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
 {
-    let games_to_play: Vec<Vec<(&M)>> = models.iter()
+    let games_to_play: Vec<Vec<&M>> = models.iter()
         .permutations(num_players)
         .collect();
 

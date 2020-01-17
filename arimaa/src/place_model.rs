@@ -50,7 +50,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let piece_board = game_state.get_piece_board();
         let player_piece_board = piece_board.get_player_piece_mask(is_p1_turn_to_move);
 
-        for (i, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
+        for (i, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
             let piece_bits = piece_board.get_bits_by_piece_type(*piece);
             let offset = i;
 
