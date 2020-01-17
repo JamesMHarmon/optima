@@ -18,7 +18,7 @@ pub const PLAY_INPUT_H: usize = BOARD_HEIGHT;
 pub const PLAY_INPUT_W: usize = BOARD_WIDTH;
 pub const PLAY_INPUT_C: usize = BOARDS_PER_STATE * MAX_NUM_STEPS + STEP_NUM_CHANNEL + TRAP_CHANNEL;
 pub const PLAY_INPUT_SIZE: usize = BOARD_SIZE * PLAY_INPUT_C;
-pub const PLAY_MOVES_LEFT_SIZE: usize = 256;
+pub const PLAY_MOVES_LEFT_SIZE: usize = 128;
 
 pub const PLACEMENT_BIT_CHANNEL: usize = 1;
 pub const PLAYER_CHANNEL: usize = 1;
