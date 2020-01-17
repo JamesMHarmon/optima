@@ -7,7 +7,6 @@ use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
-use tokio_executor::current_thread;
 use permutohedron::{Heap as Permute};
 
 use mcts::mcts::{MCTS,MCTSOptions};
@@ -101,7 +100,7 @@ impl SelfEvaluate
                         options
                     );
 
-                    let res = current_thread::block_on_all(f);
+                    let res = common::runtime::block_on(f);
 
                     res.unwrap();
                 });

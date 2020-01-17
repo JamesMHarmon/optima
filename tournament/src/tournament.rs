@@ -6,7 +6,6 @@ use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
-use tokio_executor::current_thread;
 use itertools::Itertools;
 
 use mcts::mcts::{MCTS,MCTSOptions};
@@ -99,7 +98,7 @@ impl Tournament
                         options
                     );
 
-                    current_thread::block_on_all(f).unwrap();
+                    common::runtime::block_on(f).unwrap();
                 });
             }
 

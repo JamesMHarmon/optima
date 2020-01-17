@@ -6,7 +6,6 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error};
-use tokio_executor::current_thread;
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -231,7 +230,7 @@ where
                         &self_play_options
                     );
 
-                    let res = current_thread::block_on_all(f);
+                    let res = common::runtime::block_on(f);
 
                     res.unwrap();
                 });
