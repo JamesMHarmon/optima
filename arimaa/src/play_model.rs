@@ -144,10 +144,10 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
         let piece_board = game_state.get_piece_board_for_step(step);
         let step_offset = i * BOARDS_PER_STATE;
 
-        for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].into_iter().enumerate() {
+        for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].iter().enumerate() {
             let player_offset = j * NUM_PIECE_TYPES;
 
-            for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].into_iter().enumerate() {
+            for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
                 let piece_bits = piece_board.get_bits_for_piece(*piece, *player);
 
                 let offset = step_offset + player_offset + piece_offset;

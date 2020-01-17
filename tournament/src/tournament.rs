@@ -6,7 +6,6 @@ use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
-use tokio_executor::current_thread;
 use itertools::Itertools;
 
 use mcts::mcts::{MCTS,MCTSOptions};
@@ -102,7 +101,7 @@ impl Tournament
                         options
                     );
 
-                    current_thread::block_on_all(f).unwrap();
+                    common::runtime::block_on(f).unwrap();
                 });
             }
 
@@ -266,7 +265,7 @@ where
     M: Model<State=S,Action=A,Analyzer=T>,
     T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
 {
-    let games_to_play: Vec<Vec<(&M)>> = models.iter()
+    let games_to_play: Vec<Vec<&M>> = models.iter()
         .permutations(num_players)
         .collect();
 
