@@ -41,6 +41,7 @@ impl CountingGameEngine {
     pub fn new() -> Self { Self {} }
 }
 
+#[derive(Clone)]
 pub struct Value([f32; 2]);
 
 impl engine::value::Value for Value {

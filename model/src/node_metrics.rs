@@ -8,8 +8,7 @@ use serde::de::{Deserialize, Deserializer, Visitor};
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A> {
     pub visits: usize,
-    pub W: f32,
-    pub children_visits: Vec<(A, usize)>
+    pub children: Vec<(A, f32, usize)>
 }
 
 impl<A> Serialize for NodeMetrics<A>
@@ -20,10 +19,9 @@ where
     where
         S: Serializer,
     {
-        let mut tup = serializer.serialize_tuple(3)?;
+        let mut tup = serializer.serialize_tuple(2)?;
         tup.serialize_element(&self.visits)?;
-        tup.serialize_element(&self.W)?;
-        tup.serialize_element(&self.children_visits)?;
+        tup.serialize_element(&self.children)?;
         tup.end()
     }
 }
@@ -56,8 +54,7 @@ where
     {
         Ok(NodeMetrics {
             visits: seq.next_element()?.unwrap(),
-            W: seq.next_element()?.unwrap(),
-            children_visits: seq.next_element()?.unwrap()
+            children: seq.next_element()?.unwrap()
         })
     }
 }
@@ -70,6 +67,6 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_tuple(3, NodeMetricsVisitor::new())
+        deserializer.deserialize_tuple(2, NodeMetricsVisitor::new())
     }
 }

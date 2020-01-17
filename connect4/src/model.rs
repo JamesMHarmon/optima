@@ -62,8 +62,8 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
 
     fn policy_metrics_to_expected_output(&self, _game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let result:[f32; 7] = policy_metrics.children_visits.iter().fold([0.0; 7], |mut r, p| {
-            match p.0 { Action::DropPiece(column) => r[column as usize - 1] = p.1 as f32 / total_visits };
+        let result:[f32; 7] = policy_metrics.children.iter().fold([0.0; 7], |mut r, (action, _w, visits)| {
+            match *action { Action::DropPiece(column) => r[column as usize - 1] = *visits as f32 / total_visits };
             r
         });
 

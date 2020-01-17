@@ -22,14 +22,13 @@ pub fn get_symmetries(metrics: PositionMetrics<GameState,Action,Value>) -> Vec<P
 }
 
 fn get_symmetries_node_metrics(metrics: NodeMetrics<Action>) -> Vec<NodeMetrics<Action>> {
-    let children_visits_symmetry = metrics.children_visits.iter()
-        .map(|(a, visits)| (a.invert_horizontal(), *visits))
+    let children_symmetry = metrics.children.iter()
+        .map(|(a, w, visits)| (a.invert_horizontal(), *w, *visits))
         .collect();
 
     let metrics_symmetry = NodeMetrics {
-        W: metrics.W,
         visits: metrics.visits,
-        children_visits: children_visits_symmetry
+        children: children_symmetry
     };
 
     vec!(metrics, metrics_symmetry)
@@ -349,11 +348,10 @@ assert_eq!(game_state_symmetry_step_3, "5g
             game_state: game_state,
             policy: NodeMetrics {
                 visits: 800,
-                W: 0.3,
-                children_visits: vec!(
-                    (Action::Move(Square::new('c', 2), Direction::Up), 500),
-                    (Action::Move(Square::new('c', 2), Direction::Right), 250),
-                    (Action::Move(Square::new('c', 2), Direction::Left), 50),
+                children: vec!(
+                    (Action::Move(Square::new('c', 2), Direction::Up), 0.0, 500),
+                    (Action::Move(Square::new('c', 2), Direction::Right), 0.0, 250),
+                    (Action::Move(Square::new('c', 2), Direction::Left), 0.0, 50),
                 )
             },
             moves_left: 0
@@ -364,8 +362,7 @@ assert_eq!(game_state_symmetry_step_3, "5g
             game_state: symmetrical_game_state,
             policy: NodeMetrics {
                 visits: symmetrical_visits,
-                W: symmetrical_W,
-                children_visits: symmetrical_children_visits,
+                children: symmetrical_children,
             },
             ..
         } = symmetries.pop().unwrap();
@@ -375,18 +372,16 @@ assert_eq!(game_state_symmetry_step_3, "5g
             game_state: original_game_state,
             policy: NodeMetrics {
                 visits: original_visits,
-                W: original_W,
-                children_visits: original_children_visits
+                children: original_children
             },
             ..
         } = symmetries.pop().unwrap();
 
         assert_eq!(symmetrical_score, original_score);
-        assert_eq!(symmetrical_W, original_W);
         assert_eq!(symmetrical_visits, original_visits);
-        assert_eq!(original_children_visits.len(), symmetrical_children_visits.len());
+        assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for ((original_action, original_visits), (symmetrical_action, symmetrical_visits)) in original_children_visits.into_iter().zip(symmetrical_children_visits) {
+        for ((original_action, original_w, original_visits), (symmetrical_action, symmetrical_w, symmetrical_visits)) in original_children.into_iter().zip(symmetrical_children) {
             match original_action {
                 Action::Move(original_square, original_direction) => {
                     match symmetrical_action {
@@ -401,6 +396,7 @@ assert_eq!(game_state_symmetry_step_3, "5g
             }
             
             assert_eq!(original_visits, symmetrical_visits);
+            assert_eq!(original_w, symmetrical_w);
         }
 
 assert_eq!(original_game_state.to_string(), "5g

@@ -92,7 +92,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
         inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
 
-        policy_metrics.children_visits.iter().fold(inputs, |mut r, (action, visits)| {
+        policy_metrics.children.iter().fold(inputs, |mut r, (action, _w, visits)| {
             let policy_index = map_action_to_policy_output_idx(action);
 
             r[policy_index] = *visits as f32 / total_visits;

@@ -5,7 +5,6 @@ use std::fmt::{self,Display,Formatter};
 #[allow(non_snake_case)]
 pub struct NodeDetails<A> {
     pub visits: usize,
-    pub W: f32,
     pub children: Vec<(A, PUCT)>
 }
 
@@ -13,9 +12,8 @@ impl<A: Display> Display for NodeDetails<A> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!("[{}]", self.children.iter().fold(String::new(), |acc, (a, puct)| acc + &format!("\n\t(A: {}, {}),", a, puct)));
 
-        write!(f, "V: {visits}, Q: {value}, Actions: {actions}",
+        write!(f, "V: {visits}, Actions: {actions}",
             visits = self.visits,
-            value = self.W / self.visits as f32,
             actions = actions
         )
     }

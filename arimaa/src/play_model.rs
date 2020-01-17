@@ -74,7 +74,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
         inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
 
-        policy_metrics.children_visits.iter().fold(inputs, |mut r, (action, visits)| {
+        policy_metrics.children.iter().fold(inputs, |mut r, (action, _w, visits)| {
             // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
             // at the board from the perspective of player 1, but with the pieces inverted.
             let policy_index = if invert {
