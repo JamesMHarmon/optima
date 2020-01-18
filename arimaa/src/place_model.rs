@@ -162,12 +162,12 @@ fn insert_input_channel_bits(input: &mut [f32], offset: usize, bits: u64) {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<Engine,Mapper>;
+    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
     {
-        TensorflowModel::<Engine,Mapper>::create(
+        TensorflowModel::<GameState,Action,Value,Engine,Mapper>::create(
             model_info,
             &TensorflowModelOptions {
                 num_filters: options.number_of_filters,
