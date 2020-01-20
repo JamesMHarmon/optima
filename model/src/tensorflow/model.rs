@@ -11,7 +11,7 @@ use std::io::{BufReader,Write};
 use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::{format_err,Error};
-use itertools::{izip,Itertools};
+use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
@@ -153,7 +153,7 @@ where
         std::thread::spawn(move || {
             let mut last_report = Instant::now();
             let input_dim = mapper.get_input_dimensions();
-            let predictor = Predictor::new(&model_info, input_dim, output_size, moves_left_size);
+            let predictor = Predictor::new(&model_info, input_dim);
 
             loop {
                 let states_to_analyse = batching_model_ref.get_states_to_analyse();
@@ -168,9 +168,7 @@ where
                 
                 let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state));
                 let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).unwrap();
-                let predictions = predictions.iter().zip(states_to_analyse.into_iter());
-
-                batching_model_ref.provide_analysis(predictions);
+                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size);
 
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if thread_num == 0 && elapsed_mills >= 5_000 {
@@ -248,13 +246,11 @@ where
 
 struct Predictor {
     session: SessionAndOps,
-    input_dimensions: [u64; 3],
-    output_size: usize,
-    moves_left_size: usize
+    input_dimensions: [u64; 3]
 }
 
 impl Predictor {
-    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3], output_size: usize, moves_left_size: usize) -> Self {
+    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3]) -> Self {
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
@@ -288,23 +284,17 @@ impl Predictor {
                 op_value_head,
                 op_policy_head,
                 op_moves_left_head
-            },
-            output_size,
-            moves_left_size
+            }
         }
     }
 
     fn predict<I: Iterator<Item=Vec<f32>>>(&self, game_state_inputs: I, batch_size: usize) -> Result<AnalysisResults, Error> {
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
-        let mut flattened_inputs = Vec::with_capacity((input_dim[0] * input_dim[1] * input_dim[2]) as usize * batch_size);
-        let mut value_head_outputs: Vec<f32> = Vec::with_capacity(batch_size);
-        let mut policy_head_outputs: Vec<f32> = Vec::with_capacity(batch_size * self.output_size);
-        let mut moves_left_head_outputs: Vec<f32> = Vec::with_capacity(batch_size * self.moves_left_size);
         
-        flattened_inputs.extend(game_state_inputs.flatten().map(|v| f16::from_f32(v)));
+        let mut input_tensor: Tensor<f16> = Tensor::new(&input_dimensions);
+        fill_tensor(&mut input_tensor, game_state_inputs.flatten().map(|v| f16::from_f32(v)));
 
-        let input_tensor = Tensor::new(&input_dimensions).with_values(&flattened_inputs).unwrap();
         let session = &self.session;
 
         let mut output_step = SessionRunArgs::new();
@@ -317,46 +307,23 @@ impl Predictor {
 
         let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
         let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
-        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|fetch_token| output_step.fetch(fetch_token).unwrap());
-
-        value_head_outputs.extend(value_head_output.into_iter().map(|v| v.to_f32()));
-        policy_head_outputs.extend(policy_head_output.into_iter().map(|c| c.to_f32()));
-
-        if let Some(moves_left_head_output) = moves_left_head_output {
-            moves_left_head_outputs.extend(moves_left_head_output.into_iter().map(|c| c.to_f32()));
-        } else {
-            moves_left_head_outputs.extend(std::iter::repeat(0.0).take(batch_size * self.moves_left_size));
-        }
+        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|moves_left_head_fetch_token| output_step.fetch(moves_left_head_fetch_token).unwrap());
 
         Ok(AnalysisResults {
-            policy_head_outputs,
-            value_head_outputs,
-            moves_left_head_outputs,
-            output_size: self.output_size,
-            moves_left_size: self.moves_left_size
+            policy_head_output,
+            value_head_output,
+            moves_left_head_output
         })
     }
 }
 
-pub struct AnalysisResults {
-    policy_head_outputs: Vec<f32>,
-    value_head_outputs: Vec<f32>,
-    moves_left_head_outputs: Vec<f32>,
-    output_size: usize,
-    moves_left_size: usize
-}
-
-impl AnalysisResults {
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item=(Vec<f32>, f32, Vec<f32>)> + 'a> {
-        Box::new(izip!(
-            self.policy_head_outputs.chunks_exact(self.output_size).map(|c| c.to_vec()),
-            self.value_head_outputs.iter().map(|v| *v),
-            self.moves_left_head_outputs.chunks_exact(self.moves_left_size).map(|c| c.to_vec())
-        ))
-    }
+struct AnalysisResults {
+    policy_head_output: Tensor<f16>,
+    value_head_output: Tensor<f16>,
+    moves_left_head_output: Option<Tensor<f16>>
 } 
 
-pub struct SessionAndOps {
+struct SessionAndOps {
     session: Session,
     op_input: Operation,
     op_value_head: Operation,
@@ -701,10 +668,15 @@ where
         states_to_analyse
     }
 
-    fn provide_analysis<I: Iterator<Item=((Vec<f32>, f32, Vec<f32>), (usize, S, Waker))>>(&self, analysis: I) {
+    fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) {
         let mut analysis_len = 0;
+        let mut policy_head_iter = analysis.policy_head_output.into_iter().map(|v| v.to_f32());
+        let mut value_head_iter = analysis.value_head_output.into_iter().map(|v| v.to_f32());
+        let mut moves_left_head_iter = analysis.moves_left_head_output.as_ref().map(|ml| ml.iter().map(|v| v.to_f32()));
 
-        for ((policy_scores, value_score, moves_left_scores), (id, game_state, waker)) in analysis.into_iter() {
+        for (id, game_state, waker) in states {
+            let policy_scores = policy_head_iter.by_ref().take(output_size).collect::<Vec<_>>();
+
             let mapper = &*self.mapper;
             let valid_actions_with_policies = mapper.policy_to_valid_actions(
                 &game_state,
@@ -713,8 +685,8 @@ where
 
             let analysis = GameStateAnalysis {
                 policy_scores: valid_actions_with_policies,
-                value_score: mapper.map_value_output_to_value(&game_state, value_score),
-                moves_left: moves_left_expected_value(&moves_left_scores)
+                value_score: mapper.map_value_output_to_value(&game_state, value_head_iter.next().unwrap()),
+                moves_left: moves_left_head_iter.as_mut().map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size))).unwrap_or(0.0)
             };
 
             self.states_analysed.insert(id, analysis);
@@ -722,6 +694,10 @@ where
 
             analysis_len += 1;
         }
+
+        assert_eq!(policy_head_iter.next(), None);
+        assert_eq!(value_head_iter.next(), None);
+        assert_eq!(moves_left_head_iter.map(|mut iter| iter.next()).unwrap_or(None), None);
 
         self.min_batch_size.fetch_min(analysis_len, Ordering::SeqCst);
         self.max_batch_size.fetch_max(analysis_len, Ordering::SeqCst);
@@ -812,8 +788,8 @@ where
     }
 }
 
-pub fn moves_left_expected_value(moves_left_scores: &[f32]) -> f32 {
-    moves_left_scores.iter().enumerate()
+pub fn moves_left_expected_value<I: Iterator<Item=f32>>(moves_left_scores: I) -> f32 {
+    moves_left_scores.enumerate()
         .map(|(i, s)| (i + 1) as f32 * s)
         .fold(0.0f32, |s, e| s + e)
 }
@@ -827,3 +803,8 @@ fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f
     moves_left_one_hot
 }
 
+fn fill_tensor<I: Iterator<Item=T>, T: tensorflow::TensorType>(tensor: &mut Tensor<T>, iter: I) {
+    for (e,v) in tensor.iter_mut().zip(iter) {
+        e.clone_from(&v);
+    }
+}
