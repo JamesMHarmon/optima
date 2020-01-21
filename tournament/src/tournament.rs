@@ -7,6 +7,7 @@ use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
 use itertools::Itertools;
+use log::info;
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -91,7 +92,7 @@ impl Tournament
                 let num_games_to_play_this_thread = games_to_play.len();
 
                 s.spawn(move |_| {
-                    println!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
+                    info!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
 
                     let f = Self::play_games(
                         games_to_play,
@@ -125,9 +126,9 @@ impl Tournament
                         model_scores.iter_mut().find(|(m, _s)| *m == *model_info).unwrap().1 += score;
                     }
 
-                    println!("{:?}", game_result);
+                    info!("{:?}", game_result);
 
-                    println!(
+                    info!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
                         starting_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,

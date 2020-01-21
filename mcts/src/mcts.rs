@@ -12,6 +12,7 @@ use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
 use rand_distr::Dirichlet;
 use failure::{Error,format_err};
+use log::warn;
 
 use engine::game_state::GameState;
 use engine::value::Value;
@@ -492,8 +493,8 @@ where
 
         let chosen_idx = match weighted_index {
             Err(_) => {
-                println!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
-                println!("{:?}", action_visits);
+                warn!("Invalid puct scores. Most likely all are 0. Move will be randomly selected.");
+                warn!("{:?}", action_visits);
                 thread_rng().gen_range(0, action_visits.len())
             },
             Ok(weighted_index) => weighted_index.sample(&mut thread_rng())
@@ -852,9 +853,6 @@ mod tests {
     fn assert_metrics(left: &NodeMetrics<CountingAction>, right: &NodeMetrics<CountingAction>) {
         assert_eq!(left.visits, right.visits);
         assert_eq!(left.children.len(), right.children.len());
-
-        println!("Left: {:?}", left);
-        println!("Right: {:?}", right);
 
         for ((l_a, l_w, l_visits), (r_a, r_w, r_visits)) in left.children.iter().zip(right.children.iter()) {
             assert_eq!(l_a, r_a);

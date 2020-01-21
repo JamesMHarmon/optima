@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error};
+use log::info;
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -226,7 +227,7 @@ where
                 };
 
                 s.spawn(move |_| {
-                    println!("Starting Thread: {}", thread_num);
+                    info!("Starting Thread: {}", thread_num);
                     let f = Self::play_games(
                         num_games_to_play_this_thread,
                         self_play_batch_size,
@@ -250,7 +251,7 @@ where
                     num_of_games_played += 1;
                     num_games_to_play -= 1;
 
-                    println!(
+                    info!(
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, Number of Games To Play: {}, GPM: {:.2}",
                         starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,
@@ -258,7 +259,7 @@ where
                         num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
                     );
 
-                    println!("Number of Actions: {}, Score: {:?}",
+                    info!("Number of Actions: {}, Score: {:?}",
                         self_play_metric.get_analysis().len(),
                         self_play_metric.get_score()
                     );
@@ -285,7 +286,7 @@ where
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();
 
-        println!("To Play: {}", num_games_to_play);
+        info!("To Play: {}", num_games_to_play);
 
         for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
             self_play_metric_stream.push(

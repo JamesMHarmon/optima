@@ -6,6 +6,7 @@ use std::fs;
 use std::io::{BufReader,BufRead,Write};
 use std::fs::{File,OpenOptions};
 use model::model_info::ModelInfo;
+use log::info;
 
 use super::self_play::{SelfPlayMetrics};
 
@@ -58,7 +59,7 @@ impl SelfPlayPersistance
     }
 
     fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>, Error> {
-        println!("Reading File: {:?}", file_path);
+        info!("Reading File: {:?}", file_path);
         let file = File::open(file_path);
         let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
 

@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use failure::Error;
+use log::info;
 
 use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
@@ -35,7 +36,7 @@ where
     let new_model_info = source_model_info.get_next_model_info();
     let metric_iter = self_play_persistance.read_all_reverse_iter::<A,V>()?;
 
-    println!("Loading positions for training...");
+    info!("Loading positions for training...");
 
     let model_num = source_model_info.get_model_num();
     let number_of_games_per_net = options.number_of_games_per_net;

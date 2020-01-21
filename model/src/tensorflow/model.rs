@@ -8,13 +8,13 @@ use std::task::{Context,Poll,Waker};
 use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
-use chrono::{Utc};
 use crossbeam_queue::{SegQueue};
 use failure::{format_err,Error};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
+use log::info;
 
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
@@ -175,10 +175,8 @@ where
                     let num_nodes = batching_model_ref.take_num_nodes_analysed();
                     let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
                     let nps = num_nodes as f32 * 1000.0 / elapsed_mills as f32;
-                    let now = Utc::now().format("%H:%M:%S").to_string();
-                    println!(
-                        "TIME: {}, NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
-                        now,
+                    info!(
+                        "NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
                         nps,
                         min_batch_size,
                         max_batch_size
@@ -262,7 +260,7 @@ impl Predictor {
 
         let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
 
-        println!("{:?}", exported_model_path);
+        info!("{:?}", exported_model_path);
 
         let session = Session::from_saved_model(
             &SessionOptions::new(),
@@ -384,7 +382,7 @@ where
     I: Iterator<Item=PositionMetrics<S,A,V>>,
     Map: Mapper<S,A,V> + Send + Sync + 'static
 {
-    println!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
+    info!("Training from {} to {}", source_model_info.get_model_name(), target_model_info.get_model_name());
 
     let model_options = get_options(source_model_info)?;
     let moves_left_size = model_options.moves_left_size;
@@ -397,7 +395,7 @@ where
     for (i, sample_metrics) in sample_metrics.chunks(TRAIN_DATA_CHUNK_SIZE).into_iter().enumerate() {
         let train_data_file_name = format!("training_data_{}.npy", i);
         let train_data_path = source_base_path.join(&train_data_file_name);
-        println!("Writing data to {:?}", &train_data_path);
+        info!("Writing data to {:?}", &train_data_path);
         train_data_file_names.push(train_data_file_name);
         let sample_metrics_chunk = sample_metrics.collect::<Vec<_>>();
         let mapper = mapper.clone();
@@ -492,7 +490,7 @@ where
 
     create_tensorrt_model(source_model_info.get_game_name(), source_model_info.get_run_name(), target_model_info.get_model_num())?;
 
-    println!("Training process complete");
+    info!("Training process complete");
 
     Ok(())
 }
@@ -540,7 +538,7 @@ fn create(
 
     create_tensorrt_model(game_name, run_name, 1)?;
 
-    println!("Model creation process complete");
+    info!("Model creation process complete");
 
     Ok(())
 }
@@ -596,9 +594,9 @@ fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> R
 }
 
 fn run_cmd(cmd: &str) -> Result<(), Error> {
-    println!("\n");
-    println!("{}", cmd);
-    println!("\n");
+    info!("\n");
+    info!("{}", cmd);
+    info!("\n");
 
     let mut cmd = Command::new("/bin/bash")
         .arg("-c")
@@ -609,7 +607,7 @@ fn run_cmd(cmd: &str) -> Result<(), Error> {
 
     let result = cmd.wait();
 
-    println!("OUTPUT: {:?}", result);
+    info!("OUTPUT: {:?}", result);
 
     Ok(())
 }

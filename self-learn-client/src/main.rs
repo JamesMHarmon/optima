@@ -20,6 +20,8 @@ use self_learn::self_learn::{SelfLearn,SelfLearnOptions};
 use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
 use play::play::{Play,PlayOptions};
 use tournament::tournament::{Tournament,TournamentOptions};
+use log::info;
+use env_logger::Env;
 
 use failure::{Error,format_err};
 
@@ -38,6 +40,8 @@ pub struct Options {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
+
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
@@ -648,8 +652,8 @@ fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &O
         return Err(format_err!("Run already exists"));
     }
 
-    println!("{:?}", run_directory);
-    println!("{:?}", config_path);
+    info!("{:?}", run_directory);
+    info!("{:?}", config_path);
 
     let mut file = OpenOptions::new()
         .write(true)

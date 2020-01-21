@@ -13,9 +13,8 @@ common = { path = "../common" }
 engine = { path = "../engine" }
 
 failure="0.1"
+log = "0.4"
 chashmap="2.2.2"
-chrono="0.4.7"
-reqwest="0.9.18"
 crossbeam="0.7.1"
 serde={version="1.0.95",features=["derive"]}
 crossbeam-queue = "0.1"

@@ -1,5 +1,6 @@
 use std::fs;
 use failure::{format_err,Error};
+use log::info;
 
 use super::paths::Paths;
 use super::super::model_info::ModelInfo;
@@ -25,7 +26,7 @@ pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo, Error>
         latest_model_num
     );
 
-    println!("Getting latest model: {}", latest_model_info.get_model_name());
+    info!("Getting latest model: {}", latest_model_info.get_model_name());
 
     Ok(latest_model_info)
 }

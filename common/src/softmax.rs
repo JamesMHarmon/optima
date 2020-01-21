@@ -55,7 +55,6 @@ mod test {
         let expected = vec![0.5, 0.5];
         let actual = softmax(&logits, temperature);
 
-        println!("{:?}", actual);
         for (l, r) in expected.iter().zip(actual) {
             assert_approx_eq!(l, r, 0.00001);
         }
@@ -67,8 +66,6 @@ mod test {
         let temperature = 1.2;
         let expected = vec![0.160817, 0.516429, 0.174793, 0.147959];
         let actual = softmax(&logits, temperature);
-
-        println!("{:?}", actual);
 
         for (l, r) in expected.iter().zip(actual) {
             assert_approx_eq!(l, r, 0.00001);
@@ -82,8 +79,6 @@ mod test {
         let expected = vec![1.0];
         let actual = softmax(&logits, temperature);
 
-        println!("{:?}", actual);
-
         for (l, r) in expected.iter().zip(actual) {
             assert_approx_eq!(l, r, 0.00001);
         }
@@ -96,7 +91,6 @@ mod test {
         let expected = vec![0.234287, 0.254647, 0.276777, 0.234287];
         let actual = softmax(&logits, temperature);
 
-        println!("{:?}", actual);
         for (l, r) in expected.iter().zip(actual) {
             assert_approx_eq!(l, r, 0.00001);
         }
@@ -109,7 +103,6 @@ mod test {
         let expected = vec![1.0];
         let actual = softmax(&logits, temperature);
 
-        println!("{:?}", actual);
         for (l, r) in expected.iter().zip(actual) {
             assert_approx_eq!(l, r, 0.00001);
         }
