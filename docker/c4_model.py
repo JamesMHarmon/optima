@@ -33,7 +33,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
 
     y_trains = { "value_head": yv_train, "policy_head": yp_train, "moves_left_head": ym_train }
     y_tests = { "value_head": yv_test, "policy_head": yp_test, "moves_left_head": ym_test }
-    loss_funcs = { "value_head": "mean_squared_error", "policy_head": "categorical_crossentropy", "moves_left_head": "categorical_crossentropy" }
+    loss_funcs = { "value_head": "mean_squared_error", "policy_head": categorical_crossentropy_from_logits, "moves_left_head": "categorical_crossentropy" }
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "moves_left_head": moves_left_loss_weight }
 
     model.compile(
@@ -76,3 +76,6 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
 
 def clear():
     K.clear_session()
+
+def categorical_crossentropy_from_logits(y_true, y_pred):
+    return keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=True, label_smoothing=0)

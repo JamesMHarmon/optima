@@ -273,7 +273,7 @@ impl Predictor {
 
         let op_input = graph.operation_by_name_required("input_1").unwrap();
         let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
-        let op_policy_head = graph.operation_by_name_required("policy_head/Softmax").unwrap();
+        let op_policy_head = graph.operation_by_name_required("policy_head/Linear").unwrap();
         let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
 
         Self {

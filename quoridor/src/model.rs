@@ -1,3 +1,4 @@
+use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
 use model::analysis_cache::{cache,AnalysisCacheModel};
@@ -136,13 +137,7 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
                 )
             }).collect();
 
-        let policy_sum: f32 = valid_actions_with_policies.iter().map(|v| v.policy_score).sum();
-
-        let policy_scale = 1.0 / policy_sum;
-
-        for awp in valid_actions_with_policies.iter_mut() {
-            awp.policy_score = awp.policy_score * policy_scale;
-        }
+        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
 
         valid_actions_with_policies
     }

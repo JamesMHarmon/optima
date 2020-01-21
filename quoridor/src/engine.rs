@@ -635,8 +635,8 @@ mod tests {
 
         let mut actions = Vec::new();
 
-        for row in rows.into_iter() {
-            for col in cols.into_iter() {
+        for row in rows.iter() {
+            for col in cols.iter() {
                 actions.push(Action::PlaceHorizontalWall(Coordinate::new(*col, *row)));
             }
         }
@@ -776,8 +776,8 @@ mod tests {
 
         let mut actions = Vec::new();
 
-        for row in rows.into_iter() {
-            for col in cols.into_iter() {
+        for row in rows.iter() {
+            for col in cols.iter() {
                 actions.push(Action::PlaceVerticalWall(Coordinate::new(*col, *row)));
             }
         }

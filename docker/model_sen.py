@@ -3,7 +3,7 @@
 import numpy as np
 import keras
 from keras.models import Sequential, Model
-from keras.layers import Reshape, Dense, Conv2D, Flatten, LeakyReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
+from keras.layers import Reshape, Dense, Conv2D, Flatten, ReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
@@ -11,7 +11,7 @@ from keras import regularizers
 def Block(x, filters):
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(x)
     out = BatchNormalization()(out)
-    out = LeakyReLU()(out)
+    out = ReLU()(out)
 
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(out)
     out = BatchNormalization()(out)
@@ -19,7 +19,7 @@ def Block(x, filters):
     out = se_block(out, filters)
 
     out = keras.layers.add([x, out])
-    out = LeakyReLU()(out)
+    out = ReLU()(out)
 
     return out
 
@@ -36,11 +36,10 @@ def ValueHead(x, filters):
     filters = int(filters / 2)
     out = Conv2D(filters, kernel_size=(1,1), activation='linear', use_bias=False)(x)
     out = BatchNormalization()(out)
-    out = LeakyReLU()(out)
+    out = ReLU()(out)
 
     out = Flatten()(out)
-    out = Dense(256, kernel_regularizer=regularizers.l2(0.01), activation='linear')(out)
-    out = LeakyReLU()(out)
+    out = Dense(256, kernel_regularizer=regularizers.l2(0.01), activation='relu')(out)
 
     out = Dense(1, name='value_head', activation='tanh')(out)
     return out
@@ -50,17 +49,17 @@ def PolicyHead(x, filters, output_size):
     filters = int(filters / 2)
     out = Conv2D(filters, kernel_size=(1,1), activation='linear', use_bias=False)(x)
     out = BatchNormalization()(out)
-    out = LeakyReLU()(out)
+    out = ReLU()(out)
 
     out = Flatten()(out)
-    out = Dense(output_size, name='policy_head', kernel_regularizer=regularizers.l2(0.01), activation='softmax')(out)
+    out = Dense(output_size, name='policy_head', kernel_regularizer=regularizers.l2(0.01), activation='linear')(out)
     return out
 
 def MovesLeftHead(x, filters, moves_left_size):
     filters = int(filters / 2)
     out = Conv2D(filters, kernel_size=(1,1), activation='linear', use_bias=False)(x)
     out = BatchNormalization()(out)
-    out = LeakyReLU()(out)
+    out = ReLU()(out)
 
     out = Flatten()(out)
     out = Dense(moves_left_size, name='moves_left_head', kernel_regularizer=regularizers.l2(0.01), activation='softmax')(out)
@@ -70,7 +69,7 @@ def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     inputs = Input(input_shape)
     net = Conv2D(filters=num_filters, kernel_size=[3, 3], strides=[1, 1], padding="same", use_bias=False)(inputs)
     net = BatchNormalization()(net)
-    net = LeakyReLU()(net)
+    net = ReLU()(net)
 
     for _ in range(0, num_blocks):
         net = Block(net, num_filters)
