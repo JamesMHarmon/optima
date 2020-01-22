@@ -51,9 +51,9 @@ pub struct GameResult<A> {
 
 #[derive(Debug,Serialize)]
 pub struct MatchResult {
-    model_scores: Vec<(ModelInfo, f32)>,
-    player_scores: Vec<f32>,
-    num_of_games_played: usize
+    pub model_scores: Vec<(ModelInfo, f32)>,
+    pub player_scores: Vec<f32>,
+    pub num_of_games_played: usize
 }
 
 impl SelfEvaluate
@@ -62,7 +62,7 @@ impl SelfEvaluate
         models: &[M],
         game_engine: &E,
         options: &SelfEvaluateOptions
-    ) -> Result<(), Error> 
+    ) -> Result<MatchResult, Error> 
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -79,7 +79,7 @@ impl SelfEvaluate
         let num_games_to_play = options.num_games;
         let batch_size = options.batch_size;
 
-        crossbeam::scope(move |s| {
+        let match_result = crossbeam::scope(move |s| {
             let num_games_per_thread = num_games_to_play / SELF_EVALUATE_PARALLELISM;
             let num_games_per_thread_remainder = num_games_to_play % SELF_EVALUATE_PARALLELISM;
 
@@ -111,7 +111,7 @@ impl SelfEvaluate
             }
 
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
-            s.spawn(move |_| -> Result<(), Error> {
+            let handle = s.spawn(move |_| -> Result<MatchResult, Error> {
                 let mut num_of_games_played: usize = 0;
                 let mut model_scores: Vec<_> = model_info.iter().map(|m| (m.to_owned(), 0.0)).collect();
                 let mut player_scores: Vec<_> = repeat(0.0).take(num_players).collect();
@@ -144,17 +144,21 @@ impl SelfEvaluate
                     presistance.write_game(&game_result)?;
                 }
 
-                presistance.write_match(&MatchResult {
+                let match_result = MatchResult {
                     num_of_games_played,
                     model_scores,
                     player_scores
-                })?;
+                };
 
-                Ok(())
+                presistance.write_match(&match_result)?;
+
+                Ok(match_result)
             });
-        }).unwrap();
 
-        Ok(())
+            handle.join()
+        });
+
+        Ok(match_result.unwrap().unwrap().unwrap())
     }
 
     async fn play_games<S, A, E, T>(
