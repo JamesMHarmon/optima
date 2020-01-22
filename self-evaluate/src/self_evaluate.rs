@@ -8,7 +8,7 @@ use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
 use failure::{Error,format_err};
 use permutohedron::{Heap as Permute};
-use log::info;
+use log::{info};
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -78,8 +78,9 @@ impl SelfEvaluate
 
         let num_games_to_play = options.num_games;
         let batch_size = options.batch_size;
-
+        
         let match_result = crossbeam::scope(move |s| {
+            let mut handles = vec![];
             let num_games_per_thread = num_games_to_play / SELF_EVALUATE_PARALLELISM;
             let num_games_per_thread_remainder = num_games_to_play % SELF_EVALUATE_PARALLELISM;
 
@@ -90,7 +91,7 @@ impl SelfEvaluate
                 let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
                 let analyzers: Vec<_> = models.iter().map(|m| m.get_game_state_analyzer()).collect();
 
-                s.spawn(move |_| {
+                handles.push(s.spawn(move |_| {
                     let model_info_and_analyzers: Vec<_> = model_info.iter().zip(analyzers.iter()).map(|(m, a)| (m, a)).collect();
                     info!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
 
@@ -104,10 +105,8 @@ impl SelfEvaluate
                         options
                     );
 
-                    let res = common::runtime::block_on(f);
-
-                    res.unwrap();
-                });
+                    common::runtime::block_on(f)
+                }));
             }
 
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
@@ -155,10 +154,16 @@ impl SelfEvaluate
                 Ok(match_result)
             });
 
+            for handle in handles {
+                handle.join()?.map_err(|_| format_err!("Error in self_evaluate scope")).unwrap();
+            }
+
             handle.join()
         });
 
-        Ok(match_result.unwrap().unwrap().unwrap())
+        match_result
+            .and_then(|r| r).map_err(|_| format_err!("Error in self_evaluate scope"))
+            .and_then(|r| r).map_err(|_| format_err!("Error in self_evaluate scope"))
     }
 
     async fn play_games<S, A, E, T>(

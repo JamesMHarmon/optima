@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
 use crossbeam_queue::{SegQueue};
-use failure::{format_err,Error};
+use failure::{format_err,ensure,Error};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
@@ -168,7 +168,7 @@ where
                 
                 let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state));
                 let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).unwrap();
-                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size);
+                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).unwrap();
 
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if thread_num == 0 && elapsed_mills >= 5_000 {
@@ -250,30 +250,30 @@ struct Predictor {
 impl Predictor {
     fn new(model_info: &ModelInfo, input_dimensions: [u64; 3]) -> Self {
         let mut graph = Graph::new();
-
+        
         let exported_model_path = format!(
             "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
             game_name = model_info.get_game_name(),
             run_name = model_info.get_run_name(),
             model_num = model_info.get_model_num(),
         );
-
+        
         let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
-
+        
         info!("{:?}", exported_model_path);
-
+        
         let session = Session::from_saved_model(
             &SessionOptions::new(),
             &["serve"],
             &mut graph,
             exported_model_path
         ).unwrap();
-
+        
         let op_input = graph.operation_by_name_required("input_1").unwrap();
         let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
         let op_policy_head = graph.operation_by_name_required("policy_head/Linear").unwrap();
         let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
-
+        
         Self {
             input_dimensions,
             session: SessionAndOps {
@@ -666,7 +666,7 @@ where
         states_to_analyse
     }
 
-    fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) {
+    fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) -> Result<(), Error> {
         let mut analysis_len = 0;
         let mut policy_head_iter = analysis.policy_head_output.into_iter().map(|v| v.to_f32());
         let mut value_head_iter = analysis.value_head_output.into_iter().map(|v| v.to_f32());
@@ -693,12 +693,14 @@ where
             analysis_len += 1;
         }
 
-        assert_eq!(policy_head_iter.next(), None);
-        assert_eq!(value_head_iter.next(), None);
-        assert_eq!(moves_left_head_iter.map(|mut iter| iter.next()).unwrap_or(None), None);
+        ensure!(policy_head_iter.next().is_none(), "Not all policy head values were used.");
+        ensure!(value_head_iter.next().is_none(), "Not all value head values were used.");
+        ensure!(moves_left_head_iter.map(|mut iter| iter.next()).is_none(), "Not all moves left head values were used.");
 
         self.min_batch_size.fetch_min(analysis_len, Ordering::SeqCst);
         self.max_batch_size.fetch_max(analysis_len, Ordering::SeqCst);
+
+        Ok(())
     }
 
     fn take_num_nodes_analysed(&self) -> usize {
