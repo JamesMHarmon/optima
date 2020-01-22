@@ -15,7 +15,7 @@ use super::engine::Engine;
 use super::engine::GameState;
 use super::board::{map_board_to_arr_invertable,BoardType};
 
-use failure::Error;
+use anyhow::Result;
 use itertools::izip;
 
 pub struct ModelFactory {}
@@ -212,7 +212,7 @@ impl model::model::ModelFactory for ModelFactory {
         )
     }
 
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
         Ok(get_latest_model_info(model_info)?)
     }
 }

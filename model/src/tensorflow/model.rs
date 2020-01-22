@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
 use crossbeam_queue::{SegQueue};
-use failure::{format_err,ensure,Error};
+use anyhow::{anyhow,ensure,Result};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
@@ -111,7 +111,7 @@ where
     pub fn create(
         model_info: &ModelInfo,
         options: &TensorflowModelOptions
-     ) -> Result<(), Error> {
+     ) -> Result<()> {
         create(
             model_info,
             options
@@ -212,7 +212,7 @@ where
         target_model_info: &ModelInfo,
         sample_metrics: I,
         options: &TrainOptions
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         I: Iterator<Item=PositionMetrics<S,A,V>>
     {
@@ -286,7 +286,7 @@ impl Predictor {
         }
     }
 
-    fn predict<I: Iterator<Item=Vec<f32>>>(&self, game_state_inputs: I, batch_size: usize) -> Result<AnalysisResults, Error> {
+    fn predict<I: Iterator<Item=Vec<f32>>>(&self, game_state_inputs: I, batch_size: usize) -> Result<AnalysisResults> {
         let input_dim = self.input_dimensions;
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
         
@@ -374,7 +374,7 @@ fn train<S,A,V,I,Map>(
     sample_metrics: I,
     mapper: Arc<Map>,
     options: &TrainOptions
-) -> Result<(), Error>
+) -> Result<()>
 where
     S: GameState + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
@@ -422,7 +422,7 @@ where
     }
 
     for handle in handles {
-        handle.join().map_err(|_| format_err!("Thread failed to write training data"))?;
+        handle.join().map_err(|_| anyhow!("Thread failed to write training data"))?;
     }
 
     let mut train_data_paths = train_data_file_names.iter().map(|file_name| format!(
@@ -499,7 +499,7 @@ where
 fn create(
     model_info: &ModelInfo,
     options: &TensorflowModelOptions
-) -> Result<(), Error>
+) -> Result<()>
 {
     let game_name = model_info.get_game_name();
     let run_name = model_info.get_run_name();
@@ -551,7 +551,7 @@ fn get_model_options_path(model_info: &ModelInfo) -> PathBuf {
     get_model_dir(model_info).join("model-options.json")
 }
 
-fn get_options(model_info: &ModelInfo) -> Result<TensorflowModelOptions, Error> {
+fn get_options(model_info: &ModelInfo) -> Result<TensorflowModelOptions> {
     let file_path = get_model_options_path(model_info);
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
@@ -559,7 +559,7 @@ fn get_options(model_info: &ModelInfo) -> Result<TensorflowModelOptions, Error> 
     Ok(options)
 }
 
-fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<(), Error> {
+fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()> {
     let serialized_options = serde_json::to_string(options)?;
 
     let file_path = get_model_options_path(model_info);
@@ -569,7 +569,7 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
     Ok(())
 }
 
-fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<(), Error> {
+fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
         -e NVIDIA_VISIBLE_DEVICES=1 \
@@ -593,7 +593,7 @@ fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> R
     Ok(())
 }
 
-fn run_cmd(cmd: &str) -> Result<(), Error> {
+fn run_cmd(cmd: &str) -> Result<()> {
     info!("\n");
     info!("{}", cmd);
     info!("\n");
@@ -666,7 +666,7 @@ where
         states_to_analyse
     }
 
-    fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) -> Result<(), Error> {
+    fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) -> Result<()> {
         let mut analysis_len = 0;
         let mut policy_head_iter = analysis.policy_head_output.into_iter().map(|v| v.to_f32());
         let mut value_head_iter = analysis.value_head_output.into_iter().map(|v| v.to_f32());

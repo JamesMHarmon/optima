@@ -23,7 +23,7 @@ use tournament::tournament::{Tournament,TournamentOptions};
 use log::info;
 use env_logger::Env;
 
-use failure::{Error,format_err};
+use anyhow::{Result,anyhow};
 
 const C4_NAME: &str = "Connect4";
 const QUORIDOR_NAME: &str = "Quoridor";
@@ -39,7 +39,7 @@ pub struct Options {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<()> {
     env_logger::from_env(Env::default().default_filter_or("info")).init();
 
     let yaml = load_yaml!("cli.yml");
@@ -144,7 +144,7 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn create_connect4(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
+fn create_connect4(run_name: &str, options: &ModelOptions) -> Result<()> {
     let model_factory = Connect4ModelFactory::new();
 
     SelfLearn::<_,_,_,Connect4Engine>::create(
@@ -155,7 +155,7 @@ fn create_connect4(run_name: &str, options: &ModelOptions) -> Result<(), Error> 
     )
 }
 
-fn run_connect4(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn run_connect4(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
     let run_directory = get_run_directory(C4_NAME, run_name);
@@ -174,7 +174,7 @@ fn run_connect4(run_name: &str, self_learn_options: &SelfLearnOptions, self_eval
     Ok(())
 }
 
-fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
     let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), 1);
@@ -198,7 +198,7 @@ fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     Ok(())
 }
 
-fn tournament_connect4(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+fn tournament_connect4(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<()> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
 
@@ -216,7 +216,7 @@ fn tournament_connect4(run_name: &str, models: &[usize], options: &TournamentOpt
     Ok(())
 }
 
-async fn play_connect4(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
+async fn play_connect4(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<()> {
     let model_factory = Connect4ModelFactory::new();
     let game_engine = Connect4Engine::new();
     let model_info = ModelInfo::new(C4_NAME.to_owned(), run_name.to_owned(), 1);
@@ -237,13 +237,13 @@ async fn play_connect4(run_name: &str, model_num: Option<usize>, options: &PlayO
     Ok(())
 }
 
-fn create(game_name: &str, run_name: &str, options: &Options) -> Result<(), Error> {
+fn create(game_name: &str, run_name: &str, options: &Options) -> Result<()> {
     if game_name.contains("_") {
-        return Err(format_err!("game_name cannot contain any '_' characters"));
+        return Err(anyhow!("game_name cannot contain any '_' characters"));
     }
 
     if run_name.contains("_") {
-        return Err(format_err!("run_name cannot contain any '_' characters"));
+        return Err(anyhow!("run_name cannot contain any '_' characters"));
     }
 
     initialize_directories_and_files(&game_name, &run_name, &options)?;
@@ -251,7 +251,7 @@ fn create(game_name: &str, run_name: &str, options: &Options) -> Result<(), Erro
     Ok(())
 }
 
-fn create_quoridor(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
+fn create_quoridor(run_name: &str, options: &ModelOptions) -> Result<()> {
     let model_factory = QuoridorModelFactory::new();
 
     SelfLearn::<_,_,_,QuoridorEngine>::create(
@@ -262,7 +262,7 @@ fn create_quoridor(run_name: &str, options: &ModelOptions) -> Result<(), Error> 
     )
 }
 
-fn run_quoridor(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn run_quoridor(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = QuoridorModelFactory::new();
     let game_engine = QuoridorEngine::new();
     let run_directory = get_run_directory(QUORIDOR_NAME, run_name);
@@ -281,7 +281,7 @@ fn run_quoridor(run_name: &str, self_learn_options: &SelfLearnOptions, self_eval
     Ok(())
 }
 
-fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = QuoridorModelFactory::new();
     let game_engine = QuoridorEngine::new();
     let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), 1);
@@ -305,7 +305,7 @@ fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     Ok(())
 }
 
-fn tournament_quoridor(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+fn tournament_quoridor(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<()> {
     let model_factory = QuoridorModelFactory::new();
     let game_engine = QuoridorEngine::new();
 
@@ -323,7 +323,7 @@ fn tournament_quoridor(run_name: &str, models: &[usize], options: &TournamentOpt
     Ok(())
 }
 
-async fn play_quoridor(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
+async fn play_quoridor(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<()> {
     let model_factory = QuoridorModelFactory::new();
     let game_engine = QuoridorEngine::new();
     let model_info = ModelInfo::new(QUORIDOR_NAME.to_owned(), run_name.to_owned(), 1);
@@ -344,7 +344,7 @@ async fn play_quoridor(run_name: &str, model_num: Option<usize>, options: &PlayO
     Ok(())
 }
 
-fn create_arimaa(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
+fn create_arimaa(run_name: &str, options: &ModelOptions) -> Result<()> {
     let model_factory = ArimaaModelFactory::new();
 
     SelfLearn::<_,_,_,ArimaaEngine>::create(
@@ -355,7 +355,7 @@ fn create_arimaa(run_name: &str, options: &ModelOptions) -> Result<(), Error> {
     )
 }
 
-fn run_arimaa(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn run_arimaa(run_name: &str, self_learn_options: &SelfLearnOptions, self_evaluate_options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = ArimaaModelFactory::new();
     let game_engine = ArimaaEngine::new();
     let run_directory = get_run_directory(ARIMAA_NAME, run_name);
@@ -374,7 +374,7 @@ fn run_arimaa(run_name: &str, self_learn_options: &SelfLearnOptions, self_evalua
     Ok(())
 }
 
-fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<(), Error> {
+fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Option<usize>, options: &SelfEvaluateOptions) -> Result<()> {
     let model_factory = ArimaaModelFactory::new();
     let game_engine = ArimaaEngine::new();
     let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), 1);
@@ -398,7 +398,7 @@ fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Opti
     Ok(())
 }
 
-fn tournament_arimaa(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<(), Error> {
+fn tournament_arimaa(run_name: &str, models: &[usize], options: &TournamentOptions) -> Result<()> {
     let model_factory = ArimaaModelFactory::new();
     let game_engine = ArimaaEngine::new();
 
@@ -416,7 +416,7 @@ fn tournament_arimaa(run_name: &str, models: &[usize], options: &TournamentOptio
     Ok(())
 }
 
-async fn play_arimaa(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<(), Error> {
+async fn play_arimaa(run_name: &str, model_num: Option<usize>, options: &PlayOptions) -> Result<()> {
     let model_factory = ArimaaModelFactory::new();
     let game_engine = ArimaaEngine::new();
     let model_info = ModelInfo::new(ARIMAA_NAME.to_owned(), run_name.to_owned(), 1);
@@ -437,7 +437,7 @@ async fn play_arimaa(run_name: &str, model_num: Option<usize>, options: &PlayOpt
     Ok(())
 }
 
-fn get_default_options() -> Result<Options, Error> {
+fn get_default_options() -> Result<Options> {
     let self_learn_options = SelfLearnOptions {
         number_of_games_per_net: 32_000,
         self_play_batch_size: 256,
@@ -538,7 +538,7 @@ fn get_default_options() -> Result<Options, Error> {
     })
 }
 
-fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matches: &clap::ArgMatches) -> Result<(), Error> {
+fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matches: &clap::ArgMatches) -> Result<()> {
     if let Some(number_of_games_per_net) = matches.value_of("number_of_games_per_net") { options.number_of_games_per_net = number_of_games_per_net.parse()? };
     if let Some(self_play_batch_size) = matches.value_of("self_play_batch_size") { options.self_play_batch_size = self_play_batch_size.parse()? };
     if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse()? };
@@ -569,14 +569,14 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     Ok(())
 }
 
-fn update_model_options_from_matches(options: &mut ModelOptions, matches: &clap::ArgMatches) -> Result<(), Error> {
+fn update_model_options_from_matches(options: &mut ModelOptions, matches: &clap::ArgMatches) -> Result<()> {
     if let Some(number_of_filters) = matches.value_of("number_of_filters") { options.number_of_filters = number_of_filters.parse()? };
     if let Some(number_of_residual_blocks) = matches.value_of("number_of_residual_blocks") { options.number_of_residual_blocks = number_of_residual_blocks.parse()? };
 
     Ok(())
 }
 
-fn update_self_evaluate_options_from_matches(options: &mut SelfEvaluateOptions, matches: &clap::ArgMatches) -> Result<(Option<String>, Option<String>), Error> {
+fn update_self_evaluate_options_from_matches(options: &mut SelfEvaluateOptions, matches: &clap::ArgMatches) -> Result<(Option<String>, Option<String>)> {
     if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse()? };
     if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") { options.temperature_max_actions = temperature_max_actions.parse()? };
     if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") { options.temperature_post_max_actions = temperature_post_max_actions.parse()? };
@@ -592,7 +592,7 @@ fn update_self_evaluate_options_from_matches(options: &mut SelfEvaluateOptions, 
     Ok((matches.value_of("model_1").map(|s| s.to_owned()), matches.value_of("model_2").map(|s| s.to_owned())))
 }
 
-fn update_play_options_from_matches(options: &mut PlayOptions, matches: &clap::ArgMatches) -> Result<Option<String>, Error> {
+fn update_play_options_from_matches(options: &mut PlayOptions, matches: &clap::ArgMatches) -> Result<Option<String>> {
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
@@ -604,7 +604,7 @@ fn update_play_options_from_matches(options: &mut PlayOptions, matches: &clap::A
     Ok(matches.value_of("model").map(|s| s.to_owned()))
 }
 
-fn update_tournament_options_from_matches(options: &mut TournamentOptions, matches: &clap::ArgMatches) -> Result<String, Error> {
+fn update_tournament_options_from_matches(options: &mut TournamentOptions, matches: &clap::ArgMatches) -> Result<String> {
     if let Some(visits) = matches.value_of("visits") { options.visits = visits.parse()? };
     if let Some(fpu) = matches.value_of("fpu") { options.fpu = fpu.parse()? };
     if let Some(fpu_root) = matches.value_of("fpu_root") { options.fpu_root = fpu_root.parse()? };
@@ -613,10 +613,10 @@ fn update_tournament_options_from_matches(options: &mut TournamentOptions, match
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
 
-    Ok(matches.value_of("models").ok_or(format_err!("model ranges not specified"))?.to_owned())
+    Ok(matches.value_of("models").ok_or(anyhow!("model ranges not specified"))?.to_owned())
 }
 
-fn get_options(game_name: &str, run_name: &str) -> Result<Options, Error> {
+fn get_options(game_name: &str, run_name: &str) -> Result<Options> {
     let run_directory = get_run_directory(&game_name, &run_name);
     get_config(&run_directory)
 }
@@ -629,7 +629,7 @@ fn get_config_path(run_directory: &Path) -> PathBuf {
     run_directory.join("config.json")
 }
 
-fn get_config(run_directory: &Path) -> Result<Options, Error> {
+fn get_config(run_directory: &Path) -> Result<Options> {
     let config_path = get_config_path(run_directory);
     let mut file = OpenOptions::new()
         .read(true)
@@ -642,14 +642,14 @@ fn get_config(run_directory: &Path) -> Result<Options, Error> {
     Ok(options)
 }
 
-fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &Options) -> Result<PathBuf, Error> {
+fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &Options) -> Result<PathBuf> {
     let run_directory = get_run_directory(game_name, run_name);
     create_dir_all(&run_directory).expect("Run already exists or unable to create directories");
 
     let config_path = get_config_path(&run_directory);
 
     if config_path.exists() {
-        return Err(format_err!("Run already exists"));
+        return Err(anyhow!("Run already exists"));
     }
 
     info!("{:?}", run_directory);

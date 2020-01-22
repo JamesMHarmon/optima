@@ -13,7 +13,7 @@ common = { path = "../common" }
 model = { path = "../model" }
 mcts = { path = "../mcts" }
 
-failure="0.1"
+anyhow="1.0"
 log = "0.4"
 crossbeam="0.7.1"
 rand="0.7.0"

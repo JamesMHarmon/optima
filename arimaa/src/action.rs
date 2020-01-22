@@ -5,7 +5,7 @@ use std::fmt;
 use serde::ser::{Serialize,Serializer};
 use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
 use common::bits::single_bit_index;
-use failure::{format_err};
+use anyhow::{anyhow};
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Ord, PartialOrd)]
 pub struct Square(u8);
@@ -71,7 +71,7 @@ impl fmt::Debug for Square {
 
 
 impl FromStr for Square {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
@@ -88,7 +88,7 @@ impl FromStr for Square {
             }
         }
 
-        Err(format_err!("Invalid value for square"))
+        Err(anyhow!("Invalid value for square"))
     }
 }
 
@@ -134,7 +134,7 @@ impl fmt::Display for Direction {
 }
 
 impl FromStr for Direction {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
@@ -155,7 +155,7 @@ impl FromStr for Direction {
             }
         }
 
-        Err(format_err!("Invalid value for direction"))
+        Err(anyhow!("Invalid value for direction"))
     }
 }
 
@@ -185,7 +185,7 @@ impl fmt::Display for Piece {
 }
 
 impl FromStr for Piece {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
@@ -208,7 +208,7 @@ impl FromStr for Piece {
             }
         }
 
-        Err(format_err!("Invalid value for piece"))
+        Err(anyhow!("Invalid value for piece"))
     }
 }
 
@@ -298,7 +298,7 @@ impl fmt::Debug for Action {
 }
 
 impl FromStr for Action {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
@@ -319,7 +319,7 @@ impl FromStr for Action {
             }
         }
 
-        Err(format_err!("Invalid action"))
+        Err(anyhow!("Invalid action"))
     }
 }
 

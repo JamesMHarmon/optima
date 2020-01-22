@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
-use failure::Error;
+use anyhow::Result;
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -35,7 +35,7 @@ impl Play
         model: &M,
         game_engine: &E,
         options: &PlayOptions
-    ) -> Result<(), Error> 
+    ) -> Result<()> 
     where
         S: GameState + Display,
         A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,

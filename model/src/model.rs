@@ -1,5 +1,5 @@
 use engine::game_state::GameState;
-use failure::Error;
+use anyhow::Result;
 use serde::{Serialize,Deserialize};
 
 use super::model_info::ModelInfo;
@@ -14,7 +14,7 @@ pub trait Model {
     type Analyzer: GameAnalyzer<Action=Self::Action,State=Self::State,Value=Self::Value> + Send;
 
     fn get_model_info(&self) -> &ModelInfo;
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error>;
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<()>;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 
@@ -25,7 +25,7 @@ pub trait ModelFactory
 
     fn create(&self, model_info: &ModelInfo, model_options: &Self::O) -> Self::M;
     fn get(&self, model_info: &ModelInfo) -> Self::M;
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo,Error>;
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]

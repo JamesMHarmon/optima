@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::fmt::{self,Display,Formatter};
-use failure::Error;
+use anyhow::Result;
 
 use common::linked_list::List;
 use super::engine::{GameState,PlayPhase,Phase,PieceBoard,PieceBoardState};
@@ -44,9 +44,9 @@ impl Display for GameState {
 }
 
 impl FromStr for GameState {
-    type Err = Error;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let lines: Vec<_> = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
         let regex = regex::Regex::new(r"^\s*(\d+)([gswb])").unwrap();
 

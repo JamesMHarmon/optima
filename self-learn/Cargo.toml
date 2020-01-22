@@ -12,7 +12,7 @@ model = { path = "../model" }
 mcts = { path = "../mcts" }
 self-evaluate = { path = "../self-evaluate" }
 
-failure="0.1"
+anyhow="1.0"
 log = "0.4"
 crossbeam="0.7"
 rand="0.7"

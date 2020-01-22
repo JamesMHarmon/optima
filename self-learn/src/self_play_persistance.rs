@@ -1,4 +1,4 @@
-use failure::Error;
+use anyhow::Result;
 use serde::de::DeserializeOwned;
 use std::path::{Path,PathBuf};
 use serde::{Serialize};
@@ -19,7 +19,7 @@ pub struct SelfPlayPersistance
 
 impl SelfPlayPersistance
 {
-    pub fn new(run_directory: &Path, model_name: String) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, model_name: String) -> Result<Self> {
         let games_dir = run_directory.join("games");
         let file_path = Self::get_file_path(&games_dir, &model_name);
 
@@ -37,7 +37,7 @@ impl SelfPlayPersistance
         })
     }
 
-    pub fn write<A: Serialize, V: Serialize>(&mut self, self_play_metrics: &SelfPlayMetrics<A,V>) -> Result<(), Error> {
+    pub fn write<A: Serialize, V: Serialize>(&mut self, self_play_metrics: &SelfPlayMetrics<A,V>) -> Result<()> {
         let serialized = serde_json::to_string(self_play_metrics)?;
 
         writeln!(self.file, "{}", serialized)?;
@@ -45,12 +45,12 @@ impl SelfPlayPersistance
         Ok(())
     }
 
-    pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>, Error> {
+    pub fn read<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>> {
         let file_path = Self::get_file_path(&self.games_dir, &self.model_name);
         Self::read_metrics_from_file(&file_path)
     }
 
-    pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A,V>, Error> {
+    pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A,V>> {
         let mut file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
 
         file_paths.sort();
@@ -58,7 +58,7 @@ impl SelfPlayPersistance
         Ok(SelfPlayMetricsIterator::new(file_paths))
     }
 
-    fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>, Error> {
+    fn read_metrics_from_file<A: DeserializeOwned, V: DeserializeOwned>(file_path: &Path) -> Result<Box<dyn Iterator<Item=SelfPlayMetrics<A,V>>>> {
         info!("Reading File: {:?}", file_path);
         let file = File::open(file_path);
         let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
@@ -80,7 +80,7 @@ impl SelfPlayPersistance
         games_dir.join(format!("{}.json", name))
     }
 
-    fn get_game_files_in_dir(games_dir: &Path) -> Result<Vec<PathBuf>, Error> {
+    fn get_game_files_in_dir(games_dir: &Path) -> Result<Vec<PathBuf>> {
         let file_paths: Vec<PathBuf> = fs::read_dir(games_dir)?
             .filter_map(|e| e.map(|e| e.path()).ok())
             .filter(|p| p.is_file() && file_path_is_valid_game_file(p))

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use serde::{Serialize, Deserialize};
-use failure::{Error,format_err};
+use anyhow::{Result,anyhow};
 use rand::Rng;
 
 use engine::engine::GameEngine;
@@ -62,7 +62,7 @@ pub async fn self_play<'a, S, A, E, M, V>(
     game_engine: &'a E,
     analytics: &'a M,
     options: &'a SelfPlayOptions
-) -> Result<SelfPlayMetrics<A,V>, Error>
+) -> Result<SelfPlayMetrics<A,V>>
     where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -121,7 +121,7 @@ pub async fn self_play<'a, S, A, E, M, V>(
         analysis.push((action, metrics));
     };
 
-    let score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
+    let score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
 
     Ok(SelfPlayMetrics::<A,V> {
         analysis,

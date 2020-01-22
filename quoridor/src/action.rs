@@ -5,7 +5,7 @@ use std::fmt;
 use serde::ser::{Serialize,Serializer};
 use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
 use common::bits::single_bit_index;
-use failure::{format_err};
+use anyhow::{anyhow};
 
 #[derive(Clone,Eq,PartialEq)]
 pub struct Coordinate {
@@ -138,20 +138,20 @@ impl fmt::Debug for Action {
 }
 
 impl FromStr for Action {
-    type Err = failure::Error;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
         let row = chars[0];
         // @TODO: Update to take multiple digits
-        let col = chars[1].to_digit(10).ok_or_else(|| format_err!("Invalid value"))?;
+        let col = chars[1].to_digit(10).ok_or_else(|| anyhow!("Invalid value"))?;
         let coordinate = Coordinate::new(row, col as usize);
 
         match chars.get(2) {
             None => Ok(Action::MovePawn(coordinate)),
             Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
             Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
-            Some(_) => Err(format_err!("Invalid value"))
+            Some(_) => Err(anyhow!("Invalid value"))
         }
     }
 }

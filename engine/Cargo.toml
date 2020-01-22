@@ -9,4 +9,3 @@ publish = false
 name="engine"
 
 [dependencies]
-failure="0.1"

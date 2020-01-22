@@ -1,11 +1,11 @@
 use std::fs;
-use failure::{format_err,Error};
+use anyhow::{anyhow,Result};
 use log::info;
 
 use super::paths::Paths;
 use super::super::model_info::ModelInfo;
 
-pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo, Error> {
+pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo> {
     let paths = Paths::from_model_info(model_info);
 
     let latest_model_num = fs::read_dir(paths.get_models_path())?
@@ -18,7 +18,7 @@ pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo, Error>
             ModelInfo::from_model_name(model_name_excluding_file_ext).get_model_num()
         })
         .max()
-        .ok_or_else(|| format_err!("No models found"))?;
+        .ok_or_else(|| anyhow!("No models found"))?;
 
     let latest_model_info = ModelInfo::new(
         model_info.get_game_name().to_owned(),

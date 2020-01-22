@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
-use failure::{Error,format_err};
+use anyhow::{Result,anyhow};
 use itertools::Itertools;
 use log::info;
 
@@ -76,7 +76,7 @@ impl Tuner
         model_factory: &F,
         game_engine: &E,
         options: &TunerOptions<'static>
-    ) -> Result<(), Error> 
+    ) -> Result<()> 
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -140,7 +140,7 @@ impl Tuner
                 });
             }
 
-            s.spawn(move |_| -> Result<(), Error> {
+            s.spawn(move |_| -> Result<()> {
                 let mut num_of_games_played: usize = 0;
                 let mut player_scores: Vec<_> = players.iter().map(|(id, m)| (*id, *m, 0.0)).collect();
 
@@ -187,7 +187,7 @@ impl Tuner
         batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         game_engine: &E
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -207,7 +207,7 @@ impl Tuner
         while let Some(game_result) = game_result_stream.next().await {
             let game_result = game_result?;
 
-            results_channel.send(game_result).map_err(|_| format_err!("Failed to send game_result"))?;
+            results_channel.send(game_result).map_err(|_| anyhow!("Failed to send game_result"))?;
 
             if let Some(players) = games_to_play.pop() {
                 let game_to_play = Self::play_game(game_engine, players);
@@ -222,7 +222,7 @@ impl Tuner
     async fn play_game<'a, S, A, E, T>(
         game_engine: &E,
         players: Vec<Player<'a, T>>
-    ) -> Result<GameResult<A>, Error>
+    ) -> Result<GameResult<A>>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -278,7 +278,7 @@ impl Tuner
             actions.push(action);
         };
 
-        let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
+        let final_score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
 
         let scores: Vec<_> = players.iter().enumerate().map(|(i, Player { id, .. })| (
             *id,

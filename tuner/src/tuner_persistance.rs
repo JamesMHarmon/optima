@@ -3,7 +3,7 @@ use serde::{Serialize};
 use std::fs;
 use std::io::Write;
 use std::fs::{File,OpenOptions};
-use failure::Error;
+use anyhow::Result;
 
 use super::tuner::{GameResult,PlayerScore};
 
@@ -15,7 +15,7 @@ pub struct TunerPersistance
 
 impl TunerPersistance
 {
-    pub fn new(run_directory: &Path, name: &str) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, name: &str) -> Result<Self> {
         let tuner_dir = run_directory.join("tuner");
 
         let game_file_path = get_game_file_path(&tuner_dir, name);
@@ -39,7 +39,7 @@ impl TunerPersistance
         })
     }
 
-    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<(), Error> {
+    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<()> {
         let serialized = serde_json::to_string(game_result)?;
 
         writeln!(self.game_file, "{}", serialized)?;
@@ -47,7 +47,7 @@ impl TunerPersistance
         Ok(())
     }
 
-    pub fn write_player_scores(&mut self, player_scores: &[PlayerScore]) -> Result<(), Error> {
+    pub fn write_player_scores(&mut self, player_scores: &[PlayerScore]) -> Result<()> {
         let mut player_scores = player_scores.iter().collect::<Vec<_>>();
         player_scores.sort_by(|PlayerScore { score: s1, .. }, PlayerScore { score: s2, .. }| s1.partial_cmp(s2).unwrap());
 

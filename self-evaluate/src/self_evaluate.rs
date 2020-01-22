@@ -6,7 +6,7 @@ use std::iter::{repeat,repeat_with};
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
-use failure::{Error,format_err};
+use anyhow::{anyhow,Result};
 use permutohedron::{Heap as Permute};
 use log::{info};
 
@@ -62,7 +62,7 @@ impl SelfEvaluate
         models: &[M],
         game_engine: &E,
         options: &SelfEvaluateOptions
-    ) -> Result<MatchResult, Error> 
+    ) -> Result<MatchResult> 
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -110,7 +110,7 @@ impl SelfEvaluate
             }
 
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
-            let handle = s.spawn(move |_| -> Result<MatchResult, Error> {
+            let handle = s.spawn(move |_| -> Result<MatchResult> {
                 let mut num_of_games_played: usize = 0;
                 let mut model_scores: Vec<_> = model_info.iter().map(|m| (m.to_owned(), 0.0)).collect();
                 let mut player_scores: Vec<_> = repeat(0.0).take(num_players).collect();
@@ -155,15 +155,15 @@ impl SelfEvaluate
             });
 
             for handle in handles {
-                handle.join()?.map_err(|_| format_err!("Error in self_evaluate scope")).unwrap();
+                handle.join()?.map_err(|_| anyhow!("Error in self_evaluate scope")).unwrap();
             }
 
             handle.join()
         });
 
         match_result
-            .and_then(|r| r).map_err(|_| format_err!("Error in self_evaluate scope"))
-            .and_then(|r| r).map_err(|_| format_err!("Error in self_evaluate scope"))
+            .and_then(|r| r).map_err(|_| anyhow!("Error in self_evaluate scope"))
+            .and_then(|r| r).map_err(|_| anyhow!("Error in self_evaluate scope"))
     }
 
     async fn play_games<S, A, E, T>(
@@ -174,7 +174,7 @@ impl SelfEvaluate
         game_engine: &E,
         models: &[(&ModelInfo, &T)],
         options: &SelfEvaluateOptions
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -201,7 +201,7 @@ impl SelfEvaluate
         while let Some(game_result) = game_result_stream.next().await {
             let game_result = game_result?;
 
-            results_channel.send(game_result).map_err(|_| format_err!("Failed to send game_result"))?;
+            results_channel.send(game_result).map_err(|_| anyhow!("Failed to send game_result"))?;
 
             if let Some(players) = games_to_play.pop() {
                 let game_to_play = Self::play_game(game_engine, players, options);
@@ -217,7 +217,7 @@ impl SelfEvaluate
         game_engine: &E,
         players: Vec<(&ModelInfo, &T)>,
         options: &SelfEvaluateOptions
-    ) -> Result<GameResult<A>, Error>
+    ) -> Result<GameResult<A>>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
@@ -271,7 +271,7 @@ impl SelfEvaluate
             actions.push(action);
         };
 
-        let final_score = game_engine.is_terminal_state(&state).ok_or(format_err!("Expected a terminal state"))?;
+        let final_score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
 
         let scores: Vec<_> = players.iter().enumerate().map(|(i, (m, _))| (
             (**m).to_owned(),

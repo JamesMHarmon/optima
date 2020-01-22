@@ -11,7 +11,7 @@ use rand::{thread_rng,Rng};
 use rand::prelude::Distribution;
 use rand::distributions::WeightedIndex;
 use rand_distr::Dirichlet;
-use failure::{Error,format_err};
+use anyhow::{Result,anyhow};
 use log::warn;
 
 use engine::game_state::GameState;
@@ -183,7 +183,7 @@ where
         }
     }
 
-    pub async fn search_time(&mut self, duration: Duration) -> Result<usize, Error> {
+    pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
         let alive = Arc::new(AtomicBool::new(true));
 
         let alive_clone = alive.clone();
@@ -195,7 +195,7 @@ where
         self.search(|_| alive.load(Ordering::SeqCst)).await
     }
 
-    pub async fn search_visits(&mut self, visits: usize) -> Result<usize, Error> {
+    pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
         let mut searches = 0;
 
         self.search(|initial_visits| {
@@ -207,23 +207,23 @@ where
         }).await
     }
 
-    pub async fn play(&mut self, alive: &mut bool) -> Result<usize, Error> {
+    pub async fn play(&mut self, alive: &mut bool) -> Result<usize> {
         self.search(|_| *alive).await
     }
 
-    pub async fn select_action(&mut self) -> Result<A, Error> {
+    pub async fn select_action(&mut self) -> Result<A> {
         self._select_action(true).await
     }
 
-    pub async fn select_action_no_temp(&mut self) -> Result<A, Error> {
+    pub async fn select_action_no_temp(&mut self) -> Result<A> {
         self._select_action(false).await
     }
 
-    pub async fn advance_to_action(&mut self, action: A) -> Result<(), Error> {
+    pub async fn advance_to_action(&mut self, action: A) -> Result<()> {
         self.advance_to_action_clearable(action, true).await
     }
 
-    pub async fn advance_to_action_retain(&mut self, action: A) -> Result<(), Error> {
+    pub async fn advance_to_action_retain(&mut self, action: A) -> Result<()> {
         self.advance_to_action_clearable(action, false).await
     }
 
@@ -238,8 +238,8 @@ where
         }
     }
 
-    pub async fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>, Error> {
-        let root_index = self.root.ok_or(format_err!("No root node found!"))?;
+    pub async fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>> {
+        let root_index = self.root.ok_or(anyhow!("No root node found!"))?;
         let root = &self.arena.borrow()[root_index];
 
         Ok(NodeMetrics {
@@ -252,15 +252,15 @@ where
         })
     }
 
-    pub async fn get_root_node_details(&self) -> Result<NodeDetails<A>, Error> {
-        let root_index = self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+    pub async fn get_root_node_details(&self) -> Result<NodeDetails<A>> {
+        let root_index = self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
         self.get_node_details(*root_index, true).await
     }
 
-    pub async fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>, Error> {
+    pub async fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
         let arena_borrow = &self.arena.borrow();
 
-        let mut node_index = *self.root.as_ref().ok_or(format_err!("No root node found!"))?;
+        let mut node_index = *self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
         let mut nodes = vec!();
 
         loop {
@@ -285,7 +285,7 @@ where
         Ok(nodes)
     }
 
-    pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize, Error> {
+    pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
         let root_node_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
@@ -325,7 +325,7 @@ where
         Ok(max_depth)
     }
 
-    async fn _select_action(&mut self, use_temp: bool) -> Result<A, Error> {
+    async fn _select_action(&mut self, use_temp: bool) -> Result<A> {
         if let Some(root_node_index) = &self.root {
             let arena_borrow = self.arena.borrow();
             let root_node = &arena_borrow[*root_node_index];
@@ -340,11 +340,11 @@ where
                 let arena_borrow = self.arena.borrow();
                 let root_node = &arena_borrow[*root_node_index];
                 let game_state = &root_node.game_state;
-                return Err(format_err!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
+                return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
             }
 
             let best_action = if temp == 0.0 || !use_temp {
-                let (best_action, _) = child_node_details.first().ok_or_else(|| format_err!("No available actions"))?;
+                let (best_action, _) = child_node_details.first().ok_or_else(|| anyhow!("No available actions"))?;
                 best_action
             } else {
                 let candidates: Vec<_> = child_node_details.iter().map(|(a, puct)| (a, puct.Nsa)).collect();
@@ -355,10 +355,10 @@ where
             return Ok(best_action.clone());
         }
 
-        return Err(format_err!("Root node does not exist. Run search first."));
+        return Err(anyhow!("Root node does not exist. Run search first."));
     }
 
-    async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>, Error> {
+    async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
         let arena_borrow = &self.arena.borrow();
         let root = &arena_borrow[node_index];
 
@@ -382,13 +382,13 @@ where
         })
     }
 
-    async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<(), Error> {
+    async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<()> {
         let root_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
 
         let arena_borrow_mut = &mut *self.arena.borrow_mut();
-        let root_node = arena_borrow_mut.remove(root_index).ok_or(format_err!("Root node should exist in arena."))?;
+        let root_node = arena_borrow_mut.remove(root_index).ok_or(anyhow!("Root node should exist in arena."))?;
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
         if let Err(err) = split_nodes {
@@ -445,14 +445,14 @@ where
         }
     }
 
-    fn split_node_children_by_action<'b>(current_root: &'b MCTSNode<S,A,V>, action: &A) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>), Error> {
-        let matching_action = current_root.get_child_of_action(action).ok_or(format_err!("No matching Action"))?;
+    fn split_node_children_by_action<'b>(current_root: &'b MCTSNode<S,A,V>, action: &A) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>)> {
+        let matching_action = current_root.get_child_of_action(action).ok_or(anyhow!("No matching Action"))?;
         let other_actions: Vec<_> = current_root.children.iter().filter(|n| n.action != *action).map(|n| &n.state).collect();
 
         Ok((&matching_action.state, other_actions))
     }
 
-    fn select_path(node_index: Index, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, options: &MCTSOptions<S,C,T>) -> Result<usize, Error> {
+    fn select_path(node_index: Index, arena: &Arena<MCTSNode<S,A,V>>, is_root: bool, options: &MCTSOptions<S,C,T>) -> Result<usize> {
         let node = &arena[node_index];
         let children = &node.children;
         let fpu = if is_root { options.fpu_root } else { options.fpu };
@@ -486,7 +486,7 @@ where
         Ok(best_child_index)
     }
 
-    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize, Error> {
+    fn select_action_using_temperature(action_visits: &[(&A, usize)], temp: f32, temperature_visit_offset: f32) -> Result<usize> {
         let normalized_visits = action_visits.iter().map(|(_, visits)| (*visits as f32 + temperature_visit_offset).max(0.0).powf(1.0 / temp));
 
         let weighted_index = WeightedIndex::new(normalized_visits);
@@ -669,7 +669,7 @@ async fn recurse_path_and_expand<'a,S,A,E,M,C,T,V>(
     game_engine: &E,
     analyzer: &M,
     options: &MCTSOptions<S,C,T>
-) -> Result<usize, Error>
+) -> Result<usize>
 where
     S: GameState,
     A: Clone + Eq + Debug,
