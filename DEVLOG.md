@@ -63,10 +63,14 @@ Run-8
 Continuation of Run-7 model 550.
 
 01-##-20: model 1 -
+    Raised moving window size from 300k to 500k
+    Increased sample rate from 0.0384 to 0.0625
     Increased train_batch_size from 512 to 1024.
-    Add gating into pipeline.
+    Add gating into pipeline at 50%.
+    Initiated Learning Rate at 0.15
+    Introduced Policy Softmax Temp at 1.2
     Add symmetries into generated board position training data.
-    Add moves left head.
+    Added moves left head w/ 0.95 threshold 10.0 scale and 0.05 factor.
     Changed cpuct_init from 2.5 to 1.25.
     Fix issue where positions were sampled during taining on fast_visits.
     Upgrade net size from 64x5 to 96x8.

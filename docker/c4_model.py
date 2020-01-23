@@ -50,7 +50,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
           callbacks=callbacks)
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    model = tf.keras.models.load_model(model_path)
+    model = tf.keras.models.load_model(model_path, custom_objects={'categorical_crossentropy_from_logits': categorical_crossentropy_from_logits})
     model_weights = model.get_weights()
 
     dtype='float16'
