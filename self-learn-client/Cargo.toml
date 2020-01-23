@@ -16,7 +16,7 @@ arimaa = { path = "../arimaa" }
 connect4 = { path = "../connect4" }
 quoridor = { path = "../quoridor" }
 
-failure="0.1"
+anyhow="1.0"
 log = "0.4"
 env_logger = "0.7"
 serde_json="1.0"

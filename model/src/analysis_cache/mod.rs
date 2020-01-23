@@ -12,7 +12,7 @@ use futures::future::FutureExt;
 use std::marker::PhantomData;
 use std::future::Future;
 
-use failure::Error;
+use anyhow::Result;
 
 pub trait ShouldCache {
     type State;
@@ -69,7 +69,7 @@ where
         self.model.get_model_info()
     }
 
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error> {
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<()> {
         M::train(&self.model, target_model_info, sample_metrics, options)
     }
 

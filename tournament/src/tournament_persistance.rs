@@ -3,7 +3,7 @@ use serde::{Serialize};
 use std::fs;
 use std::io::Write;
 use std::fs::{File,OpenOptions};
-use failure::Error;
+use anyhow::Result;
 
 use model::model_info::ModelInfo;
 use super::tournament::{GameResult};
@@ -16,7 +16,7 @@ pub struct TournamentPersistance
 
 impl TournamentPersistance
 {
-    pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self> {
         let tournament_dir = run_directory.join("tournament");
 
         let game_file_path = get_game_file_path(&tournament_dir, model_infos);
@@ -40,7 +40,7 @@ impl TournamentPersistance
         })
     }
 
-    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<(), Error> {
+    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<()> {
         let serialized = serde_json::to_string(game_result)?;
 
         writeln!(self.game_file, "{}", serialized)?;
@@ -48,7 +48,7 @@ impl TournamentPersistance
         Ok(())
     }
 
-    pub fn write_model_scores(&mut self, model_scores: &[(ModelInfo, f32)]) -> Result<(), Error> {
+    pub fn write_model_scores(&mut self, model_scores: &[(ModelInfo, f32)]) -> Result<()> {
         let mut model_scores = model_scores.to_owned();
         model_scores.sort_by(|(_,s1), (_,s2)| s1.partial_cmp(s2).unwrap());
 

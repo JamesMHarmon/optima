@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use futures::stream::{FuturesUnordered,StreamExt};
-use failure::{Error};
+use anyhow::Result;
 use log::info;
 
 use model::analytics::GameAnalyzer;
@@ -83,7 +83,7 @@ where
         run_name: String,
         model_factory: &F,
         options: &O
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         M: Model<Action=A,State=S,Analyzer=T>,
         T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
@@ -103,7 +103,7 @@ where
         run_directory: &'a Path,
         self_learn_options: &'a SelfLearnOptions,
         self_evaluate_options: &'a SelfEvaluateOptions,
-    ) -> Result<Self, Error>
+    ) -> Result<Self>
     {
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
@@ -116,7 +116,7 @@ where
         })
     }
 
-    pub fn learn<M,T,F>(&mut self, model_factory: &F) -> Result<(), Error>
+    pub fn learn<M,T,F>(&mut self, model_factory: &F) -> Result<()>
     where
         M: Model<Action=A,State=S,Analyzer=T,Value=V>,
         T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
@@ -183,7 +183,7 @@ where
         num_games_to_play: usize,
         self_play_persistance: &mut SelfPlayPersistance,
         options: &SelfLearnOptions,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         M: Model<State=S,Action=A,Analyzer=T,Value=V>,
         T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
@@ -243,7 +243,7 @@ where
                 });
             }
 
-            s.spawn(move |_| -> Result<(), Error> {
+            s.spawn(move |_| -> Result<()> {
                 let mut num_of_games_played: usize = 0;
 
                 while let Ok(self_play_metric) = game_results_rx.recv() {
@@ -279,7 +279,7 @@ where
         game_engine: &E,
         analyzer: &T,
         self_play_options: &SelfPlayOptions
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
     {

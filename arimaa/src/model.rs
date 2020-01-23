@@ -13,7 +13,7 @@ use super::engine::GameState;
 use super::place_model::{ModelFactory as PlaceModelFactory, Mapper as PlaceMapper};
 use super::play_model::{ModelFactory as PlayModelFactory, Mapper as PlayMapper};
 
-use failure::Error;
+use anyhow::Result;
 
 pub struct ModelFactory {
     play_model_factory: PlayModelFactory,
@@ -56,7 +56,7 @@ impl model::model::ModelFactory for ModelFactory {
         }
     }
 
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
         Ok(get_latest_model_info(model_info)?)
     }
 }
@@ -76,7 +76,7 @@ impl model::model::Model for Model {
         self.play_model.get_model_info()
     }
     
-    fn train<I>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error>
+    fn train<I>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<()>
     where
         I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>
     {

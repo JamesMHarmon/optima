@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::fs::{File,OpenOptions};
 use itertools::Itertools;
-use failure::Error;
+use anyhow::Result;
 
 use model::model_info::ModelInfo;
 use super::self_evaluate::{GameResult,MatchResult};
@@ -17,7 +17,7 @@ pub struct SelfEvaluatePersistance
 
 impl SelfEvaluatePersistance
 {
-    pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self, Error> {
+    pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self> {
         let evaluations_dir = run_directory.join("evaluations");
 
         let game_file_path = get_game_file_path(
@@ -45,7 +45,7 @@ impl SelfEvaluatePersistance
         })
     }
 
-    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<(), Error> {
+    pub fn write_game<A: Serialize>(&mut self, game_result: &GameResult<A>) -> Result<()> {
         let serialized = serde_json::to_string(game_result)?;
 
         writeln!(self.game_file, "{}", serialized)?;
@@ -53,7 +53,7 @@ impl SelfEvaluatePersistance
         Ok(())
     }
 
-    pub fn write_match(&mut self, match_result: &MatchResult) -> Result<(), Error> {
+    pub fn write_match(&mut self, match_result: &MatchResult) -> Result<()> {
         let serialized = serde_json::to_string(match_result)?;
 
         writeln!(self.match_file, "{}", serialized)?;

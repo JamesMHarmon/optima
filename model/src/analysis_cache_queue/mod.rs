@@ -11,7 +11,7 @@ use super::model_info::ModelInfo;
 use futures::future::FutureExt;
 use std::future::Future;
 
-use failure::Error;
+use anyhow::Result;
 
 const CACHE_SIZE: usize = 5_000_000;
 const CACHE_BUFFER: usize = 5_000;
@@ -58,7 +58,7 @@ where
         self.model.get_model_info()
     }
 
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<(), Error> {
+    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<()> {
         M::train(&self.model, target_model_info, sample_metrics, options)
     }
 

@@ -14,7 +14,7 @@ use super::constants::{PLACE_INPUT_H as INPUT_H,PLACE_INPUT_W as INPUT_W,PLACE_I
 use super::engine::Engine;
 use super::engine::GameState;
 
-use failure::Error;
+use anyhow::Result;
 
 /*
     Layers:
@@ -188,7 +188,7 @@ impl model::model::ModelFactory for ModelFactory {
         )
     }
 
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo, Error> {
+    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
         Ok(get_latest_model_info(model_info)?)
     }
 }
