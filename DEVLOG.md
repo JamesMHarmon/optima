@@ -63,8 +63,6 @@ Run-8
 Continuation of Run-7 model 550.
 
 01-##-20: model 1 -
-    Raised moving window size from 300k to 500k
-    Increased sample rate from 0.0384 to 0.0625
     Increased train_batch_size from 512 to 1024.
     Add gating into pipeline at 50%.
     Initiated Learning Rate at 0.15

@@ -92,7 +92,8 @@ where
             epochs: options.epochs,
             learning_rate: options.learning_rate,
             policy_loss_weight: options.policy_loss_weight,
-            value_loss_weight: options.value_loss_weight
+            value_loss_weight: options.value_loss_weight,
+            moves_left_loss_weight: options.moves_left_loss_weight
         }
     )?;
 

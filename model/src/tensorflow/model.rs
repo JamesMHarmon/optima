@@ -451,6 +451,7 @@ where
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
         -e VALUE_LOSS_WEIGHT={value_loss_weight} \
+        -e MOVES_LEFT_LOSS_WEIGHT={moves_left_loss_weight} \
         -e INPUT_H={input_h} \
         -e INPUT_W={input_w} \
         -e INPUT_C={input_c} \
@@ -458,6 +459,7 @@ where
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
@@ -471,6 +473,7 @@ where
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight,
+        moves_left_loss_weight = options.moves_left_loss_weight,
         input_h = model_options.channel_height,
         input_w = model_options.channel_width,
         input_c = model_options.channels,
@@ -520,6 +523,7 @@ fn create(
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/create:latest",
         game_name = game_name,
         run_name = run_name,
@@ -570,6 +574,7 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
 fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
