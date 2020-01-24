@@ -2,8 +2,8 @@
 # https://towardsdatascience.com/understanding-residual-networks-9add4b664b03
 import numpy as np
 import keras
-from keras.models import Sequential, Model
-from keras.layers import Reshape, Dense, Conv2D, Flatten, ReLU, BatchNormalization, Input, merge, GlobalAveragePooling2D, multiply
+from keras.models import Model
+from keras.layers import Reshape, Dense, Conv2D, Flatten, ReLU, BatchNormalization, Input, GlobalAveragePooling2D, multiply
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
@@ -76,9 +76,14 @@ def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
 
     value_head = ValueHead(net, num_filters)
     policy_head = PolicyHead(net, num_filters, output_size)
-    moves_left_head = MovesLeftHead(net, num_filters, moves_left_size)
 
-    model = Model(inputs=inputs,outputs=[value_head, policy_head, moves_left_head])
+    if moves_left_size > 0:
+        moves_left_head = MovesLeftHead(net, num_filters, moves_left_size)
+        outputs = [value_head, policy_head, moves_left_head]
+    else:
+        outputs = [value_head, policy_head]
+
+    model = Model(inputs=inputs,outputs=outputs)
 
     return model
 

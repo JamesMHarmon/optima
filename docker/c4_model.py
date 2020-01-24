@@ -23,6 +23,9 @@ def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     
     return model
 
+def load(model_path):
+    return tf.keras.models.load_model(model_path, custom_objects={'categorical_crossentropy_from_logits': categorical_crossentropy_from_logits})
+
 def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks):
     X_train, X_test, yv_train, yv_test, yp_train, yp_test, ym_train, ym_test = train_test_split(
         X,
@@ -31,10 +34,16 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         ym,
         train_size=train_ratio)
 
-    y_trains = { "value_head": yv_train, "policy_head": yp_train, "moves_left_head": ym_train }
-    y_tests = { "value_head": yv_test, "policy_head": yp_test, "moves_left_head": ym_test }
-    loss_funcs = { "value_head": "mean_squared_error", "policy_head": categorical_crossentropy_from_logits, "moves_left_head": "categorical_crossentropy" }
-    loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "moves_left_head": moves_left_loss_weight }
+    y_trains = { "value_head": yv_train, "policy_head": yp_train }
+    y_tests = { "value_head": yv_test, "policy_head": yp_test }
+    loss_funcs = { "value_head": "mean_squared_error", "policy_head": categorical_crossentropy_from_logits }
+    loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight }
+
+    if any("moves_left" in output.name for output in model.outputs):
+        y_trains.moves_left_head = ym_train
+        y_tests.moves_left_head = ym_test
+        loss_funcs.moves_left_head = "categorical_crossentropy"
+        loss_weights.moves_left_head = moves_left_loss_weight
 
     model.compile(
         optimizer=SGD(lr=learning_rate, momentum=0.9),
@@ -50,7 +59,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
           callbacks=callbacks)
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    model = tf.keras.models.load_model(model_path, custom_objects={'categorical_crossentropy_from_logits': categorical_crossentropy_from_logits})
+    model = load(model_path)
     model_weights = model.get_weights()
 
     dtype='float16'

@@ -34,7 +34,7 @@ if __name__== "__main__":
 
     print(data_paths)
     c4.clear()
-    model = c4.load_model(source_model_path)
+    model = c4.load(source_model_path)
     tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
 
     for (i, path) in enumerate(data_paths):
