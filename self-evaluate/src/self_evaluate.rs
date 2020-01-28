@@ -109,6 +109,8 @@ impl SelfEvaluate
                 }));
             }
 
+            drop(game_results_tx);
+
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
             let handle = s.spawn(move |_| -> Result<MatchResult> {
                 let mut num_of_games_played: usize = 0;
