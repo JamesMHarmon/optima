@@ -451,6 +451,7 @@ fn get_default_options() -> Result<Options> {
         learning_rate: 0.1,
         policy_loss_weight: 1.0,
         value_loss_weight: 0.5,
+        moves_left_loss_weight: 0.1,
         temperature: 1.2,
         temperature_max_actions: 30,
         temperature_post_max_actions: 0.45,
