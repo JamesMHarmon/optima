@@ -124,6 +124,7 @@ enum MCTSNodeState {
 struct MCTSChildNode<A> {
     action: A,
     W: f32,
+    M: f32,
     visits: usize,
     policy_score: f32,
     state: MCTSNodeState
@@ -437,6 +438,7 @@ where
         for child in node.children.iter_mut() {
             child.visits = 0;
             child.W = 0.0;
+            child.M = 0.0;
         }
 
         let child_indexes: Vec<_> = node.children.iter().filter_map(|c| c.state.get_index()).collect();
@@ -460,20 +462,19 @@ where
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
         let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
-        let moves_left_baseline = get_moves_left_baseline(children, arena, options.moves_left_threshold);
+        let game_length_baseline = &get_game_length_baseline(children, options.moves_left_threshold);
 
         let mut best_child_index = 0;
         let mut best_puct = std::f32::MIN;
 
         for (i, child) in children.iter().enumerate() {
-            let node = child.state.get_index().map(|i| &arena[i]);
             let W = child.W;
             let Nsa = child.visits;
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
-            let Msa = Self::get_Msa(node, moves_left_baseline, options);
+            let Msa = Self::get_Msa(child, game_length_baseline, options);
 
             let PUCT = Msa + logitQ + Usa;
 
@@ -511,7 +512,7 @@ where
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
         let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
-        let moves_left_baseline = get_moves_left_baseline(&children, arena, options.moves_left_threshold);
+        let game_length_baseline = &get_game_length_baseline(&children, options.moves_left_threshold);
         
         let mut pucts = Vec::with_capacity(children.len());
 
@@ -524,7 +525,7 @@ where
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let moves_left = node.map_or(0.0, |n| n.moves_left_score);
-            let Msa = Self::get_Msa(node, moves_left_baseline, options);
+            let Msa = Self::get_Msa(child, game_length_baseline, options);
 
             let PUCT = logitQ + Usa;
             pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, moves_left, PUCT });
@@ -583,15 +584,29 @@ where
         }
     }
 
-    fn get_Msa(node: Option<&MCTSNode<S,A,V>>, moves_left_baseline: Option<f32>, options: &MCTSOptions<S,C,T>) -> f32
+    fn get_Msa(child: &MCTSChildNode<A>, game_length_baseline: &GameLengthBaseline, options: &MCTSOptions<S,C,T>) -> f32
     {
-        moves_left_baseline.and_then(|moves_left_baseline| node.map(|node| {
-            let moves_left_scale = options.moves_left_scale;
-            let moves_left_clamped = (moves_left_baseline - node.moves_left_score).min(moves_left_scale).max(-moves_left_scale);
-            let moves_left_scaled = moves_left_clamped / moves_left_scale;
-            moves_left_scaled * options.moves_left_factor
-        }))
-        .unwrap_or(0.0)
+        if child.visits == 0 {
+            return 0.0;
+        }
+
+        if let GameLengthBaseline::None = game_length_baseline {
+            return 0.0;
+        }
+
+        let (direction, game_length_baseline) = if let GameLengthBaseline::MinimizeGameLength(game_length_baseline) = game_length_baseline {
+            (1.0f32, game_length_baseline)
+        } else if let GameLengthBaseline::MaximizeGameLength(game_length_baseline) = game_length_baseline {
+            (-1.0, game_length_baseline)
+        } else {
+            panic!();
+        };
+
+        let expected_game_length = child.M / child.visits as f32;
+        let moves_left_scale = options.moves_left_scale;
+        let moves_left_clamped = (game_length_baseline - expected_game_length).min(moves_left_scale).max(-moves_left_scale);
+        let moves_left_scaled = moves_left_clamped / moves_left_scale;
+        moves_left_scaled * options.moves_left_factor * direction
     }
 }
 
@@ -625,18 +640,31 @@ fn logit(val: f32) -> f32 {
     }
 }
 
+enum GameLengthBaseline {
+    MinimizeGameLength(f32),
+    MaximizeGameLength(f32),
+    None,
+}
+
 #[allow(non_snake_case)]
-fn get_moves_left_baseline<S,A,V>(nodes: &[MCTSChildNode<A>], arena: &Arena<MCTSNode<S,A,V>>, moves_left_threshold: f32) -> Option<f32> {
+fn get_game_length_baseline<A>(nodes: &[MCTSChildNode<A>], moves_left_threshold: f32) -> GameLengthBaseline {
+    if moves_left_threshold >= 1.0 {
+        return GameLengthBaseline::None;
+    }
+
     nodes.iter()
         .max_by_key(|n| n.visits)
-        .and_then(|best_child_node| best_child_node.state.get_index().map(|index| (best_child_node, index)))
-        .and_then(|(best_child_node, best_node_index)| {
-            let best_node = &arena[best_node_index];
-            let Qsa = best_child_node.W / best_child_node.visits as f32;
+        .filter(|n| n.visits > 0)
+        .map_or(GameLengthBaseline::None, |n| {
+            let Qsa = n.W / n.visits as f32;
+            let expected_game_length = n.M / n.visits as f32;
+
             if Qsa >= moves_left_threshold {
-                Some(best_node.moves_left_score)
+                GameLengthBaseline::MinimizeGameLength(expected_game_length)
+            } else if Qsa <= (1.0 - moves_left_threshold) {
+                GameLengthBaseline::MaximizeGameLength(expected_game_length)
             } else {
-                None
+                GameLengthBaseline::None
             }
         })
 }
@@ -653,6 +681,7 @@ impl<S,A,V> MCTSNode<S,A,V> {
                 MCTSChildNode {
                     visits: 0,
                     W: 0.0,
+                    M: 0.0,
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
                     state: MCTSNodeState::Unexpanded
@@ -660,6 +689,11 @@ impl<S,A,V> MCTSNode<S,A,V> {
             }).collect()
         }
     }
+}
+
+struct NodeUpdateInfo {
+    parent_node_index: Index,
+    node_child_index: usize
 }
 
 #[allow(non_snake_case)]
@@ -680,7 +714,7 @@ where
     T: Fn(&S, usize) -> f32
 {
     let mut depth = 0;
-    let mut update_W_stack: Vec<(Index, usize)> = vec!();
+    let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec!();
     let mut latest_index = root_index;
 
     'outer: loop {
@@ -691,7 +725,7 @@ where
         // If the node is a terminal node.
         let children = &node.children;
         if children.len() == 0 {
-            update_Ws(&update_W_stack, latest_index, &mut arena_borrow_mut, game_engine);
+            update_node_values(&nodes_to_propagate_to_stack, latest_index, &mut arena_borrow_mut, game_engine);
             break 'outer;
         }
 
@@ -704,7 +738,10 @@ where
             options
         )?;
 
-        update_W_stack.push((latest_index, selected_child_node_children_index));
+        nodes_to_propagate_to_stack.push(NodeUpdateInfo {
+            parent_node_index: latest_index,
+            node_child_index: selected_child_node_children_index
+        });
 
         let selected_child_node = &mut arena_borrow_mut[latest_index].children[selected_child_node_children_index];
         let prev_visits = selected_child_node.visits;
@@ -713,7 +750,7 @@ where
         if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
             // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
             if prev_visits == 0 {
-                update_Ws(&update_W_stack, selected_child_node_index, &mut arena_borrow_mut, game_engine);
+                update_node_values(&nodes_to_propagate_to_stack, selected_child_node_index, &mut arena_borrow_mut, game_engine);
                 break 'outer;
             }
 
@@ -773,7 +810,7 @@ where
 
                 let expanded_node_index = update_child_with_expanded_node(latest_index, expanded_node, &selected_action, arena_borrow_mut);
 
-                update_Ws(&update_W_stack, expanded_node_index, arena_borrow_mut, game_engine);
+                update_node_values(&nodes_to_propagate_to_stack, expanded_node_index, arena_borrow_mut, game_engine);
 
                 expanding_lock.wake();
 
@@ -799,22 +836,28 @@ where
 }
 
 #[allow(non_snake_case)]
-fn update_Ws<S,A,V,E>(node_indexes: &[(Index, usize)], value_node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>, game_engine: &E)
+fn update_node_values<S,A,V,E>(nodes_to_update: &[NodeUpdateInfo], value_node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>, game_engine: &E)
 where
     V: Value,
     E: GameEngine<State=S,Action=A,Value=V>
 {
     let value_node = &arena[value_node_index];
     let value_score = &value_node.value_score.clone();
+    let value_node_move_num = game_engine.get_move_number(&value_node.game_state);
+    let value_node_moves_left_score = value_node.moves_left_score;
+    let value_node_game_length = value_node_move_num as f32 + value_node_moves_left_score;
 
-    for (node_index, children_index) in node_indexes {
-        let node = &mut arena[*node_index];
+    for NodeUpdateInfo { parent_node_index, node_child_index } in nodes_to_update {
+        let node_to_update_parent = &mut arena[*parent_node_index];
         // Update value of W from the parent node's perspective.
         // This is because the parent chooses which child node to select, and as such will want the one with the
         // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
-        let player_to_move = game_engine.get_player_to_move(&node.game_state);
+        let player_to_move = game_engine.get_player_to_move(&node_to_update_parent.game_state);
         let score = value_score.get_value_for_player(player_to_move);
-        node.children[*children_index].W += score;
+
+        let mut node_to_update = &mut node_to_update_parent.children[*node_child_index];
+        node_to_update.W += score;
+        node_to_update.M += value_node_game_length;
     }
 }
 
