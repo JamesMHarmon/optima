@@ -167,8 +167,8 @@ where
                 }
                 
                 let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state));
-                let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).unwrap();
-                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).unwrap();
+                let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).expect("Expected predict to be successful");
+                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).expect("Expected provide_analysis to be successful");
 
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if thread_num == 0 && elapsed_mills >= 5_000 {
@@ -258,7 +258,7 @@ impl Predictor {
             model_num = model_info.get_model_num(),
         );
         
-        let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
+        let exported_model_path = std::env::current_dir().expect("Expected to be able to open the model directory").join(exported_model_path);
         
         info!("{:?}", exported_model_path);
         
@@ -267,11 +267,11 @@ impl Predictor {
             &["serve"],
             &mut graph,
             exported_model_path
-        ).unwrap();
+        ).expect("Expected to be able to load model");
         
-        let op_input = graph.operation_by_name_required("input_1").unwrap();
-        let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
-        let op_policy_head = graph.operation_by_name_required("policy_head/BiasAdd").unwrap();
+        let op_input = graph.operation_by_name_required("input_1").expect("Expected to find input operation");
+        let op_value_head = graph.operation_by_name_required("value_head/Tanh").expect("Expected to find value_head operation");
+        let op_policy_head = graph.operation_by_name_required("policy_head/BiasAdd").expect("Expected to find policy_head operation");
         let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
         
         Self {
@@ -301,11 +301,11 @@ impl Predictor {
         let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
         let moves_left_head_fetch_token = session.op_moves_left_head.as_ref().map(|op| output_step.request_fetch(op, 0));
 
-        session.session.run(&mut output_step).unwrap();
+        session.session.run(&mut output_step).expect("Expected to be able to run the model session");
 
-        let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
-        let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
-        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|moves_left_head_fetch_token| output_step.fetch(moves_left_head_fetch_token).unwrap());
+        let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).expect("Expected to be able to load value_head output");
+        let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).expect("Expected to be able to load policy_head output");
+        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|moves_left_head_fetch_token| output_step.fetch(moves_left_head_fetch_token).expect("Expected to be able to load moves_left_head output"));
 
         Ok(AnalysisResults {
             policy_head_output,
@@ -685,7 +685,7 @@ where
 
             let analysis = GameStateAnalysis {
                 policy_scores: valid_actions_with_policies,
-                value_score: mapper.map_value_output_to_value(&game_state, value_head_iter.next().unwrap()),
+                value_score: mapper.map_value_output_to_value(&game_state, value_head_iter.next().expect("Expected value score to exist")),
                 moves_left: moves_left_head_iter.as_mut().map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size))).unwrap_or(0.0)
             };
 
@@ -782,7 +782,7 @@ where
         if !self.has_requested {
             let self_mut = self.get_mut();
             self_mut.has_requested = true;
-            let game_state = self_mut.game_state.take().unwrap();
+            let game_state = self_mut.game_state.take().expect("Expected game_state to exist");
             self_mut.batching_model.request(self_mut.id, game_state, cx.waker())
         } else {
             (*self).batching_model.poll(self.id)
