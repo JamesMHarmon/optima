@@ -48,7 +48,7 @@ if __name__== "__main__":
         start_index += yv_size
         ym = dataset[:,start_index:]
 
-        callbacks = [tensor_board] if i == len(data_paths) - 1 else []
+        callbacks = [tensor_board] if i == 0 else []
 
         c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
 

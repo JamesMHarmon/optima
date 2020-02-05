@@ -425,16 +425,12 @@ where
         handle.join().map_err(|_| anyhow!("Thread failed to write training data"))?;
     }
 
-    let mut train_data_paths = train_data_file_names.iter().map(|file_name| format!(
+    let train_data_paths = train_data_file_names.iter().map(|file_name| format!(
         "/{game_name}_runs/{run_name}/{file_name}",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
         file_name = file_name
-    )).collect::<Vec<_>>();
-
-    // Reverse the data paths so that the latest ones are the last in the list.
-    // We want the training to happen in reverse order so that the last data trained is the most recent. AKA the most recent data has a higher weighting. 
-    train_data_paths.reverse();
+    ));
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
@@ -469,7 +465,7 @@ where
         train_batch_size = options.train_batch_size,
         epochs = (source_model_info.get_model_num() - 1) + options.epochs,
         initial_epoch = (source_model_info.get_model_num() - 1),
-        train_data_paths = train_data_paths.iter().map(|p| format!("\"{}\"", p)).join(","),
+        train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight,

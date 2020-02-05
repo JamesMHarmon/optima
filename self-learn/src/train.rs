@@ -1,7 +1,7 @@
 use model::model_info::ModelInfo;
 use model::position_metrics::PositionMetrics;
 use model::model::TrainOptions;
-use rand::seq::IteratorRandom;
+use rand::seq::{IteratorRandom,SliceRandom};
 
 use std::fmt::Debug;
 use serde::Serialize;
@@ -45,7 +45,7 @@ where
     let num_games = std::cmp::min(num_max_moving_window_percentage_games, options.moving_window_size);
     let position_sample_percentage = options.position_sample_percentage;
     let mut rng = rand::thread_rng();
-
+    
     let positions_metrics = metric_iter
         .take(num_games)
         .flat_map(|m| {
@@ -83,9 +83,15 @@ where
             })
         });
 
+    let mut positions_metrics = positions_metrics.collect::<Vec<PositionMetrics<S,A,V>>>();
+
+    info!("Shuffling {} positions", positions_metrics.len());
+    positions_metrics.shuffle(&mut rng);
+    info!("Shuffling completed");
+
     model.train(
         &new_model_info,
-        positions_metrics,
+        positions_metrics.into_iter(),
         &TrainOptions {
             train_ratio: options.train_ratio,
             train_batch_size: options.train_batch_size,
