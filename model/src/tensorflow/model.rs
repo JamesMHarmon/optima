@@ -15,6 +15,7 @@ use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
 use log::info;
+use rand::seq::SliceRandom;
 
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
