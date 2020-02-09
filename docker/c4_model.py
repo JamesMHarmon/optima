@@ -32,7 +32,8 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         yv,
         yp,
         ym,
-        train_size=train_ratio)
+        train_size=train_ratio,
+        shuffle=False)
 
     y_trains = { "value_head": yv_train, "policy_head": yp_train }
     y_tests = { "value_head": yv_test, "policy_head": yp_test }

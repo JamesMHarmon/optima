@@ -401,10 +401,13 @@ where
         let mapper = mapper.clone();
 
         handles.push(std::thread::spawn(move || {
+            let rng = &mut rand::thread_rng();
             let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
             for metric in sample_metrics_chunk {
-                for metric in mapper.get_symmetries(metric) {
+                let metric_symmetires = mapper.get_symmetries(metric);
+                let metric = metric_symmetires.choose(rng).expect("Expected at least one metric to return from symmetries.");
+
                     for record in 
                         mapper.game_state_to_input(&metric.game_state).into_iter().chain(
                         mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
@@ -415,7 +418,6 @@ where
                         wtr.push(&record).unwrap();
                     }
                 }
-            }
 
             wtr.close().unwrap();
         }));
