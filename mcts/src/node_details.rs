@@ -51,7 +51,12 @@ impl Display for PUCT {
 
 impl Ord for PUCT {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct)).unwrap()
+        match (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct)) {
+            Some(ordering) => ordering,
+            None => {
+                panic!("Could not compare: {:?} to {:?}", (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct), (other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct));
+            }
+        }
     }
 }
 

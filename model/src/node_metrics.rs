@@ -19,9 +19,12 @@ where
     where
         S: Serializer,
     {
+        let metrics = &self.children.iter().map(|(a, _, v)| (a, v)).collect::<Vec<_>>();
+
         let mut tup = serializer.serialize_tuple(2)?;
         tup.serialize_element(&self.visits)?;
-        tup.serialize_element(&self.children)?;
+        tup.serialize_element(&metrics)?;
+
         tup.end()
     }
 }
@@ -52,9 +55,12 @@ where
     where
         S: SeqAccess<'de>,
     {
+        let visits = seq.next_element()?.unwrap();
+        let metrics: Vec<(A,usize)> = seq.next_element()?.unwrap();
+
         Ok(NodeMetrics {
-            visits: seq.next_element()?.unwrap(),
-            children: seq.next_element()?.unwrap()
+            visits,
+            children: metrics.into_iter().map(|(a, v)| (a, 0.0, v)).collect()
         })
     }
 }

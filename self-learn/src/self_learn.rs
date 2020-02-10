@@ -51,6 +51,7 @@ pub struct SelfLearnOptions {
     pub learning_rate: f32,
     pub policy_loss_weight: f32,
     pub value_loss_weight: f32,
+    pub moves_left_loss_weight: f32,
     pub temperature: f32,
     pub temperature_max_actions: usize,
     pub temperature_post_max_actions: f32,

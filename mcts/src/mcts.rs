@@ -399,7 +399,7 @@ where
             return Err(err);
         }
 
-        let (chosen_node, other_nodes) = split_nodes.unwrap();
+        let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
             Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
@@ -425,7 +425,7 @@ where
     }
 
     fn remove_nodes_from_arena(node_index: Index, arena: &mut Arena<MCTSNode<S,A,V>>) {
-        let child_node = arena.remove(node_index).unwrap();
+        let child_node = arena.remove(node_index).expect("Expected node in arena to exist.");
 
         for child_node_index in child_node.children.into_iter().filter_map(|n| n.state.get_index()) {
             Self::remove_nodes_from_arena(child_node_index, arena);
@@ -765,7 +765,7 @@ where
         'inner: loop {
             let arena_borrow = arena.borrow();
             let prior_node = &arena_borrow[latest_index];
-            let selected_child_node = prior_node.get_child_of_action(&selected_action).unwrap();
+            let selected_child_node = prior_node.get_child_of_action(&selected_action).expect("Expected child to exist.");
             let selected_child_node_state = &selected_child_node.state;
             if let MCTSNodeState::Expanded(selected_child_node_index) = selected_child_node.state {
                 latest_index = selected_child_node_index;
@@ -786,7 +786,7 @@ where
             drop(arena_borrow);
             let mut arena_borrow_mut = arena.borrow_mut();
             let prior_node = &mut arena_borrow_mut[latest_index];
-            let selected_child_node = prior_node.get_child_of_action_mut(&selected_action).unwrap();
+            let selected_child_node = prior_node.get_child_of_action_mut(&selected_action).expect("Expected child to exist.");
             let selected_child_node_state = &mut selected_child_node.state;
 
             // Double check that the node has not changed now that the lock has been reacquired as a write.
@@ -828,7 +828,7 @@ where
 {
     let expanded_node_index = arena.insert(expanded_node);
     let prior_node = &mut arena[parent_node];
-    let selected_child_node = prior_node.get_child_of_action_mut(action).unwrap();
+    let selected_child_node = prior_node.get_child_of_action_mut(action).expect("Expected child to exist.");
     let selected_child_node_state = &mut selected_child_node.state;
     std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(expanded_node_index));
 

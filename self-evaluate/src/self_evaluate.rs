@@ -6,9 +6,9 @@ use std::iter::{repeat,repeat_with};
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
-use anyhow::{anyhow,Result};
+use anyhow::{anyhow,Context,Result};
 use permutohedron::{Heap as Permute};
-use log::{info};
+use log::{info,error};
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -109,6 +109,8 @@ impl SelfEvaluate
                 }));
             }
 
+            drop(game_results_tx);
+
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
             let handle = s.spawn(move |_| -> Result<MatchResult> {
                 let mut num_of_games_played: usize = 0;
@@ -155,15 +157,15 @@ impl SelfEvaluate
             });
 
             for handle in handles {
-                handle.join()?.map_err(|_| anyhow!("Error in self_evaluate scope")).unwrap();
+                handle.join()?.with_context(|| "Error in self_evaluate scope 1").unwrap();
             }
 
             handle.join()
         });
 
         match_result
-            .and_then(|r| r).map_err(|_| anyhow!("Error in self_evaluate scope"))
-            .and_then(|r| r).map_err(|_| anyhow!("Error in self_evaluate scope"))
+            .and_then(|r| r).map_err(|e| { error!("{:?}", e); anyhow!("Error in self_evaluate scope 2") })
+            .and_then(|r| r).map_err(|e| { error!("{:?}", e); anyhow!("Error in self_evaluate scope 3") })
     }
 
     async fn play_games<S, A, E, T>(

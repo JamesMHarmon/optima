@@ -15,6 +15,7 @@ use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
 use half::f16;
 use log::info;
+use rand::seq::SliceRandom;
 
 use common::incrementing_map::IncrementingMap;
 use engine::game_state::GameState;
@@ -167,8 +168,8 @@ where
                 }
                 
                 let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state));
-                let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).unwrap();
-                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).unwrap();
+                let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).expect("Expected predict to be successful");
+                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).expect("Expected provide_analysis to be successful");
 
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if thread_num == 0 && elapsed_mills >= 5_000 {
@@ -258,7 +259,7 @@ impl Predictor {
             model_num = model_info.get_model_num(),
         );
         
-        let exported_model_path = std::env::current_dir().unwrap().join(exported_model_path);
+        let exported_model_path = std::env::current_dir().expect("Expected to be able to open the model directory").join(exported_model_path);
         
         info!("{:?}", exported_model_path);
         
@@ -267,11 +268,11 @@ impl Predictor {
             &["serve"],
             &mut graph,
             exported_model_path
-        ).unwrap();
+        ).expect("Expected to be able to load model");
         
-        let op_input = graph.operation_by_name_required("input_1").unwrap();
-        let op_value_head = graph.operation_by_name_required("value_head/Tanh").unwrap();
-        let op_policy_head = graph.operation_by_name_required("policy_head/BiasAdd").unwrap();
+        let op_input = graph.operation_by_name_required("input_1").expect("Expected to find input operation");
+        let op_value_head = graph.operation_by_name_required("value_head/Tanh").expect("Expected to find value_head operation");
+        let op_policy_head = graph.operation_by_name_required("policy_head/BiasAdd").expect("Expected to find policy_head operation");
         let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
         
         Self {
@@ -301,11 +302,11 @@ impl Predictor {
         let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
         let moves_left_head_fetch_token = session.op_moves_left_head.as_ref().map(|op| output_step.request_fetch(op, 0));
 
-        session.session.run(&mut output_step).unwrap();
+        session.session.run(&mut output_step).expect("Expected to be able to run the model session");
 
-        let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).unwrap();
-        let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).unwrap();
-        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|moves_left_head_fetch_token| output_step.fetch(moves_left_head_fetch_token).unwrap());
+        let value_head_output: Tensor<f16> = output_step.fetch(value_head_fetch_token).expect("Expected to be able to load value_head output");
+        let policy_head_output: Tensor<f16> = output_step.fetch(policy_head_fetch_token).expect("Expected to be able to load policy_head output");
+        let moves_left_head_output: Option<Tensor<f16>> = moves_left_head_fetch_token.map(|moves_left_head_fetch_token| output_step.fetch(moves_left_head_fetch_token).expect("Expected to be able to load moves_left_head output"));
 
         Ok(AnalysisResults {
             policy_head_output,
@@ -401,10 +402,13 @@ where
         let mapper = mapper.clone();
 
         handles.push(std::thread::spawn(move || {
+            let rng = &mut rand::thread_rng();
             let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
             for metric in sample_metrics_chunk {
-                for metric in mapper.get_symmetries(metric) {
+                let metric_symmetires = mapper.get_symmetries(metric);
+                let metric = metric_symmetires.choose(rng).expect("Expected at least one metric to return from symmetries.");
+
                     for record in 
                         mapper.game_state_to_input(&metric.game_state).into_iter().chain(
                         mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
@@ -415,7 +419,6 @@ where
                         wtr.push(&record).unwrap();
                     }
                 }
-            }
 
             wtr.close().unwrap();
         }));
@@ -425,16 +428,12 @@ where
         handle.join().map_err(|_| anyhow!("Thread failed to write training data"))?;
     }
 
-    let mut train_data_paths = train_data_file_names.iter().map(|file_name| format!(
+    let train_data_paths = train_data_file_names.iter().map(|file_name| format!(
         "/{game_name}_runs/{run_name}/{file_name}",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
         file_name = file_name
-    )).collect::<Vec<_>>();
-
-    // Reverse the data paths so that the latest ones are the last in the list.
-    // We want the training to happen in reverse order so that the last data trained is the most recent. AKA the most recent data has a higher weighting. 
-    train_data_paths.reverse();
+    ));
 
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
@@ -451,6 +450,7 @@ where
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
         -e VALUE_LOSS_WEIGHT={value_loss_weight} \
+        -e MOVES_LEFT_LOSS_WEIGHT={moves_left_loss_weight} \
         -e INPUT_H={input_h} \
         -e INPUT_W={input_w} \
         -e INPUT_C={input_c} \
@@ -458,6 +458,7 @@ where
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
@@ -467,10 +468,11 @@ where
         train_batch_size = options.train_batch_size,
         epochs = (source_model_info.get_model_num() - 1) + options.epochs,
         initial_epoch = (source_model_info.get_model_num() - 1),
-        train_data_paths = train_data_paths.iter().map(|p| format!("\"{}\"", p)).join(","),
+        train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight,
+        moves_left_loss_weight = options.moves_left_loss_weight,
         input_h = model_options.channel_height,
         input_w = model_options.channel_width,
         input_c = model_options.channels,
@@ -520,6 +522,7 @@ fn create(
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         quoridor_engine/create:latest",
         game_name = game_name,
         run_name = run_name,
@@ -570,6 +573,7 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
 fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
     let docker_cmd = format!("docker run --rm \
         --runtime=nvidia \
+        -e NVIDIA_VISIBLE_DEVICES=1 \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
@@ -680,7 +684,7 @@ where
 
             let analysis = GameStateAnalysis {
                 policy_scores: valid_actions_with_policies,
-                value_score: mapper.map_value_output_to_value(&game_state, value_head_iter.next().unwrap()),
+                value_score: mapper.map_value_output_to_value(&game_state, value_head_iter.next().expect("Expected value score to exist")),
                 moves_left: moves_left_head_iter.as_mut().map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size))).unwrap_or(0.0)
             };
 
@@ -777,7 +781,7 @@ where
         if !self.has_requested {
             let self_mut = self.get_mut();
             self_mut.has_requested = true;
-            let game_state = self_mut.game_state.take().unwrap();
+            let game_state = self_mut.game_state.take().expect("Expected game_state to exist");
             self_mut.batching_model.request(self_mut.id, game_state, cx.waker())
         } else {
             (*self).batching_model.poll(self.id)
