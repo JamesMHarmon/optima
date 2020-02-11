@@ -47,7 +47,7 @@ def ValueHead(x, filters):
 def PolicyHead(x, filters, output_size):
     # Number of filters is half that of the residual layer's filter size.
     filters = int(filters / 2)
-    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg(), use_bias=False)(x)
+    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
     out = BatchNormalization()(out)
     out = ReLU()(out)
 
@@ -57,7 +57,7 @@ def PolicyHead(x, filters, output_size):
 
 def MovesLeftHead(x, filters, moves_left_size):
     filters = int(filters / 2)
-    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg(), use_bias=False)(x)
+    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
     out = BatchNormalization()(out)
     out = ReLU()(out)
 
