@@ -5,9 +5,9 @@ use std::sync::mpsc;
 use serde::{Deserialize,Serialize};
 use serde::de::{DeserializeOwned};
 use futures::stream::{FuturesUnordered,StreamExt};
-use anyhow::{Result,anyhow};
+use anyhow::{anyhow,Context,Result};
 use itertools::Itertools;
-use log::info;
+use log::{error,info};
 
 use mcts::mcts::{MCTS,MCTSOptions};
 use model::analytics::GameAnalyzer;
@@ -75,7 +75,7 @@ impl Tournament
 
         let batch_size = options.batch_size;
 
-        crossbeam::scope(move |s| {
+        let tournament_result = crossbeam::scope(move |s| {
             let games_to_play = generate_games_to_play(models, options.num_players).iter()
                 .map(|models| models.iter().map(|m| (m.get_model_info(), m.get_game_state_analyzer())).collect::<Vec<_>>())
                 .collect::<Vec<_>>();
@@ -87,11 +87,12 @@ impl Tournament
                 .into_iter().map(|c| c.collect::<Vec<_>>())
                 .collect::<Vec<_>>();
 
+            let mut handles = vec![];
             for (thread_num, games_to_play) in games_to_play_chunks.into_iter().enumerate() {
                 let game_results_tx = game_results_tx.clone();
                 let num_games_to_play_this_thread = games_to_play.len();
 
-                s.spawn(move |_| {
+                handles.push(s.spawn(move |_| -> Result<()> {
                     info!("Starting Thread: {}, Games: {}", thread_num, num_games_to_play_this_thread);
 
                     let f = Self::play_games(
@@ -103,11 +104,15 @@ impl Tournament
                     );
 
                     common::runtime::block_on(f).unwrap();
-                });
+
+                    Ok(())
+                }));
             }
 
+            drop(game_results_tx);
+
             let model_info: Vec<_> = models.iter().map(|m| m.get_model_info().to_owned()).collect();
-            s.spawn(move |_| -> Result<()> {
+            let handle = s.spawn(move |_| -> Result<()> {
                 let mut num_of_games_played: usize = 0;
                 let mut model_scores: Vec<_> = model_info.iter().map(|m| (m.to_owned(), 0.0)).collect();
 
@@ -142,9 +147,17 @@ impl Tournament
 
                 Ok(())
             });
-        }).unwrap();
 
-        Ok(())
+            for handle in handles {
+                handle.join()?.with_context(|| "Error in tournament scope 1").unwrap();
+            }
+
+            handle.join()
+        });
+
+        tournament_result
+            .and_then(|r| r).map_err(|e| { error!("{:?}", e); anyhow!("Error in self_evaluate scope 2") })
+            .and_then(|r| r).map_err(|e| { error!("{:?}", e); anyhow!("Error in self_evaluate scope 3") })
     }
 
     async fn play_games<S, A, E, T>(
