@@ -1,5 +1,3 @@
-
-# https://towardsdatascience.com/understanding-residual-networks-9add4b664b03
 import numpy as np
 import keras
 from keras.models import Model
@@ -23,7 +21,7 @@ def Block(x, filters):
 
     return out
 
-def se_block(x, filters, ratio=16):
+def se_block(x, filters, ratio=4):
     out = GlobalAveragePooling2D()(x)
     out = Reshape([1, 1, filters])(out)
     out = Dense(filters//ratio, activation='relu', kernel_initializer='he_normal', kernel_regularizer=l2_reg(), use_bias=False)(out)
@@ -31,23 +29,18 @@ def se_block(x, filters, ratio=16):
     return multiply([x, out])
 
 def ValueHead(x, filters):
-    # Value Head
-    # https://github.com/glinscott/leela-chess/issues/47
-    filters = int(filters / 2)
-    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg(), use_bias=False)(x)
+    out = Conv2D(filters // 2, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
     out = BatchNormalization()(out)
     out = ReLU()(out)
 
     out = Flatten()(out)
-    out = Dense(256,activation='relu', kernel_regularizer=l2_reg())(out)
+    out = Dense(256, activation='relu', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg())(out)
 
     out = Dense(1, name='value_head', activation='tanh', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg())(out)
     return out
 
 def PolicyHead(x, filters, output_size):
-    # Number of filters is half that of the residual layer's filter size.
-    filters = int(filters / 2)
-    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
+    out = Conv2D(filters // 2, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
     out = BatchNormalization()(out)
     out = ReLU()(out)
 
@@ -56,8 +49,7 @@ def PolicyHead(x, filters, output_size):
     return out
 
 def MovesLeftHead(x, filters, moves_left_size):
-    filters = int(filters / 2)
-    out = Conv2D(filters, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
+    out = Conv2D(filters // 2, kernel_size=(1,1), activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
     out = BatchNormalization()(out)
     out = ReLU()(out)
 
@@ -92,4 +84,4 @@ def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_s
     return model
 
 def l2_reg():
-    return regularizers.l2(0.0001)
+    return regularizers.l2(0.00005)
