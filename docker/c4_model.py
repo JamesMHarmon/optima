@@ -47,7 +47,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         loss_weights['moves_left_head'] = moves_left_loss_weight
 
     model.compile(
-        optimizer=SGD(lr=learning_rate, momentum=0.9),
+        optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=0.6),
         loss=loss_funcs,
         loss_weights=loss_weights)
 
