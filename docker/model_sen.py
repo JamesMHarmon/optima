@@ -77,7 +77,7 @@ def MovesLeftHead(x, filters, moves_left_size):
     out = Dense(moves_left_size, name='moves_left_head', activation='softmax')(out)
     return out
 
-def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
+def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     inputs = Input(input_shape)
     net = ConvBlock(filters=num_filters, kernel_size=3, batch_scale=True)(inputs)
 
@@ -95,8 +95,4 @@ def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
 
     model = Model(inputs=inputs,outputs=outputs)
 
-    return model
-
-def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    model = ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size)
     return model
