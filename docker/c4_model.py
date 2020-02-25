@@ -11,6 +11,7 @@ import numpy as np
 import keras
 import math
 import model_sen
+import warmup_lr_scheduler
 
 def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     model = model_sen.create_model(
@@ -48,18 +49,21 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         loss_funcs['moves_left_head'] = "categorical_crossentropy"
         loss_weights['moves_left_head'] = moves_left_loss_weight
 
+    steps_per_epoch = X_train.shape[0] // train_batch_size
+    lr_schedule = warmup_lr_scheduler.WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000, steps_per_epoch=steps_per_epoch)
+
     model.compile(
         optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=0.6),
         loss=loss_funcs,
         loss_weights=loss_weights)
 
     model.fit(X_train, y_trains,
-          batch_size=train_batch_size,
-          epochs=epochs,
-          initial_epoch=initial_epoch,
-          verbose=1,
-          validation_data=(X_test, y_tests),
-          callbacks=callbacks)
+        batch_size=train_batch_size,
+        epochs=epochs,
+        initial_epoch=initial_epoch,
+        verbose=1,
+        validation_data=(X_test, y_tests),
+        callbacks=callbacks + [lr_schedule])
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
     model = load(model_path)

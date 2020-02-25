@@ -4,6 +4,6 @@ WORKDIR /usr/local/bin
 
 RUN pip3 install keras sklearn pandas
 
-COPY c4_model.py model_sen.py train_model.py ./
+COPY c4_model.py model_sen.py train_model.py  warmup_lr_scheduler ./
 
 CMD ["python3", "./train_model.py"]
