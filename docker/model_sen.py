@@ -6,19 +6,27 @@ from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
 
+def BatchNorm(scale=False):
+    def batch_norm(input):
+        if scale:
+            return BatchNormalization(scale=True, virtual_batch_size=64, epsilon=1e-5, beta_regularizer=l2_reg(), gamma_regularizer=l2_reg())(input)
+        else:
+            return BatchNormalization(scale=False, virtual_batch_size=64, epsilon=1e-5, beta_regularizer=l2_reg())(input)
+    return batch_norm
+
 def ConvBlock(x, filters, kernel_size=[3, 3]):
     out = Conv2D(filters, kernel_size=kernel_size, activation='linear', kernel_regularizer=l2_reg(), use_bias=False)(x)
-    out = BatchNormalization(scale=False, beta_regularizer=l2_reg())(out)
+    out = BatchNorm(scale=False)(out)
     out = ReLU()(out)
     return out
 
 def ResidualBlock(x, filters):
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", kernel_regularizer=l2_reg(), use_bias=False)(x)
-    out = BatchNormalization(scale=False, beta_regularizer=l2_reg())(out)
+    out = BatchNorm(scale=False)(out)
     out = ReLU()(out)
 
     out = Conv2D(filters=filters, kernel_size=[3, 3], strides=[1, 1], padding="same", kernel_regularizer=l2_reg(), use_bias=False)(out)
-    out = BatchNormalization(scale=True, beta_regularizer=l2_reg(), gamma_regularizer=l2_reg())(out)
+    out = BatchNorm(scale=True)(out)
     
     out = SqueezeExcitation(out, filters)
 
@@ -61,7 +69,7 @@ def MovesLeftHead(x, filters, moves_left_size):
 def ResNet(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     inputs = Input(input_shape)
     net = Conv2D(filters=num_filters, kernel_size=[3, 3], strides=[1, 1], padding="same", kernel_regularizer=l2_reg(), use_bias=False)(inputs)
-    net = BatchNormalization(scale=True, beta_regularizer=l2_reg(), gamma_regularizer=l2_reg())(net)
+    net = BatchNorm(scale=True)(net)
     net = ReLU()(net)
 
     for _ in range(0, num_blocks):
