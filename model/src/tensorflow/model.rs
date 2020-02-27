@@ -436,7 +436,7 @@ where
     ));
 
     let docker_cmd = format!("docker run --rm \
-        --runtime=nvidia \
+        --gpus all \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         -e SOURCE_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{source_model_num:0>5}.h5 \
         -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_model_num:0>5}.h5 \
@@ -459,6 +459,7 @@ where
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
         run_name = source_model_info.get_run_name(),
@@ -511,7 +512,7 @@ fn create(
     write_options(model_info, options)?;
 
     let docker_cmd = format!("docker run --rm \
-        --runtime=nvidia \
+        --gpus all \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_00001.h5 \
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/1 \
@@ -523,6 +524,7 @@ fn create(
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/create:latest",
         game_name = game_name,
         run_name = run_name,
@@ -572,8 +574,9 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
 
 fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
     let docker_cmd = format!("docker run --rm \
-        --runtime=nvidia \
+        --gpus all \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \
         usr/local/bin/saved_model_cli convert \
