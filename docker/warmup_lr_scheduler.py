@@ -15,7 +15,7 @@ class WarmupLearningRateScheduler(Callback):
         step_num = self.epoch * self.steps_per_epoch + batch + 1
 
         if step_num <= self.warmup_steps:
-            lr = (step_num / self.warmup_steps) * lr
+            lr = (step_num / self.warmup_steps) * self.target_lr
             K.set_value(self.model.optimizer.lr, lr)
             print('\nStep %05d: WarmupLearningRateScheduler setting learning rate to %s.' % (step_num, lr))
 
