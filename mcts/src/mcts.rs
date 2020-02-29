@@ -23,7 +23,6 @@ use common::wait_for::WaitFor;
 use super::node_details::{PUCT,NodeDetails};
 
 pub struct DirichletOptions {
-    pub alpha: f32,
     pub epsilon: f32
 }
 

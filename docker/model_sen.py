@@ -17,10 +17,10 @@ def BatchNorm(scale):
     if scale:
         gamma_regularizer=l2_reg()
 
-    return keras.layers.BatchNormalization(scale=scale, virtual_batch_size=1024, epsilon=1e-5, beta_regularizer=l2_reg(), gamma_regularizer=gamma_regularizer)
+    return keras.layers.BatchNormalization(scale=scale, epsilon=1e-5, beta_regularizer=l2_reg(), gamma_regularizer=gamma_regularizer)
 
 def Dense(units, activation, name=None):
-    return keras.layers.Dense(units, activation=activation, kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg())
+    return keras.layers.Dense(units, name=name, activation=activation, kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), bias_regularizer=l2_reg())
 
 def ConvBlock(filters, kernel_size, batch_scale=False):
     def block(x):

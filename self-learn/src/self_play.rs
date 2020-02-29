@@ -35,7 +35,6 @@ pub struct SelfPlayOptions {
     pub moves_left_threshold: f32,
     pub moves_left_scale: f32,
     pub moves_left_factor: f32,
-    pub alpha: f32,
     pub epsilon: f32
 }
 
@@ -83,7 +82,6 @@ pub async fn self_play<'a, S, A, E, M, V>(
         analytics,
         MCTSOptions::<S,_,_>::new(
             Some(DirichletOptions {
-                alpha: options.alpha,
                 epsilon: options.epsilon
             }),
             options.fpu,

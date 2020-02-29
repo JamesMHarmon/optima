@@ -44,7 +44,6 @@ pub struct SelfLearnOptions {
     pub moving_window_size: usize,
     pub max_moving_window_percentage: f32,
     pub position_sample_percentage: f32,
-    pub exclude_drawn_games: bool,
     pub train_ratio: f32,
     pub train_batch_size: usize,
     pub epochs: usize,
@@ -68,7 +67,6 @@ pub struct SelfLearnOptions {
     pub moves_left_threshold: f32,
     pub moves_left_scale: f32,
     pub moves_left_factor: f32,
-    pub alpha: f32,
     pub epsilon: f32
 }
 
@@ -207,7 +205,6 @@ where
 
                 let self_play_options = SelfPlayOptions {
                     epsilon: options.epsilon,
-                    alpha: options.alpha,
                     fpu: options.fpu,
                     fpu_root: options.fpu_root,
                     logit_q: options.logit_q,

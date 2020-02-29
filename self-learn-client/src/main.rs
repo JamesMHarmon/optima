@@ -440,13 +440,12 @@ async fn play_arimaa(run_name: &str, model_num: Option<usize>, options: &PlayOpt
 fn get_default_options() -> Result<Options> {
     let self_learn_options = SelfLearnOptions {
         number_of_games_per_net: 32_000,
-        self_play_batch_size: 256,
+        self_play_batch_size: 512,
         moving_window_size: 500_000,
         max_moving_window_percentage: 0.5,
-        position_sample_percentage: 0.0512,
-        exclude_drawn_games: false,
+        position_sample_percentage: 0.0256,
         train_ratio: 0.9,
-        train_batch_size: 512,
+        train_batch_size: 1024,
         epochs: 1,
         learning_rate: 0.1,
         policy_loss_weight: 1.0,
@@ -459,17 +458,16 @@ fn get_default_options() -> Result<Options> {
         visits: 800,
         fast_visits: 150,
         full_visits_probability: 0.25,
-        parallelism: 32,
+        parallelism: 4,
         fpu: 0.0,
         fpu_root: 1.0,
-        logit_q: true,
+        logit_q: false,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
         cpuct_root_scaling: 2.0,
         moves_left_threshold: 0.95,
         moves_left_scale: 10.0,
         moves_left_factor: 0.05,
-        alpha: 0.3,
         epsilon: 0.25
     };
 
@@ -481,7 +479,7 @@ fn get_default_options() -> Result<Options> {
     let self_evaluate_options = SelfEvaluateOptions {
         num_games: 200,
         batch_size: self_learn_options.self_play_batch_size,
-        parallelism: self_learn_options.parallelism * 4,
+        parallelism: 32,
         temperature: self_learn_options.temperature,
         temperature_max_actions: self_learn_options.temperature_max_actions,
         temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
@@ -499,7 +497,7 @@ fn get_default_options() -> Result<Options> {
 
     let play_options = PlayOptions {
         visits: self_learn_options.visits * 50,
-        parallelism: self_learn_options.parallelism * 4,
+        parallelism: 1024,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
         logit_q: self_learn_options.logit_q,
@@ -545,7 +543,6 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(moving_window_size) = matches.value_of("moving_window_size") { options.moving_window_size = moving_window_size.parse()? };
     if let Some(max_moving_window_percentage) = matches.value_of("max_moving_window_percentage") { options.max_moving_window_percentage = max_moving_window_percentage.parse()? };
     if let Some(position_sample_percentage) = matches.value_of("position_sample_percentage") { options.position_sample_percentage = position_sample_percentage.parse()? };
-    if let Some(exclude_drawn_games) = matches.value_of("exclude_drawn_games") { options.exclude_drawn_games = exclude_drawn_games.parse()? };
     if let Some(train_ratio) = matches.value_of("train_ratio") { options.train_ratio = train_ratio.parse()? };
     if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse()? };
     if let Some(epochs) = matches.value_of("epochs") { options.epochs = epochs.parse()? };
@@ -564,7 +561,6 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(cpuct_base) = matches.value_of("cpuct_base") { options.cpuct_base = cpuct_base.parse()? };
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
-    if let Some(alpha) = matches.value_of("alpha") { options.alpha = alpha.parse()? };
     if let Some(epsilon) = matches.value_of("epsilon") { options.epsilon = epsilon.parse()? };
 
     Ok(())

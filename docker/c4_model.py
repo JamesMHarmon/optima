@@ -53,7 +53,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
     lr_schedule = warmup_lr_scheduler.WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000, steps_per_epoch=steps_per_epoch)
 
     model.compile(
-        optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=0.6),
+        optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=8.0),
         loss=loss_funcs,
         loss_weights=loss_weights)
 
