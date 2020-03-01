@@ -6,32 +6,13 @@ import tensorflow as tf
 from os import listdir
 from os.path import isfile, join
 from pathlib import Path
+from get_gradient_norm import get_gradient_norm
 import os
 import numpy as np
 import keras
 import math
 import model_sen
 import warmup_lr_scheduler
-
-def get_gradient_norm_func(model):
-    grads = model.optimizer.get_gradients(model.total_loss, model.trainable_weights)
-    summed_squares = [K.sum(K.square(g)) for g in grads]
-    norm = K.sqrt(sum(summed_squares))
-    inputs = model._feed_inputs + model._feed_targets + model._feed_sample_weights
-    func = K.function(inputs, norm)
-    return func
-
-def calculate_grad_norm(model, X_train, y_trains, loss_weights, train_batch_size):
-    X = X_train[:train_batch_size]
-
-    y = {}
-    for attr, val in y_trains.items():
-        y[attr] = val[:train_batch_size]
-
-    get_gradient_norm = get_gradient_norm_func(model)
-    data = model._standardize_user_data(X, y)
-    grad_norm = get_gradient_norm(data)
-    return grad_norm
 
 def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     model = model_sen.create_model(
@@ -77,7 +58,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         loss=loss_funcs,
         loss_weights=loss_weights)
 
-    print("Gradient Norm:", calculate_grad_norm(model, X_train, y_trains, loss_weights, train_batch_size))
+    print("Gradient Norm:", get_gradient_norm(model, X_train, y_trains, loss_weights, train_batch_size))
 
     model.fit(X_train, y_trains,
         batch_size=train_batch_size,

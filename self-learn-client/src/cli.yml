@@ -141,7 +141,7 @@ subcommands:
             - cpuct_root_scaling:
                 long: cpuct_root_scaling
                 takes_value: true
-                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                help: "[Default: 1.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM
             - alpha:
                 long: alpha
@@ -257,7 +257,7 @@ subcommands:
             - cpuct_root_scaling:
                 long: cpuct_root_scaling
                 takes_value: true
-                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                help: "[Default: 1.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM
     - tournament:
         about: Pits multiple models against each other.
@@ -326,7 +326,7 @@ subcommands:
             - cpuct_root_scaling:
                 long: cpuct_root_scaling
                 takes_value: true
-                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                help: "[Default: 1.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM
     - play:
         about: Plays on positions as the user select which moves to play.
@@ -379,5 +379,5 @@ subcommands:
             - cpuct_root_scaling:
                 long: cpuct_root_scaling
                 takes_value: true
-                help: "[Default: 2.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
+                help: "[Default: 1.0] The cpuct value within the MCTS algorithm. Scales cpu by the provided value when evaluating the children of the root node."
                 value_name: NUM

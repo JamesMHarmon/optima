@@ -48,76 +48,108 @@ impl Play
         let cpuct_root_scaling = options.cpuct_root_scaling;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
+        let mut actions: Vec<A> = vec!();
+        
+        'outer: loop {
+            let mut state: S = S::initial();
+            let mut total_visits = 0;
 
-        let mut mcts = MCTS::with_capacity(
-            S::initial(),
-            0,
-            game_engine,
-            &analyzer,
-            MCTSOptions::<S,_,_>::new(
-                None,
-                options.fpu,
-                options.fpu_root,
-                options.logit_q,
-                |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                |_,_| 0.0,
-                0.0,
-                options.moves_left_threshold,
-                options.moves_left_scale,
-                options.moves_left_factor,
-                options.parallelism
-            ),
-            visits
-        );
+            let mut mcts = MCTS::with_capacity(
+                S::initial(),
+                0,
+                game_engine,
+                &analyzer,
+                MCTSOptions::<S,_,_>::new(
+                    None,
+                    options.fpu,
+                    options.fpu_root,
+                    options.logit_q,
+                    |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
+                    |_,_| 0.0,
+                    0.0,
+                    options.moves_left_threshold,
+                    options.moves_left_scale,
+                    options.moves_left_factor,
+                    options.parallelism
+                ),
+                visits
+            );
 
-        let mut state: S = S::initial();
-        let mut total_visits = 0;
+            for action in actions.iter() {
+                if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
+                    println!("Illegal Action: {:?}", &action);
+                    continue;
+                }
+                state = game_engine.take_action(&state, &action);
+            }
 
-        while game_engine.is_terminal_state(&state).is_none() {
+            while game_engine.is_terminal_state(&state).is_none() {
+                println!("{}", state);
+
+                println!("Input action or Enter to play");
+                let reader = std::io::stdin();
+                let mut input = String::new();
+                reader.read_line(&mut input)?;
+                let input = input.trim();
+                println!("Read: {}", input);
+
+                if input == "" {
+                    println!("PLAYING: {}", visits);
+                    total_visits += visits;
+                    mcts.search_visits(total_visits).await?;
+                    println!("{}", mcts.get_root_node_details().await?);
+                    let pvs: Vec<_> = mcts.get_principal_variation().await?.iter().map(|n| format!("\n\t{:?}", n)).collect();
+                    println!("{}", pvs.join(""));
+                    continue;
+                }
+
+                let inputs = input.split(&[',', ' '][..]).filter_map(|v| {
+                    let trimmed = v.trim();
+                    if trimmed.len() > 0 { Some(trimmed) } else { None }
+                });
+
+                if input == "help" {
+                    println!("help: Displays the available commands.");
+                    println!("moves: Lists the previous moves to get to this state.");
+                    println!("undo: Undoes the last action.");
+                    println!("{{A}}: Takes the actions.");
+                    println!("{{A,A,..}}: Takes a comma deliminated list of actions.");
+                }
+
+                if input == "undo" {
+                    actions.pop();
+                    continue 'outer;
+                }
+
+                if input == "moves" {
+                    println!("{}", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(","));
+                    continue;
+                }
+
+                for input in inputs {       
+                    let action = input.parse::<A>();
+                    
+                    match action {
+                        Ok(action) => {
+                            if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
+                                println!("Illegal Action: {:?}", &action);
+                                continue;
+                            }
+                            
+                            println!("Taking Action: {:?}", &action);
+                            state = game_engine.take_action(&state, &action);
+                            actions.push(action);
+                            total_visits = 0;
+                        },
+                        Err(_) => println!("{}", "Error parsing action")
+                    }
+                }
+            };
+
             println!("{}", state);
 
-            println!("Input action or Enter to play");
-            let reader = std::io::stdin();
-            let mut input = String::new();
-            reader.read_line(&mut input)?;
-            let input = input.trim();
-            println!("Read: {}", input);
-
-            if input == "" {
-                println!("PLAYING: {}", visits);
-                total_visits += visits;
-                mcts.search_visits(total_visits).await?;
-                println!("{}", mcts.get_root_node_details().await?);
-                let pvs: Vec<_> = mcts.get_principal_variation().await?.iter().map(|n| format!("\n\t{:?}", n)).collect();
-                println!("{}", pvs.join(""));
-                continue;
-            }
-
-            let inputs = input.split(&[',', ' '][..]).filter_map(|v| {
-                let trimmed = v.trim();
-                if trimmed.len() > 0 { Some(trimmed) } else { None }
-            });
-
-            for input in inputs {       
-                let action = input.parse::<A>();
-                
-                match action {
-                    Ok(action) => {
-                        if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
-                            println!("Illegal Action: {:?}", &action);
-                            continue;
-                        }
-                        
-                        println!("Taking Action: {:?}", &action);
-                        state = game_engine.take_action(&state, &action);
-                        total_visits = 0;
-                    },
-                    Err(_) => println!("{}", "Error parsing action")
-                }
-            }
-        };
-
-        println!("{}", state);
+            break 'outer;
+        }
 
         Ok(())
     }

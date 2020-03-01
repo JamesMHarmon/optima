@@ -464,7 +464,7 @@ fn get_default_options() -> Result<Options> {
         logit_q: false,
         cpuct_base: 19_652.0,
         cpuct_init: 1.25,
-        cpuct_root_scaling: 2.0,
+        cpuct_root_scaling: 1.0,
         moves_left_threshold: 0.95,
         moves_left_scale: 10.0,
         moves_left_factor: 0.05,
