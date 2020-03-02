@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::fmt::{self,Display,Formatter};
+use std::fmt::{self,Debug,Display,Formatter};
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
@@ -19,7 +19,7 @@ impl<A: Display> Display for NodeDetails<A> {
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(PartialEq)]
 #[allow(non_snake_case)]
 pub struct PUCT {
     pub Nsa: usize,
@@ -35,10 +35,9 @@ pub struct PUCT {
 
 impl Display for PUCT {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa}, Qlogit: {logitQ}, Msa: {Msa}, Psa: {Psa}, Usa: {Usa}, cpuct: {cpuct}, moves_left: {moves_left}, PUCT: {PUCT}",
+        write!(f, "Nsa: {Nsa}, Qsa: {Qsa:.3}, Msa: {Msa:.2}, Psa: {Psa:.3}, Usa: {Usa:.2}, cpuct: {cpuct:.2}, moves_left: {moves_left:.1}, PUCT: {PUCT:.3}",
             Nsa = self.Nsa,
             Qsa = self.Qsa,
-            logitQ = self.logitQ,
             Psa = self.Psa,
             Usa = self.Usa,
             Msa = self.Msa,
@@ -46,6 +45,12 @@ impl Display for PUCT {
             cpuct = self.cpuct,
             PUCT = self.PUCT,
         )
+    }
+}
+
+impl Debug for PUCT {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
