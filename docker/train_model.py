@@ -1,8 +1,8 @@
 import os
 import json
-from keras.callbacks import TensorBoard
 import c4_model as c4
 import numpy as np
+from tensorboard_enriched import TensorBoardEnriched
 
 if __name__== "__main__":
 
@@ -35,7 +35,7 @@ if __name__== "__main__":
     print(data_paths)
     c4.clear()
     model = c4.load(source_model_path)
-    tensor_board = TensorBoard(log_dir=tensor_board_path,update_freq='epoch')
+    tensor_board = TensorBoardEnriched(log_dir=tensor_board_path)
 
     for (i, path) in enumerate(data_paths):
         print("Loading Data: " + path)

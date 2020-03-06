@@ -6,7 +6,6 @@ import tensorflow as tf
 from os import listdir
 from os.path import isfile, join
 from pathlib import Path
-from get_gradient_norm import get_gradient_norm
 import os
 import numpy as np
 import keras
@@ -57,8 +56,6 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
         optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=8.0),
         loss=loss_funcs,
         loss_weights=loss_weights)
-
-    print("Gradient Norm:", get_gradient_norm(model, X_train, y_trains, loss_weights, train_batch_size))
 
     model.fit(X_train, y_trains,
         batch_size=train_batch_size,
