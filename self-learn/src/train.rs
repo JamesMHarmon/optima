@@ -97,6 +97,7 @@ where
             train_batch_size: options.train_batch_size,
             epochs: options.epochs,
             learning_rate: options.learning_rate,
+            max_grad_norm: options.max_grad_norm,
             policy_loss_weight: options.policy_loss_weight,
             value_loss_weight: options.value_loss_weight,
             moves_left_loss_weight: options.moves_left_loss_weight

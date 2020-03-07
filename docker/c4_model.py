@@ -27,7 +27,7 @@ def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
 def load(model_path):
     return load_model(model_path, custom_objects={'categorical_crossentropy_from_logits': categorical_crossentropy_from_logits})
 
-def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks):
+def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks):
     X_train, X_test, yv_train, yv_test, yp_train, yp_test, ym_train, ym_test = train_test_split(
         X,
         yv,
@@ -53,7 +53,7 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
     lr_schedule = warmup_lr_scheduler.WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000, steps_per_epoch=steps_per_epoch)
 
     model.compile(
-        optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=8.0),
+        optimizer=SGD(lr=learning_rate, momentum=0.9, clipnorm=max_grad_norm),
         loss=loss_funcs,
         loss_weights=loss_weights)
 

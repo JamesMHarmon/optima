@@ -448,6 +448,7 @@ fn get_default_options() -> Result<Options> {
         train_batch_size: 1024,
         epochs: 1,
         learning_rate: 0.1,
+        max_grad_norm: 8.0,
         policy_loss_weight: 1.0,
         value_loss_weight: 0.5,
         moves_left_loss_weight: 0.1,
@@ -547,6 +548,7 @@ fn update_self_learn_options_from_matches(options: &mut SelfLearnOptions, matche
     if let Some(train_batch_size) = matches.value_of("train_batch_size") { options.train_batch_size = train_batch_size.parse()? };
     if let Some(epochs) = matches.value_of("epochs") { options.epochs = epochs.parse()? };
     if let Some(learning_rate) = matches.value_of("learning_rate") { options.learning_rate = learning_rate.parse()? };
+    if let Some(max_grad_norm) = matches.value_of("max_grad_norm") { options.max_grad_norm = max_grad_norm.parse()? };
     if let Some(policy_loss_weight) = matches.value_of("policy_loss_weight") { options.policy_loss_weight = policy_loss_weight.parse()? };
     if let Some(value_loss_weight) = matches.value_of("value_loss_weight") { options.value_loss_weight = value_loss_weight.parse()? };
     if let Some(temperature) = matches.value_of("temperature") { options.temperature = temperature.parse()? };

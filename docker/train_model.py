@@ -16,6 +16,7 @@ if __name__== "__main__":
     train_batch_size        = int(os.environ['TRAIN_BATCH_SIZE'])
     epochs                  = int(os.environ['EPOCHS'])
     initial_epoch           = int(os.environ['INITIAL_EPOCH'])
+    max_grad_norm           = float(os.environ['MAX_GRAD_NORM'])
     learning_rate           = float(os.environ['LEARNING_RATE'])
     policy_loss_weight      = float(os.environ['POLICY_LOSS_WEIGHT'])
     value_loss_weight       = float(os.environ['VALUE_LOSS_WEIGHT'])
@@ -50,7 +51,7 @@ if __name__== "__main__":
 
         callbacks = [tensor_board] if i == 0 else []
 
-        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch + i, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
+        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch + i, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
 
     model.save(target_model_path)
 

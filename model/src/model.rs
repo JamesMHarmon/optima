@@ -39,6 +39,7 @@ pub struct TrainOptions {
     pub train_batch_size: usize,
     pub epochs: usize,
     pub learning_rate: f32,
+    pub max_grad_norm: f32,
     pub policy_loss_weight: f32,
     pub value_loss_weight: f32,
     pub moves_left_loss_weight: f32

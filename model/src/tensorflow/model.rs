@@ -447,6 +447,7 @@ where
         -e TRAIN_RATIO={train_ratio} \
         -e TRAIN_BATCH_SIZE={train_batch_size} \
         -e EPOCHS={epochs} \
+        -e MAX_GRAD_NORM={max_grad_norm} \
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
         -e VALUE_LOSS_WEIGHT={value_loss_weight} \
@@ -471,6 +472,7 @@ where
         initial_epoch = (source_model_info.get_model_num() - 1),
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         learning_rate = options.learning_rate,
+        max_grad_norm = options.max_grad_norm,
         policy_loss_weight = options.policy_loss_weight,
         value_loss_weight = options.value_loss_weight,
         moves_left_loss_weight = options.moves_left_loss_weight,

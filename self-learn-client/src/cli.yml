@@ -68,6 +68,11 @@ subcommands:
                 takes_value: true
                 help: "[Default: 0.1] The learning rate to use when training a net. AZ used the following schedule 0: 2e-1, 100e3: 2e-2, 300e3: 2e-3, 500e3: 2e-4."
                 value_name: RATE
+            - max_grad_norm:
+                long: max_grad_norm
+                takes_value: true
+                help: "[Default: 8.0] The maximum gradient norm with respect to loss when training the model. This limits the effictive learning rate if the gradient of the model is too extreme. This prevents spikes during training."
+                value_name: NORM
             - policy_loss_weight:
                 long: policy_loss_weight
                 takes_value: true
