@@ -460,6 +460,7 @@ where
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e CUDA_VISIBLE_DEVICES=1 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
@@ -526,6 +527,7 @@ fn create(
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e CUDA_VISIBLE_DEVICES=1 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/create:latest",
         game_name = game_name,
@@ -578,6 +580,7 @@ fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> R
     let docker_cmd = format!("docker run --rm \
         --gpus all \
         -e NVIDIA_VISIBLE_DEVICES=1 \
+        -e CUDA_VISIBLE_DEVICES=1 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
         tensorflow/tensorflow:latest-gpu \

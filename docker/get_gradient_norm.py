@@ -8,8 +8,7 @@ def get_gradient_norm_func(model):
     func = K.function(inputs, norm)
     return func
 
-def get_gradient_norm(model, X, y):
-    gradient_norm_func = get_gradient_norm_func(model)
+def get_gradient_norm(model, gradient_norm_func, X, y):
     data = model._standardize_user_data(X, y)
     grad_norm = gradient_norm_func(data)
     return grad_norm
