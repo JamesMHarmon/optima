@@ -51,7 +51,7 @@ if __name__== "__main__":
 
         callbacks = [tensor_board] if i == 0 else []
 
-        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch + i, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
+        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs + i, initial_epoch + i, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
 
     model.save(target_model_path)
 

@@ -34,6 +34,7 @@ pub struct ModelOptions {
     pub number_of_residual_blocks: usize
 }
 
+#[derive(Clone)]
 pub struct TrainOptions {
     pub train_ratio: f32,
     pub train_batch_size: usize,
