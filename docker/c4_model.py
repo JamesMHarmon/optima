@@ -38,6 +38,9 @@ def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_e
 
     X_train, yv_train, yp_train, ym_train = clip_to_be_divisible(X_train, yv_train, yp_train, ym_train, divisor=train_batch_size)
 
+    if len(X_train) == 0:
+        return
+
     y_trains = { "value_head": yv_train, "policy_head": yp_train }
     y_tests = { "value_head": yv_test, "policy_head": yp_test }
     loss_funcs = { "value_head": "mean_squared_error", "policy_head": categorical_crossentropy_from_logits }
