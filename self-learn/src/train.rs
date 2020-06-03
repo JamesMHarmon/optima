@@ -34,11 +34,11 @@ where
 {
     let source_model_info = model.get_model_info();
     let new_model_info = source_model_info.get_next_model_info();
-    let metric_iter = self_play_persistance.read_all_reverse_iter::<A,V>()?;
+    let model_num = source_model_info.get_model_num();
+    let metric_iter = self_play_persistance.read_all_reverse_iter::<A,V>(model_num)?;
 
     info!("Loading positions for training...");
 
-    let model_num = source_model_info.get_model_num();
     let number_of_games_per_net = options.number_of_games_per_net;
     let num_games_since_beginning = model_num * number_of_games_per_net;
     let num_max_moving_window_percentage_games = number_of_games_per_net + (num_games_since_beginning as f32 * options.max_moving_window_percentage) as usize;

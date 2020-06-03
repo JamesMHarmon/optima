@@ -632,8 +632,8 @@ fn get_config(run_directory: &Path) -> Result<Options> {
     let config_path = get_config_path(run_directory);
     let mut file = OpenOptions::new()
         .read(true)
-        .open(config_path)
-        .expect("Couldn't load config file.");
+        .open(&config_path)
+        .expect(&format!("Couldn't load config file: {:?}", &config_path));
 
     let mut config_file_contents = String::new();
     file.read_to_string(&mut config_file_contents).expect("Failed to read config file");

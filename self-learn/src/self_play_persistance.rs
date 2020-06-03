@@ -50,8 +50,10 @@ impl SelfPlayPersistance
         Self::read_metrics_from_file(&file_path)
     }
 
-    pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self) -> Result<SelfPlayMetricsIterator<A,V>> {
-        let mut file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
+    pub fn read_all_reverse_iter<A: DeserializeOwned, V: DeserializeOwned>(&self, model_num: usize) -> Result<SelfPlayMetricsIterator<A,V>> {
+        let file_paths = Self::get_game_files_in_dir(&self.games_dir)?;
+
+        let mut file_paths = file_paths.into_iter().filter(|p| get_model_num(p) <= model_num).collect::<Vec<_>>();
 
         file_paths.sort();
 
@@ -98,6 +100,11 @@ fn file_path_is_valid_game_file(path: &PathBuf) -> bool {
     }
 
     false
+}
+
+fn get_model_num(path: &PathBuf) -> usize {
+    let file_stem = path.file_stem().unwrap().to_str().unwrap();
+    ModelInfo::from_model_name(file_stem).get_model_num()
 }
 
 pub struct SelfPlayMetricsIterator<A,V>
