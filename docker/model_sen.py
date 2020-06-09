@@ -7,7 +7,7 @@ from keras.optimizers import Nadam
 from keras import regularizers
 
 def l2_reg():
-    return regularizers.l2(5e-5)
+    return regularizers.l2(2e-5)
 
 def Conv2D(filters, kernel_size):
     return keras.layers.Conv2D(filters=filters, kernel_size=kernel_size, padding='same', kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), use_bias=False)
