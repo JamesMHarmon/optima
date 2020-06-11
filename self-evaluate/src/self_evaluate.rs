@@ -142,6 +142,8 @@ impl SelfEvaluate
                         num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
                     );
 
+                    info!("Model Scores: {:?}", model_scores);
+
                     presistance.write_game(&game_result)?;
                 }
 
