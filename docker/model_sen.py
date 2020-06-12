@@ -7,7 +7,7 @@ from keras.optimizers import Nadam
 from keras import regularizers
 
 def l2_reg():
-    return regularizers.l2(2e-5)
+    return regularizers.l2(3e-5)
 
 def Conv2D(filters, kernel_size):
     return keras.layers.Conv2D(filters=filters, kernel_size=kernel_size, padding='same', kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), use_bias=False)
@@ -15,8 +15,8 @@ def Conv2D(filters, kernel_size):
 def BatchNorm(scale):
     return keras.layers.BatchNormalization(scale=scale, epsilon=1e-5, beta_regularizer=l2_reg(), gamma_regularizer=None)
 
-def Dense(units, activation, name=None):
-    return keras.layers.Dense(units, name=name, activation=activation, kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), bias_regularizer=None)
+def Dense(units, activation, name=None, bias_regularizer=None):
+    return keras.layers.Dense(units, name=name, activation=activation, kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), bias_regularizer=bias_regularizer)
 
 def ConvBlock(filters, kernel_size, batch_scale=False):
     def block(x):
@@ -62,7 +62,7 @@ def PolicyHead(x, filters, output_size):
     out = ConvBlock(filters=32, kernel_size=1)(x)
 
     out = Flatten()(out)
-    out = Dense(output_size, name='policy_head', activation=None)(out)
+    out = Dense(output_size, name='policy_head', activation=None, bias_regularizer=l2_reg())(out)
     return out
 
 def MovesLeftHead(x, filters, moves_left_size):
