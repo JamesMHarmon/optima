@@ -9,7 +9,7 @@ from keras import regularizers
 DATA_FORMAT = 'channels_last'
 
 def l2_reg():
-    return regularizers.l2(3e-5)
+    return regularizers.l2(2e-5)
 
 def Conv2D(filters, kernel_size):
     return keras.layers.Conv2D(
