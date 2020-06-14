@@ -153,12 +153,16 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
 }
 
 fn set_step_num_squares(input: &mut [f32], game_state: &GameState) {
-    let current_step_num = game_state.get_current_step();
-    let step_num_normalized = (current_step_num as f32) / (MAX_NUM_STEPS - 1) as f32;
-    let step_num_offset = STEP_NUM_CHANNEL_IDX;
-    for board_idx in 0..BOARD_SIZE {
-        let cell_idx = board_idx * PLAY_INPUT_C + step_num_offset;
-        input[cell_idx] = step_num_normalized;
+    let current_step = game_state.get_current_step();
+
+    // Current step is base 0. However we start from 1 since the first step doesn't have a corresponding channel since 0 0 0 reoresents the first step.
+    for step_num in 1..=current_step {
+        let step_num_offset = STEP_NUM_CHANNEL_IDX + step_num - 1;
+
+        for board_idx in 0..BOARD_SIZE {
+            let cell_idx = board_idx * PLAY_INPUT_C + step_num_offset;
+            input[cell_idx] = 1.0;
+        }
     }
 }
 

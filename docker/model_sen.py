@@ -6,17 +6,36 @@ from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
 
+DATA_FORMAT = 'channels_last'
+
 def l2_reg():
     return regularizers.l2(3e-5)
 
 def Conv2D(filters, kernel_size):
-    return keras.layers.Conv2D(filters=filters, kernel_size=kernel_size, padding='same', kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), use_bias=False)
+    return keras.layers.Conv2D(
+        filters=filters,
+        kernel_size=kernel_size,
+        padding='same',
+        kernel_initializer='glorot_normal',
+        kernel_regularizer=l2_reg(),
+        use_bias=False,
+        data_format=DATA_FORMAT)
 
 def BatchNorm(scale):
-    return keras.layers.BatchNormalization(scale=scale, epsilon=1e-5, beta_regularizer=l2_reg(), gamma_regularizer=None)
+    return keras.layers.BatchNormalization(
+        scale=scale,
+        epsilon=1e-5,
+        beta_regularizer=l2_reg(),
+        gamma_regularizer=None)
 
 def Dense(units, activation, name=None, bias_regularizer=None):
-    return keras.layers.Dense(units, name=name, activation=activation, kernel_initializer='glorot_normal', kernel_regularizer=l2_reg(), bias_regularizer=bias_regularizer)
+    return keras.layers.Dense(
+        units,
+        name=name,
+        activation=activation,
+        kernel_initializer='glorot_normal',
+        kernel_regularizer=l2_reg(),
+        bias_regularizer=bias_regularizer)
 
 def ConvBlock(filters, kernel_size, batch_scale=False):
     def block(x):
@@ -43,9 +62,9 @@ def ResidualBlock(x, filters):
     return out
 
 def SqueezeExcitation(x, filters, ratio=4):
-    pool = GlobalAveragePooling2D()(x)
+    pool = GlobalAveragePooling2D(data_format=DATA_FORMAT)(x)
     pool = Reshape([1, 1, filters])(pool)
-    squeeze = Dense(filters//ratio, activation='relu')(pool)
+    squeeze = Dense(filters // ratio, activation='relu')(pool)
     excite = Dense(filters, activation='sigmoid')(squeeze)
     return multiply([x, excite])
 

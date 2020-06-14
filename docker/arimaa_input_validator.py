@@ -7,7 +7,7 @@ FILE_NAME = '/tmp/sample.npy'
 
 input_h = 8
 input_w = 8
-input_c = 50
+input_c = 52
 input_size = input_h * input_w * input_c
 channels_per_step = 12
 steps = 4
@@ -55,13 +55,21 @@ for step in range(0, steps):
     print("Flattened Step")
     flattened = flattened.astype("int")
     print(pieces[flattened])
+    print("")
 
-print("Step Plane")
-print("")
-step_plane = getChannel(X, (steps * channels_per_step))
-print(step_plane)
+step_channel_idx = steps * channels_per_step
+for step in range(0, steps - 1):
+    print("Step Plane " + str(step))
+    step_plane = getChannel(X, (step_channel_idx + step))
+    print(step_plane)
+    print("")
 
+print("Trap Plane")
+trap_plane_channel_idx = step_channel_idx + 3
+trap_plane = getChannel(X, trap_plane_channel_idx)
+print(trap_plane)
 print("")
+
 moves = yp[:-1]
 for i in range(0,outputs):
     print("Policies: " + output_names[i])
@@ -69,8 +77,8 @@ for i in range(0,outputs):
     print(moves.reshape(outputs,output_w,output_h)[i])
     print("")
     
-print("")
 print("Pass: ", yp[-1])
-
 print("")
+
 print("Value: ", yv)
+print("")
