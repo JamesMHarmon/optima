@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
 use crossbeam_queue::{SegQueue};
-use anyhow::{anyhow,ensure,Result};
+use anyhow::{Context as AnyhowContext,ensure,Result};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
