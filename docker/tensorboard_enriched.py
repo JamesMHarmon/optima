@@ -20,7 +20,8 @@ class TensorBoardEnriched(keras.callbacks.Callback):
         self._write_learning_rate(epoch)
         self._write_reg_term(epoch)
         self._write_gradient_norm(epoch)
-        
+        self._write_layer_losses(epoch)
+
         self.writer.flush()
 
     def on_batch_begin(self, step, logs=None):
@@ -66,7 +67,12 @@ class TensorBoardEnriched(keras.callbacks.Callback):
             grad_norm_max = max(self._grad_norms)
             self._write_value("Gradient Norm Average", epoch=epoch, val=grad_norm_avg)
             self._write_value("Gradient Norm Max", epoch=epoch, val=grad_norm_max)
-        
+
+    def _write_layer_losses(self, epoch):
+        for loss_layer in self.model.losses:
+            loss_val = K.get_session().run(loss_layer)
+            self._write_value(loss_layer.name, epoch=epoch, val=loss_val)
+    
     def _write_value(self, tag, epoch, val):
         print(tag + ':', val)
         summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=val)])

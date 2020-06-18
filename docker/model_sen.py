@@ -24,9 +24,7 @@ def Conv2D(filters, kernel_size):
 def BatchNorm(scale):
     return keras.layers.BatchNormalization(
         scale=scale,
-        epsilon=1e-5,
-        beta_regularizer=l2_reg(),
-        gamma_regularizer=None)
+        epsilon=1e-5)
 
 def Dense(units, activation, name=None, bias_regularizer=None):
     return keras.layers.Dense(
@@ -71,7 +69,7 @@ def SqueezeExcitation(x, filters, ratio=4):
 def ValueHead(x, filters):
     out = ConvBlock(filters=32, kernel_size=1)(x)
 
-    out = Flatten()(out)
+    out = Flatten(data_format=DATA_FORMAT)(out)
     out = Dense(128, activation='relu')(out)
 
     out = Dense(1, name='value_head', activation='tanh')(out)
@@ -80,14 +78,14 @@ def ValueHead(x, filters):
 def PolicyHead(x, filters, output_size):
     out = ConvBlock(filters=32, kernel_size=1)(x)
 
-    out = Flatten()(out)
+    out = Flatten(data_format=DATA_FORMAT)(out)
     out = Dense(output_size, name='policy_head', activation=None, bias_regularizer=l2_reg())(out)
     return out
 
 def MovesLeftHead(x, filters, moves_left_size):
     out = ConvBlock(filters=8, kernel_size=1)(x)
 
-    out = Flatten()(out)
+    out = Flatten(data_format=DATA_FORMAT)(out)
     out = Dense(moves_left_size * 2, activation='relu')(out)
     out = Dense(moves_left_size, name='moves_left_head', activation='softmax')(out)
     return out
