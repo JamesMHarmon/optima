@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
 use crossbeam_queue::{SegQueue};
-use anyhow::{Context as AnyhowContext,ensure,Result};
+use anyhow::{anyhow,Context as AnyhowContext,ensure,Result};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
 use serde::{Serialize, Deserialize};
@@ -272,7 +272,7 @@ impl Predictor {
         
         let op_input = graph.operation_by_name_required("input_1").expect("Expected to find input operation");
         let op_value_head = graph.operation_by_name_required("value_head/Tanh").expect("Expected to find value_head operation");
-        let op_policy_head = graph.operation_by_name_required("policy_head/BiasAdd").expect("Expected to find policy_head operation");
+        let op_policy_head = graph.operation_by_name_required("policy_head/concat").expect("Expected to find policy_head operation");
         let op_moves_left_head = graph.operation_by_name_required("moves_left_head/Softmax").ok();
         
         Self {

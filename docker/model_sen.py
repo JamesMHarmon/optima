@@ -75,12 +75,12 @@ def ValueHead(x, filters):
 
     out = Flatten()(out)
     out = Dense(filters, activation='relu')(out)
-
     out = Dense(1, name='value_head', activation='tanh')(out)
+
     return out
 
 def PolicyHeadFullyConnected(x, filters, output_size):
-    out = ConvBlock(filters=32, kernel_size=1)(x)
+    out = ConvBlock(filters=filters // 8, kernel_size=1)(x)
 
     out = Flatten()(out)
     out = Dense(output_size, name='policy_head', activation=None, bias_regularizer=l2_reg())(out)
@@ -99,9 +99,9 @@ def PolicyHeadConvolutional(x, filters, output_size):
     move_down_out = create_move_dir_out(cropping=((0, 1), (0, 0)))
     move_left_out = create_move_dir_out(cropping=((0, 0), (1, 0)))
 
-    pass_out = ConvBlock(filters=32, kernel_size=1)(conv_block)
+    pass_out = ConvBlock(filters=filters // 8, kernel_size=1)(conv_block)
     pass_out = Flatten()(pass_out)
-    pass_out = Dense(128, activation='relu')(pass_out)
+    pass_out = Dense(filters, activation='relu')(pass_out)
     pass_out = Dense(1, activation=None, bias_regularizer=l2_reg())(pass_out)
 
     out = Concatenate(name='policy_head')([
@@ -132,7 +132,12 @@ def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_s
         net = ResidualBlock(net, num_filters)
 
     value_head = ValueHead(net, num_filters)
-    policy_head = PolicyHeadConvolutional(net, num_filters, output_size)
+
+    # Hack to use the Convolutional head for the Arimaa Play Net
+    if output_size == 225:
+        policy_head = PolicyHeadConvolutional(net, num_filters, output_size)
+    else:
+        policy_head = PolicyHeadFullyConnected(net, num_filters, output_size)
 
     if moves_left_size > 0:
         moves_left_head = MovesLeftHead(net, num_filters, moves_left_size)
