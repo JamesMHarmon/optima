@@ -1,7 +1,7 @@
 import numpy as np
 import keras
 from keras.models import Model
-from keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, multiply, Concatenate, Cropping2D
+from keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
@@ -60,17 +60,18 @@ def ResidualBlock(x, filters, name):
     
     out = SqueezeExcitation(out, filters, name=name)
 
-    out = keras.layers.add([x, out])
+    out = add([x, out])
     out = ReLU()(out)
 
     return out
 
 def SqueezeExcitation(x, filters, name, ratio=4):
     pool = GlobalAveragePooling2D(data_format=DATA_FORMAT, name=name + '/se/global_average_pooling2d')(x)
-    pool = Reshape([1, 1, filters])(pool)
     squeeze = Dense(filters // ratio, activation='relu', name=name + '/se/1')(pool)
-    excite = Dense(filters, activation='sigmoid', name=name + '/se/2')(squeeze)
-    return multiply([x, excite])
+    excite_gamma = Reshape([1, 1, filters])(Dense(filters, activation='sigmoid', name=name + '/se/gamma')(squeeze))
+    excite_beta = Reshape([1, 1, filters])(Dense(filters, activation=None, name=name + '/se/bias')(squeeze))
+
+    return add([multiply([x, excite_gamma]), excite_beta])
 
 def ValueHead(x, filters):
     out = ConvBlock(filters=filters // 8, kernel_size=1, name='value_head')(x)
