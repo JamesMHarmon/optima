@@ -65,13 +65,20 @@ def ResidualBlock(x, filters, name):
 
     return out
 
-def SqueezeExcitation(x, filters, name, ratio=4):
+def SqueezeExcitationWithBeta(x, filters, name, ratio=4):
     pool = GlobalAveragePooling2D(data_format=DATA_FORMAT, name=name + '/se/global_average_pooling2d')(x)
     squeeze = Dense(filters // ratio, activation='relu', name=name + '/se/1')(pool)
     excite_gamma = Reshape([1, 1, filters])(Dense(filters, activation='sigmoid', name=name + '/se/gamma')(squeeze))
-    excite_beta = Reshape([1, 1, filters])(Dense(filters, activation=None, name=name + '/se/bias')(squeeze))
+    excite_beta = Reshape([1, 1, filters])(Dense(filters, activation=None, name=name + '/se/beta')(squeeze))
 
     return add([multiply([x, excite_gamma]), excite_beta])
+
+def SqueezeExcitation(x, filters, name, ratio=4):
+    pool = GlobalAveragePooling2D(data_format=DATA_FORMAT, name=name + '/se/global_average_pooling2d')(x)
+    pool = Reshape([1, 1, filters])(pool)
+    squeeze = Dense(filters // ratio, activation='relu', name=name + '/se/1')(pool)
+    excite = Dense(filters, activation='sigmoid', name=name + '/se/2')(squeeze)
+    return multiply([x, excite])
 
 def ValueHead(x, filters):
     out = ConvBlock(filters=filters // 8, kernel_size=1, name='value_head')(x)
