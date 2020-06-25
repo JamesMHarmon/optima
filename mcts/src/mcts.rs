@@ -98,7 +98,8 @@ where
     starting_game_state: Option<S>,
     starting_num_actions: Option<usize>,
     root: Option<Index>,
-    arena: RefCell<Arena<MCTSNode<S,A,V>>>
+    arena: RefCell<Arena<MCTSNode<S,A,V>>>,
+    nodes_to_remove: Vec<Index>
 }
 
 #[allow(non_snake_case)]
@@ -160,7 +161,8 @@ where
             starting_game_state: Some(game_state),
             starting_num_actions: Some(actions),
             root: None,
-            arena: RefCell::new(Arena::new())
+            arena: RefCell::new(Arena::new()),
+            nodes_to_remove: Vec::new()
         }
     }
 
@@ -179,7 +181,8 @@ where
             starting_game_state: Some(game_state),
             starting_num_actions: Some(actions),
             root: None,
-            arena: RefCell::new(Arena::with_capacity(capacity * 2))
+            arena: RefCell::new(Arena::with_capacity(capacity * 2)),
+            nodes_to_remove: Vec::new()
         }
     }
 
@@ -220,10 +223,26 @@ where
     }
 
     pub async fn advance_to_action(&mut self, action: A) -> Result<()> {
-        self.advance_to_action_clearable(action, true).await
+        let result = self.advance_to_action_clearable(action, true).await;
+
+        if result.is_ok() {
+            self.clean_unused_nodes();
+        }
+
+        result
     }
 
     pub async fn advance_to_action_retain(&mut self, action: A) -> Result<()> {
+        let result = self.advance_to_action_clearable(action, false).await;
+
+        if result.is_ok() {
+            self.clean_unused_nodes();
+        }
+
+        result
+    }
+
+    pub async fn advance_to_action_retain_no_clean(&mut self, action: A) -> Result<()> {
         self.advance_to_action_clearable(action, false).await
     }
 
@@ -325,6 +344,14 @@ where
         Ok(max_depth)
     }
 
+    pub fn clean_unused_nodes(&mut self) {
+        let arena_borrow_mut = &mut *self.arena.borrow_mut();
+
+        for node_index in self.nodes_to_remove.drain(..) {
+            Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
+        }
+    }
+
     async fn _select_action(&mut self, use_temp: bool) -> Result<A> {
         if let Some(root_node_index) = &self.root {
             let arena_borrow = self.arena.borrow();
@@ -401,7 +428,7 @@ where
         let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
-            Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
+            self.nodes_to_remove.push(node_index);
         }
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {

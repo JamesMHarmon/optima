@@ -565,7 +565,6 @@ impl GameState {
     fn move_piece(&self, square: &Square, direction: &Direction) -> Self {
         let curr_play_phase = self.unwrap_play_phase();
         let curr_step = self.get_current_step();
-        // @TODO, why was this 4.
         let is_last_step = curr_step >= 3;
         let new_action = Action::Move(*square, *direction);
         let (new_piece_board_state, new_animal_was_trapped) = self.piece_board.take_action(&new_action);
