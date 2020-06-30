@@ -109,9 +109,8 @@ def PolicyHeadConvolutional(x, filters, output_size):
     move_down_out = create_move_dir_out(cropping=((0, 1), (0, 0)), name='policy_head/down')
     move_left_out = create_move_dir_out(cropping=((0, 0), (1, 0)), name='policy_head/left')
 
-    pass_out = ConvBlock(filters=filters // 8, kernel_size=1, name='policy_head/pass')(conv_block)
+    pass_out = ConvBlock(filters=2, kernel_size=1, name='policy_head/pass')(conv_block)
     pass_out = Flatten()(pass_out)
-    pass_out = Dense(filters, activation='relu', name='policy_head/pass/1')(pass_out)
     pass_out = Dense(1, activation=None, bias_regularizer=l2_reg(), name='policy_head/pass/2')(pass_out)
 
     out = Concatenate(name='policy_head')([
