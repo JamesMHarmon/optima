@@ -135,19 +135,16 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
     let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
     let invert = !is_p1_turn_to_move;
 
-    for (i, step) in (0..=current_step_num).rev().enumerate() {
-        let piece_board = game_state.get_piece_board_for_step(step);
-        let step_offset = i * BOARDS_PER_STATE;
+    let piece_board = game_state.get_piece_board_for_step(current_step_num);
 
-        for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].iter().enumerate() {
-            let player_offset = j * NUM_PIECE_TYPES;
+    for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].iter().enumerate() {
+        let player_offset = j * NUM_PIECE_TYPES;
 
-            for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
-                let piece_bits = piece_board.get_bits_for_piece(*piece, *player);
+        for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
+            let piece_bits = piece_board.get_bits_for_piece(*piece, *player);
 
-                let offset = step_offset + player_offset + piece_offset;
-                set_board_bits_invertable(input, offset, piece_bits, invert);
-            }
+            let offset = player_offset + piece_offset;
+            set_board_bits_invertable(input, offset, piece_bits, invert);
         }
     }
 }

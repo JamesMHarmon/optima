@@ -755,17 +755,7 @@ impl GameState {
     fn remove_passing_like_actions(&self, valid_actions: &mut Vec<Action>) {
         let play_phase = self.unwrap_play_phase();
         if play_phase.get_step() == 3 && !play_phase.piece_trapped_this_turn {
-            let mut actions_to_remove = Vec::with_capacity(0);
-
-            for action in valid_actions.iter() {
-                if self.is_passing_like_action(action) {
-                    actions_to_remove.push(action.clone());
-                }
-            }
-
-            for action_to_remove in actions_to_remove {
-                valid_actions.remove_item(&action_to_remove);
-            }
+            valid_actions.retain(|action| !self.is_passing_like_action(action));
         }
     }
 
