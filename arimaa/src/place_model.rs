@@ -1,3 +1,4 @@
+use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
@@ -14,6 +15,7 @@ use super::constants::{PLACE_INPUT_H as INPUT_H,PLACE_INPUT_W as INPUT_W,PLACE_I
 use super::engine::Engine;
 use super::engine::GameState;
 
+use half::f16;
 use anyhow::Result;
 
 /*
@@ -26,6 +28,13 @@ use anyhow::Result;
     Out:
     6 pieces
 */
+
+pub struct TranspositionEntry {
+    policy_metrics: [f16; OUTPUT_SIZE],
+    moves_left: f32,
+    value: f16
+}
+
 pub struct ModelFactory {}
 
 impl ModelFactory {
@@ -40,9 +49,32 @@ impl Mapper {
     fn new() -> Self {
         Self {}
     }
+
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f16]) -> Vec<ActionWithPolicy<Action>> {
+        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
+            .map(|action| {
+                let policy_index = map_action_to_policy_output_idx(&action);
+                let policy_score = policy_scores[policy_index];
+
+                ActionWithPolicy::new(
+                    action,
+                    policy_score.to_f32()
+                )
+            }).collect();
+
+        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
+
+        valid_actions_with_policies
+    }
+
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+        let curr_val = (value_output + 1.0) / 2.0;
+        let opp_val = 1.0 - curr_val;
+        if game_state.is_p1_turn_to_move() { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
+    }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
+impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
         let mut input: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
         input.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
@@ -101,33 +133,37 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         })
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
-        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
-            .map(|action| {
-                let policy_index = map_action_to_policy_output_idx(&action);
-                let policy_score = policy_scores[policy_index];
-
-                ActionWithPolicy::new(
-                    action,
-                    policy_score
-                )
-            }).collect();
-
-        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
-
-        valid_actions_with_policies
-    }
-
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
-        let opp_val = 1.0 - curr_val;
-        if game_state.is_p1_turn_to_move() { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
-    }
-
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         let player_to_move = if game_state.is_p1_turn_to_move() { 1 } else { 2 };
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
+    }
+
+    fn get_transposition_key(&self, _game_state: &GameState) -> u64 {
+        // @TODO: Add transpositions and enable cache
+        0
+    }
+
+    fn map_output_to_transposition_entry<I: Iterator<Item=f16>>(&self, _game_state: &GameState, policy_scores: I, value: f16, moves_left: f32) -> TranspositionEntry {
+        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
+
+        for (i, score) in policy_scores.enumerate() {
+            policy_metrics[i] = score;
+        }
+
+        TranspositionEntry {
+            policy_metrics,
+            moves_left,
+            value
+        }
+    }
+
+    fn map_transposition_entry_to_analysis(&self, game_state: &GameState, transposition_entry: &TranspositionEntry) -> GameStateAnalysis<Action,Value> {
+        GameStateAnalysis::new(
+            self.map_value_output_to_value(game_state, transposition_entry.value.to_f32()),
+            self.policy_to_valid_actions(game_state, &transposition_entry.policy_metrics),
+            transposition_entry.moves_left
+        )
     }
 }
 
@@ -157,12 +193,12 @@ fn insert_input_channel_bits(input: &mut [f32], offset: usize, bits: u64) {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper>;
+    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper,TranspositionEntry>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
     {
-        TensorflowModel::<GameState,Action,Value,Engine,Mapper>::create(
+        TensorflowModel::<GameState,Action,Value,Engine,Mapper,TranspositionEntry>::create(
             model_info,
             &TensorflowModelOptions {
                 num_filters: options.number_of_filters,
@@ -184,7 +220,8 @@ impl model::model::ModelFactory for ModelFactory {
         TensorflowModel::new(
             model_info.clone(),
             Engine::new(),
-            mapper
+            mapper,
+            0
         )
     }
 

@@ -1,3 +1,4 @@
+use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
 use model::model::ModelOptions;
@@ -15,6 +16,7 @@ use super::constants::{PLAY_INPUT_H as INPUT_H,PLAY_INPUT_W as INPUT_W,PLAY_INPU
 use super::engine::Engine;
 use super::engine::GameState;
 
+use half::f16;
 use anyhow::Result;
 
 /*
@@ -31,6 +33,12 @@ use anyhow::Result;
     1 pass bit
 */
 
+pub struct TranspositionEntry {
+    policy_metrics: [f16; OUTPUT_SIZE],
+    moves_left: f32,
+    value: f16
+}
+
 pub struct ModelFactory {}
 
 impl ModelFactory {
@@ -45,9 +53,43 @@ impl Mapper {
     pub fn new() -> Self {
         Self {}
     }
+
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f16]) -> Vec<ActionWithPolicy<Action>> {
+        let invert = !game_state.is_p1_turn_to_move();
+
+        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
+            .map(|action|
+            {
+                // Policy scores coming from the model are always from the perspective of player 1.
+                // This means that if we are p2, we need to flip the actions coming back and translate them
+                // to be actions in the p2 perspective.
+                let policy_index = if invert {
+                    map_action_to_policy_output_idx(&action.invert())
+                } else {
+                    map_action_to_policy_output_idx(&action)
+                };
+
+                let policy_score = policy_scores[policy_index];
+
+                ActionWithPolicy::new(
+                    action,
+                    policy_score.to_f32()
+                )
+            }).collect();
+
+        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
+
+        valid_actions_with_policies
+    }
+
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+        let curr_val = (value_output + 1.0) / 2.0;
+        let opp_val = 1.0 - curr_val;
+        if game_state.is_p1_turn_to_move() { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
+    }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
+impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
@@ -89,44 +131,37 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         })
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
-        let invert = !game_state.is_p1_turn_to_move();
-
-        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
-            .map(|action|
-            {
-                // Policy scores coming from the model are always from the perspective of player 1.
-                // This means that if we are p2, we need to flip the actions coming back and translate them
-                // to be actions in the p2 perspective.
-                let policy_index = if invert {
-                    map_action_to_policy_output_idx(&action.invert())
-                } else {
-                    map_action_to_policy_output_idx(&action)
-                };
-
-                let policy_score = policy_scores[policy_index];
-
-                ActionWithPolicy::new(
-                    action,
-                    policy_score
-                )
-            }).collect();
-
-        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
-
-        valid_actions_with_policies
-    }
-
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
-        let opp_val = 1.0 - curr_val;
-        if game_state.is_p1_turn_to_move() { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
-    }
-
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         let player_to_move = if game_state.is_p1_turn_to_move() { 1 } else { 2 };
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
+    }
+
+    fn get_transposition_key(&self, _game_state: &GameState) -> u64 {
+        // @TODO: Add transpositions and enable cache
+        0
+    }
+
+    fn map_output_to_transposition_entry<I: Iterator<Item=f16>>(&self, _game_state: &GameState, policy_scores: I, value: f16, moves_left: f32) -> TranspositionEntry {
+        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
+
+        for (i, score) in policy_scores.enumerate() {
+            policy_metrics[i] = score;
+        }
+
+        TranspositionEntry {
+            policy_metrics,
+            moves_left,
+            value
+        }
+    }
+
+    fn map_transposition_entry_to_analysis(&self, game_state: &GameState, transposition_entry: &TranspositionEntry) -> GameStateAnalysis<Action,Value> {
+        GameStateAnalysis::new(
+            self.map_value_output_to_value(game_state, transposition_entry.value.to_f32()),
+            self.policy_to_valid_actions(game_state, &transposition_entry.policy_metrics),
+            transposition_entry.moves_left
+        )
     }
 }
 
@@ -206,12 +241,12 @@ fn map_coord_to_policy_output_idx_left(square: &Square) -> usize {
 
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper>;
+    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper,TranspositionEntry>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
     {
-        TensorflowModel::<GameState,Action,Value,Engine,Mapper>::create(
+        TensorflowModel::<GameState,Action,Value,Engine,Mapper,TranspositionEntry>::create(
             model_info,
             &TensorflowModelOptions {
                 num_filters: options.number_of_filters,
@@ -230,13 +265,12 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        //cache(
-            TensorflowModel::new(
-                model_info.clone(),
-                Engine::new(),
-                mapper
-            )
-        //)
+        TensorflowModel::new(
+            model_info.clone(),
+            Engine::new(),
+            mapper,
+            0
+        )
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {

@@ -6,7 +6,5 @@ pub mod model_info;
 pub mod node_metrics;
 pub mod position_metrics;
 
-pub mod analysis_cache; 
-pub mod analysis_cache_queue; 
 pub mod tensorflow;
 pub mod logits;

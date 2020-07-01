@@ -1,22 +1,28 @@
+use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
-use model::analysis_cache::cache;
 use model::analytics::ActionWithPolicy;
 use model::node_metrics::NodeMetrics;
 use model::model_info::ModelInfo;
-use model::analysis_cache::AnalysisCacheModel;
 use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use model::model::ModelOptions;
 use engine::value::{Value as ValueTrait};
 use super::value::Value;
-use super::constants::{ACTIONS_TO_CACHE,INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MOVES_LEFT_SIZE};
+use super::constants::{INPUT_H,INPUT_W,INPUT_C,OUTPUT_SIZE,MOVES_LEFT_SIZE};
 use super::action::Action;
 use super::engine::Engine;
 use super::engine::GameState;
 use super::board::map_board_to_arr;
 
+use half::f16;
 use anyhow::Result;
+
+pub struct TranspositionEntry {
+    policy_metrics: [f16; OUTPUT_SIZE],
+    moves_left: f32,
+    value: f16
+}
 
 pub struct ModelFactory {}
 
@@ -32,9 +38,35 @@ impl Mapper {
     fn new() -> Self {
         Self {}
     }
+
+    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f16]) -> Vec<ActionWithPolicy<Action>> {
+        let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
+           .zip(policy_scores).enumerate()
+           .filter_map(|(i, (v, p))|
+           {
+               if *v {
+                   Some(ActionWithPolicy::new(
+                       Action::DropPiece((i + 1) as u64),
+                       p.to_f32()
+                   ))
+               } else {
+                   None
+               }
+           }).collect();
+
+       update_logit_policies_to_softmax(&mut valid_actions_with_policies);
+
+       valid_actions_with_policies
+   }
+
+   fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+       let curr_val = (value_output + 1.0) / 2.0;
+       let opp_val = 1.0 - curr_val;
+       if game_state.p1_turn_to_move { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
+   }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
+impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
         let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
@@ -71,45 +103,46 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
         result.to_vec()
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f32]) -> Vec<ActionWithPolicy<Action>> {
-         let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state.get_valid_actions().iter()
-            .zip(policy_scores).enumerate()
-            .filter_map(|(i, (v, p))|
-            {
-                if *v {
-                    Some(ActionWithPolicy::new(
-                        Action::DropPiece((i + 1) as u64),
-                        *p
-                    ))
-                } else {
-                    None
-                }
-            }).collect();
-
-        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
-
-        valid_actions_with_policies
-    }
-
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
-        let opp_val = 1.0 - curr_val;
-        if game_state.p1_turn_to_move { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
-    }
-
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         let player_to_move = if game_state.p1_turn_to_move { 1 } else { 2 };
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
     }
+
+    fn get_transposition_key(&self, _game_state: &GameState) -> u64 {
+        // @TODO: Add transpositions and enable cache
+        0
+    }
+
+    fn map_output_to_transposition_entry<I: Iterator<Item=f16>>(&self, _game_state: &GameState, policy_scores: I, value: f16, moves_left: f32) -> TranspositionEntry {
+        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
+
+        for (i, score) in policy_scores.enumerate() {
+            policy_metrics[i] = score;
+        }
+
+        TranspositionEntry {
+            policy_metrics,
+            moves_left,
+            value
+        }
+    }
+
+    fn map_transposition_entry_to_analysis(&self, game_state: &GameState, transposition_entry: &TranspositionEntry) -> GameStateAnalysis<Action,Value> {
+        GameStateAnalysis::new(
+            self.map_value_output_to_value(game_state, transposition_entry.value.to_f32()),
+            self.policy_to_valid_actions(game_state, &transposition_entry.policy_metrics),
+            transposition_entry.moves_left
+        )
+    }
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = AnalysisCacheModel<ShouldCache,TensorflowModel<GameState,Action,Value,Engine,Mapper>>;
+    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper,TranspositionEntry>;
     type O = ModelOptions;
 
     fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M {
-        TensorflowModel::<GameState,Action,Value,Engine,Mapper>::create(
+        TensorflowModel::<GameState,Action,Value,Engine,Mapper,TranspositionEntry>::create(
             model_info,
             &TensorflowModelOptions {
                 num_filters: options.number_of_filters,
@@ -128,26 +161,15 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        cache(
-            TensorflowModel::new(
-                model_info.clone(),
-                Engine::new(),
-                mapper
-            )
+        TensorflowModel::new(
+            model_info.clone(),
+            Engine::new(),
+            mapper,
+            0
         )
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
         Ok(get_latest_model_info(model_info)?)
-    }
-}
-
-pub struct ShouldCache {}
-
-impl model::analysis_cache::ShouldCache for ShouldCache {
-    type State = GameState;
-
-    fn should_cache(game_state: &GameState) -> bool {
-        game_state.number_of_actions() <= ACTIONS_TO_CACHE
     }
 }

@@ -10,8 +10,8 @@ use super::value::Value;
 use super::action::Action;
 use super::engine::Engine;
 use super::engine::GameState;
-use super::place_model::{ModelFactory as PlaceModelFactory, Mapper as PlaceMapper};
-use super::play_model::{ModelFactory as PlayModelFactory, Mapper as PlayMapper};
+use super::place_model::{ModelFactory as PlaceModelFactory, Mapper as PlaceMapper, TranspositionEntry as PlaceTranspositionEntry};
+use super::play_model::{ModelFactory as PlayModelFactory, Mapper as PlayMapper, TranspositionEntry as PlayTranspositionEntry};
 
 use anyhow::Result;
 
@@ -62,8 +62,8 @@ impl model::model::ModelFactory for ModelFactory {
 }
 
 pub struct Model {
-    play_model: TensorflowModel<GameState,Action,Value,Engine,PlayMapper>,
-    place_model: TensorflowModel<GameState,Action,Value,Engine,PlaceMapper>
+    play_model: TensorflowModel<GameState,Action,Value,Engine,PlayMapper,PlayTranspositionEntry>,
+    place_model: TensorflowModel<GameState,Action,Value,Engine,PlaceMapper,PlaceTranspositionEntry>
 }
 
 impl model::model::Model for Model {
@@ -106,14 +106,14 @@ impl model::model::Model for Model {
 }
 
 pub struct Analyzer {
-    play_analyzer: GameAnalyzer<GameState,Action,Value,Engine,PlayMapper>,
-    place_analyzer: GameAnalyzer<GameState,Action,Value,Engine,PlaceMapper>
+    play_analyzer: GameAnalyzer<GameState,Action,Value,Engine,PlayMapper,PlayTranspositionEntry>,
+    place_analyzer: GameAnalyzer<GameState,Action,Value,Engine,PlaceMapper,PlaceTranspositionEntry>
 }
 
 impl model::analytics::GameAnalyzer for Analyzer {
     type Future = Either<
-        GameStateAnalysisFuture<Self::State,Self::Action,Self::Value,Engine,PlayMapper>,
-        GameStateAnalysisFuture<Self::State,Self::Action,Self::Value,Engine,PlaceMapper>
+        GameStateAnalysisFuture<Self::State,Self::Action,Self::Value,Engine,PlayMapper,PlayTranspositionEntry>,
+        GameStateAnalysisFuture<Self::State,Self::Action,Self::Value,Engine,PlaceMapper,PlaceTranspositionEntry>
     >;
     type Action = Action;
     type State = GameState;
