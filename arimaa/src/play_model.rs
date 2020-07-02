@@ -56,6 +56,8 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value> for Mapper {
 
         set_step_num_squares(&mut result, game_state);
 
+        set_valid_move_squares(&mut result, game_state);
+
         set_trap_squares(&mut result);
 
         result
@@ -149,17 +151,45 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
     }
 }
 
+fn set_valid_move_squares(input: &mut [f32], game_state: &GameState) {
+    let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
+    let invert = !is_p1_turn_to_move;
+
+    for valid_action in game_state.valid_actions() {
+        let action = if invert { valid_action.invert() } else { valid_action };
+        match action {
+            Action::Move(square, direction) => {
+                let dir_channel_idx = match direction {
+                    Direction::Up => VALID_MOVES_CHANNEL_IDX,
+                    Direction::Right => VALID_MOVES_CHANNEL_IDX + 1,
+                    Direction::Down => VALID_MOVES_CHANNEL_IDX + 2,
+                    Direction::Left => VALID_MOVES_CHANNEL_IDX + 3,
+                };
+
+                let input_idx = square.get_index() * PLAY_INPUT_C + dir_channel_idx;
+                input[input_idx] = 1.0;
+            },
+            Action::Pass => set_all_bits_for_channel(input, VALID_MOVES_CHANNEL_IDX + 4),
+            Action::Place(_) => panic!("Place not valid for play.")
+        }
+    }
+}
+
 fn set_step_num_squares(input: &mut [f32], game_state: &GameState) {
     let current_step = game_state.get_current_step();
 
     // Current step is base 0. However we start from 1 since the first step doesn't have a corresponding channel since 0 0 0 reoresents the first step.
     for step_num in 1..=current_step {
-        let step_num_offset = STEP_NUM_CHANNEL_IDX + step_num - 1;
+        let step_num_channel_idx = STEP_NUM_CHANNEL_IDX + step_num - 1;
 
-        for board_idx in 0..BOARD_SIZE {
-            let cell_idx = board_idx * PLAY_INPUT_C + step_num_offset;
-            input[cell_idx] = 1.0;
-        }
+        set_all_bits_for_channel(input, step_num_channel_idx);
+    }
+}
+
+fn set_all_bits_for_channel(input: &mut [f32], channel_idx: usize) {
+    for board_idx in 0..BOARD_SIZE {
+        let input_idx = board_idx * PLAY_INPUT_C + channel_idx;
+        input[input_idx] = 1.0;
     }
 }
 
@@ -203,7 +233,6 @@ fn map_coord_to_policy_output_idx_left(square: &Square) -> usize {
     let num_squares_to_skip = square_index / BOARD_WIDTH;
     square_index - num_squares_to_skip - 1
 }
-
 
 impl model::model::ModelFactory for ModelFactory {
     type M = TensorflowModel<GameState,Action,Value,Engine,Mapper>;

@@ -7,7 +7,7 @@ FILE_NAME = '/tmp/sample.npy'
 
 input_h = 8
 input_w = 8
-input_c = 52
+input_c = 57
 input_size = input_h * input_w * input_c
 channels_per_step = 12
 steps = 4
@@ -41,7 +41,7 @@ def getChannel(arr, channel_idx):
 for step in range(0, steps):
     channels = []
     for i in range(0, channels_per_step):
-        print("Channel: " + str(i))
+        print("Piece Channel: " + str(i) + " " + pieces[i])
         channel = getChannel(X, (step * channels_per_step) + i)
         print(channel)
         channel = np.where(channel==1, i + 1, 0)
@@ -52,7 +52,7 @@ for step in range(0, steps):
     for i in range(0, channels_per_step):
         flattened += channels[i]
 
-    print("Flattened Step")
+    print("Flattened Piece Channel: " + str(step))
     flattened = flattened.astype("int")
     print(pieces[flattened])
     print("")
@@ -63,9 +63,17 @@ for step in range(0, steps - 1):
     step_plane = getChannel(X, (step_channel_idx + step))
     print(step_plane)
     print("")
+    
+valid_moves_channel_idx = step_channel_idx + 3
+for plane in range(0, 5):
+    valid_moves_places = ['Up', 'Right', 'Down', 'Left', 'Pass']
+    print("Valid Move Plane " + valid_moves_places[plane])
+    valid_move_plane = getChannel(X, (valid_moves_channel_idx + plane))
+    print(valid_move_plane)
+    print("")
 
 print("Trap Plane")
-trap_plane_channel_idx = step_channel_idx + 3
+trap_plane_channel_idx = valid_moves_channel_idx + 5
 trap_plane = getChannel(X, trap_plane_channel_idx)
 print(trap_plane)
 print("")
