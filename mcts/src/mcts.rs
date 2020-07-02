@@ -552,9 +552,10 @@ where
             let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let moves_left = node.map_or(0.0, |n| n.moves_left_score);
             let Msa = Self::get_Msa(child, game_length_baseline, options);
+            let game_length = if Nsa == 0 { child.M } else { child.M / Nsa as f32 };
 
             let PUCT = logitQ + Usa;
-            pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, moves_left, PUCT });
+            pucts.push(PUCT { Psa, Nsa, Msa, cpuct, Usa, Qsa, logitQ, moves_left, game_length, PUCT });
         }
 
         pucts
