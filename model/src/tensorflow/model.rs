@@ -42,7 +42,6 @@ pub struct TensorflowModel<S,A,V,E,Map,Te>
     active_analyzers: Arc<AtomicUsize>,
     active_threads: Arc<AtomicUsize>,
     id_generator: Arc<AtomicUsize>,
-    transposition_table: Arc<TranspositionTable<Te>>,
     mapper: Arc<Map>,
     analysis_request_threads: usize,
     options: TensorflowModelOptions
@@ -98,7 +97,7 @@ where
         }
 
         let mapper = Arc::new(mapper);
-        let transposition_table = Arc::new(TranspositionTable::new(tt_cache_size));
+        let transposition_table = Arc::new(if tt_cache_size > 0 { Some(TranspositionTable::new(tt_cache_size)) } else { None });
         let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), transposition_table.clone(), analysis_request_threads, batch_size));
         let options = get_options(&model_info).expect("Could not load model options file");
 
@@ -108,7 +107,6 @@ where
             active_analyzers: Arc::new(AtomicUsize::new(0)),
             active_threads: Arc::new(AtomicUsize::new(0)),
             id_generator: Arc::new(AtomicUsize::new(0)),
-            transposition_table,
             mapper,
             analysis_request_threads,
             options
@@ -190,6 +188,15 @@ where
                         min_batch_size,
                         max_batch_size
                     );
+                    if let Some((entries, capacity, hits, misses)) = batching_model_ref.take_transposition_hits() {
+                        info!(
+                            "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
+                            if hits > 0 { (hits as f32 / (hits + misses) as f32) * 100f32 } else { 0f32 },
+                            (entries as f32 / capacity as f32) * 100f32,
+                            entries,
+                            capacity
+                        );
+                    }
                     last_report = Instant::now();
                 }
             }
@@ -637,7 +644,7 @@ fn run_cmd(cmd: &str) -> Result<()> {
 pub struct BatchingModel<S,A,V,E,Map,Te> {
     states_to_analyse: SegQueue<(usize, S, Waker)>,
     states_analysed: IncrementingMap<GameStateAnalysis<A,V>>,
-    transposition_table: Arc<TranspositionTable<Te>>,
+    transposition_table: Arc<Option<TranspositionTable<Te>>>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -656,7 +663,7 @@ where
     E: GameEngine<State=S,Action=A,Value=V> + Send + Sync + 'static,
     Map: Mapper<S,A,V,Te>
 {
-    fn new(engine: E, mapper: Arc<Map>, transposition_table: Arc<TranspositionTable<Te>>, analysis_request_threads: usize, batch_size: usize) -> Self
+    fn new(engine: E, mapper: Arc<Map>, transposition_table: Arc<Option<TranspositionTable<Te>>>, analysis_request_threads: usize, batch_size: usize) -> Self
     {
         let states_to_analyse = SegQueue::new();
         let states_analysed = IncrementingMap::with_capacity(batch_size * analysis_request_threads);
@@ -713,6 +720,11 @@ where
 
             let analysis = mapper.map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
 
+            if let Some(transposition_table) = &*self.transposition_table {
+                let transposition_key = self.mapper.get_transposition_key(&game_state);
+                transposition_table.set(transposition_key, transposition_table_entry);
+            }
+
             self.states_analysed.insert(id, analysis);
             waker.wake();
 
@@ -742,6 +754,15 @@ where
         )
     }
 
+    fn take_transposition_hits(&self) -> Option<(usize, usize, usize, usize)> {
+        self.transposition_table.as_ref().as_ref().map(|transposition_table| (
+            transposition_table.num_entries(),
+            transposition_table.capacity(),
+            self.cache_hits.swap(0, Ordering::SeqCst),
+            self.cache_misses.swap(0, Ordering::SeqCst)
+        ))
+    }
+
     fn poll(&self, id: usize) -> Poll<GameStateAnalysis<A,V>> {
         let analysis = self.states_analysed.remove(id);
 
@@ -757,24 +778,32 @@ where
     fn request(&self, id: usize, game_state: S, waker: &Waker) -> Poll<GameStateAnalysis<A,V>> {
         if let Some(value) = self.engine.is_terminal_state(&game_state) {
             self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
-            Poll::Ready(GameStateAnalysis::new(
+            return Poll::Ready(GameStateAnalysis::new(
                 value,
                 Vec::new(),
                 0.0
-            ))
-        } else if let Some(transposition_entry) = self.transposition_table.get(self.mapper.get_transposition_key(&game_state)) {
-            let analysis = self.mapper.map_transposition_entry_to_analysis(&game_state, &*transposition_entry);
-
-            Poll::Ready(analysis)
-        } else {
-            self.states_to_analyse.push((
-                id,
-                game_state,
-                waker.clone()
             ));
+        } 
+        
+        if let Some(transposition_table) = &*self.transposition_table {
+            if let Some(transposition_entry) = transposition_table.get(self.mapper.get_transposition_key(&game_state)) {
+                let analysis = self.mapper.map_transposition_entry_to_analysis(&game_state, &*transposition_entry);
 
-            Poll::Pending
+                self.cache_hits.fetch_add(1, Ordering::SeqCst);
+    
+                return Poll::Ready(analysis);
+            }
         }
+
+        self.cache_misses.fetch_add(1, Ordering::SeqCst);
+
+        self.states_to_analyse.push((
+            id,
+            game_state,
+            waker.clone()
+        ));
+
+        Poll::Pending
     }
 }
 

@@ -217,14 +217,14 @@ pub struct GameState {
 
 impl Hash for GameState {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.hash.hash());
+        state.write_u64(self.hash.board_state_hash());
         state.finish();
     }
 }
 
 impl PartialEq for GameState {
     fn eq(&self, other: &GameState) -> bool {
-        self.hash.hash() == other.hash.hash()
+        self.hash.board_state_hash() == other.hash.board_state_hash()
     }
 }
 
@@ -396,6 +396,13 @@ impl GameState {
         }
 
         None
+    }
+
+    pub fn get_transposition_hash(&self) -> u64 {
+        match &self.phase {
+            Phase::PlayPhase(play_phase) => self.hash.board_state_hash_with_push_pull_state(play_phase.push_pull_state),
+            Phase::PlacePhase => self.hash.board_state_hash()
+        }
     }
 
     fn can_pass(&self) -> bool {
@@ -625,13 +632,14 @@ impl GameState {
         let piece_board = &self.get_piece_board();
         let is_opponent_piece = self.is_their_piece(source_square_bit, piece_board);
         let play_phase = self.unwrap_play_phase();
+        let piece_type_at_bit = get_piece_type_at_bit(source_square_bit, piece_board);
 
         // Check if previous move can count as a pull, if so, do that.
         // Otherwise state that it must be followed with a push.
         if is_opponent_piece && !self.move_can_be_counted_as_pull(source_square_bit, direction, piece_board) {
-            PushPullState::MustCompletePush(*square, get_piece_type_at_bit(source_square_bit, piece_board))
-        } else if !is_opponent_piece && !play_phase.push_pull_state.is_must_complete_push() {
-            PushPullState::PossiblePull(*square, get_piece_type_at_bit(source_square_bit, piece_board))
+            PushPullState::MustCompletePush(*square, piece_type_at_bit)
+        } else if !is_opponent_piece && !play_phase.push_pull_state.is_must_complete_push() && piece_type_at_bit != Piece::Rabbit {
+            PushPullState::PossiblePull(*square, piece_type_at_bit)
         } else {
             PushPullState::None
         }

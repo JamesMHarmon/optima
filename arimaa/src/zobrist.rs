@@ -1,4 +1,4 @@
-use super::engine::{GameState,PieceBoardState};
+use super::engine::{GameState,PieceBoardState,PushPullState};
 use super::action::{Piece,Square,map_bit_board_to_squares};
 use super::zobrist_values::*;
 
@@ -64,8 +64,18 @@ impl Zobrist {
         Zobrist { hash }
     }
 
-    pub fn hash(&self) -> u64 {
+    pub fn board_state_hash(&self) -> u64 {
         self.hash
+    }
+
+    pub fn board_state_hash_with_push_pull_state(&self, push_pull_state: PushPullState) -> u64 {
+        let push_pull_hash = match push_pull_state {
+            PushPullState::MustCompletePush(square, piece) => get_push_piece_value(square, piece),
+            PushPullState::PossiblePull(square, piece) => get_pull_piece_value(square, piece),
+            PushPullState::None => 0
+        };
+
+        self.hash ^ push_pull_hash
     }
 }
 
@@ -106,4 +116,30 @@ fn get_piece_value(square: Square, piece: Piece, is_p1: bool) -> u64 {
     let piece_idx = piece_idx + if is_p1 { 0 } else { 6 };
 
     SQUARE_VALUES[piece_idx][square.get_index()]
+}
+
+fn get_push_piece_value(square: Square, piece: Piece) -> u64 {
+    let piece_idx = match piece {
+        Piece::Elephant => panic!("Elephants cannot be pushed"),
+        Piece::Camel => 0,
+        Piece::Horse => 1,
+        Piece::Dog => 2,
+        Piece::Cat => 3,
+        Piece::Rabbit => 4
+    };
+
+    PUSH_VALUES[piece_idx][square.get_index()]
+}
+
+fn get_pull_piece_value(square: Square, piece: Piece) -> u64 {
+    let piece_idx = match piece {
+        Piece::Elephant => 0,
+        Piece::Camel => 1,
+        Piece::Horse => 2,
+        Piece::Dog => 3,
+        Piece::Cat => 4,
+        Piece::Rabbit => panic!("Rabbits cannot pull")
+    };
+
+    POSSIBLE_PULL_VALUES[piece_idx][square.get_index()]
 }
