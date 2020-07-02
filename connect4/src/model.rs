@@ -109,9 +109,8 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
         (val * 2.0) - 1.0
     }
 
-    fn get_transposition_key(&self, _game_state: &GameState) -> u64 {
-        // @TODO: Add transpositions and enable cache
-        0
+    fn get_transposition_key(&self, game_state: &GameState) -> u64 {
+        game_state.get_transposition_hash()
     }
 
     fn map_output_to_transposition_entry<I: Iterator<Item=f16>>(&self, _game_state: &GameState, policy_scores: I, value: f16, moves_left: f32) -> TranspositionEntry {
@@ -165,7 +164,7 @@ impl model::model::ModelFactory for ModelFactory {
             model_info.clone(),
             Engine::new(),
             mapper,
-            0
+            4000
         )
     }
 

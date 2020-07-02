@@ -1,18 +1,21 @@
 use std::fmt::{self,Display,Formatter};
+use std::hash::{Hash,Hasher};
 use engine::engine::GameEngine;
 use engine::game_state;
 
+use super::zobrist::Zobrist;
 use super::value::Value;
 use super::action::Action;
 use super::board::map_board_to_arr;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_piece_board: u64,
-    pub p2_piece_board: u64
+    pub p2_piece_board: u64,
+    pub zobrist: Zobrist
 }
 
 impl game_state::GameState for GameState {
@@ -20,8 +23,15 @@ impl game_state::GameState for GameState {
         GameState {
             p1_turn_to_move: true,
             p1_piece_board: 0,
-            p2_piece_board: 0
+            p2_piece_board: 0,
+            zobrist: Zobrist::initial()
         }
+    }
+}
+
+impl Hash for GameState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.zobrist.board_state_hash().hash(state);
     }
 }
 
@@ -31,6 +41,7 @@ impl GameState {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
         let dropped_piece = (all_pieces + column_adder) & !all_pieces;
         let p1_turn_to_move = self.p1_turn_to_move;
+        let zobrist = self.zobrist.add_piece(dropped_piece, p1_turn_to_move);
         let mut p1_piece_board = self.p1_piece_board;
         let mut p2_piece_board = self.p2_piece_board;
 
@@ -43,7 +54,8 @@ impl GameState {
         Self {
             p1_turn_to_move: !p1_turn_to_move,
             p1_piece_board,
-            p2_piece_board
+            p2_piece_board,
+            zobrist
         }
     }
 
@@ -92,6 +104,10 @@ impl GameState {
         }
 
         num_of_set_bits
+    }
+
+    pub fn get_transposition_hash(&self) -> u64 {
+        self.zobrist.board_state_hash()
     }
 
     fn has_connected_4(&self) -> bool {

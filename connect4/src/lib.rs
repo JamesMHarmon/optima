@@ -5,3 +5,5 @@ pub mod value;
 
 mod board;
 mod constants;
+mod zobrist;
+mod zobrist_values;
