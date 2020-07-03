@@ -24,7 +24,8 @@ use engine::value::Value;
 
 use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE,ANALYSIS_REQUEST_THREADS,TRAIN_DATA_CHUNK_SIZE};
 use super::paths::Paths;
-use super::transposition_table::{TranspositionTable};
+use super::transposition_table::TranspositionTable;
+use super::mode::Mode;
 use super::super::analytics::{self,GameStateAnalysis};
 use super::super::model::{Model as ModelTrait,TrainOptions};
 use super::super::model_info::ModelInfo;
@@ -59,7 +60,7 @@ pub struct TensorflowModelOptions {
 }
 
 pub trait Mapper<S,A,V,Te> {
-    fn game_state_to_input(&self, game_state: &S) -> Vec<f32>;
+    fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<f32>;
     fn get_input_dimensions(&self) -> [u64; 3];
     fn get_symmetries(&self, metric: PositionMetrics<S,A,V>) -> Vec<PositionMetrics<S,A,V>>;
     fn policy_metrics_to_expected_output(&self, game_state: &S, policy: &NodeMetrics<A>) -> Vec<f32>;
@@ -173,7 +174,7 @@ where
                     }
                 }
                 
-                let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state));
+                let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state, Mode::Infer));
                 let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).expect("Expected predict to be successful");
                 batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).expect("Expected provide_analysis to be successful");
 
@@ -428,7 +429,7 @@ where
                 let metric = metric_symmetires.choose(rng).expect("Expected at least one metric to return from symmetries.");
 
                     for record in 
-                        mapper.game_state_to_input(&metric.game_state).into_iter().chain(
+                        mapper.game_state_to_input(&metric.game_state, Mode::Train).into_iter().chain(
                         mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy).into_iter().chain(
                         std::iter::once(mapper.map_value_to_value_output(&metric.game_state, &metric.score)).chain(
                         map_moves_left_to_one_hot(metric.moves_left, moves_left_size)

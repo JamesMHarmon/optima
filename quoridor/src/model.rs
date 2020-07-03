@@ -1,3 +1,4 @@
+use model::tensorflow::mode::Mode;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
@@ -80,7 +81,7 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
+    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
 
         let GameState {
@@ -422,7 +423,7 @@ mod tests {
 
         let game_state = GameState::initial();
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(76, 4, &vec!(), &vec!(), 0, 0),
@@ -437,7 +438,7 @@ mod tests {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(76, 13, &vec!(), &vec!(), 0, 0),
@@ -452,7 +453,7 @@ mod tests {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(76, 4, &vec!(), &vec!(9,10), 0, 1),
@@ -468,7 +469,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('d', 9)));
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(76, 3, &vec!(), &vec!(79,80), 1, 0),
@@ -484,7 +485,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(67, 4, &vec!(38,47), &vec!(), 0, 1),
@@ -501,7 +502,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
 
-        let input = mapper.game_state_to_input(&game_state);
+        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
             map_to_input_vec(76, 22, &vec!(32,41), &vec!(), 1, 0),

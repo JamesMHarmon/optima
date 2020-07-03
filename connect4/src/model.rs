@@ -1,3 +1,4 @@
+use model::tensorflow::mode::Mode;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
@@ -67,7 +68,7 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
+    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
         let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
             (game_state.p1_piece_board, game_state.p2_piece_board)

@@ -1,3 +1,4 @@
+use model::tensorflow::mode::Mode;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::position_metrics::PositionMetrics;
@@ -75,7 +76,7 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState) -> Vec<f32> {
+    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f32> {
         let mut input: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
         input.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
 

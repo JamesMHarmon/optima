@@ -282,7 +282,7 @@ impl GameState {
             if play_phase.push_pull_state.is_must_complete_push() {
                 let valid_actions = self.get_must_complete_push_actions(piece_board);
                 self.has_non_passing_like_action(valid_actions)
-            } else if self.can_pass() {
+            } else if self.can_pass(true) {
                 true
             } else if {
                 let mut valid_actions = Vec::new();
@@ -323,29 +323,11 @@ impl GameState {
     }
 
     pub fn valid_actions(&self) -> Vec<Action> {
-        if let Phase::PlayPhase(play_phase) = &self.phase {
-            let piece_board = &self.get_piece_board();
-            let mut valid_actions = if play_phase.push_pull_state.is_must_complete_push() {
-                self.get_must_complete_push_actions(piece_board)
-            } else {
-                let mut valid_actions = Vec::with_capacity(50);
-                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board);       
-                self.extend_with_pull_piece_actions(&mut valid_actions, piece_board);
-                self.extend_with_push_piece_actions(&mut valid_actions, piece_board);
+        self.valid_actions_(true)
+    }
 
-                if self.can_pass() {
-                    valid_actions.push(Action::Pass);
-                }
-
-                valid_actions
-            };
-
-            self.remove_passing_like_actions(&mut valid_actions);
-
-            valid_actions
-        } else {
-            self.valid_placement()
-        }
+    pub fn valid_actions_no_exclusions(&self) -> Vec<Action> {
+        self.valid_actions_(false)
     }
 
     pub fn get_piece_board_for_step(&self, step: usize) -> &PieceBoardState {
@@ -405,12 +387,45 @@ impl GameState {
         }
     }
 
-    fn can_pass(&self) -> bool {
+    pub fn valid_actions_(&self, check_repititions: bool) -> Vec<Action> {
+        if let Phase::PlayPhase(play_phase) = &self.phase {
+            let piece_board = &self.get_piece_board();
+            let mut valid_actions = if play_phase.push_pull_state.is_must_complete_push() {
+                self.get_must_complete_push_actions(piece_board)
+            } else {
+                let mut valid_actions = Vec::with_capacity(50);
+                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board);       
+                self.extend_with_pull_piece_actions(&mut valid_actions, piece_board);
+                self.extend_with_push_piece_actions(&mut valid_actions, piece_board);
+
+                if self.can_pass(check_repititions) {
+                    valid_actions.push(Action::Pass);
+                }
+
+                valid_actions
+            };
+
+            if check_repititions {
+                self.remove_passing_like_actions(&mut valid_actions);
+            }
+
+            valid_actions
+        } else {
+            self.valid_placement()
+        }
+    }
+
+    fn can_pass(&self, check_repititions: bool) -> bool {
         self.as_play_phase().map_or(false, |play_phase|
             play_phase.get_step() >= 1 &&
             !play_phase.push_pull_state.is_must_complete_push() &&
-            self.unwrap_play_phase().initial_hash_of_move != self.hash.exclude_step(play_phase.get_step()) &&
-            !hash_history_contains_hash_twice(&play_phase.hash_history, &self.hash.pass(play_phase.get_step()))
+            (
+                !check_repititions || 
+                (
+                    (self.unwrap_play_phase().initial_hash_of_move != self.hash.exclude_step(play_phase.get_step())) &&
+                    !hash_history_contains_hash_twice(&play_phase.hash_history, &self.hash.pass(play_phase.get_step()))
+                )
+            )
         )
     }
 
@@ -1764,7 +1779,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
     }
 
     #[test]
@@ -1785,7 +1800,7 @@ mod tests {
             .parse().unwrap();
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(), true);
+        assert_eq!(game_state.can_pass(true), true);
     }
 
     #[test]
@@ -1806,17 +1821,17 @@ mod tests {
             .parse().unwrap();
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
     }
 
     #[test]
     fn test_can_pass_during_place_phase() {
         let game_state = GameState::initial();
 
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
 
         let game_state = game_state.take_action(&Action::Place(Piece::Elephant));
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
     }
 
     #[test]
@@ -1836,16 +1851,16 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(), true);
+        assert_eq!(game_state.can_pass(true), true);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
-        assert_eq!(game_state.can_pass(), false);
+        assert_eq!(game_state.can_pass(true), false);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(), true);
+        assert_eq!(game_state.can_pass(true), true);
     }
 
     #[test]
