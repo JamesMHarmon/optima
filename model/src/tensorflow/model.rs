@@ -180,16 +180,20 @@ where
 
                 let elapsed_mills = last_report.elapsed().as_millis();
                 if thread_num == 0 && elapsed_mills >= 5_000 {
-                    let num_nodes = batching_model_ref.take_num_nodes_analysed();
+                    let transposition_hits = batching_model_ref.take_transposition_hits();
+                    let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
+                    let num_transpo_nodes = transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
                     let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
-                    let nps = num_nodes as f32 * 1000.0 / elapsed_mills as f32;
+                    let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
+                    let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0 / elapsed_mills as f32;
                     info!(
-                        "NPS: {:.2}, Min Batch Size: {}, Max Batch Size: {}",
-                        nps,
-                        min_batch_size,
-                        max_batch_size
+                        "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
+                        total_nps=total_nps,
+                        infer_nps=infer_nps,
+                        min_batch_size=min_batch_size,
+                        max_batch_size=max_batch_size
                     );
-                    if let Some((entries, capacity, hits, misses)) = batching_model_ref.take_transposition_hits() {
+                    if let Some((entries, capacity, hits, misses)) = transposition_hits {
                         info!(
                             "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
                             if hits > 0 { (hits as f32 / (hits + misses) as f32) * 100f32 } else { 0f32 },
