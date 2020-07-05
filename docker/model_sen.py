@@ -1,7 +1,7 @@
 import numpy as np
 import keras
 from keras.models import Model
-from keras.layers import Reshape, LeakyReLU as ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
+from keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
 from keras.layers.core import Activation, Layer
 from keras.optimizers import Nadam
 from keras import regularizers
@@ -61,7 +61,7 @@ def ResidualBlock(x, filters, name):
     out = Conv2D(filters=filters, kernel_size=3, name=name + '/residual_block/2')(out)
     out = BatchNorm(scale=True, name=name + '/residual_block/2')(out)
     
-    # out = SqueezeExcitation(out, filters, name=name)
+    out = SqueezeExcitation(out, filters, name=name)
 
     out = add([x, out])
     out = ReLU()(out)
@@ -70,8 +70,7 @@ def ResidualBlock(x, filters, name):
 
 def SqueezeExcitationWithBeta(x, filters, name, ratio=4):
     pool = GlobalAveragePooling2D(data_format=DATA_FORMAT, name=name + '/se/global_average_pooling2d')(x)
-    squeeze = Dense(filters // ratio, activation=None, name=name + '/se/1')(pool)
-    squeeze = ReLU(squeeze)
+    squeeze = Dense(filters // ratio, activation='relu', name=name + '/se/1')(pool)
     excite_gamma = Reshape([1, 1, filters])(Dense(filters, activation='sigmoid', name=name + '/se/gamma')(squeeze))
     excite_beta = Reshape([1, 1, filters])(Dense(filters, activation=None, name=name + '/se/beta')(squeeze))
 
@@ -80,8 +79,7 @@ def SqueezeExcitationWithBeta(x, filters, name, ratio=4):
 def SqueezeExcitation(x, filters, name, ratio=4):
     pool = GlobalAveragePooling2D(data_format=DATA_FORMAT, name=name + '/se/global_average_pooling2d')(x)
     pool = Reshape([1, 1, filters])(pool)
-    squeeze = Dense(filters // ratio, activation=None, name=name + '/se/1')(pool)
-    squeeze = ReLU(squeeze)
+    squeeze = Dense(filters // ratio, activation='relu', name=name + '/se/1')(pool)
     excite = Dense(filters, activation='sigmoid', name=name + '/se/2')(squeeze)
     return multiply([x, excite])
 
@@ -89,8 +87,7 @@ def ValueHead(x, filters):
     out = ConvBlock(filters=filters // 8, kernel_size=1, name='value_head')(x)
 
     out = Flatten()(out)
-    out = Dense(filters, activation=None, name='value_head/1')(out)
-    out = ReLU()(out)
+    out = Dense(filters, activation='relu', name='value_head/1')(out)
     out = Dense(1, activation='tanh', name='', full_name='value_head')(out)
 
     return out

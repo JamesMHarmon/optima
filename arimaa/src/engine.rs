@@ -389,14 +389,14 @@ impl GameState {
 
     pub fn valid_actions_(&self, check_repititions: bool) -> Vec<Action> {
         if let Phase::PlayPhase(play_phase) = &self.phase {
-            let piece_board = &self.get_piece_board();
+            let piece_board = self.get_piece_board();
             let mut valid_actions = if play_phase.push_pull_state.is_must_complete_push() {
                 self.get_must_complete_push_actions(piece_board)
             } else {
                 let mut valid_actions = Vec::with_capacity(50);
-                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board);       
-                self.extend_with_pull_piece_actions(&mut valid_actions, piece_board);
                 self.extend_with_push_piece_actions(&mut valid_actions, piece_board);
+                self.extend_with_pull_piece_actions(&mut valid_actions, piece_board);
+                self.extend_with_valid_curr_player_piece_moves(&mut valid_actions, piece_board);       
 
                 if self.can_pass(check_repititions) {
                     valid_actions.push(Action::Pass);
@@ -469,7 +469,10 @@ impl GameState {
                 for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left].iter() {
                     if shift_pieces_in_direction(lesser_opp_pieces, &direction) & square_bit != 0 {
                         let source_opp_piece_square = Square::from_bit_board(shift_pieces_in_opp_direction(square_bit, direction));
-                        valid_actions.push(Action::Move(source_opp_piece_square, *direction));
+                        let action = Action::Move(source_opp_piece_square, *direction);
+                        if !valid_actions.contains(&action) {
+                            valid_actions.push(action);
+                        }
                     }
                 }
             }
@@ -1455,7 +1458,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
         assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e, d5w, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5w, a1n, a1e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
 8|   r   r r   r   |
@@ -1523,7 +1526,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
         assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1e, d5w, a2n, a2e, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a2n, a2e, d5w, a1e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
 8|   r   r r   r   |
@@ -1539,7 +1542,7 @@ mod tests {
 ");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Left));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1e, a2n, a2e, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a2n, a2e, a1e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
 8|   r   r r   r   |
@@ -1608,7 +1611,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Up));
 
         assert_eq!(game_state.unwrap_play_phase().push_pull_state.as_possible_pull().unwrap(), (Square::new('c', 5), Piece::Elephant));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1e, d5w, a2n, a2e, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a2n, a2e, d5w, a1e, p]");
         assert_eq!(game_state.to_string(), "1g
  +-----------------+
 8|   r   r r   r   |
@@ -1695,7 +1698,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a3e, a4n, a4e, a2e, a2s]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a4n, a4e, a2e, a2s, a3e]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Right));
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[a3s]");
@@ -1714,7 +1717,7 @@ mod tests {
 ");
  
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 3), Direction::Down));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a2n, a2s, b2n, b2e, b2s, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[b2n, b2e, b2s, a2n, a2s, p]");
         assert_eq!(game_state.to_string(), "1s
  +-----------------+
 8|                 |
@@ -1730,7 +1733,7 @@ mod tests {
 ");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Down));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a1n, a1e, b2w, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[b2w, a1n, a1e, p]");
         assert_eq!(game_state.to_string(), "1s
  +-----------------+
 8|                 |
@@ -2421,7 +2424,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[b3n, d3n, e3n, f3n, g3n, a2n, c2n, h2n, b1n, d1n, e1n, g1n, a4e, c4e, b3e, g3e, a2e, c2e, f2e, b1e, e1e, g1e, a4s, c4s, h4s, a2s, c2s, f2s, h2s, c4w, h4w, b3w, d3w, c2w, f2w, h2w, b1w, d1w, g1w, a5n, c5n, h5n, a5e, c5e, c5w, h5w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[a5n, c5n, h5n, a5e, c5e, c5w, h5w, b3n, d3n, e3n, f3n, g3n, a2n, c2n, h2n, b1n, d1n, e1n, g1n, a4e, c4e, b3e, g3e, a2e, c2e, f2e, b1e, e1e, g1e, a4s, c4s, h4s, a2s, c2s, f2s, h2s, c4w, h4w, b3w, d3w, c2w, f2w, h2w, b1w, d1w, g1w]");
     }
 
     #[test]
@@ -2605,7 +2608,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, d4e, d4s, d4w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4e, d4s, d4w, d5n, d5e, d5w]");
     }
 
 
@@ -2626,7 +2629,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, a8s, d5w, d4e, d4s, d4w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4e, d4s, d4w, d5n, a8e, d5e, a8s, d5w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
 
@@ -2634,7 +2637,7 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, a8s, d4s, d4w, e4n, e4e, e4s, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e4n, e4e, e4s, d4n, a8e, a8s, d4s, d4w, p]");
     }
 
     #[test]
@@ -2654,7 +2657,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w, d4e, d4w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4e, d4w, d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
 
@@ -2662,7 +2665,7 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, d3e, a8s, d3s, d4w, d3w, e4n, e4e, e4s, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e4n, e4e, e4s, d4n, a8e, d3e, a8s, d3s, d4w, d3w, p]");
     }
 
     #[test]
@@ -2682,7 +2685,7 @@ mod tests {
                 a b c d e f g h"
             .parse().unwrap();
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w, d4e]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4e, d5n, a8e, d5e, d3e, a8s, d3s, d5w, d3w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Right));
 
@@ -2690,7 +2693,7 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d4n, a8e, d3e, a8s, d3s, d3w, e4n, e4e, e4s, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e4n, e4e, e4s, d4n, a8e, d3e, a8s, d3s, d3w, p]");
     }
 
     #[test]
@@ -2808,7 +2811,7 @@ mod tests {
             .parse().unwrap();
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, h1n, d4e, d4s, d4w, h1w, p]");
         let game_state = game_state.take_action(&Action::Pass);
 
         // First occurance of position
@@ -2825,7 +2828,7 @@ mod tests {
         assert_eq!(format!("{:?}", game_state.valid_actions()), "[d3n, h1n, d3e, d3s, d3w, h1w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, h1n, d4e, d4s, d4w, h1w, p]");
         let game_state = game_state.take_action(&Action::Pass);
 
         // Second occurance of position
@@ -2833,7 +2836,7 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('h', 7), Direction::Down));
         let game_state = game_state.take_action(&Action::Pass);
 
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, h1n, d4e, d4s, d4w, h1w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Down));
@@ -2848,12 +2851,34 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 3), Direction::Up));
 
         // Should not allow pass here
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d4e, d4s, d4w, h1w, d5n, d5e, d5w]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5n, d5e, d5w, h1n, d4e, d4s, d4w, h1w]");
 
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
 
         // Should not allow last move to be the final repeat
-        assert_eq!(format!("{:?}", game_state.valid_actions()), "[h1n, d3e, d3w, h1w, d5s, p]");
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[d5s, h1n, d3e, d3w, h1w, p]");
+    }
+
+    #[test]
+    fn test_valid_actions_does_not_duplicate_piece_that_can_be_both_pushed_and_pull() {
+        let game_state: GameState = "
+             1g
+              +-----------------+
+             8|                 |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E c H     |
+             3|     x     x     |
+             2|                 |
+             1|   e             |
+              +-----------------+
+                a b c d e f g h"
+            .parse().unwrap();
+
+        let game_state = game_state.take_action(&Action::Move(Square::new('f', 4), Direction::Up));
+
+        assert_eq!(format!("{:?}", game_state.valid_actions()), "[e4n, e4e, e4s, f5n, d4n, f5e, f5s, d4s, f5w, d4w, p]");
     }
 
     #[test]
