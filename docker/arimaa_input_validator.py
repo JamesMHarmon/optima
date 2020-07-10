@@ -7,7 +7,7 @@ FILE_NAME = '/tmp/sample.npy'
 
 input_h = 8
 input_w = 8
-input_c = 57
+input_c = 21
 input_size = input_h * input_w * input_c
 channels_per_step = 12
 steps = 4
@@ -38,7 +38,7 @@ yv = yv[POSITION]
 def getChannel(arr, channel_idx):
     return arr[:,:,channel_idx]
 
-for step in range(0, steps):
+for step in range(0, 1):
     channels = []
     for i in range(0, channels_per_step):
         print("Piece Channel: " + str(i) + " " + pieces[i])
@@ -57,7 +57,7 @@ for step in range(0, steps):
     print(pieces[flattened])
     print("")
 
-step_channel_idx = steps * channels_per_step
+step_channel_idx = channels_per_step
 for step in range(0, steps - 1):
     print("Step Plane " + str(step))
     step_plane = getChannel(X, (step_channel_idx + step))
@@ -89,4 +89,7 @@ print("Pass: ", yp[-1])
 print("")
 
 print("Value: ", yv)
+print("")
+
+print("Policy Sum: ", yp.sum())
 print("")

@@ -94,7 +94,13 @@ impl model::model::Model for Model {
         self.play_model.train(target_model_info, play_sample_iter, options)?;
 
         let place_model_info = map_to_place_model_info(target_model_info);
-        self.place_model.train(&place_model_info, place_samples.into_iter(), options)
+
+        let max_grad_norm = std::env::var("PLACE_MAX_GRAD_NORM")
+            .map(|v| v.parse::<f32>().expect("PLACE_MAX_GRAD_NORM must be a valid number"))
+            .unwrap_or(options.max_grad_norm);
+
+        let place_options = TrainOptions { max_grad_norm, ..(*options) };
+        self.place_model.train(&place_model_info, place_samples.into_iter(), &place_options)
     }
     
     fn get_game_state_analyzer(&self) -> Self::Analyzer {
