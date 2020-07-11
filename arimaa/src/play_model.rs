@@ -298,11 +298,15 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
+        let table_size = std::env::var("PLAY_TABLE_SIZE")
+            .map(|v| v.parse::<usize>().expect("PLAY_TABLE_SIZE must be a valid number"))
+            .unwrap_or(2200);
+
         TensorflowModel::new(
             model_info.clone(),
             Engine::new(),
             mapper,
-            2200
+            table_size
         )
     }
 
