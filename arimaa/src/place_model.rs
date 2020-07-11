@@ -217,8 +217,8 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        let table_size = std::env::var("PLAY_TABLE_SIZE")
-            .map(|v| v.parse::<usize>().expect("PLAY_TABLE_SIZE must be a valid number"))
+        let table_size = std::env::var("PLACE_TABLE_SIZE")
+            .map(|v| v.parse::<usize>().expect("PLACE_TABLE_SIZE must be a valid number"))
             .unwrap_or(800);
 
         TensorflowModel::new(
