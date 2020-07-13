@@ -187,7 +187,7 @@ where
     }
 
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
-        self.search_time_max_visits(duration, std::usize::max())
+        self.search_time_max_visits(duration, usize::max_value()).await
     }
 
     pub async fn search_time_max_visits(&mut self, duration: Duration, max_visits: usize) -> Result<usize> {
