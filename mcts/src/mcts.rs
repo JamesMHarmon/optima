@@ -187,6 +187,10 @@ where
     }
 
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
+        self.search_time_max_visits(duration, std::usize::max())
+    }
+
+    pub async fn search_time_max_visits(&mut self, duration: Duration, max_visits: usize) -> Result<usize> {
         let alive = Arc::new(AtomicBool::new(true));
 
         let alive_clone = alive.clone();
@@ -195,19 +199,11 @@ where
             alive_clone.store(false, Ordering::SeqCst);
         });
 
-        self.search(|_| alive.load(Ordering::SeqCst)).await
+        self.search(|visits| alive.load(Ordering::SeqCst) && visits < max_visits).await
     }
 
     pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
-        let mut searches = 0;
-
-        self.search(|initial_visits| {
-            let prevsearches = searches;
-
-            searches += 1;
-
-            initial_visits + prevsearches < visits
-        }).await
+        self.search(|node_visits| node_visits < visits).await
     }
 
     pub async fn play(&mut self, alive: &mut bool) -> Result<usize> {
@@ -315,25 +311,27 @@ where
         let mut alive = alive;
 
         let arena_borrow = arena_cell.borrow();
-        let initial_visits = arena_borrow[root_node_index].get_node_visits();
+        let mut visits = arena_borrow[root_node_index].get_node_visits();
         drop(arena_borrow);
         
         let analyzer = &mut self.analyzer;
         let mut searches = FuturesOrdered::new();
 
         for _ in 0..self.options.parallelism {
-            if alive_flag && alive(initial_visits) {
+            if alive_flag && alive(visits) {
                 let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
                 searches.push(future);
+                visits += 1;
             } else {
                 alive_flag = false;
             }
         }
 
         while let Some(search_depth) = searches.next().await {
-            if alive_flag && alive(initial_visits) {
+            if alive_flag && alive(visits) {
                 let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
                 searches.push(future);
+                visits += 1;
             } else {
                 alive_flag = false;
             }
