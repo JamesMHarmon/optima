@@ -97,8 +97,8 @@ impl Play
                     println!("PLAYING: {}", visits);
                     total_visits += visits;
                     mcts.search_visits(total_visits).await?;
-                    println!("{}", mcts.get_root_node_details().await?);
-                    let pvs: Vec<_> = mcts.get_principal_variation().await?.iter().map(|n| format!("\n\t{:?}", n)).collect();
+                    println!("{}", mcts.get_root_node_details()?);
+                    let pvs: Vec<_> = mcts.get_principal_variation()?.iter().map(|n| format!("\n\t{:?}", n)).collect();
                     println!("{}", pvs.join(""));
                     continue;
                 }

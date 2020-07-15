@@ -245,7 +245,7 @@ impl Tournament
             let player_to_move = game_engine.get_player_to_move(&state);
             let player_to_move_mcts = &mut mctss[player_to_move - 1];
             player_to_move_mcts.search_visits(visits).await?;
-            let action = player_to_move_mcts.select_action().await?;
+            let action = player_to_move_mcts.select_action()?;
             
             for mcts in &mut mctss {
                 mcts.advance_to_action(action.to_owned()).await?;

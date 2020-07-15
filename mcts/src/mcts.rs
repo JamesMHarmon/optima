@@ -99,7 +99,7 @@ where
     starting_num_actions: Option<usize>,
     root: Option<Index>,
     arena: RefCell<Arena<MCTSNode<S,A,V>>>,
-    nodes_to_remove: Vec<Index>
+    focus_actions: Vec<A>
 }
 
 #[allow(non_snake_case)]
@@ -162,7 +162,7 @@ where
             starting_num_actions: Some(actions),
             root: None,
             arena: RefCell::new(Arena::new()),
-            nodes_to_remove: Vec::new()
+            focus_actions: Vec::with_capacity(4)
         }
     }
 
@@ -182,7 +182,7 @@ where
             starting_num_actions: Some(actions),
             root: None,
             arena: RefCell::new(Arena::with_capacity(capacity * 2)),
-            nodes_to_remove: Vec::new()
+            focus_actions: Vec::with_capacity(4)
         }
     }
 
@@ -210,36 +210,28 @@ where
         self.search(|_| *alive).await
     }
 
-    pub async fn select_action(&mut self) -> Result<A> {
-        self._select_action(true).await
+    pub fn select_action(&mut self) -> Result<A> {
+        self._select_action(true)
     }
 
-    pub async fn select_action_no_temp(&mut self) -> Result<A> {
-        self._select_action(false).await
+    pub fn select_action_no_temp(&mut self) -> Result<A> {
+        self._select_action(false)
     }
 
     pub async fn advance_to_action(&mut self, action: A) -> Result<()> {
-        let result = self.advance_to_action_clearable(action, true).await;
-
-        if result.is_ok() {
-            self.clean_unused_nodes();
-        }
-
-        result
+        self.advance_to_action_clearable(action, true).await
     }
 
     pub async fn advance_to_action_retain(&mut self, action: A) -> Result<()> {
-        let result = self.advance_to_action_clearable(action, false).await;
-
-        if result.is_ok() {
-            self.clean_unused_nodes();
-        }
-
-        result
+        self.advance_to_action_clearable(action, false).await
     }
 
-    pub async fn advance_to_action_retain_no_clean(&mut self, action: A) -> Result<()> {
-        self.advance_to_action_clearable(action, false).await
+    pub fn add_focus_to_action(&mut self, action: A) {
+        self.focus_actions.push(action);
+    }
+
+    pub fn clear_focus(&mut self) {
+        self.focus_actions.clear();
     }
 
     pub async fn apply_noise_at_root(&mut self) {
@@ -253,7 +245,7 @@ where
         }
     }
 
-    pub async fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>> {
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>> {
         let root_index = self.root.ok_or(anyhow!("No root node found!"))?;
         let root = &self.arena.borrow()[root_index];
 
@@ -267,12 +259,12 @@ where
         })
     }
 
-    pub async fn get_root_node_details(&self) -> Result<NodeDetails<A>> {
+    pub fn get_root_node_details(&self) -> Result<NodeDetails<A>> {
         let root_index = self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
-        self.get_node_details(*root_index, true).await
+        self.get_node_details(*root_index, true)
     }
 
-    pub async fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
+    pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
         let arena_borrow = &self.arena.borrow();
 
         let mut node_index = *self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
@@ -280,7 +272,7 @@ where
 
         loop {
             let is_root = nodes.len() == 0;
-            let mut children = self.get_node_details(node_index, is_root).await?.children;
+            let mut children = self.get_node_details(node_index, is_root)?.children;
 
             if children.len() == 0 { break; }
 
@@ -306,6 +298,7 @@ where
         let game_engine = &self.game_engine;
         let options = &self.options;
         let arena_cell = &self.arena;
+        let focus_actions = &self.focus_actions;
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
         let mut alive = alive;
@@ -319,7 +312,7 @@ where
 
         for _ in 0..self.options.parallelism {
             if alive_flag && alive(visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, focus_actions, game_engine, analyzer, options);
                 searches.push(future);
                 visits += 1;
             } else {
@@ -329,7 +322,7 @@ where
 
         while let Some(search_depth) = searches.next().await {
             if alive_flag && alive(visits) {
-                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, game_engine, analyzer, options);
+                let future = recurse_path_and_expand::<S,A,E,M,C,T,V>(root_node_index, arena_cell, focus_actions, game_engine, analyzer, options);
                 searches.push(future);
                 visits += 1;
             } else {
@@ -342,15 +335,7 @@ where
         Ok(max_depth)
     }
 
-    pub fn clean_unused_nodes(&mut self) {
-        let arena_borrow_mut = &mut *self.arena.borrow_mut();
-
-        for node_index in self.nodes_to_remove.drain(..) {
-            Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
-        }
-    }
-
-    async fn _select_action(&mut self, use_temp: bool) -> Result<A> {
+    fn _select_action(&mut self, use_temp: bool) -> Result<A> {
         if let Some(root_node_index) = &self.root {
             let arena_borrow = self.arena.borrow();
             let root_node = &arena_borrow[*root_node_index];
@@ -359,7 +344,7 @@ where
             let game_state = &root_node.game_state;
             let temp = temp(game_state, root_node.num_actions);
             drop(arena_borrow);
-            let child_node_details = self.get_root_node_details().await?.children;
+            let child_node_details = self.get_root_node_details()?.children;
 
             if child_node_details.len() == 0 {
                 let arena_borrow = self.arena.borrow();
@@ -383,7 +368,7 @@ where
         return Err(anyhow!("Root node does not exist. Run search first."));
     }
 
-    async fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
+    fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
         let arena_borrow = &self.arena.borrow();
         let root = &arena_borrow[node_index];
 
@@ -408,6 +393,8 @@ where
     }
 
     async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<()> {
+        self.clear_focus();
+
         let root_index = self.get_or_create_root_node().await;
 
         let game_engine = &self.game_engine;
@@ -426,7 +413,7 @@ where
         let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
-            self.nodes_to_remove.push(node_index);
+            Self::remove_nodes_from_arena(node_index, arena_borrow_mut);
         }
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {
@@ -725,6 +712,7 @@ struct NodeUpdateInfo {
 async fn recurse_path_and_expand<'a,S,A,E,M,C,T,V>(
     root_index: Index,
     arena: &RefCell<Arena<MCTSNode<S,A,V>>>,
+    focus_actions: &[A],
     game_engine: &E,
     analyzer: &M,
     options: &MCTSOptions<S,C,T>
@@ -756,12 +744,16 @@ where
 
         let is_root = depth == 1;
 
-        let selected_child_node_children_index = MCTS::<S,A,E,M,C,T,V>::select_path(
-            latest_index,
-            &mut *arena_borrow_mut,
-            is_root,
-            options
-        )?;
+        let selected_child_node_children_index = if let Some(focus_action) = focus_actions.get(depth - 1) {
+            node.get_position_of_action(focus_action).ok_or_else(|| anyhow!("Focused action was not found"))?
+        } else {
+            MCTS::<S,A,E,M,C,T,V>::select_path(
+                latest_index,
+                &mut *arena_borrow_mut,
+                is_root,
+                options
+            )?
+        };
 
         nodes_to_propagate_to_stack.push(NodeUpdateInfo {
             parent_node_index: latest_index,
@@ -901,6 +893,10 @@ where
     fn get_child_of_action_mut(&mut self, action: &A) -> Option<&mut MCTSChildNode<A>> {
         self.children.iter_mut().find(|c| c.action == *action)
     }
+
+    fn get_position_of_action(&self, action: &A) -> Option<usize> {
+        self.children.iter().position(|c| c.action == *action)
+    }
 }
 
 impl MCTSNodeState {
@@ -968,8 +964,8 @@ mod tests {
         mcts.search_visits(800).await.unwrap();
         mcts2.search_visits(800).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
-        let metrics2 = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
+        let metrics2 = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &metrics2);
     }
@@ -996,7 +992,7 @@ mod tests {
         ));
 
         mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action().await.unwrap();
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
@@ -1025,7 +1021,7 @@ mod tests {
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
         mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action().await.unwrap();
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -1054,13 +1050,13 @@ mod tests {
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
         mcts.search_visits(800).await.unwrap();
-        let details = mcts.get_root_node_details().await.unwrap();
+        let details = mcts.get_root_node_details().unwrap();
         let (action, _) = details.children.first().unwrap();
 
         assert_eq!(*action, CountingAction::Stay);
 
         mcts.search_visits(8000).await.unwrap();
-        let action = mcts.select_action().await.unwrap();
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -1112,7 +1108,7 @@ mod tests {
 
         mcts.search_visits(800).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
@@ -1147,7 +1143,7 @@ mod tests {
 
         mcts.search_visits(100).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 100,
@@ -1182,7 +1178,7 @@ mod tests {
 
         mcts.search_visits(1).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 1,
@@ -1217,7 +1213,7 @@ mod tests {
 
         mcts.search_visits(2).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 2,
@@ -1252,7 +1248,7 @@ mod tests {
 
         mcts.search_visits(8000).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 8000,
@@ -1287,7 +1283,7 @@ mod tests {
 
         mcts.search_visits(800).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
@@ -1322,7 +1318,7 @@ mod tests {
 
         mcts.search_visits(800).await.unwrap();
 
-        let metrics = mcts.get_root_node_metrics().await.unwrap();
+        let metrics = mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &NodeMetrics {
             visits: 800,
@@ -1357,11 +1353,11 @@ mod tests {
         ));
 
         non_clear_mcts.search_visits(search_num_visits).await.unwrap();
-        let action = non_clear_mcts.select_action().await.unwrap();
+        let action = non_clear_mcts.select_action().unwrap();
         non_clear_mcts.advance_to_action_retain(action).await.unwrap();
         non_clear_mcts.search_visits(search_num_visits).await.unwrap();
 
-        let non_clear_metrics = non_clear_mcts.get_root_node_metrics().await.unwrap();
+        let non_clear_metrics = non_clear_mcts.get_root_node_metrics().unwrap();
 
         let mut clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analyzer, MCTSOptions::new(
             None,
@@ -1378,11 +1374,11 @@ mod tests {
         ));
 
         clear_mcts.search_visits(search_num_visits).await.unwrap();
-        let action = clear_mcts.select_action().await.unwrap();
+        let action = clear_mcts.select_action().unwrap();
         clear_mcts.advance_to_action(action.clone()).await.unwrap();
         clear_mcts.search_visits(search_num_visits).await.unwrap();
 
-        let clear_metrics = clear_mcts.get_root_node_metrics().await.unwrap();
+        let clear_metrics = clear_mcts.get_root_node_metrics().unwrap();
 
         let mut initial_mcts = MCTS::new(game_state, actions, &game_engine, &analyzer, MCTSOptions::new(
             None,
@@ -1401,7 +1397,7 @@ mod tests {
         initial_mcts.advance_to_action(action).await.unwrap();
         initial_mcts.search_visits(search_num_visits).await.unwrap();
 
-        let initial_metrics = initial_mcts.get_root_node_metrics().await.unwrap();
+        let initial_metrics = initial_mcts.get_root_node_metrics().unwrap();
 
         assert_metrics(&initial_metrics, &clear_metrics);
         assert_metrics(&non_clear_metrics, &clear_metrics);

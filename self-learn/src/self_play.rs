@@ -106,13 +106,13 @@ pub async fn self_play<'a, S, A, E, M, V>(
         let action = if rng.gen::<f32>() <= options.full_visits_probability {
             mcts.apply_noise_at_root().await;
             mcts.search_visits(options.visits).await?;
-            mcts.select_action().await?
+            mcts.select_action()?
         } else {
             mcts.search_visits(options.fast_visits).await?;
-            mcts.select_action_no_temp().await?
+            mcts.select_action_no_temp()?
         };
 
-        let metrics = mcts.get_root_node_metrics().await?;
+        let metrics = mcts.get_root_node_metrics()?;
 
         mcts.advance_to_action(action.to_owned()).await?;
         state = game_engine.take_action(&state, &action);

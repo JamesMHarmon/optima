@@ -19,6 +19,7 @@ use super::engine::GameState;
 
 use half::f16;
 use anyhow::Result;
+use log::{error};
 
 /*
     Layers:
@@ -129,7 +130,12 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
                 map_action_to_policy_output_idx(action)
             };
 
+            if r[policy_index] != 0.0 {
+                error!("Policy value already exists {:?}", action);
+            }
+
             r[policy_index] = *visits as f32 / total_visits;
+
             r
         })
     }
