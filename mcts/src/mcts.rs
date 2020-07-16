@@ -259,9 +259,11 @@ where
         })
     }
 
-    pub fn get_root_node_details(&self) -> Result<NodeDetails<A>> {
-        let root_index = self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
-        self.get_node_details(*root_index, true)
+    pub fn get_focus_node_details(&self) -> Result<Option<NodeDetails<A>>> {
+        self.get_focus_node_index()?.map(|node_index| {
+            let is_root = self.focus_actions.is_empty();
+            self.get_node_details(node_index, is_root)
+        }).transpose()
     }
 
     pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
@@ -279,11 +281,9 @@ where
             let (action, puct) = children.swap_remove(0);
             nodes.push((action.clone(), puct));
 
-            if let Some(child) = arena_borrow[node_index].get_child_of_action(&action) {
-                if let Some(child_index) = child.state.get_index() {
-                    node_index = child_index;
-                    continue;
-                }
+            if let Some(child_index) = arena_borrow[node_index].get_child_of_action(&action).and_then(|child| child.state.get_index()) {
+                node_index = child_index;
+                continue;
             }
 
             break;
@@ -304,9 +304,12 @@ where
         let mut alive = alive;
 
         let arena_borrow = arena_cell.borrow();
-        let mut visits = arena_borrow[root_node_index].get_node_visits();
+
+        let mut visits = self.get_focus_node_index()?.map(|node_index| {
+            arena_borrow[node_index].get_node_visits()
+        }).unwrap_or(0);
         drop(arena_borrow);
-        
+
         let analyzer = &mut self.analyzer;
         let mut searches = FuturesOrdered::new();
 
@@ -336,20 +339,19 @@ where
     }
 
     fn _select_action(&mut self, use_temp: bool) -> Result<A> {
-        if let Some(root_node_index) = &self.root {
+        if let Some(node_index) = &self.get_focus_node_index()? {
             let arena_borrow = self.arena.borrow();
-            let root_node = &arena_borrow[*root_node_index];
+            let node = &arena_borrow[*node_index];
             let temp = &self.options.temperature;
             let temperature_visit_offset = self.options.temperature_visit_offset;
-            let game_state = &root_node.game_state;
-            let temp = temp(game_state, root_node.num_actions);
+            let game_state = &node.game_state;
+            let temp = temp(game_state, node.num_actions);
             drop(arena_borrow);
-            let child_node_details = self.get_root_node_details()?.children;
-
+            let child_node_details = self.get_node_details(*node_index, self.focus_actions.is_empty())?.children;
             if child_node_details.len() == 0 {
                 let arena_borrow = self.arena.borrow();
-                let root_node = &arena_borrow[*root_node_index];
-                let game_state = &root_node.game_state;
+                let node = &arena_borrow[*node_index];
+                let game_state = &node.game_state;
                 return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
             }
 
@@ -365,7 +367,7 @@ where
             return Ok(best_action.clone());
         }
 
-        return Err(anyhow!("Root node does not exist. Run search first."));
+        return Err(anyhow!("Root or focused node does not exist. Run search first."));
     }
 
     fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
@@ -619,6 +621,21 @@ where
         let moves_left_clamped = (game_length_baseline - expected_game_length).min(moves_left_scale).max(-moves_left_scale);
         let moves_left_scaled = moves_left_clamped / moves_left_scale;
         moves_left_scaled * options.moves_left_factor * direction
+    }
+
+    fn get_focus_node_index(&self) -> Result<Option<Index>> {
+        let arena_borrow = &self.arena.borrow();
+
+        let mut node_index = *self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
+
+        for action in &self.focus_actions {
+            match arena_borrow[node_index].get_child_of_action(&action).and_then(|child| child.state.get_index()) {
+                Some(child_index) => node_index = child_index,
+                None => return Ok(None)
+            };
+        }
+
+        Ok(Some(node_index))
     }
 }
 
