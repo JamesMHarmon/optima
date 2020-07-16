@@ -372,16 +372,16 @@ where
 
     fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
         let arena_borrow = &self.arena.borrow();
-        let root = &arena_borrow[node_index];
+        let node = &arena_borrow[node_index];
 
         let metrics = Self::get_PUCT_for_nodes(
-            &root,
+            &node,
             &*arena_borrow,
             is_root,
             &self.options
         );
 
-        let mut children: Vec<_> = root.children.iter().zip(metrics).map(|(n, m)| (
+        let mut children: Vec<_> = node.children.iter().zip(metrics).map(|(n, m)| (
             n.action.clone(),
             m
         )).collect();
@@ -389,7 +389,7 @@ where
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
 
         Ok(NodeDetails {
-            visits: root.get_node_visits(),
+            visits: node.get_node_visits(),
             children
         })
     }
