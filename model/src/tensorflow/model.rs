@@ -166,43 +166,45 @@ where
             loop {
                 let states_to_analyse = batching_model_ref.get_states_to_analyse();
                 
-                if states_to_analyse.len() == 0 {
-                    std::thread::sleep(std::time::Duration::from_micros(100));
-                    
+                if !states_to_analyse.is_empty() {
+                    let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state, Mode::Infer));
+                    let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).expect("Expected predict to be successful");
+                    batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).expect("Expected provide_analysis to be successful");
+                } else {
                     if active_analyzers.load(Ordering::SeqCst) == 0 {
                         break;
                     }
-                }
-                
-                let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state, Mode::Infer));
-                let predictions = predictor.predict(game_states_to_predict, states_to_analyse.len()).expect("Expected predict to be successful");
-                batching_model_ref.provide_analysis(states_to_analyse.into_iter(), predictions, output_size, moves_left_size).expect("Expected provide_analysis to be successful");
 
-                let elapsed_mills = last_report.elapsed().as_millis();
-                if thread_num == 0 && elapsed_mills >= 5_000 {
-                    let transposition_hits = batching_model_ref.take_transposition_hits();
-                    let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
-                    let num_transpo_nodes = transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
-                    let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
-                    let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
-                    let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0 / elapsed_mills as f32;
-                    info!(
-                        "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
-                        total_nps=total_nps,
-                        infer_nps=infer_nps,
-                        min_batch_size=min_batch_size,
-                        max_batch_size=max_batch_size
-                    );
-                    if let Some((entries, capacity, hits, misses)) = transposition_hits {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+
+                if thread_num == 0 {
+                    let elapsed_mills = last_report.elapsed().as_millis();
+                    if elapsed_mills >= 5_000 {
+                        let transposition_hits = batching_model_ref.take_transposition_hits();
+                        let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
+                        let num_transpo_nodes = transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
+                        let (min_batch_size, max_batch_size) = batching_model_ref.take_min_max_batch_size();
+                        let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
+                        let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0 / elapsed_mills as f32;
                         info!(
-                            "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
-                            if hits > 0 { (hits as f32 / (hits + misses) as f32) * 100f32 } else { 0f32 },
-                            (entries as f32 / capacity as f32) * 100f32,
-                            entries,
-                            capacity
+                            "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
+                            total_nps=total_nps,
+                            infer_nps=infer_nps,
+                            min_batch_size=min_batch_size,
+                            max_batch_size=max_batch_size
                         );
+                        if let Some((entries, capacity, hits, misses)) = transposition_hits {
+                            info!(
+                                "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
+                                if hits > 0 { (hits as f32 / (hits + misses) as f32) * 100f32 } else { 0f32 },
+                                (entries as f32 / capacity as f32) * 100f32,
+                                entries,
+                                capacity
+                            );
+                        }
+                        last_report = Instant::now();
                     }
-                    last_report = Instant::now();
                 }
             }
 
