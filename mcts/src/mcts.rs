@@ -1067,7 +1067,7 @@ mod tests {
         mcts.advance_to_action(CountingAction::Increment).await.unwrap();
 
         mcts.search_visits(800).await.unwrap();
-        let details = mcts.get_root_node_details().unwrap();
+        let details = mcts.get_focus_node_details().unwrap().unwrap();
         let (action, _) = details.children.first().unwrap();
 
         assert_eq!(*action, CountingAction::Stay);
