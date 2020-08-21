@@ -795,6 +795,7 @@ where
         if let Some(transposition_table) = &*self.transposition_table {
             if let Some(transposition_entry) = transposition_table.get(self.mapper.get_transposition_key(&game_state)) {
                 let analysis = self.mapper.map_transposition_entry_to_analysis(&game_state, &*transposition_entry);
+                drop(transposition_entry);
 
                 self.cache_hits.fetch_add(1, Ordering::SeqCst);
     

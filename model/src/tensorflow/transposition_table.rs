@@ -19,8 +19,8 @@ impl<Te> TranspositionTable<Te> {
         let capacity = 2u128.pow(power as u32) as usize;
         let mut table = Vec::with_capacity(capacity);
 
-        info!("Initializing cache with a capacity of {} entries taking up {}MB", capacity, (std::mem::size_of::<TranspositionRow<Te>>() * capacity) / BYTES_PER_MB);
-        
+        info!("Initializing cache with a power of {}, a capacity of {}, and entries taking up {}MB", power, capacity, (std::mem::size_of::<TranspositionRow<Te>>() * capacity) / BYTES_PER_MB);
+
         for _ in 0..capacity {
             table.push(Mutex::new(None));
         }
