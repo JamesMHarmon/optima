@@ -1,6 +1,5 @@
 use std::sync::atomic::{AtomicUsize,Ordering};
-use std::sync::Mutex;
-use owning_ref::MutexGuardRef;
+use parking_lot::{MappedMutexGuard,Mutex,MutexGuard};
 use log::{info};
 
 const BYTES_PER_KB: usize = 1000;
@@ -33,19 +32,17 @@ impl<Te> TranspositionTable<Te> {
         }
     }
 
-    pub fn get<'ret, 'me:'ret>(&'me self, tranposition_key: u64) -> Option<MutexGuardRef<'ret, Option<TranspositionEntry<Te>>, Te>> {
+    pub fn get<'ret, 'me:'ret>(&'me self, tranposition_key: u64) -> Option<MappedMutexGuard<'ret, Te>> {
         let idx = tranposition_key & self.key_mask;
 
-        let entry_guard = self.table[idx as usize].lock().unwrap();
+        let guard = self.table[idx as usize].lock();
 
-        if entry_guard.is_none() {
+        if guard.is_none() {
             return None;
         }
 
-        if entry_guard.as_ref().unwrap().full_key == tranposition_key {
-            let entry = MutexGuardRef::new(entry_guard);
-
-            Some(entry.map(|e| &e.as_ref().unwrap().tranposition))
+        if guard.as_ref().unwrap().full_key == tranposition_key {
+            Some(MutexGuard::map(guard, |e| &mut e.as_mut().unwrap().tranposition))
         } else {
             None
         }
@@ -54,7 +51,7 @@ impl<Te> TranspositionTable<Te> {
     pub fn set(&self, tranposition_key: u64, tranposition: Te) {
         let idx = tranposition_key & self.key_mask;
 
-        let mut row = self.table[idx as usize].lock().unwrap();
+        let mut row = self.table[idx as usize].lock();
 
         let prev = row.replace(TranspositionEntry {
             full_key: tranposition_key,

@@ -8,7 +8,6 @@ use std::task::{Context,Poll,Waker};
 use std::time::Instant;
 use std::path::{PathBuf};
 use std::io::{BufReader,Write};
-use crossbeam_queue::{SegQueue};
 use anyhow::{anyhow,Context as AnyhowContext,ensure,Result};
 use itertools::{Itertools};
 use tensorflow::{Graph,Operation,Session,SessionOptions,SessionRunArgs,Tensor};
@@ -18,6 +17,7 @@ use log::info;
 use rand::seq::SliceRandom;
 
 use common::incrementing_map::IncrementingMap;
+use common::chunk_queue::ConcurrentChunkQueue;
 use engine::game_state::GameState;
 use engine::engine::GameEngine;
 use engine::value::Value;
@@ -164,7 +164,7 @@ where
             let predictor = Predictor::new(&model_info, input_dim);
 
             loop {
-                let states_to_analyse = batching_model_ref.get_states_to_analyse();
+                let states_to_analyse = (&(*batching_model_ref).states_to_analyse).dequeue_chunk();
                 
                 if !states_to_analyse.is_empty() {
                     let game_states_to_predict = states_to_analyse.iter().map(|(_,game_state,_)| mapper.game_state_to_input(game_state, Mode::Infer));
@@ -649,7 +649,7 @@ fn run_cmd(cmd: &str) -> Result<()> {
 }
 
 pub struct BatchingModel<S,A,V,E,Map,Te> {
-    states_to_analyse: SegQueue<(usize, S, Waker)>,
+    states_to_analyse: ConcurrentChunkQueue<(usize, S, Waker)>,
     states_analysed: IncrementingMap<GameStateAnalysis<A,V>>,
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     num_nodes_analysed: AtomicUsize,
@@ -658,8 +658,7 @@ pub struct BatchingModel<S,A,V,E,Map,Te> {
     cache_misses: AtomicUsize,
     cache_hits: AtomicUsize,
     engine: E,
-    mapper: Arc<Map>,
-    batch_size: usize
+    mapper: Arc<Map>
 }
 
 impl<S,A,V,E,Map,Te> BatchingModel<S,A,V,E,Map,Te>
@@ -672,8 +671,9 @@ where
 {
     fn new(engine: E, mapper: Arc<Map>, transposition_table: Arc<Option<TranspositionTable<Te>>>, analysis_request_threads: usize, batch_size: usize) -> Self
     {
-        let states_to_analyse = SegQueue::new();
-        let states_analysed = IncrementingMap::with_capacity(batch_size * analysis_request_threads);
+        let analysis_capacity = batch_size * analysis_request_threads;
+        let states_to_analyse = ConcurrentChunkQueue::new(batch_size, analysis_capacity);
+        let states_analysed = IncrementingMap::with_capacity(analysis_capacity);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -690,24 +690,8 @@ where
             cache_misses,
             cache_hits,
             engine,
-            mapper,
-            batch_size
+            mapper
         }
-    }
-
-    fn get_states_to_analyse(&self) -> Vec<(usize, S, Waker)> {
-        let states_to_analyse_queue = &self.states_to_analyse;
-
-        let mut states_to_analyse: Vec<_> = Vec::with_capacity(self.batch_size);
-        while let Ok(state_to_analyse) = states_to_analyse_queue.pop() {
-            states_to_analyse.push(state_to_analyse);
-
-            if states_to_analyse.len() >= self.batch_size {
-                break;
-            }
-        }
-
-        states_to_analyse
     }
 
     fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) -> Result<()> {

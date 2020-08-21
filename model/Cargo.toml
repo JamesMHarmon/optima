@@ -14,10 +14,8 @@ engine = { path = "../engine" }
 
 anyhow="1.0"
 log = "0.4"
-chashmap="2.2.2"
 crossbeam="0.7.1"
 serde={version="1.0.95",features=["derive"]}
-crossbeam-queue = "0.1"
 serde_json="1.0"
 tensorflow={version="0.15"}
 itertools="0.9"
@@ -25,4 +23,4 @@ futures-preview = "=0.3.0-alpha.19"
 half = "1.6.0"
 npy = "0.4"
 rand="0.7"
-owning_ref = "0.4.1"
+parking_lot="0.11"

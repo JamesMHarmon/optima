@@ -12,3 +12,4 @@ name="common"
 rand="0.7.0"
 tokio={version="0.2.9",features=["rt-core"]}
 assert_approx_eq = "1.1.0"
+crossbeam-queue = "0.2.3"
