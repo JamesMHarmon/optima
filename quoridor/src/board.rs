@@ -33,7 +33,7 @@ pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: b
             result[removed_bit_vec_idx + 1] = 1.0;
         }
 
-        board = board ^ 1 << bit_idx;
+        board ^= 1 << bit_idx;
     }
 
     result

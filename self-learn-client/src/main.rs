@@ -102,9 +102,9 @@ async fn main() -> Result<()> {
         let run_name = matches.value_of("run").unwrap();
         let mut options = get_options(game_name, run_name)?.tournament;
         let model_ranges = update_tournament_options_from_matches(&mut options, matches)?;
-        let models_or_ranges = model_ranges.split(",").collect::<Vec<&str>>();
+        let models_or_ranges = model_ranges.split(',').collect::<Vec<&str>>();
         let model_nums = models_or_ranges.iter().map(|s| {
-            let split = s.split("-").collect::<Vec<&str>>();
+            let split = s.split('-').collect::<Vec<&str>>();
             if split.len() >= 2 {
                 let start = split[0].parse::<usize>().unwrap();
                 let end = split[1].parse::<usize>().unwrap();
@@ -190,7 +190,7 @@ fn evaluate_connect4(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_2 = model_factory.get(&model_2_info);
 
     SelfEvaluate::evaluate(
-        &vec!(model_1, model_2),
+        &[model_1, model_2],
         &game_engine,
         options
     )?;
@@ -238,11 +238,11 @@ async fn play_connect4(run_name: &str, model_num: Option<usize>, options: &PlayO
 }
 
 fn create(game_name: &str, run_name: &str, options: &Options) -> Result<()> {
-    if game_name.contains("_") {
+    if game_name.contains('_') {
         return Err(anyhow!("game_name cannot contain any '_' characters"));
     }
 
-    if run_name.contains("_") {
+    if run_name.contains('_') {
         return Err(anyhow!("run_name cannot contain any '_' characters"));
     }
 
@@ -297,7 +297,7 @@ fn evaluate_quoridor(run_name: &str, model_1_num: Option<usize>, model_2_num: Op
     let model_2 = model_factory.get(&model_2_info);
 
     SelfEvaluate::evaluate(
-        &vec!(model_1, model_2),
+        &[model_1, model_2],
         &game_engine,
         options
     )?;
@@ -390,7 +390,7 @@ fn evaluate_arimaa(run_name: &str, model_1_num: Option<usize>, model_2_num: Opti
     let model_2 = model_factory.get(&model_2_info);
 
     SelfEvaluate::evaluate(
-        &vec!(model_1, model_2),
+        &[model_1, model_2],
         &game_engine,
         options
     )?;
@@ -633,7 +633,7 @@ fn get_config(run_directory: &Path) -> Result<Options> {
     let mut file = OpenOptions::new()
         .read(true)
         .open(&config_path)
-        .expect(&format!("Couldn't load config file: {:?}", &config_path));
+        .unwrap_or_else(|_| panic!("Couldn't load config file: {:?}", &config_path));
 
     let mut config_file_contents = String::new();
     file.read_to_string(&mut config_file_contents).expect("Failed to read config file");

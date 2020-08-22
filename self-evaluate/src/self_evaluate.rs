@@ -139,7 +139,7 @@ impl SelfEvaluate
                         "Time Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
                         starting_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,
-                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
+                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60_f32
                     );
 
                     info!("Model Scores: {:?}", model_scores);

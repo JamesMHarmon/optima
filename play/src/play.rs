@@ -76,7 +76,7 @@ impl Play
             );
 
             for action in actions.iter() {
-                if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
+                if mcts.advance_to_action_retain(action.clone()).await.is_err() {
                     println!("Illegal Action: {:?}", &action);
                     continue;
                 }
@@ -105,7 +105,7 @@ impl Play
 
                 let inputs = input.split(&[',', ' '][..]).filter_map(|v| {
                     let trimmed = v.trim();
-                    if trimmed.len() > 0 { Some(trimmed) } else { None }
+                    if !trimmed.is_empty() { Some(trimmed) } else { None }
                 });
 
                 if input == "help" {
@@ -131,7 +131,7 @@ impl Play
                     
                     match action {
                         Ok(action) => {
-                            if let Err(_) = mcts.advance_to_action_retain(action.clone()).await {
+                            if mcts.advance_to_action_retain(action.clone()).await.is_err() {
                                 println!("Illegal Action: {:?}", &action);
                                 continue;
                             }

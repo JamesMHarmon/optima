@@ -273,10 +273,10 @@ where
         let mut nodes = vec!();
 
         loop {
-            let is_root = nodes.len() == 0;
+            let is_root = nodes.is_empty();
             let mut children = self.get_node_details(node_index, is_root)?.children;
 
-            if children.len() == 0 { break; }
+            if children.is_empty() { break; }
 
             let (action, puct) = children.swap_remove(0);
             nodes.push((action.clone(), puct));
@@ -348,7 +348,7 @@ where
             let temp = temp(game_state, node.num_actions);
             drop(arena_borrow);
             let child_node_details = self.get_node_details(*node_index, self.focus_actions.is_empty())?.children;
-            if child_node_details.len() == 0 {
+            if child_node_details.is_empty() {
                 let arena_borrow = self.arena.borrow();
                 let node = &arena_borrow[*node_index];
                 let game_state = &node.game_state;
@@ -367,7 +367,7 @@ where
             return Ok(best_action.clone());
         }
 
-        return Err(anyhow!("Root or focused node does not exist. Run search first."));
+        Err(anyhow!("Root or focused node does not exist. Run search first."))
     }
 
     fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
@@ -754,7 +754,7 @@ where
 
         // If the node is a terminal node.
         let children = &node.children;
-        if children.len() == 0 {
+        if children.is_empty() {
             update_node_values(&nodes_to_propagate_to_stack, latest_index, &mut arena_borrow_mut, game_engine);
             break 'outer;
         }
@@ -1355,7 +1355,7 @@ mod tests {
         let analyzer = CountingAnalyzer::new();
         let search_num_visits = 800;
 
-        let mut non_clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analyzer, MCTSOptions::new(
+        let mut non_clear_mcts = MCTS::new(game_state.clone(), actions, &game_engine, &analyzer, MCTSOptions::new(
             None,
             0.0,
             0.0,
@@ -1376,7 +1376,7 @@ mod tests {
 
         let non_clear_metrics = non_clear_mcts.get_root_node_metrics().unwrap();
 
-        let mut clear_mcts = MCTS::new(game_state.clone(), actions.clone(), &game_engine, &analyzer, MCTSOptions::new(
+        let mut clear_mcts = MCTS::new(game_state.clone(), actions, &game_engine, &analyzer, MCTSOptions::new(
             None,
             0.0,
             0.0,

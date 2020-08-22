@@ -17,7 +17,7 @@ impl ModelInfo {
     }
 
     pub fn from_model_name(model_name: &str) -> ModelInfo {
-        let parts: Vec<_> = model_name.split("_").collect();
+        let parts: Vec<_> = model_name.split('_').collect();
 
         ModelInfo {
             game_name: parts[0].to_string(),
@@ -27,8 +27,8 @@ impl ModelInfo {
     }
 
     pub fn is_model_name(model_name: &str) -> bool {
-        let parts: Vec<_> = model_name.split("_").collect();
-        parts.len() == 3 && parts[2].split(".").collect::<Vec<_>>()[0].parse::<usize>().is_ok()
+        let parts: Vec<_> = model_name.split('_').collect();
+        parts.len() == 3 && parts[2].split('.').collect::<Vec<_>>()[0].parse::<usize>().is_ok()
     }
 
     pub fn get_game_name(&self) -> &str {

@@ -144,9 +144,7 @@ where
 
             let file_path = self.file_paths.pop();
 
-            if file_path.is_none() {
-                return None;
-            }
+            file_path.as_ref()?;
 
             let metrics = SelfPlayPersistance::read_metrics_from_file(&file_path.unwrap()).unwrap();
 

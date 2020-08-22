@@ -345,7 +345,7 @@ assert_eq!(game_state_symmetry_step_3, "5g
 
         let mut symmetries = get_symmetries(PositionMetrics {
             score: Value([0.0,1.0]),
-            game_state: game_state,
+            game_state,
             policy: NodeMetrics {
                 visits: 800,
                 children: vec!(

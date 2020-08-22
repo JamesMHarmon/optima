@@ -89,7 +89,7 @@ fn calculate_tt_capacity_power<Te>(tt_cache_size_mb: usize) -> usize {
     let mut capacity_power = -1;
 
     while max_num_entries != 0 {
-        max_num_entries = max_num_entries >> 1;
+        max_num_entries >>= 1;
         capacity_power += 1;
     }
 

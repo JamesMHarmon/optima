@@ -426,7 +426,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(76, 4, &vec!(), &vec!(), 0, 0),
+            map_to_input_vec(76, 4, &[], &[], 0, 0),
             input
         )
     }
@@ -441,7 +441,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(76, 13, &vec!(), &vec!(), 0, 0),
+            map_to_input_vec(76, 13, &[], &[], 0, 0),
             input
         )
     }
@@ -456,7 +456,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(76, 4, &vec!(), &vec!(9,10), 0, 1),
+            map_to_input_vec(76, 4, &[], &[9,10], 0, 1),
             input
         )
     }
@@ -472,7 +472,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(76, 3, &vec!(), &vec!(79,80), 1, 0),
+            map_to_input_vec(76, 3, &[], &[79,80], 1, 0),
             input
         )
     }
@@ -488,7 +488,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(67, 4, &vec!(38,47), &vec!(), 0, 1),
+            map_to_input_vec(67, 4, &[38,47], &[], 0, 1),
             input
         )
     }
@@ -505,7 +505,7 @@ mod tests {
         let input = mapper.game_state_to_input(&game_state, Mode::Infer);
 
         assert_eq!(
-            map_to_input_vec(76, 22, &vec!(32,41), &vec!(), 1, 0),
+            map_to_input_vec(76, 22, &[32,41], &[], 1, 0),
             input
         )
     }

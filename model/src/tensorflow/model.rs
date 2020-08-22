@@ -99,7 +99,7 @@ where
 
         let mapper = Arc::new(mapper);
         let transposition_table = Arc::new(if tt_cache_size > 0 { Some(TranspositionTable::new(tt_cache_size)) } else { None });
-        let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), transposition_table.clone(), analysis_request_threads, batch_size));
+        let batching_model = Arc::new(BatchingModel::new(engine, mapper.clone(), transposition_table, analysis_request_threads, batch_size));
         let options = get_options(&model_info).expect("Could not load model options file");
 
         Self {
@@ -316,7 +316,7 @@ impl Predictor {
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
         
         let mut input_tensor: Tensor<f16> = Tensor::new(&input_dimensions);
-        fill_tensor(&mut input_tensor, game_state_inputs.flatten().map(|v| f16::from_f32(v)));
+        fill_tensor(&mut input_tensor, game_state_inputs.flatten().map(f16::from_f32));
 
         let session = &self.session;
 
@@ -696,15 +696,15 @@ where
 
     fn provide_analysis<I: Iterator<Item=(usize, S, Waker)>>(&self, states: I, analysis: AnalysisResults, output_size: usize, moves_left_size: usize) -> Result<()> {
         let mut analysis_len = 0;
-        let mut policy_head_iter = analysis.policy_head_output.into_iter();
-        let mut value_head_iter = analysis.value_head_output.into_iter();
+        let mut policy_head_iter = analysis.policy_head_output.iter();
+        let mut value_head_iter = analysis.value_head_output.iter();
         let mut moves_left_head_iter = analysis.moves_left_head_output.as_ref().map(|ml| ml.iter().map(|v| v.to_f32()));
 
         for (id, game_state, waker) in states {
             let mapper = &*self.mapper;
             let transposition_table_entry = mapper.map_output_to_transposition_entry(
                 &game_state,
-                policy_head_iter.by_ref().take(output_size).map(|v| *v),
+                policy_head_iter.by_ref().take(output_size).copied(),
                 *value_head_iter.next().expect("Expected value score to exist"),
                 moves_left_head_iter.as_mut().map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size))).unwrap_or(0.0)
             );
@@ -733,9 +733,7 @@ where
     }
 
     fn take_num_nodes_analysed(&self) -> usize {
-        (
-           self.num_nodes_analysed.swap(0, Ordering::SeqCst)
-        )
+        self.num_nodes_analysed.swap(0, Ordering::SeqCst)
     }
 
     fn take_min_max_batch_size(&self) -> (usize, usize) {

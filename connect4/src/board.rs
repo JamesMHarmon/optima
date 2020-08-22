@@ -6,7 +6,7 @@ pub fn map_board_to_arr(board: u64) -> [f32; 42] {
         let removed_bit_vec_idx = map_board_idx_to_vec_idx(bit_idx);
     
         result[removed_bit_vec_idx] = 1.0;
-        board = board ^ 1 << bit_idx;
+        board ^= 1 << bit_idx;
     }
 
     result

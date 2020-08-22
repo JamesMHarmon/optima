@@ -168,7 +168,7 @@ where
 
             let new_model = model_factory.get(&new_model_info);
             SelfEvaluate::evaluate(
-                &vec!(latest_model, new_model),
+                &[latest_model, new_model],
                 game_engine,
                 self_evaluate_options
             )?;
@@ -255,7 +255,7 @@ where
                         starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                         num_of_games_played,
                         num_games_to_play,
-                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60 as f32
+                        num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60_f32
                     );
 
                     info!("Number of Actions: {}, Score: {:?}",

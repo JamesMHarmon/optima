@@ -43,7 +43,7 @@ impl Display for GameState {
         let horizontal_wall_board = map_board_to_arr_invertable(self.horizontal_wall_placement_board, BoardType::HorizontalWall, false);
         let vertical_wall_board = map_board_to_arr_invertable(self.vertical_wall_placement_board, BoardType::VerticalWall, false);
 
-        writeln!(f, "")?;
+        writeln!(f)?;
 
         for y in 0..BOARD_HEIGHT {
             for x in 0..BOARD_WIDTH {
@@ -54,7 +54,7 @@ impl Display for GameState {
                 write!(f, "{}{}", w, c)?;
             }
 
-            writeln!(f, "")?;
+            writeln!(f)?;
 
             for x in 0..BOARD_WIDTH {
                 let idx = y * BOARD_WIDTH + x;
@@ -64,7 +64,7 @@ impl Display for GameState {
                 write!(f, " {} {}", p, w)?;
             }
 
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
 
         for x in 0..BOARD_WIDTH {
@@ -72,7 +72,7 @@ impl Display for GameState {
             write!(f, "---+")?;
         }
 
-        writeln!(f, "")?;
+        writeln!(f)?;
 
         for x in 0..BOARD_WIDTH {
             if x == 0 { write!(f, "   ")?; }
@@ -80,8 +80,8 @@ impl Display for GameState {
             write!(f, " {}  ", col_letter)?;
         }
 
-        writeln!(f, "")?;
-        writeln!(f, "")?;
+        writeln!(f)?;
+        writeln!(f)?;
         writeln!(f, "  P1: {}  P2: {}", NUM_WALLS_PER_PLAYER - self.p1_num_walls_placed, NUM_WALLS_PER_PLAYER - self.p2_num_walls_placed)?;
 
         Ok(())
@@ -106,21 +106,21 @@ impl GameState {
     pub fn get_valid_pawn_move_actions(&self) -> Vec<Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_pawn_moves())
             .into_iter()
-            .map(|coord| Action::MovePawn(coord))
+            .map(Action::MovePawn)
             .collect()
     }
 
     pub fn get_valid_horizontal_wall_actions(&self) -> Vec<Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_horizontal_wall_placement())
             .into_iter()
-            .map(|coord| Action::PlaceHorizontalWall(coord))
+            .map(Action::PlaceHorizontalWall)
             .collect()
     }
 
     pub fn get_valid_vertical_wall_actions(&self) -> Vec<Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_vertical_wall_placement())
             .into_iter()
-            .map(|coord| Action::PlaceVerticalWall(coord))
+            .map(Action::PlaceVerticalWall)
             .collect()
     }
 
@@ -440,7 +440,7 @@ impl GameState {
             let coordinate = Coordinate::from_bit_board(removed_bit);
             coordinates.push(coordinate);
 
-            board = board ^ removed_bit;
+            board ^= removed_bit;
         }
 
         coordinates

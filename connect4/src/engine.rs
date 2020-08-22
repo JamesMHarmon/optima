@@ -37,7 +37,7 @@ impl Hash for GameState {
 
 impl GameState {
     pub fn drop_piece(&self, column: usize) -> Self {
-        let column_adder = 1 << 7 * (column - 1);
+        let column_adder = 1 << (7 * (column - 1));
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
         let dropped_piece = (all_pieces + column_adder) & !all_pieces;
         let p1_turn_to_move = self.p1_turn_to_move;
@@ -63,7 +63,7 @@ impl GameState {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
         let valid_columns: Vec<bool> = (1..8).map(|column| {
-            let column_mask = 1 << 7 * (column - 1);
+            let column_mask = 1 << (7 * (column - 1));
             let column_mask_row_six = column_mask << 5;
             let is_column_full = column_mask_row_six & all_pieces != 0;
             !is_column_full
@@ -133,7 +133,7 @@ impl GameState {
             return true;
         }
 
-        return false;
+        false
     }
 }
 
@@ -142,7 +142,7 @@ impl Display for GameState {
         let p1_board = map_board_to_arr(self.p1_piece_board);
         let p2_board = map_board_to_arr(self.p2_piece_board);
 
-        writeln!(f, "")?;
+        writeln!(f)?;
         writeln!(f, "   +---+---+---+---+---+---+---+")?;
 
         for y in 0..6 {
@@ -152,7 +152,7 @@ impl Display for GameState {
                 let p = if p1_board[idx] != 0.0 { "X" } else if p2_board[idx] != 0.0 { "O" } else { " " };
                 write!(f, " {} |", p)?;
             }
-            writeln!(f, "")?;
+            writeln!(f)?;
             if y != 5 { writeln!(f, "   |---+---+---+---+---+---+---|")?; }
         }
 
@@ -225,7 +225,7 @@ mod tests {
     fn test_drop_piece_empty_last_column() {
         let mut state: GameState = game_state::GameState::initial();
         state = state.drop_piece(7);
-        assert_eq!(state.p1_piece_board, 1 << 7 * 6);
+        assert_eq!(state.p1_piece_board, 1 << (7 * 6));
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod tests {
         state = state.drop_piece(3);
 
         let piece_1 = 1;
-        let piece_3 = 1 << 7 * 2;
+        let piece_3 = 1 << (7 * 2);
         assert_eq!(state.p1_piece_board, piece_1 | piece_3);
     }
 
@@ -254,7 +254,7 @@ mod tests {
         let piece_1_1 = 1;
         let piece_1_2 = 2;
 
-        let column_4 = 1 << 7 * 3;
+        let column_4 = 1 << (7 * 3);
         let piece_4_1 = column_4;
         let piece_4_2 = column_4 << 1;
         let piece_4_3 = column_4 << 2;
