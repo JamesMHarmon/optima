@@ -16,13 +16,11 @@ impl<Te> TranspositionTable<Te> {
     pub fn new(tt_cache_size: usize) -> TranspositionTable<Te> {
         let power = calculate_tt_capacity_power::<TranspositionRow<Te>>(tt_cache_size);
         let capacity = 2u128.pow(power as u32) as usize;
-        let mut table = Vec::with_capacity(capacity);
 
         info!("Initializing cache with a power of {}, a capacity of {}, and entries taking up {}MB", power, capacity, (std::mem::size_of::<TranspositionRow<Te>>() * capacity) / BYTES_PER_MB);
 
-        for _ in 0..capacity {
-            table.push(Mutex::new(None));
-        }
+        let mut table = Vec::with_capacity(capacity);
+        table.resize_with(capacity, Default::default);
 
         TranspositionTable {
             table,

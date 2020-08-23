@@ -332,7 +332,7 @@ pub fn map_bit_board_to_squares(board: u64) -> Vec<Square> {
         let square = Square::from_index(bit_idx as u8);
         squares.push(square);
 
-        board = board ^ 1 << bit_idx;
+        board ^= 1 << bit_idx;
     }
 
     squares

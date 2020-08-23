@@ -7,6 +7,7 @@ pub enum BoardType {
     HorizontalWall
 }
 
+#[allow(clippy::assign_op_pattern)]
 pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> Vec<f32> {
     let size = BOARD_HEIGHT * BOARD_WIDTH;
     let mut board = board;

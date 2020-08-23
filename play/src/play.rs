@@ -141,7 +141,7 @@ impl Play
                             actions.push(action);
                             total_visits = 0;
                         },
-                        Err(_) => println!("{}", "Error parsing action")
+                        Err(_) => println!("Error parsing action")
                     }
                 }
             };

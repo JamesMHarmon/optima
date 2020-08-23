@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct List<T> {
     head: Link<T>,
 }
 
 type Link<T> = Option<Arc<Node<T>>>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Node<T> {
     elem: T,
     next: Link<T>,
@@ -44,6 +44,10 @@ impl<T> List<T> {
     pub fn len(&self) -> usize {
         self.head.as_ref().map_or(0, |n| n.len)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<T> Clone for List<T> {
@@ -59,7 +63,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<T> List<T> {
-    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+    pub fn iter(&self) -> Iter<T> {
         Iter { next: self.head.as_deref() }
     }
 }

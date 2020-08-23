@@ -126,6 +126,7 @@ where
 
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_analysis_threads<S,A,V,E,Map,Te>(
     active_threads: &Arc<AtomicUsize>,
     active_analyzers: &Arc<AtomicUsize>,
@@ -844,7 +845,7 @@ pub fn moves_left_expected_value<I: Iterator<Item=f32>>(moves_left_scores: I) ->
 }
 
 fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
-    if moves_left_size <= 0 {
+    if moves_left_size == 0 {
         return vec![];
     }
 

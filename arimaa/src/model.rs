@@ -15,6 +15,7 @@ use super::play_model::{ModelFactory as PlayModelFactory, Mapper as PlayMapper, 
 
 use anyhow::Result;
 
+#[derive(Default)]
 pub struct ModelFactory {
     play_model_factory: PlayModelFactory,
     place_model_factory: PlaceModelFactory
@@ -66,6 +67,7 @@ pub struct Model {
     place_model: TensorflowModel<GameState,Action,Value,Engine,PlaceMapper,PlaceTranspositionEntry>
 }
 
+#[allow(clippy::unnecessary_filter_map)]
 impl model::model::Model for Model {
     type State = GameState;
     type Action = Action;
@@ -116,6 +118,7 @@ pub struct Analyzer {
     place_analyzer: GameAnalyzer<GameState,Action,Value,Engine,PlaceMapper,PlaceTranspositionEntry>
 }
 
+#[allow(clippy::type_complexity)]
 impl model::analytics::GameAnalyzer for Analyzer {
     type Future = Either<
         GameStateAnalysisFuture<Self::State,Self::Action,Self::Value,Engine,PlayMapper,PlayTranspositionEntry>,

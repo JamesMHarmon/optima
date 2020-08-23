@@ -119,7 +119,7 @@ pub async fn self_play<'a, S, A, E, M, V>(
         analysis.push((action, metrics));
     };
 
-    let score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
+    let score = game_engine.is_terminal_state(&state).ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
     Ok(SelfPlayMetrics::<A,V> {
         analysis,

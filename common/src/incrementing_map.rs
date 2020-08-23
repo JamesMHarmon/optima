@@ -20,10 +20,7 @@ impl<T> Bucket<T> {
 impl<T> IncrementingMap<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         let mut buckets = Vec::with_capacity(capacity);
-
-        for _ in 0..capacity {
-            buckets.push(Bucket::new());
-        }
+        buckets.resize_with(capacity, Bucket::new);
 
         Self {
             capacity,

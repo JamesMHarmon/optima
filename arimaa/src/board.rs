@@ -11,7 +11,7 @@ pub fn set_board_bits_invertable(arr: &mut [f32], offset: usize, board: u64, inv
 
         arr[cell_idx] = 1.0;
 
-        board = board ^ 1 << bit_idx;
+        board ^= 1 << bit_idx;
     }
 }
 
@@ -26,7 +26,7 @@ pub fn set_placement_board_bits(arr: &mut [f32], offset: usize, board: u64) {
 
         arr[cell_idx] = 1.0;
 
-        board = board ^ 1 << bit_idx;
+        board ^= 1 << bit_idx;
     }
 }
 

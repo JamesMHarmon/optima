@@ -612,7 +612,7 @@ fn update_tournament_options_from_matches(options: &mut TournamentOptions, match
     if let Some(cpuct_init) = matches.value_of("cpuct_init") { options.cpuct_init = cpuct_init.parse()? };
     if let Some(cpuct_root_scaling) = matches.value_of("cpuct_root_scaling") { options.cpuct_root_scaling = cpuct_root_scaling.parse()? };
 
-    Ok(matches.value_of("models").ok_or(anyhow!("model ranges not specified"))?.to_owned())
+    Ok(matches.value_of("models").ok_or_else(|| anyhow!("model ranges not specified"))?.to_owned())
 }
 
 fn get_options(game_name: &str, run_name: &str) -> Result<Options> {
@@ -661,7 +661,7 @@ fn initialize_directories_and_files(game_name: &str, run_name: &str, options: &O
         .expect("Couldn't open or create the config file");
 
     let serialized_options = serde_json::to_string_pretty(options).expect("Unable to serialize options");
-    file.write(serialized_options.as_bytes()).expect("Unable to write options to file");
+    file.write_all(serialized_options.as_bytes()).expect("Unable to write options to file");
 
     Ok(run_directory)
 }

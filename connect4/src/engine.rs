@@ -10,7 +10,7 @@ use super::board::map_board_to_arr;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_piece_board: u64,
@@ -34,6 +34,14 @@ impl Hash for GameState {
         self.zobrist.board_state_hash().hash(state);
     }
 }
+
+impl PartialEq for GameState {
+    fn eq(&self, other: &Self) -> bool {
+        self.zobrist.board_state_hash() == other.zobrist.board_state_hash()
+    }
+}
+
+impl Eq for GameState {}
 
 impl GameState {
     pub fn drop_piece(&self, column: usize) -> Self {
@@ -163,6 +171,7 @@ impl Display for GameState {
     }
 }
 
+#[derive(Default)]
 pub struct Engine {}
 
 impl Engine {

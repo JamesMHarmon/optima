@@ -275,7 +275,7 @@ impl SelfEvaluate
             actions.push(action);
         };
 
-        let final_score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
+        let final_score = game_engine.is_terminal_state(&state).ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
         let scores: Vec<_> = players.iter().enumerate().map(|(i, (m, _))| (
             (**m).to_owned(),

@@ -2,6 +2,8 @@
 #![feature(vec_remove_item)]
 #![feature(test)]
 
+#![allow(clippy::inconsistent_digit_grouping)]
+
 #[macro_use]
 mod bits;
 mod board;

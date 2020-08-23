@@ -46,17 +46,13 @@ impl Coordinate {
     fn invert_column(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
         let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
-        let a = (ASCII_LETTER_A + inverted_col_num - 1) as char;
-
-        a
+        (ASCII_LETTER_A + inverted_col_num - 1) as char
     }
 
     fn invert_column_shift(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
         let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
-        let a = (ASCII_LETTER_A + inverted_col_num - 2) as char;
-
-        a
+        (ASCII_LETTER_A + inverted_col_num - 2) as char
     }
 }
 

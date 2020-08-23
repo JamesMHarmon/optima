@@ -25,6 +25,7 @@ pub struct TranspositionEntry {
     value: f16
 }
 
+#[derive(Default)]
 pub struct ModelFactory {}
 
 impl ModelFactory {
@@ -33,6 +34,7 @@ impl ModelFactory {
     }
 }
 
+#[derive(Default)]
 pub struct Mapper {}
 
 impl Mapper {

@@ -462,6 +462,7 @@ impl game_state::GameState for GameState {
     }
 }
 
+#[derive(Default)]
 pub struct Engine {}
 
 impl Engine {

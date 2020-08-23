@@ -100,9 +100,7 @@ impl PieceBoardState {
 
         if animal_is_on_trap {
             let unsupported_piece_bits = get_both_player_unsupported_piece_bits(self);
-            let trapped_animal_bits = unsupported_piece_bits & TRAP_MASK;
-
-            trapped_animal_bits
+            unsupported_piece_bits & TRAP_MASK
         } else {
             0
         }
@@ -277,8 +275,9 @@ impl GameState {
         })
     }
 
+    #[allow(clippy::blocks_in_if_conditions,clippy::if_same_then_else,clippy::needless_bool)]
     pub fn has_move(&self, piece_board: &PieceBoardState) -> Option<Value> {
-        let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {   
+        let has_move = if let Phase::PlayPhase(play_phase) = &self.phase {
             if play_phase.push_pull_state.is_must_complete_push() {
                 let valid_actions = self.get_must_complete_push_actions(piece_board);
                 self.has_non_passing_like_action(valid_actions)
@@ -357,10 +356,7 @@ impl GameState {
     }
 
     pub fn is_play_phase(&self) -> bool {
-        match &self.phase {
-            Phase::PlayPhase(_) => true,
-            _ => false
-        }
+        matches!(&self.phase, Phase::PlayPhase(_))
     }
 
     pub fn get_trapped_animal_for_action(&self, action: &Action) -> Option<(Square,Piece,bool)> {
@@ -756,6 +752,7 @@ impl GameState {
         }
     }
 
+    #[allow(clippy::let_and_return)]
     fn get_invalid_rabbit_moves(&self, direction: &Direction, piece_board: &PieceBoardState) -> u64 {
         let backward_direction = if self.p1_turn_to_move { Direction::Down } else { Direction::Up };
 
@@ -804,7 +801,7 @@ impl GameState {
     }
 
     fn has_non_passing_like_action(&self, valid_actions: Vec<Action>) -> bool {
-        if valid_actions.len() == 0 {
+        if valid_actions.is_empty() {
             return false;
         }
 
@@ -819,7 +816,7 @@ impl GameState {
             }
         }
 
-        return false;
+        false
     }
 }
 
@@ -921,10 +918,7 @@ impl GameStateTrait for GameState {
 
 impl PushPullState {
     fn is_must_complete_push(&self) -> bool {
-        match self {
-            PushPullState::MustCompletePush(_,_) => true,
-            _ => false
-        }
+        matches!(self, PushPullState::MustCompletePush(_,_))
     }
 
     fn unwrap_must_complete_push(&self) -> (Square, Piece) {
@@ -942,11 +936,8 @@ impl PushPullState {
     }
 
     fn can_push(&self) -> bool {
-        match self {
-            // We can't push another piece if we are already obligated to push another
-            PushPullState::MustCompletePush(_,_) => false,
-            _ => true
-        }
+        // We can't push another piece if we are already obligated to push another
+        !matches!(self, PushPullState::MustCompletePush(_,_))
     }
 }
 
@@ -994,6 +985,7 @@ impl PlayPhase {
     }
 }
 
+#[derive(Default)]
 pub struct Engine {}
 
 impl Engine {

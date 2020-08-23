@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::cell::{Cell,RefCell};
 use std::future::Future;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WaitFor {
     wakers: RefCell<Vec<Waker>>,
     is_waiting: Cell<bool>

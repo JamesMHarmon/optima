@@ -82,13 +82,10 @@ impl Tournament
 
             let num_games_to_play = games_to_play.len();
             let num_games_per_thread = num_games_to_play / TOURNAMENT_PARALLELISM;
-            let games_to_play_chunks = games_to_play.into_iter()
-                .chunks(num_games_per_thread)
-                .into_iter().map(|c| c.collect::<Vec<_>>())
-                .collect::<Vec<_>>();
+            let games_to_play_chunks = games_to_play.into_iter().chunks(num_games_per_thread);
 
             let mut handles = vec![];
-            for (thread_num, games_to_play) in games_to_play_chunks.into_iter().enumerate() {
+            for (thread_num, games_to_play) in games_to_play_chunks.into_iter().map(|c| c.collect::<Vec<_>>()).enumerate() {
                 let game_results_tx = game_results_tx.clone();
                 let num_games_to_play_this_thread = games_to_play.len();
 
@@ -256,7 +253,7 @@ impl Tournament
             actions.push(action);
         };
 
-        let final_score = game_engine.is_terminal_state(&state).ok_or(anyhow!("Expected a terminal state"))?;
+        let final_score = game_engine.is_terminal_state(&state).ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
         let scores: Vec<_> = players.iter().enumerate().map(|(i, (m, _))| (
             (**m).to_owned(),

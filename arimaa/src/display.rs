@@ -47,10 +47,10 @@ impl FromStr for GameState {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let lines: Vec<_> = s.split("|").enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
+        let lines: Vec<_> = s.split('|').enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
         let regex = regex::Regex::new(r"^\s*(\d+)([gswb])").unwrap();
 
-        let (move_number, p1_turn_to_move) = regex.captures(s.split("|").find(|_| true).unwrap()).map_or((2, true), |c| (
+        let (move_number, p1_turn_to_move) = regex.captures(s.split('|').find(|_| true).unwrap()).map_or((2, true), |c| (
             c.get(1).unwrap().as_str().parse().unwrap(),
             c.get(2).unwrap().as_str() != "s" && c.get(2).unwrap().as_str() != "b"
         ));

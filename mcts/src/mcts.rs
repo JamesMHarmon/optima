@@ -46,6 +46,7 @@ where
     _phantom_state: PhantomData<*const S>
 }
 
+#[allow(clippy::too_many_arguments)]
 impl<S,C,T> MCTSOptions<S,C,T>
 where
     S: GameState,
@@ -246,7 +247,7 @@ where
     }
 
     pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>> {
-        let root_index = self.root.ok_or(anyhow!("No root node found!"))?;
+        let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let root = &self.arena.borrow()[root_index];
 
         Ok(NodeMetrics {
@@ -269,7 +270,7 @@ where
     pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
         let arena_borrow = &self.arena.borrow();
 
-        let mut node_index = *self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
+        let mut node_index = *self.root.as_ref().ok_or_else(|| anyhow!("No root node found!"))?;
         let mut nodes = vec!();
 
         loop {
@@ -402,7 +403,7 @@ where
         let game_engine = &self.game_engine;
 
         let arena_borrow_mut = &mut *self.arena.borrow_mut();
-        let root_node = arena_borrow_mut.remove(root_index).ok_or(anyhow!("Root node should exist in arena."))?;
+        let root_node = arena_borrow_mut.remove(root_index).ok_or_else(|| anyhow!("Root node should exist in arena."))?;
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
         if let Err(err) = split_nodes {
@@ -461,7 +462,7 @@ where
     }
 
     fn split_node_children_by_action<'b>(current_root: &'b MCTSNode<S,A,V>, action: &A) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>)> {
-        let matching_action = current_root.get_child_of_action(action).ok_or(anyhow!("No matching Action"))?;
+        let matching_action = current_root.get_child_of_action(action).ok_or_else(|| anyhow!("No matching Action"))?;
         let other_actions: Vec<_> = current_root.children.iter().filter(|n| n.action != *action).map(|n| &n.state).collect();
 
         Ok((&matching_action.state, other_actions))
@@ -626,7 +627,7 @@ where
     fn get_focus_node_index(&self) -> Result<Option<Index>> {
         let arena_borrow = &self.arena.borrow();
 
-        let mut node_index = *self.root.as_ref().ok_or(anyhow!("No root node found!"))?;
+        let mut node_index = *self.root.as_ref().ok_or_else(|| anyhow!("No root node found!"))?;
 
         for action in &self.focus_actions {
             match arena_borrow[node_index].get_child_of_action(&action).and_then(|child| child.state.get_index()) {
@@ -766,7 +767,7 @@ where
         } else {
             MCTS::<S,A,E,M,C,T,V>::select_path(
                 latest_index,
-                &mut *arena_borrow_mut,
+                &arena_borrow_mut,
                 is_root,
                 options
             )?
@@ -827,7 +828,7 @@ where
             if let MCTSNodeState::Unexpanded = selected_child_node_state {
                 // Immediately replace the state with an indication that we are expanding.RwLock
                 let expanding_lock = Rc::new(WaitFor::new());
-                std::mem::replace(selected_child_node_state, MCTSNodeState::Expanding(expanding_lock.clone()));
+                *selected_child_node_state = MCTSNodeState::Expanding(expanding_lock.clone());
 
                 let new_game_state = game_engine.take_action(&prior_node.game_state, &selected_action);
                 let prior_num_actions = prior_node.num_actions;
@@ -864,7 +865,7 @@ where
     let prior_node = &mut arena[parent_node];
     let selected_child_node = prior_node.get_child_of_action_mut(action).expect("Expected child to exist.");
     let selected_child_node_state = &mut selected_child_node.state;
-    std::mem::replace(selected_child_node_state, MCTSNodeState::Expanded(expanded_node_index));
+    *selected_child_node_state = MCTSNodeState::Expanded(expanded_node_index);
 
     expanded_node_index
 }

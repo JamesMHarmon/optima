@@ -1,3 +1,5 @@
+#![allow(clippy::inconsistent_digit_grouping)]
+
 pub mod action;
 pub mod engine;
 pub mod model;
