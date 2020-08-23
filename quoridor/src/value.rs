@@ -1,6 +1,6 @@
-use serde::{Serialize,Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone,Debug,PartialEq,Serialize,Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Value(pub [f32; 2]);
 
 impl engine::value::Value for Value {

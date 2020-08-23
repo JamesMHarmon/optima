@@ -1,16 +1,16 @@
-use super::constants::{BOARD_HEIGHT,BOARD_WIDTH,ASCII_LETTER_A};
-use std::str::FromStr;
-use serde::de::Error;
-use std::fmt;
-use serde::ser::{Serialize,Serializer};
-use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
+use super::constants::{ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH};
+use anyhow::anyhow;
 use common::bits::single_bit_index;
-use anyhow::{anyhow};
+use serde::de::Error;
+use serde::de::{Deserialize, Deserializer, Error as DeserializeError, Unexpected, Visitor};
+use serde::ser::{Serialize, Serializer};
+use std::fmt;
+use std::str::FromStr;
 
-#[derive(Clone,Eq,PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Coordinate {
     pub column: char,
-    pub row: usize
+    pub row: usize,
 }
 
 impl Coordinate {
@@ -23,7 +23,7 @@ impl Coordinate {
         let column = BOARD_WIDTH - (index % BOARD_WIDTH);
         let row = ((index / BOARD_WIDTH) as usize) + 1;
 
-        let column = (ASCII_LETTER_A  + column as u8 - 1) as char;
+        let column = (ASCII_LETTER_A + column as u8 - 1) as char;
 
         Coordinate::new(column, row)
     }
@@ -38,8 +38,16 @@ impl Coordinate {
 
     pub fn invert(&self, shift: bool) -> Coordinate {
         Coordinate::new(
-            if shift { Self::invert_column_shift(self.column) } else { Self::invert_column(self.column) },
-            if shift { BOARD_HEIGHT } else { BOARD_HEIGHT + 1 } - self.row
+            if shift {
+                Self::invert_column_shift(self.column)
+            } else {
+                Self::invert_column(self.column)
+            },
+            if shift {
+                BOARD_HEIGHT
+            } else {
+                BOARD_HEIGHT + 1
+            } - self.row,
         )
     }
 
@@ -56,24 +64,24 @@ impl Coordinate {
     }
 }
 
-impl Serialize for Action
-{
+impl Serialize for Action {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{}",self))
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 
 struct ActionVisitor {}
 
 impl ActionVisitor {
-    fn new() -> Self { Self {} }
+    fn new() -> Self {
+        Self {}
+    }
 }
 
-impl<'de> Visitor<'de> for ActionVisitor
-{
+impl<'de> Visitor<'de> for ActionVisitor {
     type Value = Action;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -84,12 +92,12 @@ impl<'de> Visitor<'de> for ActionVisitor
     where
         E: Error,
     {
-        v.parse::<Action>().map_err(|_| DeserializeError::invalid_value(Unexpected::Str(v),&self))
+        v.parse::<Action>()
+            .map_err(|_| DeserializeError::invalid_value(Unexpected::Str(v), &self))
     }
 }
 
-impl<'de> Deserialize<'de> for Action
-{
+impl<'de> Deserialize<'de> for Action {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -98,32 +106,41 @@ impl<'de> Deserialize<'de> for Action
     }
 }
 
-#[derive(Clone,Eq,PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Action {
     MovePawn(Coordinate),
     PlaceHorizontalWall(Coordinate),
-    PlaceVerticalWall(Coordinate)
+    PlaceVerticalWall(Coordinate),
 }
 
 impl Action {
     pub fn invert(&self) -> Self {
         match self {
             Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert(false)),
-            Action::PlaceHorizontalWall(coordinate) => Action::PlaceHorizontalWall(coordinate.invert(true)),
-            Action::PlaceVerticalWall(coordinate) => Action::PlaceVerticalWall(coordinate.invert(true))
+            Action::PlaceHorizontalWall(coordinate) => {
+                Action::PlaceHorizontalWall(coordinate.invert(true))
+            }
+            Action::PlaceVerticalWall(coordinate) => {
+                Action::PlaceVerticalWall(coordinate.invert(true))
+            }
         }
     }
 }
 
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (coordinate,action_type) = match self {
+        let (coordinate, action_type) = match self {
             Action::MovePawn(coordinate) => (coordinate, ""),
             Action::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
-            Action::PlaceVerticalWall(coordinate) => (coordinate, "v")
+            Action::PlaceVerticalWall(coordinate) => (coordinate, "v"),
         };
 
-        write!(f, "{coordinate}{action_type}", coordinate = coordinate, action_type = action_type)
+        write!(
+            f,
+            "{coordinate}{action_type}",
+            coordinate = coordinate,
+            action_type = action_type
+        )
     }
 }
 
@@ -140,14 +157,16 @@ impl FromStr for Action {
         let chars: Vec<char> = s.chars().collect();
         let row = chars[0];
         // @TODO: Update to take multiple digits
-        let col = chars[1].to_digit(10).ok_or_else(|| anyhow!("Invalid value"))?;
+        let col = chars[1]
+            .to_digit(10)
+            .ok_or_else(|| anyhow!("Invalid value"))?;
         let coordinate = Coordinate::new(row, col as usize);
 
         match chars.get(2) {
             None => Ok(Action::MovePawn(coordinate)),
             Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
             Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
-            Some(_) => Err(anyhow!("Invalid value"))
+            Some(_) => Err(anyhow!("Invalid value")),
         }
     }
 }
@@ -270,8 +289,8 @@ mod tests {
 
     #[test]
     fn test_to_coordinate_to_bit_board_from_bit_board_back_to_coordinate() {
-        let cols = ['a','b','c','d','e','f','g','h','i'];
-        let rows = [1,2,3,4,5,6,7,8,9];
+        let cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+        let rows = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         for (col, row) in cols.iter().zip(rows.iter()) {
             let orig_coordinate = Coordinate::new(*col, *row);
@@ -286,7 +305,7 @@ mod tests {
     fn test_invert_coordinate_a1() {
         let coord = Coordinate::new('a', 1);
         let expected = Coordinate::new('i', 9);
-        
+
         assert_eq!(coord.invert(false), expected);
     }
 
@@ -294,7 +313,7 @@ mod tests {
     fn test_invert_coordinate_i9() {
         let coord = Coordinate::new('i', 9);
         let expected = Coordinate::new('a', 1);
-        
+
         assert_eq!(coord.invert(false), expected);
     }
 
@@ -302,7 +321,7 @@ mod tests {
     fn test_invert_coordinate_e5() {
         let coord = Coordinate::new('e', 5);
         let expected = Coordinate::new('e', 5);
-        
+
         assert_eq!(coord.invert(false), expected);
     }
 
@@ -310,14 +329,14 @@ mod tests {
     fn test_invert_coordinate_d3() {
         let coord = Coordinate::new('d', 3);
         let expected = Coordinate::new('f', 7);
-        
+
         assert_eq!(coord.invert(false), expected);
     }
 
     #[test]
     fn test_invert_coordinate_double_invert() {
         let coord = Coordinate::new('d', 3);
-        
+
         assert_eq!(coord.invert(false).invert(false), coord);
     }
 
@@ -325,7 +344,7 @@ mod tests {
     fn test_invert_coordinate_shift_a1() {
         let coord = Coordinate::new('a', 1);
         let expected = Coordinate::new('h', 8);
-        
+
         assert_eq!(coord.invert(true), expected);
     }
 
@@ -333,7 +352,7 @@ mod tests {
     fn test_invert_coordinate_shift_h8() {
         let coord = Coordinate::new('h', 8);
         let expected = Coordinate::new('a', 1);
-        
+
         assert_eq!(coord.invert(true), expected);
     }
 
@@ -341,7 +360,7 @@ mod tests {
     fn test_invert_coordinate_shift_e5() {
         let coord = Coordinate::new('e', 5);
         let expected = Coordinate::new('d', 4);
-        
+
         assert_eq!(coord.invert(true), expected);
     }
 
@@ -349,32 +368,29 @@ mod tests {
     fn test_invert_coordinate_shift_d3() {
         let coord = Coordinate::new('d', 3);
         let expected = Coordinate::new('e', 6);
-        
+
         assert_eq!(coord.invert(true), expected);
     }
 
     #[test]
     fn test_invert_coordinate_shift_double_invert() {
         let coord = Coordinate::new('d', 3);
-        
+
         assert_eq!(coord.invert(true).invert(true), coord);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_action_pawn_move_ser_json() {
         let action = Action::MovePawn(Coordinate::new('a', 1));
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "a1"
-        );
+        assert_eq!(serialized_action_as_json, "a1");
     }
 
     #[test]
@@ -382,10 +398,7 @@ mod test {
         let action = Action::PlaceVerticalWall(Coordinate::new('a', 1));
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "a1v"
-        );
+        assert_eq!(serialized_action_as_json, "a1v");
     }
 
     #[test]
@@ -393,10 +406,7 @@ mod test {
         let action = Action::PlaceHorizontalWall(Coordinate::new('a', 1));
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "a1h"
-        );
+        assert_eq!(serialized_action_as_json, "a1h");
     }
 
     #[test]

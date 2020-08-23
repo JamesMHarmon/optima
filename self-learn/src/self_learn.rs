@@ -1,39 +1,38 @@
-use std::path::Path;
-use std::fmt::Debug;
-use std::time::Instant;
-use std::sync::mpsc;
-use serde::{Serialize, Deserialize};
-use serde::de::DeserializeOwned;
-use futures::stream::{FuturesUnordered,StreamExt};
 use anyhow::Result;
+use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
+use std::path::Path;
+use std::sync::mpsc;
+use std::time::Instant;
 
-use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
+use model::analytics::GameAnalyzer;
 use model::model::{Model, ModelFactory};
 use model::model_info::ModelInfo;
-use self_evaluate::self_evaluate::{SelfEvaluate,SelfEvaluateOptions};
+use self_evaluate::self_evaluate::{SelfEvaluate, SelfEvaluateOptions};
 
-use super::self_play::{self,SelfPlayOptions,SelfPlayMetrics};
-use super::self_play_persistance::{SelfPlayPersistance};
 use super::constants::SELF_PLAY_PARALLELISM;
+use super::self_play::{self, SelfPlayMetrics, SelfPlayOptions};
+use super::self_play_persistance::SelfPlayPersistance;
 use super::train;
-
 
 pub struct SelfLearn<'a, S, A, V, E>
 where
     S: GameState,
     A: Clone + Eq + Serialize + Unpin,
     V: Value,
-    E: 'a + GameEngine<State=S,Action=A,Value=V>
+    E: 'a + GameEngine<State = S, Action = A, Value = V>,
 {
     self_learn_options: &'a SelfLearnOptions,
     self_evaluate_options: &'a SelfEvaluateOptions,
     run_directory: &'a Path,
     game_engine: &'a E,
-    model_info: ModelInfo
+    model_info: ModelInfo,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -68,26 +67,26 @@ pub struct SelfLearnOptions {
     pub moves_left_threshold: f32,
     pub moves_left_scale: f32,
     pub moves_left_factor: f32,
-    pub epsilon: f32
+    pub epsilon: f32,
 }
 
-impl<'a,S,A,V,E> SelfLearn<'a,S,A,V,E>
+impl<'a, S, A, V, E> SelfLearn<'a, S, A, V, E>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
     V: Value + DeserializeOwned + Serialize,
-    E: 'a + GameEngine<State=S,Action=A,Value=V> + Sync
+    E: 'a + GameEngine<State = S, Action = A, Value = V> + Sync,
 {
-    pub fn create<M,T,F,O>(
+    pub fn create<M, T, F, O>(
         game_name: String,
         run_name: String,
         model_factory: &F,
-        options: &O
+        options: &O,
     ) -> Result<()>
     where
-        M: Model<Action=A,State=S,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send,
-        F: ModelFactory<M=M,O=O>
+        M: Model<Action = A, State = S, Analyzer = T>,
+        T: GameAnalyzer<Action = A, State = S, Value = M::Value> + Send,
+        F: ModelFactory<M = M, O = O>,
     {
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
@@ -103,8 +102,7 @@ where
         run_directory: &'a Path,
         self_learn_options: &'a SelfLearnOptions,
         self_evaluate_options: &'a SelfEvaluateOptions,
-    ) -> Result<Self>
-    {
+    ) -> Result<Self> {
         let model_info = ModelInfo::new(game_name, run_name, 1);
 
         Ok(Self {
@@ -112,16 +110,16 @@ where
             self_evaluate_options,
             run_directory,
             game_engine,
-            model_info
+            model_info,
         })
     }
 
-    pub fn learn<M,T,F>(&mut self, model_factory: &F) -> Result<()>
+    pub fn learn<M, T, F>(&mut self, model_factory: &F) -> Result<()>
     where
-        M: Model<Action=A,State=S,Analyzer=T,Value=V>,
-        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
-        F: ModelFactory<M=M>,
-        V: Clone + Send + Debug
+        M: Model<Action = A, State = S, Analyzer = T, Value = V>,
+        T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
+        F: ModelFactory<M = M>,
+        V: Clone + Send + Debug,
     {
         let self_learn_options = self.self_learn_options;
         let self_evaluate_options = self.self_evaluate_options;
@@ -133,22 +131,21 @@ where
             let model_name = latest_model_info.get_model_name();
 
             let num_games_to_play = {
-                let self_play_persistance = SelfPlayPersistance::new(
-                    run_directory,
-                    model_name.to_owned()
-                )?;
+                let self_play_persistance =
+                    SelfPlayPersistance::new(run_directory, model_name.to_owned())?;
 
-                let num_games_this_net = self_play_persistance.read::<A,V>()?.count();
+                let num_games_this_net = self_play_persistance.read::<A, V>()?.count();
                 let number_of_games_per_net = self_learn_options.number_of_games_per_net;
-                let num_games_to_play = if num_games_this_net < number_of_games_per_net { number_of_games_per_net - num_games_this_net } else { 0 };
+                let num_games_to_play = if num_games_this_net < number_of_games_per_net {
+                    number_of_games_per_net - num_games_this_net
+                } else {
+                    0
+                };
                 drop(self_play_persistance);
                 num_games_to_play
             };
 
-            let mut self_play_persistance = SelfPlayPersistance::new(
-                run_directory,
-                model_name
-            )?;
+            let mut self_play_persistance = SelfPlayPersistance::new(run_directory, model_name)?;
 
             let latest_model = model_factory.get(&latest_model_info);
             Self::play_self(
@@ -156,28 +153,28 @@ where
                 game_engine,
                 num_games_to_play,
                 &mut self_play_persistance,
-                self_learn_options
+                self_learn_options,
             )?;
 
-            let new_model_info = train::train_model::<S,A,V,E,M,T>(
+            let new_model_info = train::train_model::<S, A, V, E, M, T>(
                 &latest_model,
                 &self_play_persistance,
                 game_engine,
-                self_learn_options
+                self_learn_options,
             )?;
 
             let new_model = model_factory.get(&new_model_info);
             SelfEvaluate::evaluate(
                 &[latest_model, new_model],
                 game_engine,
-                self_evaluate_options
+                self_evaluate_options,
             )?;
 
             latest_model_info = new_model_info;
         }
     }
 
-    fn play_self<M,T>(
+    fn play_self<M, T>(
         model: &M,
         engine: &E,
         num_games_to_play: usize,
@@ -185,9 +182,9 @@ where
         options: &SelfLearnOptions,
     ) -> Result<()>
     where
-        M: Model<State=S,Action=A,Analyzer=T,Value=V>,
-        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
-        V: Send + Debug
+        M: Model<State = S, Action = A, Analyzer = T, Value = V>,
+        T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
+        V: Send + Debug,
     {
         let self_play_batch_size = options.self_play_batch_size;
         let starting_run_time = Instant::now();
@@ -274,13 +271,13 @@ where
     async fn play_games<T>(
         num_games_to_play: usize,
         self_play_batch_size: usize,
-        results_channel: mpsc::Sender<SelfPlayMetrics<A,V>>,
+        results_channel: mpsc::Sender<SelfPlayMetrics<A, V>>,
         game_engine: &E,
         analyzer: &T,
-        self_play_options: &SelfPlayOptions
+        self_play_options: &SelfPlayOptions,
     ) -> Result<()>
     where
-        T: GameAnalyzer<Action=A,State=S,Value=V> + Send,
+        T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
     {
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();
@@ -288,21 +285,27 @@ where
         info!("To Play: {}", num_games_to_play);
 
         for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
-            self_play_metric_stream.push(
-                self_play::self_play(game_engine, analyzer, &self_play_options)
-            );
+            self_play_metric_stream.push(self_play::self_play(
+                game_engine,
+                analyzer,
+                &self_play_options,
+            ));
         }
 
         while let Some(self_play_metric) = self_play_metric_stream.next().await {
             let self_play_metric = self_play_metric.unwrap();
             num_games_to_play -= 1;
 
-            results_channel.send(self_play_metric).expect("Failed to send game result");
+            results_channel
+                .send(self_play_metric)
+                .expect("Failed to send game result");
 
             if num_games_to_play - self_play_metric_stream.len() > 0 {
-                self_play_metric_stream.push(
-                    self_play::self_play(game_engine, analyzer, &self_play_options)
-                );
+                self_play_metric_stream.push(self_play::self_play(
+                    game_engine,
+                    analyzer,
+                    &self_play_options,
+                ));
             }
         }
 

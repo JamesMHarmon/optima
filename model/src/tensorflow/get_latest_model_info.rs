@@ -1,9 +1,9 @@
-use std::fs;
-use anyhow::{anyhow,Result};
+use anyhow::{anyhow, Result};
 use log::info;
+use std::fs;
 
-use super::paths::Paths;
 use super::super::model_info::ModelInfo;
+use super::paths::Paths;
 
 pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo> {
     let paths = Paths::from_model_info(model_info);
@@ -23,10 +23,13 @@ pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo> {
     let latest_model_info = ModelInfo::new(
         model_info.get_game_name().to_owned(),
         model_info.get_run_name().to_owned(),
-        latest_model_num
+        latest_model_num,
     );
 
-    info!("Getting latest model: {}", latest_model_info.get_model_name());
+    info!(
+        "Getting latest model: {}",
+        latest_model_info.get_model_name()
+    );
 
     Ok(latest_model_info)
 }

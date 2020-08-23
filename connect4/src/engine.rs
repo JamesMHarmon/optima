@@ -1,12 +1,12 @@
-use std::fmt::{self,Display,Formatter};
-use std::hash::{Hash,Hasher};
 use engine::engine::GameEngine;
 use engine::game_state;
+use std::fmt::{self, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
-use super::zobrist::Zobrist;
-use super::value::Value;
 use super::action::Action;
 use super::board::map_board_to_arr;
+use super::value::Value;
+use super::zobrist::Zobrist;
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 
@@ -15,7 +15,7 @@ pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_piece_board: u64,
     pub p2_piece_board: u64,
-    pub zobrist: Zobrist
+    pub zobrist: Zobrist,
 }
 
 impl game_state::GameState for GameState {
@@ -24,7 +24,7 @@ impl game_state::GameState for GameState {
             p1_turn_to_move: true,
             p1_piece_board: 0,
             p2_piece_board: 0,
-            zobrist: Zobrist::initial()
+            zobrist: Zobrist::initial(),
         }
     }
 }
@@ -63,36 +63,42 @@ impl GameState {
             p1_turn_to_move: !p1_turn_to_move,
             p1_piece_board,
             p2_piece_board,
-            zobrist
+            zobrist,
         }
     }
 
     pub fn get_valid_actions(&self) -> Vec<bool> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
-        let valid_columns: Vec<bool> = (1..8).map(|column| {
-            let column_mask = 1 << (7 * (column - 1));
-            let column_mask_row_six = column_mask << 5;
-            let is_column_full = column_mask_row_six & all_pieces != 0;
-            !is_column_full
-        }).collect();
+        let valid_columns: Vec<bool> = (1..8)
+            .map(|column| {
+                let column_mask = 1 << (7 * (column - 1));
+                let column_mask_row_six = column_mask << 5;
+                let is_column_full = column_mask_row_six & all_pieces != 0;
+                !is_column_full
+            })
+            .collect();
 
         valid_columns
     }
 
     /// Determines if the current state is either a winning or drawn position.
-    /// 
+    ///
     /// Win: If the position is winning then this method will return Some(-1.0) since the value of the position
     /// is always from the reference of the current player to move, who just lost.
-    /// 
+    ///
     /// Drawn: If the position is a draw then the return will be Some(0.0);
-    /// 
+    ///
     /// Not Terminal: If the position is not yet the end of the game then None will be returned.
     pub fn is_terminal(&self) -> Option<Value> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
         if self.has_connected_4() {
-            return Some(if self.p1_turn_to_move { Value([0.0, 1.0]) } else { Value([1.0, 0.0]) });
+            return Some(if self.p1_turn_to_move {
+                Value([0.0, 1.0])
+            } else {
+                Value([1.0, 0.0])
+            });
         }
 
         if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
@@ -119,7 +125,11 @@ impl GameState {
     }
 
     fn has_connected_4(&self) -> bool {
-        let board = if self.p1_turn_to_move { self.p2_piece_board } else { self.p1_piece_board };
+        let board = if self.p1_turn_to_move {
+            self.p2_piece_board
+        } else {
+            self.p1_piece_board
+        };
 
         let c2 = board & (board << 6);
         if c2 & (c2 << (2 * 6)) != 0 {
@@ -155,13 +165,23 @@ impl Display for GameState {
 
         for y in 0..6 {
             for x in 0..7 {
-                if x == 0 { write!(f, "   |")?; }
+                if x == 0 {
+                    write!(f, "   |")?;
+                }
                 let idx = y * 7 + x;
-                let p = if p1_board[idx] != 0.0 { "X" } else if p2_board[idx] != 0.0 { "O" } else { " " };
+                let p = if p1_board[idx] != 0.0 {
+                    "X"
+                } else if p2_board[idx] != 0.0 {
+                    "O"
+                } else {
+                    " "
+                };
                 write!(f, " {} |", p)?;
             }
             writeln!(f)?;
-            if y != 5 { writeln!(f, "   |---+---+---+---+---+---+---|")?; }
+            if y != 5 {
+                writeln!(f, "   |---+---+---+---+---+---+---|")?;
+            }
         }
 
         writeln!(f, "   +---+---+---+---+---+---+---+")?;
@@ -175,7 +195,9 @@ impl Display for GameState {
 pub struct Engine {}
 
 impl Engine {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 impl GameEngine for Engine {
@@ -185,7 +207,7 @@ impl GameEngine for Engine {
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         match action {
-            Action::DropPiece(column) => game_state.drop_piece(*column as usize)
+            Action::DropPiece(column) => game_state.drop_piece(*column as usize),
         }
     }
 
@@ -194,7 +216,11 @@ impl GameEngine for Engine {
     }
 
     fn get_player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.p1_turn_to_move { 1 } else { 2 }
+        if game_state.p1_turn_to_move {
+            1
+        } else {
+            2
+        }
     }
 
     fn get_move_number(&self, game_state: &Self::State) -> usize {
@@ -270,7 +296,10 @@ mod tests {
         let piece_4_4 = column_4 << 3;
         let piece_4_5 = column_4 << 4;
 
-        assert_eq!(state.p1_piece_board, piece_1_1 | piece_4_1 | piece_4_3 | piece_4_5);
+        assert_eq!(
+            state.p1_piece_board,
+            piece_1_1 | piece_4_1 | piece_4_3 | piece_4_5
+        );
         assert_eq!(state.p2_piece_board, piece_1_2 | piece_4_2 | piece_4_4);
     }
 
@@ -284,7 +313,10 @@ mod tests {
             }
         }
 
-        assert_eq!(state.get_valid_actions().as_slice(), [true, true, true, true, true, true, true]);
+        assert_eq!(
+            state.get_valid_actions().as_slice(),
+            [true, true, true, true, true, true, true]
+        );
     }
 
     #[test]
@@ -297,7 +329,10 @@ mod tests {
             }
         }
 
-        assert_eq!(state.get_valid_actions().as_slice(), [false, false, false, false, false, false, false]);
+        assert_eq!(
+            state.get_valid_actions().as_slice(),
+            [false, false, false, false, false, false, false]
+        );
     }
 
     #[test]
@@ -312,7 +347,10 @@ mod tests {
 
         state = state.drop_piece(1);
 
-        assert_eq!(state.get_valid_actions().as_slice(), [false, true, true, true, true, true, true]);
+        assert_eq!(
+            state.get_valid_actions().as_slice(),
+            [false, true, true, true, true, true, true]
+        );
     }
 
     #[test]
@@ -327,7 +365,10 @@ mod tests {
 
         state = state.drop_piece(7);
 
-        assert_eq!(state.get_valid_actions().as_slice(), [true, true, true, true, true, true, false]);
+        assert_eq!(
+            state.get_valid_actions().as_slice(),
+            [true, true, true, true, true, true, false]
+        );
     }
 
     #[test]
@@ -344,7 +385,10 @@ mod tests {
         state = state.drop_piece(4);
         state = state.drop_piece(5);
 
-        assert_eq!(state.get_valid_actions().as_slice(), [true, true, false, false, false, true, true]);
+        assert_eq!(
+            state.get_valid_actions().as_slice(),
+            [true, true, false, false, false, true, true]
+        );
     }
 
     #[test]

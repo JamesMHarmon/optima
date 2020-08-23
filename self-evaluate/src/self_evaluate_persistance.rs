@@ -1,29 +1,24 @@
-use std::path::{Path,PathBuf};
-use serde::{Serialize};
-use std::fs;
-use std::io::Write;
-use std::fs::{File,OpenOptions};
-use itertools::Itertools;
 use anyhow::Result;
+use itertools::Itertools;
+use serde::Serialize;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
+use super::self_evaluate::{GameResult, MatchResult};
 use model::model_info::ModelInfo;
-use super::self_evaluate::{GameResult,MatchResult};
 
-pub struct SelfEvaluatePersistance
-{
+pub struct SelfEvaluatePersistance {
     game_file: File,
-    match_file: File
+    match_file: File,
 }
 
-impl SelfEvaluatePersistance
-{
+impl SelfEvaluatePersistance {
     pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self> {
         let evaluations_dir = run_directory.join("evaluations");
 
-        let game_file_path = get_game_file_path(
-            &evaluations_dir,
-            model_infos
-        );
+        let game_file_path = get_game_file_path(&evaluations_dir, model_infos);
 
         let match_file_path = get_match_file_path(&evaluations_dir);
 
@@ -33,7 +28,7 @@ impl SelfEvaluatePersistance
             .append(true)
             .create(true)
             .open(game_file_path)?;
-        
+
         let match_file = OpenOptions::new()
             .append(true)
             .create(true)
@@ -41,7 +36,7 @@ impl SelfEvaluatePersistance
 
         Ok(Self {
             game_file,
-            match_file
+            match_file,
         })
     }
 

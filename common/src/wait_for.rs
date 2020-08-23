@@ -1,28 +1,28 @@
-use std::task::Waker;
-use std::task::Poll;
-use std::task::Context;
-use std::pin::Pin;
-use std::cell::{Cell,RefCell};
+use std::cell::{Cell, RefCell};
 use std::future::Future;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 #[derive(Debug, Default)]
 pub struct WaitFor {
     wakers: RefCell<Vec<Waker>>,
-    is_waiting: Cell<bool>
+    is_waiting: Cell<bool>,
 }
 
 impl WaitFor {
     pub fn new() -> Self {
         Self {
-            wakers: RefCell::new(vec!()),
-            is_waiting: Cell::new(true)
+            wakers: RefCell::new(vec![]),
+            is_waiting: Cell::new(true),
         }
     }
 
     pub fn wait(&self) -> WaitForFuture {
         WaitForFuture {
             waker_index: None,
-            wait_for: self
+            wait_for: self,
         }
     }
 
@@ -49,7 +49,7 @@ impl WaitFor {
 
 pub struct WaitForFuture<'a> {
     waker_index: Option<usize>,
-    wait_for: &'a WaitFor
+    wait_for: &'a WaitFor,
 }
 
 impl<'a> Future for WaitForFuture<'a> {

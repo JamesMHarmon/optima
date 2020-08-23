@@ -1,11 +1,11 @@
-use super::constants::{BOARD_HEIGHT,BOARD_WIDTH,ASCII_LETTER_A};
-use std::str::FromStr;
-use serde::de::Error;
-use std::fmt;
-use serde::ser::{Serialize,Serializer};
-use serde::de::{Deserialize,Deserializer,Error as DeserializeError,Unexpected,Visitor};
+use super::constants::{ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH};
+use anyhow::anyhow;
 use common::bits::single_bit_index;
-use anyhow::{anyhow};
+use serde::de::Error;
+use serde::de::{Deserialize, Deserializer, Error as DeserializeError, Unexpected, Visitor};
+use serde::ser::{Serialize, Serializer};
+use std::fmt;
+use std::str::FromStr;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Ord, PartialOrd)]
 pub struct Square(u8);
@@ -69,7 +69,6 @@ impl fmt::Debug for Square {
     }
 }
 
-
 impl FromStr for Square {
     type Err = anyhow::Error;
 
@@ -82,7 +81,11 @@ impl FromStr for Square {
 
             if let Ok(row) = row.to_string().parse() {
                 let column_as_num = column as u8 - ASCII_LETTER_A + 1;
-                if column_as_num >= 1 && column_as_num <= BOARD_WIDTH as u8 && row >= 1 && row <= BOARD_HEIGHT {
+                if column_as_num >= 1
+                    && column_as_num <= BOARD_WIDTH as u8
+                    && row >= 1
+                    && row <= BOARD_HEIGHT
+                {
                     return Ok(Square::new(column, row));
                 }
             }
@@ -92,12 +95,12 @@ impl FromStr for Square {
     }
 }
 
-#[derive(Clone,Copy,Debug,Eq,Hash,PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Direction {
     Up,
     Right,
     Down,
-    Left
+    Left,
 }
 
 impl Direction {
@@ -106,7 +109,7 @@ impl Direction {
             Direction::Up => Direction::Down,
             Direction::Right => Direction::Left,
             Direction::Down => Direction::Up,
-            Direction::Left => Direction::Right
+            Direction::Left => Direction::Right,
         }
     }
 
@@ -115,7 +118,7 @@ impl Direction {
             Direction::Up => Direction::Up,
             Direction::Right => Direction::Left,
             Direction::Down => Direction::Down,
-            Direction::Left => Direction::Right
+            Direction::Left => Direction::Right,
         }
     }
 }
@@ -126,7 +129,7 @@ impl fmt::Display for Direction {
             Direction::Up => 'n',
             Direction::Right => 'e',
             Direction::Down => 's',
-            Direction::Left => 'w'
+            Direction::Left => 'w',
         };
 
         write!(f, "{}", dir)
@@ -146,7 +149,7 @@ impl FromStr for Direction {
                     'e' => Some(Direction::Right),
                     's' => Some(Direction::Down),
                     'w' => Some(Direction::Left),
-                    _ => None
+                    _ => None,
                 };
 
                 if let Some(direction) = direction {
@@ -166,7 +169,7 @@ pub enum Piece {
     Dog,
     Horse,
     Camel,
-    Elephant
+    Elephant,
 }
 
 impl fmt::Display for Piece {
@@ -177,7 +180,7 @@ impl fmt::Display for Piece {
             Piece::Horse => 'h',
             Piece::Dog => 'd',
             Piece::Cat => 'c',
-            Piece::Rabbit => 'r'
+            Piece::Rabbit => 'r',
         };
 
         write!(f, "{}", piece)
@@ -199,7 +202,7 @@ impl FromStr for Piece {
                     'D' | 'd' => Some(Piece::Dog),
                     'C' | 'c' => Some(Piece::Cat),
                     'R' | 'r' => Some(Piece::Rabbit),
-                    _ => None
+                    _ => None,
                 };
 
                 if let Some(piece) = piece {
@@ -215,28 +218,28 @@ impl FromStr for Piece {
 #[derive(Hash, Clone, Eq, PartialEq)]
 pub enum Action {
     Place(Piece),
-    Move(Square,Direction),
-    Pass
+    Move(Square, Direction),
+    Pass,
 }
 
-impl Serialize for Action
-{
+impl Serialize for Action {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{}",self))
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 
 struct ActionVisitor {}
 
 impl ActionVisitor {
-    fn new() -> Self { Self {} }
+    fn new() -> Self {
+        Self {}
+    }
 }
 
-impl<'de> Visitor<'de> for ActionVisitor
-{
+impl<'de> Visitor<'de> for ActionVisitor {
     type Value = Action;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -247,12 +250,12 @@ impl<'de> Visitor<'de> for ActionVisitor
     where
         E: Error,
     {
-        v.parse::<Action>().map_err(|_| DeserializeError::invalid_value(Unexpected::Str(v),&self))
+        v.parse::<Action>()
+            .map_err(|_| DeserializeError::invalid_value(Unexpected::Str(v), &self))
     }
 }
 
-impl<'de> Deserialize<'de> for Action
-{
+impl<'de> Deserialize<'de> for Action {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -264,17 +267,19 @@ impl<'de> Deserialize<'de> for Action
 impl Action {
     pub fn invert(&self) -> Self {
         match self {
-            Action::Move(square,direction) => Action::Move(square.invert(),direction.invert()),
+            Action::Move(square, direction) => Action::Move(square.invert(), direction.invert()),
             Action::Place(_) => panic!("Cannot invert placement"),
-            Action::Pass => Action::Pass
+            Action::Pass => Action::Pass,
         }
     }
 
     pub fn invert_horizontal(&self) -> Self {
         match self {
-            Action::Move(square,direction) => Action::Move(square.invert_horizontal(), direction.invert_horizontal()),
+            Action::Move(square, direction) => {
+                Action::Move(square.invert_horizontal(), direction.invert_horizontal())
+            }
             Action::Place(_) => panic!("Cannot invert placement"),
-            Action::Pass => Action::Pass
+            Action::Pass => Action::Pass,
         }
     }
 }
@@ -282,9 +287,9 @@ impl Action {
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let action = match self {
-            Action::Move(square,direction) => format!("{}{}", square, direction),
+            Action::Move(square, direction) => format!("{}{}", square, direction),
             Action::Pass => "p".to_string(),
-            Action::Place(piece) => format!("{}", piece)
+            Action::Place(piece) => format!("{}", piece),
         };
 
         write!(f, "{}", action)
@@ -448,8 +453,8 @@ mod tests {
 
     #[test]
     fn test_to_square_to_bit_board_from_bit_board_back_to_square() {
-        let cols = ['a','b','c','d','e','f','g','h'];
-        let rows = [1,2,3,4,5,6,7,8];
+        let cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        let rows = [1, 2, 3, 4, 5, 6, 7, 8];
 
         for (col, row) in cols.iter().zip(rows.iter()) {
             let orig_square = Square::new(*col, *row);
@@ -575,29 +580,23 @@ mod tests {
 
 #[cfg(test)]
 mod test {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_action_move_ser_json() {
-        let action = Action::Move(Square::new('a', 1),Direction::Up);
+        let action = Action::Move(Square::new('a', 1), Direction::Up);
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "a1n"
-        );
+        assert_eq!(serialized_action_as_json, "a1n");
     }
 
     #[test]
     fn test_action_move_ser_json_2() {
-        let action = Action::Move(Square::new('d', 4),Direction::Right);
+        let action = Action::Move(Square::new('d', 4), Direction::Right);
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "d4e"
-        );
+        assert_eq!(serialized_action_as_json, "d4e");
     }
 
     #[test]
@@ -605,10 +604,7 @@ mod test {
         let action = Action::Place(Piece::Elephant);
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "e"
-        );
+        assert_eq!(serialized_action_as_json, "e");
     }
 
     #[test]
@@ -616,10 +612,7 @@ mod test {
         let action = Action::Place(Piece::Camel);
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "m"
-        );
+        assert_eq!(serialized_action_as_json, "m");
     }
 
     #[test]
@@ -627,10 +620,7 @@ mod test {
         let action = Action::Pass;
         let serialized_action_as_json = json!(action);
 
-        assert_eq!(
-            serialized_action_as_json,
-            "p"
-        );
+        assert_eq!(serialized_action_as_json, "p");
     }
 
     #[test]
@@ -657,9 +647,6 @@ mod test {
     fn test_action_deser_pass() {
         let json = "\"p\"";
 
-        assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
-            Action::Pass,
-        );
+        assert_eq!(serde_json::from_str::<Action>(&json).unwrap(), Action::Pass,);
     }
 }

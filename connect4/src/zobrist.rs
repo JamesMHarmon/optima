@@ -2,7 +2,7 @@ use super::zobrist_values::*;
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Zobrist {
-    hash: u64
+    hash: u64,
 }
 
 impl Zobrist {
@@ -15,7 +15,7 @@ impl Zobrist {
         let bit_idx = piece_bit.trailing_zeros() as usize;
         let hash = self.hash ^ SQUARE_VALUES[player_idx][bit_idx];
 
-        Zobrist { hash }  
+        Zobrist { hash }
     }
 
     pub fn board_state_hash(&self) -> u64 {

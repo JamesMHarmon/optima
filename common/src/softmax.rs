@@ -1,7 +1,10 @@
 // (exp(p-max_p))^(1/T) = exp((p-max_p)/T).
 pub fn softmax(logits: &[f32], temperature: f32) -> Vec<f32> {
     let max_p = logits.iter().cloned().fold(std::f32::MIN, f32::max);
-    let softmaxed = logits.iter().map(|&p| ((p - max_p) / temperature).exp()).collect::<Vec<_>>();
+    let softmaxed = logits
+        .iter()
+        .map(|&p| ((p - max_p) / temperature).exp())
+        .collect::<Vec<_>>();
     let sum = softmaxed.iter().sum::<f32>();
     let reduced = softmaxed.iter().map(|p| p / sum).collect::<Vec<_>>();
 

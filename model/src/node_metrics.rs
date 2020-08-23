@@ -1,25 +1,29 @@
 use serde::de::SeqAccess;
+use serde::de::{Deserialize, Deserializer, Visitor};
+use serde::ser::{Serialize, SerializeTuple, Serializer};
 use std::fmt;
 use std::marker::PhantomData;
-use serde::ser::{Serialize, Serializer,SerializeTuple};
-use serde::de::{Deserialize, Deserializer, Visitor};
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A> {
     pub visits: usize,
-    pub children: Vec<(A, f32, usize)>
+    pub children: Vec<(A, f32, usize)>,
 }
 
 impl<A> Serialize for NodeMetrics<A>
 where
-    A: Serialize
+    A: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let metrics = &self.children.iter().map(|(a, _, v)| (a, v)).collect::<Vec<_>>();
+        let metrics = &self
+            .children
+            .iter()
+            .map(|(a, _, v)| (a, v))
+            .collect::<Vec<_>>();
 
         let mut tup = serializer.serialize_tuple(2)?;
         tup.serialize_element(&self.visits)?;
@@ -30,20 +34,20 @@ where
 }
 
 struct NodeMetricsVisitor<A> {
-    marker: PhantomData<A>
+    marker: PhantomData<A>,
 }
 
 impl<A> NodeMetricsVisitor<A> {
     fn new() -> Self {
         NodeMetricsVisitor {
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
 
 impl<'de, A> Visitor<'de> for NodeMetricsVisitor<A>
 where
-    A: Deserialize<'de>
+    A: Deserialize<'de>,
 {
     type Value = NodeMetrics<A>;
 
@@ -56,18 +60,18 @@ where
         S: SeqAccess<'de>,
     {
         let visits = seq.next_element()?.unwrap();
-        let metrics: Vec<(A,usize)> = seq.next_element()?.unwrap();
+        let metrics: Vec<(A, usize)> = seq.next_element()?.unwrap();
 
         Ok(NodeMetrics {
             visits,
-            children: metrics.into_iter().map(|(a, v)| (a, 0.0, v)).collect()
+            children: metrics.into_iter().map(|(a, v)| (a, 0.0, v)).collect(),
         })
     }
 }
 
 impl<'de, A> Deserialize<'de> for NodeMetrics<A>
 where
-    A: Deserialize<'de>
+    A: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

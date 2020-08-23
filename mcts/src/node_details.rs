@@ -1,18 +1,26 @@
 use std::cmp::Ordering;
-use std::fmt::{self,Debug,Display,Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct NodeDetails<A> {
     pub visits: usize,
-    pub children: Vec<(A, PUCT)>
+    pub children: Vec<(A, PUCT)>,
 }
 
 impl<A: Display> Display for NodeDetails<A> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let actions = format!("[{}]", self.children.iter().fold(String::new(), |acc, (a, puct)| acc + &format!("\n\t(A: {}, {}),", a, puct)));
+        let actions = format!(
+            "[{}]",
+            self.children
+                .iter()
+                .fold(String::new(), |acc, (a, puct)| acc
+                    + &format!("\n\t(A: {}, {}),", a, puct))
+        );
 
-        write!(f, "V: {visits}, Actions: {actions}",
+        write!(
+            f,
+            "V: {visits}, Actions: {actions}",
             visits = self.visits,
             actions = actions
         )
@@ -58,10 +66,20 @@ impl Debug for PUCT {
 
 impl Ord for PUCT {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct)) {
+        match (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
+            other.Nsa,
+            &other.Qsa,
+            &other.Psa,
+            &other.Usa,
+            &other.cpuct,
+        )) {
             Some(ordering) => ordering,
             None => {
-                panic!("Could not compare: {:?} to {:?}", (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct), (other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct));
+                panic!(
+                    "Could not compare: {:?} to {:?}",
+                    (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct),
+                    (other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct)
+                );
             }
         }
     }
@@ -73,12 +91,12 @@ impl PartialOrd for PUCT {
     }
 }
 
-impl Eq for PUCT { }
+impl Eq for PUCT {}
 
 #[cfg(test)]
 mod tests {
-    use std::cmp::Ordering;
     use super::*;
+    use std::cmp::Ordering;
 
     #[test]
     #[allow(non_snake_case)]
@@ -245,4 +263,3 @@ mod tests {
         assert_eq!(puct_greater.cmp(&puct_less), Ordering::Greater);
     }
 }
-

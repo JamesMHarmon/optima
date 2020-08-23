@@ -11,7 +11,7 @@ type Link<T> = Option<Arc<Node<T>>>;
 struct Node<T> {
     elem: T,
     next: Link<T>,
-    len: usize
+    len: usize,
 }
 
 impl<T> List<T> {
@@ -26,8 +26,8 @@ impl<T> List<T> {
             head: Some(Arc::new(Node {
                 elem,
                 next: self.head.clone(),
-                len
-            }))
+                len,
+            })),
         }
     }
 
@@ -37,7 +37,7 @@ impl<T> List<T> {
 
     pub fn tail(&self) -> List<T> {
         List {
-            head: self.head.as_ref().and_then(|n| n.next.clone())
+            head: self.head.as_ref().and_then(|n| n.next.clone()),
         }
     }
 
@@ -53,7 +53,7 @@ impl<T> List<T> {
 impl<T> Clone for List<T> {
     fn clone(&self) -> Self {
         Self {
-            head: self.head.as_ref().cloned()
+            head: self.head.as_ref().cloned(),
         }
     }
 }
@@ -64,7 +64,9 @@ pub struct Iter<'a, T> {
 
 impl<T> List<T> {
     pub fn iter(&self) -> Iter<T> {
-        Iter { next: self.head.as_deref() }
+        Iter {
+            next: self.head.as_deref(),
+        }
     }
 }
 

@@ -1,14 +1,14 @@
-use std::str::FromStr;
-use std::fmt::Display;
-use std::fmt::Debug;
-use serde::{Serialize, Deserialize};
-use serde::de::DeserializeOwned;
 use anyhow::Result;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::str::FromStr;
 
-use mcts::mcts::{MCTS,MCTSOptions};
-use model::analytics::GameAnalyzer;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
+use mcts::mcts::{MCTSOptions, MCTS};
+use model::analytics::GameAnalyzer;
 use model::model::Model;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,28 +28,27 @@ pub struct PlayOptions {
 
 pub struct Play {}
 
-impl Play
-{
+impl Play {
     #[allow(non_snake_case)]
     pub async fn play<S, A, E, M, T>(
         model: &M,
         game_engine: &E,
-        options: &PlayOptions
-    ) -> Result<()> 
+        options: &PlayOptions,
+    ) -> Result<()>
     where
         S: GameState + Display,
         A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
-        E: GameEngine<State=S,Action=A,Value=M::Value>,
-        M: Model<State=S,Action=A,Analyzer=T>,
-        T: GameAnalyzer<Action=A,State=S,Value=M::Value> + Send
+        E: GameEngine<State = S, Action = A, Value = M::Value>,
+        M: Model<State = S, Action = A, Analyzer = T>,
+        T: GameAnalyzer<Action = A, State = S, Value = M::Value> + Send,
     {
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
         let visits = options.visits;
         let analyzer = model.get_game_state_analyzer();
-        let mut actions: Vec<A> = vec!();
-        
+        let mut actions: Vec<A> = vec![];
+
         'outer: loop {
             let mut state: S = S::initial();
             let mut total_visits = 0;
@@ -59,20 +58,23 @@ impl Play
                 0,
                 game_engine,
                 &analyzer,
-                MCTSOptions::<S,_,_>::new(
+                MCTSOptions::<S, _, _>::new(
                     None,
                     options.fpu,
                     options.fpu_root,
                     options.logit_q,
-                    |_,_,Nsb,is_root| (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init) * if is_root { cpuct_root_scaling } else { 1.0 },
-                    |_,_| 0.0,
+                    |_, _, Nsb, is_root| {
+                        (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
+                            * if is_root { cpuct_root_scaling } else { 1.0 }
+                    },
+                    |_, _| 0.0,
                     0.0,
                     options.moves_left_threshold,
                     options.moves_left_scale,
                     options.moves_left_factor,
-                    options.parallelism
+                    options.parallelism,
                 ),
-                visits
+                visits,
             );
 
             for action in actions.iter() {
@@ -98,14 +100,22 @@ impl Play
                     total_visits += visits;
                     mcts.search_visits(total_visits).await?;
                     println!("{:?}", mcts.get_focus_node_details()?);
-                    let pvs: Vec<_> = mcts.get_principal_variation()?.iter().map(|n| format!("\n\t{:?}", n)).collect();
+                    let pvs: Vec<_> = mcts
+                        .get_principal_variation()?
+                        .iter()
+                        .map(|n| format!("\n\t{:?}", n))
+                        .collect();
                     println!("{}", pvs.join(""));
                     continue;
                 }
 
                 let inputs = input.split(&[',', ' '][..]).filter_map(|v| {
                     let trimmed = v.trim();
-                    if !trimmed.is_empty() { Some(trimmed) } else { None }
+                    if !trimmed.is_empty() {
+                        Some(trimmed)
+                    } else {
+                        None
+                    }
                 });
 
                 if input == "help" {
@@ -122,29 +132,36 @@ impl Play
                 }
 
                 if input == "moves" {
-                    println!("{}", actions.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(","));
+                    println!(
+                        "{}",
+                        actions
+                            .iter()
+                            .map(|a| a.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    );
                     continue;
                 }
 
-                for input in inputs {       
+                for input in inputs {
                     let action = input.parse::<A>();
-                    
+
                     match action {
                         Ok(action) => {
                             if mcts.advance_to_action_retain(action.clone()).await.is_err() {
                                 println!("Illegal Action: {:?}", &action);
                                 continue;
                             }
-                            
+
                             println!("Taking Action: {:?}", &action);
                             state = game_engine.take_action(&state, &action);
                             actions.push(action);
                             total_visits = 0;
-                        },
-                        Err(_) => println!("Error parsing action")
+                        }
+                        Err(_) => println!("Error parsing action"),
                     }
                 }
-            };
+            }
 
             println!("{}", state);
 

@@ -2,17 +2,17 @@ use std::sync::Mutex;
 
 pub struct IncrementingMap<T> {
     buckets: Vec<Bucket<T>>,
-    capacity: usize
+    capacity: usize,
 }
 
 struct Bucket<T> {
-    items: Mutex<Vec<(usize, T)>>
+    items: Mutex<Vec<(usize, T)>>,
 }
 
 impl<T> Bucket<T> {
     fn new() -> Self {
-        Self { 
-            items: Mutex::new(Vec::new())
+        Self {
+            items: Mutex::new(Vec::new()),
         }
     }
 }
@@ -22,10 +22,7 @@ impl<T> IncrementingMap<T> {
         let mut buckets = Vec::with_capacity(capacity);
         buckets.resize_with(capacity, Bucket::new);
 
-        Self {
-            capacity,
-            buckets
-        }
+        Self { capacity, buckets }
     }
 
     pub fn insert(&self, id: usize, item: T) {
@@ -43,8 +40,8 @@ impl<T> IncrementingMap<T> {
             Some(bucket_index) => {
                 let (_id, entry) = bucket.swap_remove(bucket_index);
                 Some(entry)
-            },
-            None => None
+            }
+            None => None,
         }
     }
 

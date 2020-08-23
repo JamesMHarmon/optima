@@ -1,4 +1,4 @@
-use super::constants::{BOARD_SIZE,PLAY_INPUT_C,PLACE_INPUT_C};
+use super::constants::{BOARD_SIZE, PLACE_INPUT_C, PLAY_INPUT_C};
 
 pub fn set_board_bits_invertable(arr: &mut [f32], offset: usize, board: u64, invert: bool) {
     let mut board = board;
@@ -36,10 +36,10 @@ fn invert_idx(idx: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::constants::{PLAY_INPUT_SIZE};
-    use super::super::action::{Piece,Square};
+    use super::super::action::{Piece, Square};
+    use super::super::constants::PLAY_INPUT_SIZE;
     use super::super::engine::GameState;
+    use super::*;
     use common::bits::single_bit_index_u64;
 
     fn square_to_idx(square: Square) -> usize {
@@ -71,7 +71,8 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
@@ -79,8 +80,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            false
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            false,
         );
 
         assert_eq!(num_values_set(&result), 1);
@@ -92,8 +95,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            true
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            true,
         );
 
         assert_eq!(num_values_set(&result), 1);
@@ -115,7 +120,8 @@ mod tests {
              1|                 |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
@@ -123,8 +129,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            false
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            false,
         );
 
         assert_eq!(num_values_set(&result), 1);
@@ -136,8 +144,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            true
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            true,
         );
 
         assert_eq!(num_values_set(&result), 1);
@@ -159,7 +169,8 @@ mod tests {
              1|                 |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
@@ -167,8 +178,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            false
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            false,
         );
 
         assert_eq!(num_values_set(&result), 1);
@@ -180,8 +193,10 @@ mod tests {
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
-            game_state.get_piece_board_for_step(game_state.get_current_step()).get_bits_for_piece(Piece::Rabbit, true),
-            true
+            game_state
+                .get_piece_board_for_step(game_state.get_current_step())
+                .get_bits_for_piece(Piece::Rabbit, true),
+            true,
         );
 
         assert_eq!(num_values_set(&result), 1);

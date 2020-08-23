@@ -1,4 +1,4 @@
 pub enum Mode {
     Infer,
-    Train
+    Train,
 }

@@ -1,12 +1,12 @@
-use engine::game_state::GameState;
 use engine::engine::GameEngine;
-use model::analytics::{ActionWithPolicy,GameAnalyzer,GameStateAnalysis};
+use engine::game_state::GameState;
 use futures::future;
+use model::analytics::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CountingGameState {
     pub p1_turn: bool,
-    pub count: usize
+    pub count: usize,
 }
 
 impl CountingGameState {
@@ -28,17 +28,20 @@ impl CountingGameState {
 
 impl GameState for CountingGameState {
     fn initial() -> Self {
-        Self { p1_turn: true, count: 50 }
+        Self {
+            p1_turn: true,
+            count: 50,
+        }
     }
 }
 
-pub struct CountingGameEngine {
-
-}
+pub struct CountingGameEngine {}
 
 impl CountingGameEngine {
     #[cfg(test)]
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[derive(Clone)]
@@ -54,7 +57,7 @@ impl engine::value::Value for Value {
 pub enum CountingAction {
     Increment,
     Decrement,
-    Stay
+    Stay,
 }
 
 impl GameEngine for CountingGameEngine {
@@ -68,10 +71,13 @@ impl GameEngine for CountingGameEngine {
         let new_count = match action {
             CountingAction::Increment => count + 1,
             CountingAction::Decrement => count - 1,
-            CountingAction::Stay => count
+            CountingAction::Stay => count,
         };
 
-        Self::State { p1_turn: !game_state.p1_turn, count: new_count }
+        Self::State {
+            p1_turn: !game_state.p1_turn,
+            count: new_count,
+        }
     }
 
     fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
@@ -79,7 +85,11 @@ impl GameEngine for CountingGameEngine {
     }
 
     fn get_player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.p1_turn { 1 } else { 2 }
+        if game_state.p1_turn {
+            1
+        } else {
+            2
+        }
     }
 
     fn get_move_number(&self, _game_state: &Self::State) -> usize {
@@ -87,19 +97,19 @@ impl GameEngine for CountingGameEngine {
     }
 }
 
-pub struct CountingAnalyzer {
-
-}
+pub struct CountingAnalyzer {}
 
 impl CountingAnalyzer {
     #[cfg(test)]
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
-    type Future = future::Ready<GameStateAnalysis<Self::Action,Self::Value>>;
+    type Future = future::Ready<GameStateAnalysis<Self::Action, Self::Value>>;
     type Value = Value;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
@@ -109,27 +119,27 @@ impl GameAnalyzer for CountingAnalyzer {
             return future::ready(GameStateAnalysis {
                 policy_scores: Vec::new(),
                 value_score: score,
-                moves_left: 0.0
+                moves_left: 0.0,
             });
         }
-        
+
         future::ready(GameStateAnalysis {
-            policy_scores: vec!(
+            policy_scores: vec![
                 ActionWithPolicy {
                     action: CountingAction::Increment,
-                    policy_score: 0.3
+                    policy_score: 0.3,
                 },
                 ActionWithPolicy {
                     action: CountingAction::Decrement,
-                    policy_score: 0.3
+                    policy_score: 0.3,
                 },
                 ActionWithPolicy {
                     action: CountingAction::Stay,
-                    policy_score: 0.4
+                    policy_score: 0.4,
                 },
-            ),
+            ],
             value_score: Value([(count as f32) / 100.0, (100.0 - count as f32) / 100.0]),
-            moves_left: 0.0
+            moves_left: 0.0,
         })
     }
 }

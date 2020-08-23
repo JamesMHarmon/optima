@@ -10,7 +10,6 @@ pub fn first_set_bit(bits: u64) -> u64 {
     1 << single_bit_index_u64(bits)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

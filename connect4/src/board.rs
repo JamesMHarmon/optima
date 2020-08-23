@@ -1,10 +1,10 @@
 pub fn map_board_to_arr(board: u64) -> [f32; 42] {
     let mut board = board;
-    let mut result:[f32; 42] = [0.0; 42];
+    let mut result: [f32; 42] = [0.0; 42];
     while board != 0 {
         let bit_idx = board.trailing_zeros() as usize;
         let removed_bit_vec_idx = map_board_idx_to_vec_idx(bit_idx);
-    
+
         result[removed_bit_vec_idx] = 1.0;
         board ^= 1 << bit_idx;
     }

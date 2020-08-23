@@ -1,25 +1,29 @@
-use model::tensorflow::mode::Mode;
-use model::analytics::GameStateAnalysis;
-use model::logits::update_logit_policies_to_softmax;
-use model::position_metrics::PositionMetrics;
-use model::model::ModelOptions;
-use model::analytics::ActionWithPolicy;
-use model::node_metrics::NodeMetrics;
-use model::model_info::ModelInfo;
-use model::tensorflow::model::{TensorflowModel,TensorflowModelOptions};
-use model::tensorflow::get_latest_model_info::get_latest_model_info;
-use engine::value::{Value as ValueTrait};
-use super::symmetries::get_symmetries;
+use super::action::{Action, Direction, Piece, Square};
 use super::board::set_board_bits_invertable;
-use super::value::Value;
-use super::action::{Action,Square,Direction,Piece};
-use super::constants::{PLAY_INPUT_H as INPUT_H,PLAY_INPUT_W as INPUT_W,PLAY_INPUT_C as INPUT_C,PLAY_OUTPUT_SIZE as OUTPUT_SIZE,PLAY_MOVES_LEFT_SIZE as MOVES_LEFT_SIZE,PLAY_INPUT_SIZE as INPUT_SIZE,*};
+use super::constants::{
+    PLAY_INPUT_C as INPUT_C, PLAY_INPUT_H as INPUT_H, PLAY_INPUT_SIZE as INPUT_SIZE,
+    PLAY_INPUT_W as INPUT_W, PLAY_MOVES_LEFT_SIZE as MOVES_LEFT_SIZE,
+    PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
+};
 use super::engine::Engine;
 use super::engine::GameState;
+use super::symmetries::get_symmetries;
+use super::value::Value;
+use engine::value::Value as ValueTrait;
+use model::analytics::ActionWithPolicy;
+use model::analytics::GameStateAnalysis;
+use model::logits::update_logit_policies_to_softmax;
+use model::model::ModelOptions;
+use model::model_info::ModelInfo;
+use model::node_metrics::NodeMetrics;
+use model::position_metrics::PositionMetrics;
+use model::tensorflow::get_latest_model_info::get_latest_model_info;
+use model::tensorflow::mode::Mode;
+use model::tensorflow::model::{TensorflowModel, TensorflowModelOptions};
 
-use half::f16;
 use anyhow::Result;
-use log::{error};
+use half::f16;
+use log::error;
 
 /*
     Layers:
@@ -38,7 +42,7 @@ use log::{error};
 pub struct TranspositionEntry {
     policy_metrics: [f16; OUTPUT_SIZE],
     moves_left: f32,
-    value: f16
+    value: f16,
 }
 
 #[derive(Default)]
@@ -58,12 +62,17 @@ impl Mapper {
         Self {}
     }
 
-    fn policy_to_valid_actions(&self, game_state: &GameState, policy_scores: &[f16]) -> Vec<ActionWithPolicy<Action>> {
+    fn policy_to_valid_actions(
+        &self,
+        game_state: &GameState,
+        policy_scores: &[f16],
+    ) -> Vec<ActionWithPolicy<Action>> {
         let invert = !game_state.is_p1_turn_to_move();
 
-        let mut valid_actions_with_policies: Vec<_> = game_state.valid_actions().into_iter()
-            .map(|action|
-            {
+        let mut valid_actions_with_policies: Vec<_> = game_state
+            .valid_actions()
+            .into_iter()
+            .map(|action| {
                 // Policy scores coming from the model are always from the perspective of player 1.
                 // This means that if we are p2, we need to flip the actions coming back and translate them
                 // to be actions in the p2 perspective.
@@ -75,11 +84,9 @@ impl Mapper {
 
                 let policy_score = policy_scores[policy_index];
 
-                ActionWithPolicy::new(
-                    action,
-                    policy_score.to_f32()
-                )
-            }).collect();
+                ActionWithPolicy::new(action, policy_score.to_f32())
+            })
+            .collect();
 
         update_logit_policies_to_softmax(&mut valid_actions_with_policies);
 
@@ -89,11 +96,15 @@ impl Mapper {
     fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
         let curr_val = (value_output + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
-        if game_state.is_p1_turn_to_move() { Value([curr_val, opp_val]) } else { Value([opp_val, curr_val]) }
+        if game_state.is_p1_turn_to_move() {
+            Value([curr_val, opp_val])
+        } else {
+            Value([opp_val, curr_val])
+        }
     }
 }
 
-impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry> for Mapper {
+impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState, mode: Mode) -> Vec<f32> {
         let mut result: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
         result.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
@@ -109,7 +120,10 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
         result
     }
 
-    fn get_symmetries(&self, metrics: PositionMetrics<GameState,Action,Value>) -> Vec<PositionMetrics<GameState,Action,Value>> {
+    fn get_symmetries(
+        &self,
+        metrics: PositionMetrics<GameState, Action, Value>,
+    ) -> Vec<PositionMetrics<GameState, Action, Value>> {
         get_symmetries(metrics)
     }
 
@@ -117,33 +131,44 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
         [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
     }
 
-    fn policy_metrics_to_expected_output(&self, game_state: &GameState, policy_metrics: &NodeMetrics<Action>) -> Vec<f32> {
+    fn policy_metrics_to_expected_output(
+        &self,
+        game_state: &GameState,
+        policy_metrics: &NodeMetrics<Action>,
+    ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let invert = !game_state.is_p1_turn_to_move();
         let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
         inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
 
-        policy_metrics.children.iter().fold(inputs, |mut r, (action, _w, visits)| {
-            // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
-            // at the board from the perspective of player 1, but with the pieces inverted.
-            let policy_index = if invert {
-                map_action_to_policy_output_idx(&action.invert())
-            } else {
-                map_action_to_policy_output_idx(action)
-            };
+        policy_metrics
+            .children
+            .iter()
+            .fold(inputs, |mut r, (action, _w, visits)| {
+                // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
+                // at the board from the perspective of player 1, but with the pieces inverted.
+                let policy_index = if invert {
+                    map_action_to_policy_output_idx(&action.invert())
+                } else {
+                    map_action_to_policy_output_idx(action)
+                };
 
-            if r[policy_index] != 0.0 {
-                error!("Policy value already exists {:?}", action);
-            }
+                if r[policy_index] != 0.0 {
+                    error!("Policy value already exists {:?}", action);
+                }
 
-            r[policy_index] = *visits as f32 / total_visits;
+                r[policy_index] = *visits as f32 / total_visits;
 
-            r
-        })
+                r
+            })
     }
 
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        let player_to_move = if game_state.is_p1_turn_to_move() { 1 } else { 2 };
+        let player_to_move = if game_state.is_p1_turn_to_move() {
+            1
+        } else {
+            2
+        };
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
     }
@@ -152,7 +177,13 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
         game_state.get_transposition_hash()
     }
 
-    fn map_output_to_transposition_entry<I: Iterator<Item=f16>>(&self, _game_state: &GameState, policy_scores: I, value: f16, moves_left: f32) -> TranspositionEntry {
+    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+        &self,
+        _game_state: &GameState,
+        policy_scores: I,
+        value: f16,
+        moves_left: f32,
+    ) -> TranspositionEntry {
         let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
 
         for (i, score) in policy_scores.enumerate() {
@@ -162,15 +193,19 @@ impl model::tensorflow::model::Mapper<GameState,Action,Value,TranspositionEntry>
         TranspositionEntry {
             policy_metrics,
             moves_left,
-            value
+            value,
         }
     }
 
-    fn map_transposition_entry_to_analysis(&self, game_state: &GameState, transposition_entry: &TranspositionEntry) -> GameStateAnalysis<Action,Value> {
+    fn map_transposition_entry_to_analysis(
+        &self,
+        game_state: &GameState,
+        transposition_entry: &TranspositionEntry,
+    ) -> GameStateAnalysis<Action, Value> {
         GameStateAnalysis::new(
             self.map_value_output_to_value(game_state, transposition_entry.value.to_f32()),
             self.policy_to_valid_actions(game_state, &transposition_entry.policy_metrics),
-            transposition_entry.moves_left
+            transposition_entry.moves_left,
         )
     }
 }
@@ -185,7 +220,17 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
     for (j, player) in [is_p1_turn_to_move, !is_p1_turn_to_move].iter().enumerate() {
         let player_offset = j * NUM_PIECE_TYPES;
 
-        for (piece_offset, piece) in [Piece::Elephant, Piece::Camel, Piece::Horse, Piece::Dog, Piece::Cat, Piece::Rabbit].iter().enumerate() {
+        for (piece_offset, piece) in [
+            Piece::Elephant,
+            Piece::Camel,
+            Piece::Horse,
+            Piece::Dog,
+            Piece::Cat,
+            Piece::Rabbit,
+        ]
+        .iter()
+        .enumerate()
+        {
             let piece_bits = piece_board.get_bits_for_piece(*piece, *player);
 
             let offset = player_offset + piece_offset;
@@ -199,11 +244,15 @@ fn set_valid_move_squares(input: &mut [f32], game_state: &GameState, mode: Mode)
     let invert = !is_p1_turn_to_move;
     let valid_actions = match mode {
         Mode::Train => game_state.valid_actions(),
-        Mode::Infer => game_state.valid_actions_no_exclusions()
+        Mode::Infer => game_state.valid_actions_no_exclusions(),
     };
 
     for valid_action in valid_actions {
-        let action = if invert { valid_action.invert() } else { valid_action };
+        let action = if invert {
+            valid_action.invert()
+        } else {
+            valid_action
+        };
         match action {
             Action::Move(square, direction) => {
                 let dir_channel_idx = match direction {
@@ -215,9 +264,9 @@ fn set_valid_move_squares(input: &mut [f32], game_state: &GameState, mode: Mode)
 
                 let input_idx = square.get_index() * PLAY_INPUT_C + dir_channel_idx;
                 input[input_idx] = 1.0;
-            },
+            }
             Action::Pass => set_all_bits_for_channel(input, VALID_MOVES_CHANNEL_IDX + 4),
-            Action::Place(_) => panic!("Place not valid for play.")
+            Action::Place(_) => panic!("Place not valid for play."),
         }
     }
 }
@@ -247,17 +296,23 @@ fn set_trap_squares(input: &mut [f32]) {
     input[INPUT_C * 45 + TRAP_CHANNEL_IDX] = 1.0;
 }
 
-
 fn map_action_to_policy_output_idx(action: &Action) -> usize {
     match action {
         Action::Move(square, direction) => match direction {
             Direction::Up => map_coord_to_policy_output_idx_up(square),
             Direction::Right => map_coord_to_policy_output_idx_right(square) + NUM_UP_MOVES,
-            Direction::Down => map_coord_to_policy_output_idx_down(square) + NUM_UP_MOVES + NUM_RIGHT_MOVES,
-            Direction::Left => map_coord_to_policy_output_idx_left(square) + NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES,
+            Direction::Down => {
+                map_coord_to_policy_output_idx_down(square) + NUM_UP_MOVES + NUM_RIGHT_MOVES
+            }
+            Direction::Left => {
+                map_coord_to_policy_output_idx_left(square)
+                    + NUM_UP_MOVES
+                    + NUM_RIGHT_MOVES
+                    + NUM_DOWN_MOVES
+            }
         },
         Action::Pass => NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES,
-        _ => panic!("Action not expected")
+        _ => panic!("Action not expected"),
     }
 }
 
@@ -282,12 +337,11 @@ fn map_coord_to_policy_output_idx_left(square: &Square) -> usize {
 }
 
 impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState,Action,Value,Engine,Mapper,TranspositionEntry>;
+    type M = TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
     type O = ModelOptions;
 
-    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M
-    {
-        TensorflowModel::<GameState,Action,Value,Engine,Mapper,TranspositionEntry>::create(
+    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M {
+        TensorflowModel::<GameState, Action, Value, Engine, Mapper, TranspositionEntry>::create(
             model_info,
             &TensorflowModelOptions {
                 num_filters: options.number_of_filters,
@@ -296,9 +350,10 @@ impl model::model::ModelFactory for ModelFactory {
                 channel_width: INPUT_W,
                 channels: INPUT_C,
                 output_size: OUTPUT_SIZE,
-                moves_left_size: MOVES_LEFT_SIZE
-            }
-        ).unwrap();
+                moves_left_size: MOVES_LEFT_SIZE,
+            },
+        )
+        .unwrap();
 
         self.get(model_info)
     }
@@ -307,15 +362,13 @@ impl model::model::ModelFactory for ModelFactory {
         let mapper = Mapper::new();
 
         let table_size = std::env::var("PLAY_TABLE_SIZE")
-            .map(|v| v.parse::<usize>().expect("PLAY_TABLE_SIZE must be a valid number"))
+            .map(|v| {
+                v.parse::<usize>()
+                    .expect("PLAY_TABLE_SIZE must be a valid number")
+            })
             .unwrap_or(2200);
 
-        TensorflowModel::new(
-            model_info.clone(),
-            Engine::new(),
-            mapper,
-            table_size
-        )
+        TensorflowModel::new(model_info.clone(), Engine::new(), mapper, table_size)
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
@@ -329,7 +382,7 @@ mod tests {
     extern crate test;
 
     use super::*;
-    use model::tensorflow::model::{Mapper as MapperTrait};
+    use model::tensorflow::model::Mapper as MapperTrait;
     use test::Bencher;
 
     #[test]
@@ -457,7 +510,10 @@ mod tests {
         let action = Action::Move(Square::new('h', 1), Direction::Left);
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES - 1, idx);
+        assert_eq!(
+            NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES - 1,
+            idx
+        );
     }
 
     #[test]
@@ -465,7 +521,10 @@ mod tests {
         let action = Action::Pass;
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES, idx);
+        assert_eq!(
+            NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES,
+            idx
+        );
     }
 
     #[test]
@@ -483,7 +542,8 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let mapper = Mapper::new();
         let game_state_to_input = mapper.game_state_to_input(&game_state, Mode::Train);
@@ -501,15 +561,22 @@ mod tests {
              1|               R |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
-        let game_state_to_input_inverted = mapper.game_state_to_input(&game_state_inverted, Mode::Train);
+        let game_state_to_input_inverted =
+            mapper.game_state_to_input(&game_state_inverted, Mode::Train);
 
         assert_eq!(game_state_to_input, game_state_to_input_inverted);
     }
 
     fn get_channel_as_vec(input: &[f32], channel_idx: usize) -> Vec<f32> {
-        input.iter().skip(channel_idx).step_by(INPUT_C).copied().collect()
+        input
+            .iter()
+            .skip(channel_idx)
+            .step_by(INPUT_C)
+            .copied()
+            .collect()
     }
 
     #[test]
@@ -527,21 +594,45 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
-        
+            .parse()
+            .unwrap();
+
         let mapper = Mapper::new();
 
         let assert_steps_set = |input: &Vec<f32>, first: bool, second: bool, third: bool| {
-            let expected_step_channel_set = std::iter::repeat(1.0).take(BOARD_SIZE).collect::<Vec<_>>();
-            let expected_step_channel_not_set = std::iter::repeat(0.0).take(BOARD_SIZE).collect::<Vec<_>>();
-    
+            let expected_step_channel_set =
+                std::iter::repeat(1.0).take(BOARD_SIZE).collect::<Vec<_>>();
+            let expected_step_channel_not_set =
+                std::iter::repeat(0.0).take(BOARD_SIZE).collect::<Vec<_>>();
+
             let actual_step_channel_1 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
             let actual_step_channel_2 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX + 1);
             let actual_step_channel_3 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX + 2);
 
-            assert_eq!(&actual_step_channel_1, if first { &expected_step_channel_set } else { &expected_step_channel_not_set });
-            assert_eq!(&actual_step_channel_2, if second { &expected_step_channel_set } else { &expected_step_channel_not_set });
-            assert_eq!(&actual_step_channel_3, if third { &expected_step_channel_set } else { &expected_step_channel_not_set });
+            assert_eq!(
+                &actual_step_channel_1,
+                if first {
+                    &expected_step_channel_set
+                } else {
+                    &expected_step_channel_not_set
+                }
+            );
+            assert_eq!(
+                &actual_step_channel_2,
+                if second {
+                    &expected_step_channel_set
+                } else {
+                    &expected_step_channel_not_set
+                }
+            );
+            assert_eq!(
+                &actual_step_channel_3,
+                if third {
+                    &expected_step_channel_set
+                } else {
+                    &expected_step_channel_not_set
+                }
+            );
         };
 
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
@@ -550,17 +641,17 @@ mod tests {
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        
+
         assert_steps_set(&input, true, false, false);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 2), Direction::Up));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        
+
         assert_steps_set(&input, true, true, false);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 3), Direction::Up));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        
+
         assert_steps_set(&input, true, true, true);
     }
 
@@ -579,20 +670,19 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
-        
+            .parse()
+            .unwrap();
+
         let mapper = Mapper::new();
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        let expected_channel_traps: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,1,0,0,1,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,1,0,0,1,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected_channel_traps: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual_trap_channel = get_channel_as_vec(&input, TRAP_CHANNEL_IDX);
 
@@ -615,20 +705,19 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
-        
+            .parse()
+            .unwrap();
+
         let mapper = Mapper::new();
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        let expected_elephants: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected_elephants: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 0);
 
@@ -651,20 +740,19 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
-        
+            .parse()
+            .unwrap();
+
         let mapper = Mapper::new();
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            1,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 5);
 
@@ -687,20 +775,19 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
-        
+            .parse()
+            .unwrap();
+
         let mapper = Mapper::new();
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        let expected: Vec<_> = vec!(
-            1,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 11);
 
@@ -723,27 +810,29 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 1), Direction::Up));
 
         let mapper = Mapper::new();
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            1,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 5);
         assert_eq!(actual, expected);
 
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 3.0 + 64.0 + 64.0 + 6.0 + 4.0); // pieces, step, can_pass, valid_moves, traps
+        assert_eq!(
+            input.iter().filter(|v| **v == 1.0).sum::<f32>(),
+            3.0 + 64.0 + 64.0 + 6.0 + 4.0
+        ); // pieces, step, can_pass, valid_moves, traps
     }
 
     #[test]
@@ -761,35 +850,32 @@ mod tests {
              1| R               |
               +-----------------+
                 a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let mapper = Mapper::new();
 
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
         let actual = get_channel_as_vec(&input, 0);
         assert_eq!(actual, expected);
 
-        let expected: Vec<_> = vec!(
-            1,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 11);
         assert_eq!(actual, expected);
@@ -797,30 +883,26 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Up));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
 
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 0);
         assert_eq!(actual, expected);
 
-        let expected: Vec<_> = vec!(
-            1,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 11);
         assert_eq!(actual, expected);
@@ -828,66 +910,62 @@ mod tests {
         let game_state = game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Up));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
 
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 0);
         assert_eq!(actual, expected);
 
-        let expected: Vec<_> = vec!(
-            1,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 11);
         assert_eq!(actual, expected);
 
-        let game_state = game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Left));
+        let game_state =
+            game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Left));
         let input = mapper.game_state_to_input(&game_state, Mode::Train);
 
-        let expected: Vec<_> = vec!(
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 0);
         assert_eq!(actual, expected);
 
-        let expected: Vec<_> = vec!(
-            1,0,0,0,0,0,0,0,
-            0,0,0,1,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-            0,0,0,0,0,0,0,0,
-        ).iter().map(|i| *i as f32).collect();
+        let expected: Vec<_> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]
+        .iter()
+        .map(|i| *i as f32)
+        .collect();
 
         let actual = get_channel_as_vec(&input, 11);
         assert_eq!(actual, expected);
 
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 3.0 + 64.0 + 192.0 + 3.0 + 4.0); // pieces, step, can_pass, valid_moves, traps
+        assert_eq!(
+            input.iter().filter(|v| **v == 1.0).sum::<f32>(),
+            3.0 + 64.0 + 192.0 + 3.0 + 4.0
+        ); // pieces, step, can_pass, valid_moves, traps
     }
 
     #[bench]
@@ -906,7 +984,9 @@ mod tests {
              1| H C D M R D C H |
               +-----------------+
                 a b c d e f g h
-            ".parse().unwrap();
+            "
+        .parse()
+        .unwrap();
 
         b.iter(|| mapper.game_state_to_input(&game_state, Mode::Train));
     }
@@ -927,33 +1007,41 @@ mod tests {
              1| H C D M R D C H |
               +-----------------+
                 a b c d e f g h
-            ".parse().unwrap();
-
-        
+            "
+        .parse()
+        .unwrap();
 
         b.iter(|| {
-            let game_state = game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('d', 2), Direction::Up));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('e', 2), Direction::Up));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('e', 2), Direction::Up));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('f', 7), Direction::Down));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('f', 7), Direction::Down));
             mapper.game_state_to_input(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&Action::Move(Square::new('g', 7), Direction::Down));
+            let game_state =
+                game_state.take_action(&Action::Move(Square::new('g', 7), Direction::Down));
             mapper.game_state_to_input(&game_state, Mode::Train)
         });
     }

@@ -4,5 +4,5 @@ pub mod model_info;
 pub mod node_metrics;
 pub mod position_metrics;
 
-pub mod tensorflow;
 pub mod logits;
+pub mod tensorflow;

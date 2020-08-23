@@ -1,12 +1,12 @@
-use std::str::FromStr;
-use std::fmt::{self,Display,Formatter};
 use anyhow::Result;
+use std::fmt::{self, Display, Formatter};
+use std::str::FromStr;
 
-use common::linked_list::List;
-use super::engine::{GameState,PlayPhase,Phase,PieceBoard,PieceBoardState};
-use super::action::{Piece,Square};
-use super::constants::{BOARD_WIDTH,BOARD_HEIGHT};
+use super::action::{Piece, Square};
+use super::constants::{BOARD_HEIGHT, BOARD_WIDTH};
+use super::engine::{GameState, Phase, PieceBoard, PieceBoardState, PlayPhase};
 use super::zobrist::Zobrist;
+use common::linked_list::List;
 
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -25,7 +25,7 @@ impl Display for GameState {
                 let letter = if let Some(piece) = piece_board.get_piece_type_at_square(&square) {
                     let is_p1_piece = is_p1_piece(square.as_bit_board(), piece_board);
                     convert_piece_to_letter(&piece, is_p1_piece)
-                } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 { 
+                } else if idx == 18 || idx == 21 || idx == 42 || idx == 45 {
                     "x".to_string()
                 } else {
                     " ".to_string()
@@ -47,18 +47,39 @@ impl FromStr for GameState {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let lines: Vec<_> = s.split('|').enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).collect();
+        let lines: Vec<_> = s
+            .split('|')
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, s)| s)
+            .collect();
         let regex = regex::Regex::new(r"^\s*(\d+)([gswb])").unwrap();
 
-        let (move_number, p1_turn_to_move) = regex.captures(s.split('|').find(|_| true).unwrap()).map_or((2, true), |c| (
-            c.get(1).unwrap().as_str().parse().unwrap(),
-            c.get(2).unwrap().as_str() != "s" && c.get(2).unwrap().as_str() != "b"
-        ));
+        let (move_number, p1_turn_to_move) = regex
+            .captures(s.split('|').find(|_| true).unwrap())
+            .map_or((2, true), |c| {
+                (
+                    c.get(1).unwrap().as_str().parse().unwrap(),
+                    c.get(2).unwrap().as_str() != "s" && c.get(2).unwrap().as_str() != "b",
+                )
+            });
 
-        let mut p1_pieces = 0; let mut elephants = 0; let mut camels = 0; let mut horses = 0; let mut dogs = 0; let mut cats = 0; let mut rabbits = 0;
+        let mut p1_pieces = 0;
+        let mut elephants = 0;
+        let mut camels = 0;
+        let mut horses = 0;
+        let mut dogs = 0;
+        let mut cats = 0;
+        let mut rabbits = 0;
 
         for (row_idx, line) in lines.iter().enumerate() {
-            for (col_idx, charr) in line.chars().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, s)| s).enumerate() {
+            for (col_idx, charr) in line
+                .chars()
+                .enumerate()
+                .filter(|(i, _)| i % 2 == 1)
+                .map(|(_, s)| s)
+                .enumerate()
+            {
                 let idx = (row_idx * BOARD_WIDTH + col_idx) as u8;
                 let square = Square::from_index(idx);
                 if let Some((piece, is_p1)) = convert_char_to_piece(charr) {
@@ -80,7 +101,8 @@ impl FromStr for GameState {
             }
         }
 
-        let piece_board = PieceBoard::new(p1_pieces, elephants, camels, horses, dogs, cats, rabbits);
+        let piece_board =
+            PieceBoard::new(p1_pieces, elephants, camels, horses, dogs, cats, rabbits);
         let hash = Zobrist::from_piece_board(piece_board.get_piece_board(), p1_turn_to_move, 0);
         let hash_history = List::new();
         let hash_history = hash_history.append(hash);
@@ -90,7 +112,7 @@ impl FromStr for GameState {
             move_number,
             Phase::PlayPhase(PlayPhase::initial(hash, hash_history)),
             piece_board,
-            hash
+            hash,
         ))
     }
 }
@@ -105,7 +127,7 @@ fn convert_char_to_piece(c: char) -> Option<(Piece, bool)> {
         'D' | 'd' => Some(Piece::Dog),
         'C' | 'c' => Some(Piece::Cat),
         'R' | 'r' => Some(Piece::Rabbit),
-        _ => None
+        _ => None,
     };
 
     piece.map(|p| (p, is_p1))
@@ -123,19 +145,23 @@ pub fn convert_piece_to_letter(piece: &Piece, is_p1: bool) -> String {
         Piece::Horse => "H",
         Piece::Dog => "D",
         Piece::Cat => "C",
-        Piece::Rabbit => "R"
+        Piece::Rabbit => "R",
     };
 
-    if is_p1 { letter.to_string()} else { letter.to_lowercase() }
+    if is_p1 {
+        letter.to_string()
+    } else {
+        letter.to_lowercase()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     extern crate test;
 
+    use super::super::action::{Action, Piece};
     use super::*;
-    use super::super::action::{Action,Piece};
-    use engine::game_state::{GameState as GameStateTrait};
+    use engine::game_state::GameState as GameStateTrait;
 
     fn place_major_pieces(game_state: &GameState) -> GameState {
         let game_state = game_state.take_action(&Action::Place(Piece::Horse));
@@ -179,22 +205,59 @@ mod tests {
             1|   R   R R   R   |
             +-----------------+
                a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         let piece_board = game_state.get_piece_board();
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Rabbit, true),    0b__01011010__00000000__01011010__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Cat, true),       0b__00000000__00100100__00000000__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Dog, true),       0b__00000000__10000001__00000000__00000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Horse, true),     0b__00000000__00000000__00100000__00000100__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Camel, true),     0b__00000000__00000000__00000000__10000000__00000000__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Elephant, true),  0b__00000000__00000000__00000000__00000001__00000000__00000000__00000000__00000000);
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Rabbit, true),
+            0b__01011010__00000000__01011010__00000000__00000000__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Cat, true),
+            0b__00000000__00100100__00000000__00000000__00000000__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Dog, true),
+            0b__00000000__10000001__00000000__00000000__00000000__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Horse, true),
+            0b__00000000__00000000__00100000__00000100__00000000__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Camel, true),
+            0b__00000000__00000000__00000000__10000000__00000000__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Elephant, true),
+            0b__00000000__00000000__00000000__00000001__00000000__00000000__00000000__00000000
+        );
 
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Rabbit, false),   0b__00000000__00000000__00000000__00000000__00000000__01011010__00000000__01011010);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Cat, false),      0b__00000000__00000000__00000000__00000000__00100000__00000000__10000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Dog, false),      0b__00000000__00000000__00000000__00000000__10000100__00000000__00000000__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Horse, false),    0b__00000000__00000000__00000000__00000000__00000001__00000000__00000100__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Camel, false),    0b__00000000__00000000__00000000__00000000__00000000__00000000__00000001__00000000);
-        assert_eq!(piece_board.get_bits_for_piece(Piece::Elephant, false), 0b__00000000__00000000__00000000__00000000__00000000__00000000__00100000__00000000);
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Rabbit, false),
+            0b__00000000__00000000__00000000__00000000__00000000__01011010__00000000__01011010
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Cat, false),
+            0b__00000000__00000000__00000000__00000000__00100000__00000000__10000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Dog, false),
+            0b__00000000__00000000__00000000__00000000__10000100__00000000__00000000__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Horse, false),
+            0b__00000000__00000000__00000000__00000000__00000001__00000000__00000100__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Camel, false),
+            0b__00000000__00000000__00000000__00000000__00000000__00000000__00000001__00000000
+        );
+        assert_eq!(
+            piece_board.get_bits_for_piece(Piece::Elephant, false),
+            0b__00000000__00000000__00000000__00000000__00000000__00000000__00100000__00000000
+        );
     }
 
     #[test]
@@ -211,7 +274,8 @@ mod tests {
             1|   R   R R   R   |
             +-----------------+
                a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         assert_eq!(game_state.get_move_number(), 2);
         assert_eq!(game_state.is_p1_turn_to_move(), true);
@@ -232,7 +296,8 @@ mod tests {
             1|   R   R R   R   |
             +-----------------+
                a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         assert_eq!(game_state.get_move_number(), 5);
         assert_eq!(game_state.is_p1_turn_to_move(), false);
@@ -253,7 +318,8 @@ mod tests {
             1|   R   R R   R   |
             +-----------------+
                a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         assert_eq!(game_state.get_move_number(), 176);
         assert_eq!(game_state.is_p1_turn_to_move(), false);
@@ -274,7 +340,8 @@ mod tests {
             1|   R   R R   R   |
             +-----------------+
                a b c d e f g h"
-            .parse().unwrap();
+            .parse()
+            .unwrap();
 
         assert_eq!(game_state.get_move_number(), 13);
         assert_eq!(game_state.is_p1_turn_to_move(), true);

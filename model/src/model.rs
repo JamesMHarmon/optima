@@ -1,25 +1,30 @@
-use engine::game_state::GameState;
 use anyhow::Result;
-use serde::{Serialize,Deserialize};
+use engine::game_state::GameState;
+use serde::{Deserialize, Serialize};
 
+use super::analytics::GameAnalyzer;
 use super::model_info::ModelInfo;
 use super::position_metrics::PositionMetrics;
-use super::analytics::GameAnalyzer;
 use engine::value::Value;
 
 pub trait Model {
     type State: GameState;
     type Action;
     type Value: Value;
-    type Analyzer: GameAnalyzer<Action=Self::Action,State=Self::State,Value=Self::Value> + Send;
+    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>
+        + Send;
 
     fn get_model_info(&self) -> &ModelInfo;
-    fn train<I: Iterator<Item=PositionMetrics<Self::State,Self::Action,Self::Value>>>(&self, target_model_info: &ModelInfo, sample_metrics: I, options: &TrainOptions) -> Result<()>;
+    fn train<I: Iterator<Item = PositionMetrics<Self::State, Self::Action, Self::Value>>>(
+        &self,
+        target_model_info: &ModelInfo,
+        sample_metrics: I,
+        options: &TrainOptions,
+    ) -> Result<()>;
     fn get_game_state_analyzer(&self) -> Self::Analyzer;
 }
 
-pub trait ModelFactory
-{
+pub trait ModelFactory {
     type M: Model;
     type O;
 
@@ -31,7 +36,7 @@ pub trait ModelFactory
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ModelOptions {
     pub number_of_filters: usize,
-    pub number_of_residual_blocks: usize
+    pub number_of_residual_blocks: usize,
 }
 
 #[derive(Clone)]
@@ -43,5 +48,5 @@ pub struct TrainOptions {
     pub max_grad_norm: f32,
     pub policy_loss_weight: f32,
     pub value_loss_weight: f32,
-    pub moves_left_loss_weight: f32
+    pub moves_left_loss_weight: f32,
 }
