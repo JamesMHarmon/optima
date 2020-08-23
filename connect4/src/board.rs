@@ -68,7 +68,7 @@ mod tests {
     #[test]
     fn test_map_board_idx_to_vec_idx_top_right() {
         let board_idx = 47;
-        let expected_vec_idx = 06;
+        let expected_vec_idx = 6;
         let actual_vec_index = map_board_idx_to_vec_idx(board_idx);
         assert_eq!(expected_vec_idx, actual_vec_index);
     }
