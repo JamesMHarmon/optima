@@ -3120,37 +3120,35 @@ mod tests {
                 a b c d e f g h
             ".parse().unwrap();
 
-        
-
         b.iter(|| {
             let game_state = game_state.clone();
             let game_state = game_state.take_action(&Action::Move(Square::new('b', 4), Direction::Up));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('a', 4), Direction::Right));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('f', 2), Direction::Up));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('e', 7), Direction::Down));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('f', 7), Direction::Down));
             let valid_actions = game_state.valid_actions();
-            if valid_actions.len() <= 0 { panic!(); }
+            if valid_actions.is_empty() { panic!(); }
 
             let game_state = game_state.take_action(&Action::Move(Square::new('g', 7), Direction::Down));
             game_state.valid_actions()

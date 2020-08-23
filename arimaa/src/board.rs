@@ -44,8 +44,7 @@ mod tests {
 
     fn square_to_idx(square: Square) -> usize {
         let bit_board = square.as_bit_board();
-        let bit_index = single_bit_index_u64(bit_board);
-        bit_index
+        single_bit_index_u64(bit_board)
     }
 
     fn value_at_square(vec: &[f32], offset: usize, col: char, row: usize) -> f32 {

@@ -323,6 +323,7 @@ impl model::model::ModelFactory for ModelFactory {
     }
 }
 
+#[allow(clippy::float_cmp)]
 #[cfg(test)]
 mod tests {
     extern crate test;
@@ -368,7 +369,7 @@ mod tests {
         let action = Action::Move(Square::new('a', 8), Direction::Right);
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_UP_MOVES + 0, idx);
+        assert_eq!(NUM_UP_MOVES, idx);
     }
 
     #[test]
@@ -400,7 +401,7 @@ mod tests {
         let action = Action::Move(Square::new('a', 8), Direction::Down);
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES + 0, idx);
+        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES, idx);
     }
 
     #[test]
@@ -432,7 +433,7 @@ mod tests {
         let action = Action::Move(Square::new('b', 8), Direction::Left);
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + 0, idx);
+        assert_eq!(NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES, idx);
     }
 
     #[test]
@@ -508,7 +509,7 @@ mod tests {
     }
 
     fn get_channel_as_vec(input: &[f32], channel_idx: usize) -> Vec<f32> {
-        input.iter().skip(channel_idx).step_by(INPUT_C).map(|i| *i).collect()
+        input.iter().skip(channel_idx).step_by(INPUT_C).copied().collect()
     }
 
     #[test]
