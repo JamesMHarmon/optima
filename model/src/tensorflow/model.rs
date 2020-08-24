@@ -64,7 +64,7 @@ pub struct TensorflowModelOptions {
 }
 
 pub trait Mapper<S, A, V, Te> {
-    fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<f32>;
+    fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<half::f16>;
     fn get_input_dimensions(&self) -> [u64; 3];
     fn get_symmetries(&self, metric: PositionMetrics<S, A, V>) -> Vec<PositionMetrics<S, A, V>>;
     fn policy_metrics_to_expected_output(
@@ -367,7 +367,7 @@ impl Predictor {
         }
     }
 
-    fn predict<I: Iterator<Item = Vec<f32>>>(
+    fn predict<I: Iterator<Item = Vec<f16>>>(
         &self,
         game_state_inputs: I,
         batch_size: usize,
@@ -376,10 +376,7 @@ impl Predictor {
         let input_dimensions = [batch_size as u64, input_dim[0], input_dim[1], input_dim[2]];
 
         let mut input_tensor: Tensor<f16> = Tensor::new(&input_dimensions);
-        fill_tensor(
-            &mut input_tensor,
-            game_state_inputs.flatten().map(f16::from_f32),
-        );
+        fill_tensor(&mut input_tensor, game_state_inputs.flatten());
 
         let session = &self.session;
 
@@ -525,6 +522,7 @@ where
                 for record in mapper
                     .game_state_to_input(&metric.game_state, Mode::Train)
                     .into_iter()
+                    .map(f16::to_f32)
                     .chain(
                         mapper
                             .policy_metrics_to_expected_output(&metric.game_state, &metric.policy)

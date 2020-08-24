@@ -81,8 +81,8 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f32> {
-        let mut result: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
+        let mut input: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
         let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
             (game_state.p1_piece_board, game_state.p2_piece_board)
         } else {
@@ -93,11 +93,11 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
             .iter()
             .zip(map_board_to_arr(opp_piece_board).iter())
         {
-            result.push(*curr);
-            result.push(*opp);
+            input.push(*curr);
+            input.push(*opp);
         }
 
-        result
+        input.into_iter().map(f16::from_f32).collect()
     }
 
     fn get_input_dimensions(&self) -> [u64; 3] {

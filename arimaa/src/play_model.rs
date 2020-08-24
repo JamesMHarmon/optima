@@ -105,19 +105,19 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, mode: Mode) -> Vec<f32> {
-        let mut result: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
+    fn game_state_to_input(&self, game_state: &GameState, mode: Mode) -> Vec<f16> {
+        let mut input: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
+        input.resize(INPUT_SIZE, f16::ZERO);
 
-        set_board_state_squares(&mut result, game_state);
+        set_board_state_squares(&mut input, game_state);
 
-        set_step_num_squares(&mut result, game_state);
+        set_step_num_squares(&mut input, game_state);
 
-        set_valid_move_squares(&mut result, game_state, mode);
+        set_valid_move_squares(&mut input, game_state, mode);
 
-        set_trap_squares(&mut result);
+        set_trap_squares(&mut input);
 
-        result
+        input
     }
 
     fn get_symmetries(
@@ -210,7 +210,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
     }
 }
 
-fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
+fn set_board_state_squares(input: &mut [f16], game_state: &GameState) {
     let current_step_num = game_state.get_current_step();
     let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
     let invert = !is_p1_turn_to_move;
@@ -239,7 +239,7 @@ fn set_board_state_squares(input: &mut [f32], game_state: &GameState) {
     }
 }
 
-fn set_valid_move_squares(input: &mut [f32], game_state: &GameState, mode: Mode) {
+fn set_valid_move_squares(input: &mut [f16], game_state: &GameState, mode: Mode) {
     let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
     let invert = !is_p1_turn_to_move;
     let valid_actions = match mode {
@@ -263,7 +263,7 @@ fn set_valid_move_squares(input: &mut [f32], game_state: &GameState, mode: Mode)
                 };
 
                 let input_idx = square.get_index() * PLAY_INPUT_C + dir_channel_idx;
-                input[input_idx] = 1.0;
+                input[input_idx] = f16::ONE;
             }
             Action::Pass => set_all_bits_for_channel(input, VALID_MOVES_CHANNEL_IDX + 4),
             Action::Place(_) => panic!("Place not valid for play."),
@@ -271,7 +271,7 @@ fn set_valid_move_squares(input: &mut [f32], game_state: &GameState, mode: Mode)
     }
 }
 
-fn set_step_num_squares(input: &mut [f32], game_state: &GameState) {
+fn set_step_num_squares(input: &mut [f16], game_state: &GameState) {
     let current_step = game_state.get_current_step();
 
     // Current step is base 0. However we start from 1 since the first step doesn't have a corresponding channel since 0 0 0 reoresents the first step.
@@ -282,18 +282,18 @@ fn set_step_num_squares(input: &mut [f32], game_state: &GameState) {
     }
 }
 
-fn set_all_bits_for_channel(input: &mut [f32], channel_idx: usize) {
+fn set_all_bits_for_channel(input: &mut [f16], channel_idx: usize) {
     for board_idx in 0..BOARD_SIZE {
         let input_idx = board_idx * PLAY_INPUT_C + channel_idx;
-        input[input_idx] = 1.0;
+        input[input_idx] = f16::ONE;
     }
 }
 
-fn set_trap_squares(input: &mut [f32]) {
-    input[INPUT_C * 18 + TRAP_CHANNEL_IDX] = 1.0;
-    input[INPUT_C * 21 + TRAP_CHANNEL_IDX] = 1.0;
-    input[INPUT_C * 42 + TRAP_CHANNEL_IDX] = 1.0;
-    input[INPUT_C * 45 + TRAP_CHANNEL_IDX] = 1.0;
+fn set_trap_squares(input: &mut [f16]) {
+    input[INPUT_C * 18 + TRAP_CHANNEL_IDX] = f16::ONE;
+    input[INPUT_C * 21 + TRAP_CHANNEL_IDX] = f16::ONE;
+    input[INPUT_C * 42 + TRAP_CHANNEL_IDX] = f16::ONE;
+    input[INPUT_C * 45 + TRAP_CHANNEL_IDX] = f16::ONE;
 }
 
 fn map_action_to_policy_output_idx(action: &Action) -> usize {

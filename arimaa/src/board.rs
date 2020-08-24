@@ -1,6 +1,7 @@
 use super::constants::{BOARD_SIZE, PLACE_INPUT_C, PLAY_INPUT_C};
+use half::f16;
 
-pub fn set_board_bits_invertable(arr: &mut [f32], offset: usize, board: u64, invert: bool) {
+pub fn set_board_bits_invertable(arr: &mut [f16], offset: usize, board: u64, invert: bool) {
     let mut board = board;
 
     while board != 0 {
@@ -9,13 +10,13 @@ pub fn set_board_bits_invertable(arr: &mut [f32], offset: usize, board: u64, inv
 
         let cell_idx = removed_bit_board_idx * PLAY_INPUT_C + offset;
 
-        arr[cell_idx] = 1.0;
+        arr[cell_idx] = f16::ONE;
 
         board ^= 1 << bit_idx;
     }
 }
 
-pub fn set_placement_board_bits(arr: &mut [f32], offset: usize, board: u64) {
+pub fn set_placement_board_bits(arr: &mut [f16], offset: usize, board: u64) {
     let mut board = board;
 
     while board != 0 {
@@ -24,7 +25,7 @@ pub fn set_placement_board_bits(arr: &mut [f32], offset: usize, board: u64) {
 
         let cell_idx = removed_bit_board_idx * PLACE_INPUT_C + offset;
 
-        arr[cell_idx] = 1.0;
+        arr[cell_idx] = f16::ONE;
 
         board ^= 1 << bit_idx;
     }

@@ -89,9 +89,9 @@ impl Mapper {
 }
 
 impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f32> {
-        let mut input: Vec<f32> = Vec::with_capacity(INPUT_SIZE);
-        input.extend(std::iter::repeat(0.0).take(INPUT_SIZE));
+    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
+        let mut input: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
+        input.resize(INPUT_SIZE, f16::ZERO);
 
         let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
         let piece_board = game_state.get_piece_board();
@@ -121,7 +121,8 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
             };
 
             let offset = NUM_PIECE_TYPES + i;
-            let num_piece_remaining = num_pieces_placed as f32 / num_pieces_to_place as f32;
+            let num_piece_remaining =
+                f16::from_f32(num_pieces_placed as f32 / num_pieces_to_place as f32);
             insert_input_channel_bit(&mut input, offset, num_piece_remaining);
         }
 
@@ -130,7 +131,11 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         insert_input_channel_bits(&mut input, offset, placement_bit);
 
         let offset = NUM_PIECE_TYPES + NUM_PIECE_TYPES + PLACEMENT_BIT_CHANNEL;
-        let is_p1_turn_value = if is_p1_turn_to_move { 0.0 } else { 1.0 };
+        let is_p1_turn_value = if is_p1_turn_to_move {
+            f16::ZERO
+        } else {
+            f16::ONE
+        };
         insert_input_channel_bit(&mut input, offset, is_p1_turn_value);
 
         input
@@ -228,14 +233,14 @@ fn map_action_to_policy_output_idx(action: &Action) -> usize {
     }
 }
 
-fn insert_input_channel_bit(input: &mut [f32], offset: usize, value: f32) {
+fn insert_input_channel_bit(input: &mut [f16], offset: usize, value: f16) {
     for board_idx in 0..PLACE_BOARD_SIZE {
         let cell_idx = board_idx * INPUT_C + offset;
         input[cell_idx] = value;
     }
 }
 
-fn insert_input_channel_bits(input: &mut [f32], offset: usize, bits: u64) {
+fn insert_input_channel_bits(input: &mut [f16], offset: usize, bits: u64) {
     set_placement_board_bits(input, offset, bits);
 }
 
