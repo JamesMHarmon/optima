@@ -48,13 +48,13 @@ mod tests {
         single_bit_index_u64(bit_board)
     }
 
-    fn value_at_square(vec: &[f32], offset: usize, col: char, row: usize) -> f32 {
+    fn value_at_square(vec: &[f16], offset: usize, col: char, row: usize) -> f16 {
         let idx = square_to_idx(Square::new(col, row)) * PLAY_INPUT_C + offset;
         vec[idx]
     }
 
-    fn num_values_set(vec: &[f32]) -> usize {
-        vec.iter().filter(|v| **v != 0.0).count()
+    fn num_values_set(vec: &[f16]) -> usize {
+        vec.iter().filter(|v| **v != f16::ZERO).count()
     }
 
     #[test]
@@ -75,8 +75,8 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -88,11 +88,11 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'a', 1), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'a', 1), f16::ONE);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
@@ -103,7 +103,7 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'h', 8), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'h', 8), f16::ONE);
     }
 
     #[test]
@@ -124,8 +124,8 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -137,11 +137,11 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'b', 8), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'b', 8), f16::ONE);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
@@ -152,7 +152,7 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'g', 1), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'g', 1), f16::ONE);
     }
 
     #[test]
@@ -173,8 +173,8 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -186,11 +186,11 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'd', 4), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'd', 4), f16::ONE);
 
         // Inverted
-        let mut result: Vec<f32> = Vec::with_capacity(PLAY_INPUT_SIZE);
-        result.extend(std::iter::repeat(0.0).take(PLAY_INPUT_SIZE));
+        let mut result: Vec<f16> = Vec::with_capacity(PLAY_INPUT_SIZE);
+        result.extend(std::iter::repeat(f16::ZERO).take(PLAY_INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
@@ -201,6 +201,6 @@ mod tests {
         );
 
         assert_eq!(num_values_set(&result), 1);
-        assert_eq!(value_at_square(&result, rabbit_offset, 'e', 5), 1.0);
+        assert_eq!(value_at_square(&result, rabbit_offset, 'e', 5), f16::ONE);
     }
 }

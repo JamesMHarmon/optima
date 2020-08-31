@@ -570,12 +570,13 @@ mod tests {
         assert_eq!(game_state_to_input, game_state_to_input_inverted);
     }
 
-    fn get_channel_as_vec(input: &[f32], channel_idx: usize) -> Vec<f32> {
+    fn get_channel_as_vec(input: &[f16], channel_idx: usize) -> Vec<f32> {
         input
             .iter()
             .skip(channel_idx)
             .step_by(INPUT_C)
             .copied()
+            .map(f16::to_f32)
             .collect()
     }
 
@@ -599,7 +600,7 @@ mod tests {
 
         let mapper = Mapper::new();
 
-        let assert_steps_set = |input: &Vec<f32>, first: bool, second: bool, third: bool| {
+        let assert_steps_set = |input: &Vec<f16>, first: bool, second: bool, third: bool| {
             let expected_step_channel_set =
                 std::iter::repeat(1.0).take(BOARD_SIZE).collect::<Vec<_>>();
             let expected_step_channel_not_set =
@@ -687,7 +688,15 @@ mod tests {
         let actual_trap_channel = get_channel_as_vec(&input, TRAP_CHANNEL_IDX);
 
         assert_eq!(actual_trap_channel, expected_channel_traps);
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 13.0);
+        assert_eq!(
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
+            13.0
+        );
     }
 
     #[test]
@@ -722,7 +731,15 @@ mod tests {
         let actual = get_channel_as_vec(&input, 0);
 
         assert_eq!(actual, expected_elephants);
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 13.0);
+        assert_eq!(
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
+            13.0
+        );
     }
 
     #[test]
@@ -757,7 +774,15 @@ mod tests {
         let actual = get_channel_as_vec(&input, 5);
 
         assert_eq!(actual, expected);
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 13.0);
+        assert_eq!(
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
+            13.0
+        );
     }
 
     #[test]
@@ -792,7 +817,15 @@ mod tests {
         let actual = get_channel_as_vec(&input, 11);
 
         assert_eq!(actual, expected);
-        assert_eq!(input.iter().filter(|v| **v == 1.0).sum::<f32>(), 13.0);
+        assert_eq!(
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
+            13.0
+        );
     }
 
     #[test]
@@ -830,7 +863,12 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert_eq!(
-            input.iter().filter(|v| **v == 1.0).sum::<f32>(),
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
             3.0 + 64.0 + 64.0 + 6.0 + 4.0
         ); // pieces, step, can_pass, valid_moves, traps
     }
@@ -963,7 +1001,12 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert_eq!(
-            input.iter().filter(|v| **v == 1.0).sum::<f32>(),
+            input
+                .iter()
+                .copied()
+                .map(f16::to_f32)
+                .filter(|v| *v == 1.0)
+                .sum::<f32>(),
             3.0 + 64.0 + 192.0 + 3.0 + 4.0
         ); // pieces, step, can_pass, valid_moves, traps
     }

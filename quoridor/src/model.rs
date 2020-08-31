@@ -313,6 +313,7 @@ impl model::model::ModelFactory for ModelFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_approx_eq::assert_approx_eq;
     use engine::game_state::GameState as GameStateTrait;
     use model::tensorflow::model::Mapper as MapperTrait;
 
@@ -347,6 +348,13 @@ mod tests {
         }
 
         output.to_vec()
+    }
+
+    fn assert_approximate_eq_slice(a: &[f32], b: &[f32]) {
+        assert_eq!(a.len(), b.len());
+        for (a, b) in a.iter().zip(b) {
+            assert_approx_eq!(*a, *b, f16::EPSILON.to_f32());
+        }
     }
 
     #[test]
@@ -489,9 +497,14 @@ mod tests {
 
         let game_state = GameState::initial();
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(76, 4, &[], &[], 0, 0), input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[], 0, 0), &input)
     }
 
     #[test]
@@ -501,9 +514,14 @@ mod tests {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(76, 13, &[], &[], 0, 0), input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 13, &[], &[], 0, 0), &input)
     }
 
     #[test]
@@ -514,9 +532,14 @@ mod tests {
         let game_state =
             game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(76, 4, &[], &[9, 10], 0, 1), input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[9, 10], 0, 1), &input)
     }
 
     #[test]
@@ -528,9 +551,14 @@ mod tests {
             game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('d', 9)));
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(76, 3, &[], &[79, 80], 1, 0), input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 3, &[], &[79, 80], 1, 0), &input)
     }
 
     #[test]
@@ -542,9 +570,14 @@ mod tests {
         let game_state =
             game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(67, 4, &[38, 47], &[], 0, 1), input)
+        assert_approximate_eq_slice(&map_to_input_vec(67, 4, &[38, 47], &[], 0, 1), &input)
     }
 
     #[test]
@@ -557,8 +590,13 @@ mod tests {
             game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Infer);
+        let input = mapper
+            .game_state_to_input(&game_state, Mode::Infer)
+            .iter()
+            .copied()
+            .map(f16::to_f32)
+            .collect::<Vec<_>>();
 
-        assert_eq!(map_to_input_vec(76, 22, &[32, 41], &[], 1, 0), input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 22, &[32, 41], &[], 1, 0), &input)
     }
 }
