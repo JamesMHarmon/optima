@@ -6,6 +6,6 @@ edition = "2018"
 publish = false
 
 [lib]
-name="engine"
+name = "engine"
 
 [dependencies]

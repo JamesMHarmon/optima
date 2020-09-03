@@ -6,19 +6,19 @@ edition = "2018"
 publish = false
 
 [lib]
-name="mcts"
+name = "mcts"
 
 [dependencies]
-anyhow = "1.0"
-rand = "0.7.0"
-rand_distr = "0.2.1"
-tokio = "0.2.9"
-async-std = "1.4"
-futures = "0.3.1"
-generational-arena = "0.2"
-assert_approx_eq = "1.1.0"
-log = "0.4"
-
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
+
+anyhow = "1.0"
+rand = "0.7"
+rand_distr = "0.3"
+tokio = "0.2"
+async-std = "1.6"
+futures = "0.3"
+generational-arena = "0.2"
+assert_approx_eq = "1.1"
+log = "0.4"
