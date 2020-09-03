@@ -51,7 +51,7 @@ where
     let mut rng = rand::thread_rng();
 
     let positions_metrics = metric_iter.take(num_games).flat_map(|m| {
-        let (analysis, score) = m.take();
+        let (analysis, score) = m.into_inner();
         let mut num_positions = 0;
 
         let (_, positions_metrics, max_move_number) = analysis.into_iter().fold(

@@ -43,7 +43,7 @@ impl<A, V> SelfPlayMetrics<A, V> {
         Self { analysis, score }
     }
 
-    pub fn take(self) -> (Vec<(A, NodeMetrics<A>)>, V) {
+    pub fn into_inner(self) -> (Vec<(A, NodeMetrics<A>)>, V) {
         (self.analysis, self.score)
     }
 
