@@ -13,3 +13,6 @@ rand = "0.7"
 tokio = { version = "0.2", features = ["parking_lot", "rt-core"] }
 assert_approx_eq = "1.1"
 crossbeam-queue = "0.2"
+unreachable = "1.0"
+parking_lot = "0.11"
+futures-intrusive = "0.3"
