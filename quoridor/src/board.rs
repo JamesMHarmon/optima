@@ -1,4 +1,4 @@
-use super::constants::{BOARD_HEIGHT, BOARD_WIDTH};
+use super::constants::{BOARD_HEIGHT, BOARD_SIZE, BOARD_WIDTH};
 
 #[derive(PartialEq)]
 pub enum BoardType {
@@ -8,11 +8,13 @@ pub enum BoardType {
 }
 
 #[allow(clippy::assign_op_pattern)]
-pub fn map_board_to_arr_invertable(board: u128, board_type: BoardType, invert: bool) -> Vec<f32> {
-    let size = BOARD_HEIGHT * BOARD_WIDTH;
+pub fn map_board_to_arr_invertable(
+    board: u128,
+    board_type: BoardType,
+    invert: bool,
+) -> [f32; BOARD_SIZE] {
     let mut board = board;
-    let mut result: Vec<f32> = Vec::with_capacity(size);
-    result.extend(std::iter::repeat(0.0).take(size));
+    let mut result = [0f32; BOARD_SIZE];
 
     if invert && (board_type == BoardType::VerticalWall || board_type == BoardType::HorizontalWall)
     {

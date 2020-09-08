@@ -90,8 +90,7 @@ impl Mapper {
 
 impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
-        let mut input: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        input.resize(INPUT_SIZE, f16::ZERO);
+        let mut input: Vec<f16> = vec![f16::ZERO; INPUT_SIZE];
 
         let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
         let piece_board = game_state.get_piece_board();
@@ -158,8 +157,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         policy_metrics: &NodeMetrics<Action>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let mut inputs = Vec::with_capacity(OUTPUT_SIZE);
-        inputs.extend(std::iter::repeat(0.0).take(OUTPUT_SIZE));
+        let inputs: Vec<f32> = vec![0f32; OUTPUT_SIZE];
 
         policy_metrics
             .children

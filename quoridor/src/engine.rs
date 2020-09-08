@@ -547,7 +547,7 @@ impl GameState {
 
     fn map_bit_board_to_coordinates(board: u128) -> Vec<Coordinate> {
         let mut board = board;
-        let mut coordinates = Vec::new();
+        let mut coordinates = Vec::with_capacity(board.count_ones() as usize);
 
         while board != 0 {
             let bit_idx = board.trailing_zeros();

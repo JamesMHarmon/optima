@@ -999,8 +999,7 @@ fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f
     }
 
     let moves_left = moves_left.max(0).min(moves_left_size);
-    let mut moves_left_one_hot = Vec::with_capacity(moves_left_size);
-    moves_left_one_hot.extend(std::iter::repeat(0.0).take(moves_left_size));
+    let mut moves_left_one_hot = vec![0f32; moves_left_size];
     moves_left_one_hot[moves_left - 1] = 1.0;
 
     moves_left_one_hot
