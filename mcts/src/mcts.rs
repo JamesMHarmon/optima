@@ -303,47 +303,35 @@ where
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
         let mut alive = alive;
-
+        let mut searches = FuturesOrdered::new();
         let mut visits = self
             .get_focus_node_index()?
             .map(|node_index| arena_ref.get_mut().node(node_index).get_node_visits())
             .unwrap_or(0);
-
         let analyzer = &mut self.analyzer;
-        let mut searches = FuturesOrdered::new();
 
-        for _ in 0..self.options.parallelism {
+        let mut traverse = |searches: &mut FuturesOrdered<_>| {
             if alive_flag && alive(visits) {
-                let future = Self::traverse_tree_and_expand(
+                searches.push(Self::traverse_tree_and_expand(
                     root_node_index,
                     arena_ref,
                     focus_actions,
                     game_engine,
                     analyzer,
                     options,
-                );
-                searches.push(future);
+                ));
                 visits += 1;
             } else {
                 alive_flag = false;
             }
+        };
+
+        for _ in 0..self.options.parallelism {
+            traverse(&mut searches);
         }
 
         while let Some(search_depth) = searches.next().await {
-            if alive_flag && alive(visits) {
-                let future = Self::traverse_tree_and_expand(
-                    root_node_index,
-                    arena_ref,
-                    focus_actions,
-                    game_engine,
-                    analyzer,
-                    options,
-                );
-                searches.push(future);
-                visits += 1;
-            } else {
-                alive_flag = false;
-            }
+            traverse(&mut searches);
 
             max_depth = max_depth.max(search_depth?);
         }
