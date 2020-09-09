@@ -1136,6 +1136,8 @@ impl MCTSNodeState {
     }
 
     fn set_expanded(&mut self, index: Index) {
+        debug_assert!(!matches!(self, Self::Unexpanded));
+        debug_assert!(!matches!(self, Self::Expanded(_)));
         let state = std::mem::replace(self, Self::Expanded(index));
         if let Self::ExpandingWithWaiters(reset_events) = state {
             reset_events.set()
