@@ -261,9 +261,7 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
- "assert_approx_eq",
  "crossbeam-queue",
- "rand",
  "tokio",
 ]
 
@@ -538,6 +536,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-intrusive"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc1529d07bd55fa54fc6c2d8460f621cfde0ae3fd2b96b2fa7eb4883478e1703"
+dependencies = [
+ "futures-core",
+ "lock_api 0.3.4",
+ "parking_lot 0.10.2",
+]
+
+[[package]]
 name = "futures-io"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -802,6 +811,7 @@ dependencies = [
  "common",
  "engine",
  "futures",
+ "futures-intrusive",
  "generational-arena",
  "log",
  "model",
@@ -1515,6 +1525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d34ca54d84bf2b5b4d7d31e901a8464f7b60ac145a284fba25ceb801f2ddccd"
 dependencies = [
  "bytes",
+ "num_cpus",
  "parking_lot 0.10.2",
  "pin-project-lite",
  "tokio-macros",

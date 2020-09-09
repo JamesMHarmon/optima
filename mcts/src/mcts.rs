@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use futures::stream::{FuturesOrdered, StreamExt};
+use futures_intrusive::sync::LocalManualResetEvent;
 use generational_arena::{Arena, Index};
 use log::warn;
 use rand::distributions::WeightedIndex;
@@ -18,7 +19,6 @@ use std::thread;
 use std::time::Duration;
 
 use super::node_details::{NodeDetails, PUCT};
-use common::once_cell_async::OnceCellAsync;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
@@ -118,7 +118,9 @@ struct MCTSNode<S, A, V> {
 
 #[derive(Debug)]
 enum MCTSNodeState {
-    Unexpanded(Rc<OnceCellAsync<Index>>),
+    Unexpanded,
+    Expanding,
+    ExpandingWithWaiters(Rc<LocalManualResetEvent>),
     Expanded(Index),
 }
 
@@ -542,12 +544,10 @@ where
     }
 
     fn select_path(
-        node_index: Index,
-        arena: &Arena<MCTSNode<S, A, V>>,
+        node: &MCTSNode<S, A, V>,
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Result<usize> {
-        let node = &arena[node_index];
         let children = &node.children;
         let fpu = if is_root {
             options.fpu_root
@@ -885,7 +885,7 @@ impl<S, A, V> MCTSNode<S, A, V> {
                     M: 0.0,
                     action: action_with_policy.action,
                     policy_score: action_with_policy.policy_score,
-                    node: MCTSNodeState::Unexpanded(Rc::new(OnceCellAsync::new())),
+                    node: MCTSNodeState::Unexpanded,
                 })
                 .collect(),
         }
@@ -943,12 +943,7 @@ where
                 node.get_position_of_action(focus_action)
                     .ok_or_else(|| anyhow!("Focused action was not found"))?
             } else {
-                MCTS::<S, A, E, M, C, T, V>::select_path(
-                    latest_index,
-                    &arena_borrow_mut,
-                    is_root,
-                    options,
-                )?
+                MCTS::<S, A, E, M, C, T, V>::select_path(node, is_root, options)?
             };
 
         nodes_to_propagate_to_stack.push(NodeUpdateInfo {
@@ -956,12 +951,12 @@ where
             node_child_index: selected_child_node_children_index,
         });
 
-        let selected_child_node =
-            &mut arena_borrow_mut[latest_index].children[selected_child_node_children_index];
+        let selected_child_node = &mut node.children[selected_child_node_children_index];
+        let selected_child_node_node = &mut selected_child_node.node;
         let prev_visits = selected_child_node.visits;
         selected_child_node.visits += 1;
 
-        if let Some(selected_child_node_index) = selected_child_node.node.get_index() {
+        if let Some(selected_child_node_index) = selected_child_node_node.get_index() {
             // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
             if prev_visits == 0 {
                 update_node_values(
@@ -979,51 +974,55 @@ where
         }
 
         let selected_action = selected_child_node.action.clone();
-        let unexpanded_child_node = selected_child_node.node.unwrap_as_unexpanded().clone();
-        drop(arena_borrow_mut);
 
-        let (expanded_node_index, is_initializer) = unexpanded_child_node
-            .get_or_init(async move {
-                let arena_borrow = arena.borrow();
-                let prior_node = &arena_borrow[latest_index];
+        // If the node is yet to be expanded and is not already expanded, then start expanding it.
+        if selected_child_node_node.is_unexpanded() {
+            selected_child_node_node.mark_as_expanding();
 
-                let new_game_state =
-                    game_engine.take_action(&prior_node.game_state, &selected_action);
-                let prior_num_actions = prior_node.num_actions;
+            let new_game_state = game_engine.take_action(&node.game_state, &selected_action);
+            let prior_num_actions = node.num_actions;
 
-                drop(arena_borrow);
+            drop(arena_borrow_mut);
 
-                let expanded_node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(
-                    new_game_state,
-                    prior_num_actions,
-                    analyzer,
-                )
-                .await;
-
-                let arena_borrow_mut = &mut arena.borrow_mut();
-                let expanded_node_index = arena_borrow_mut.insert(expanded_node);
-
-                let selected_child_node = &mut arena_borrow_mut[latest_index].children
-                    [selected_child_node_children_index]
-                    .node;
-                *selected_child_node = MCTSNodeState::Expanded(expanded_node_index);
-
-                expanded_node_index
-            })
+            let expanded_node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(
+                new_game_state,
+                prior_num_actions,
+                analyzer,
+            )
             .await;
 
-        if is_initializer {
+            let arena_borrow_mut = &mut arena.borrow_mut();
+            let expanded_node_index = arena_borrow_mut.insert(expanded_node);
+
+            let selected_child_node = &mut arena_borrow_mut[latest_index].children
+                [selected_child_node_children_index]
+                .node;
+
+            selected_child_node.set_expanded(expanded_node_index);
+
             update_node_values(
                 &nodes_to_propagate_to_stack,
-                *expanded_node_index,
-                &mut arena.borrow_mut(),
+                expanded_node_index,
+                arena_borrow_mut,
                 game_engine,
             );
 
             break;
-        } else {
-            latest_index = *expanded_node_index;
         }
+
+        // The node must be expanding in another async operation. Wait for that to finish and continue the loop as if it was already expanded.
+        let waiter = selected_child_node_node.get_waiter();
+        drop(arena_borrow_mut);
+
+        waiter.wait().await;
+
+        let mut arena_borrow_mut = arena.borrow_mut();
+        let selected_child_node =
+            &mut arena_borrow_mut[latest_index].children[selected_child_node_children_index].node;
+
+        latest_index = selected_child_node
+            .get_index()
+            .expect("Node should have expanded");
     }
 
     Ok(depth)
@@ -1089,10 +1088,31 @@ impl MCTSNodeState {
         }
     }
 
-    fn unwrap_as_unexpanded(&self) -> &Rc<OnceCellAsync<Index>> {
+    fn is_unexpanded(&self) -> bool {
+        matches!(self, Self::Unexpanded)
+    }
+
+    fn mark_as_expanding(&mut self) {
+        debug_assert!(matches!(self, Self::Unexpanded));
+        *self = Self::Expanding
+    }
+
+    fn set_expanded(&mut self, index: Index) {
+        let state = std::mem::replace(self, Self::Expanded(index));
+        if let Self::ExpandingWithWaiters(reset_events) = state {
+            reset_events.set()
+        }
+    }
+
+    fn get_waiter(&mut self) -> Rc<LocalManualResetEvent> {
         match self {
-            Self::Unexpanded(inner) => inner,
-            Self::Expanded(_) => panic!("Failed to unwrap as unexpanded"),
+            Self::Expanding => {
+                let reset_event = Rc::new(LocalManualResetEvent::new(false));
+                *self = Self::ExpandingWithWaiters(reset_event.clone());
+                reset_event
+            }
+            Self::ExpandingWithWaiters(reset_event) => reset_event.clone(),
+            _ => panic!("Node state is not currently expanding"),
         }
     }
 }
