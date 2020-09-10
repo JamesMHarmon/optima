@@ -1,11 +1,15 @@
 use anyhow::{anyhow, ensure, Context as AnyhowContext, Result};
+use common::chunk_queue::ConcurrentChunkQueue;
+use common::incrementing_map::IncrementingMap;
+use engine::engine::GameEngine;
+use engine::game_state::GameState;
+use engine::value::Value;
 use half::f16;
 use itertools::Itertools;
 use log::info;
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::cell::Cell;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 use std::fs::{self, File};
@@ -15,20 +19,12 @@ use std::io::{BufReader, Write};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
 use std::task::{Context, Poll, Waker};
-use std::time::Instant;
 use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor};
-
-use common::chunk_queue::ConcurrentChunkQueue;
-use common::incrementing_map::IncrementingMap;
-use engine::engine::GameEngine;
-use engine::game_state::GameState;
-use engine::value::Value;
 
 use super::super::analytics::{self, GameStateAnalysis};
 use super::super::model::{Model as ModelTrait, TrainOptions};
@@ -40,6 +36,7 @@ use super::constants::{
 };
 use super::mode::Mode;
 use super::paths::Paths;
+use super::reporter::Reporter;
 use super::transposition_table::TranspositionTable;
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
@@ -126,10 +123,14 @@ where
         } else {
             None
         });
+
+        let reporter = Arc::new(Reporter::new(transposition_table.clone()));
+
         let batching_model = Arc::new(BatchingModel::new(
             engine,
             mapper.clone(),
             transposition_table,
+            reporter,
             analysis_request_threads,
             batch_size,
         ));
@@ -176,7 +177,6 @@ where
             let active_threads = active_threads.clone();
 
             std::thread::spawn(move || {
-                let mut last_report = Instant::now();
                 let input_dim = mapper.get_input_dimensions();
                 let predictor = Predictor::new(&model_info, input_dim);
 
@@ -220,42 +220,6 @@ where
                                 moves_left_size,
                             )
                             .expect("Expected provide_analysis to be successful");
-                    }
-
-                    if thread_num == 0 {
-                        let elapsed_mills = last_report.elapsed().as_millis();
-                        if elapsed_mills >= 5_000 {
-                            let transposition_hits = batch_ref.take_transposition_hits();
-                            let num_infer_nodes = batch_ref.take_num_nodes_analysed();
-                            let num_transpo_nodes = transposition_hits
-                                .map_or(0, |(_entries, _capacity, hits, _misses)| hits);
-                            let (min_batch_size, max_batch_size) =
-                                batch_ref.take_min_max_batch_size();
-                            let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
-                            let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0
-                                / elapsed_mills as f32;
-                            info!(
-                                "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
-                                total_nps=total_nps,
-                                infer_nps=infer_nps,
-                                min_batch_size=min_batch_size,
-                                max_batch_size=max_batch_size
-                            );
-                            if let Some((entries, capacity, hits, misses)) = transposition_hits {
-                                info!(
-                                    "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
-                                    if hits > 0 {
-                                        (hits as f32 / (hits + misses) as f32) * 100f32
-                                    } else {
-                                        0f32
-                                    },
-                                    (entries as f32 / capacity as f32) * 100f32,
-                                    entries,
-                                    capacity
-                                );
-                            }
-                            last_report = Instant::now();
-                        }
                     }
                 }
 
@@ -764,13 +728,9 @@ struct BatchingModel<S, A, V, E, Map, Te> {
     states_to_analyse: ConcurrentChunkQueue<(usize, S, Waker)>,
     states_analysed: CompletedAnalysisOrdered<A, V>,
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
-    num_nodes_analysed: AtomicUsize,
-    min_batch_size: AtomicUsize,
-    max_batch_size: AtomicUsize,
-    cache_misses: AtomicUsize,
-    cache_hits: AtomicUsize,
     engine: E,
     mapper: Arc<Map>,
+    reporter: Arc<Reporter<Te>>,
 }
 
 impl<S, A, V, E, Map, Te> BatchingModel<S, A, V, E, Map, Te>
@@ -780,32 +740,25 @@ where
     V: Value,
     E: GameEngine<State = S, Action = A, Value = V>,
     Map: Mapper<S, A, V, Te>,
+    Te: Send + 'static,
 {
     fn new(
         engine: E,
         mapper: Arc<Map>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
+        reporter: Arc<Reporter<Te>>,
         analysis_request_threads: usize,
         batch_size: usize,
     ) -> Self {
         let analysis_capacity = batch_size * analysis_request_threads;
         let states_to_analyse = ConcurrentChunkQueue::new(batch_size, analysis_capacity);
         let states_analysed = CompletedAnalysisOrdered::with_capacity(analysis_capacity);
-        let num_nodes_analysed = AtomicUsize::new(0);
-        let min_batch_size = AtomicUsize::new(std::usize::MAX);
-        let max_batch_size = AtomicUsize::new(0);
-        let cache_misses = AtomicUsize::new(0);
-        let cache_hits = AtomicUsize::new(0);
 
         Self {
             states_to_analyse,
             states_analysed,
             transposition_table,
-            num_nodes_analysed,
-            min_batch_size,
-            max_batch_size,
-            cache_misses,
-            cache_hits,
+            reporter,
             engine,
             mapper,
         }
@@ -868,17 +821,14 @@ where
             "Not all moves left head values were used."
         );
 
-        self.min_batch_size
-            .fetch_min(analysis_len, Ordering::Relaxed);
-        self.max_batch_size
-            .fetch_max(analysis_len, Ordering::Relaxed);
+        self.reporter.set_batch_size(analysis_len);
 
         Ok(())
     }
 
     fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, V>> {
         if let Some(value) = self.engine.is_terminal_state(game_state) {
-            self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
+            self.reporter.set_terminal();
 
             return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
         }
@@ -891,41 +841,17 @@ where
                     .mapper
                     .map_transposition_entry_to_analysis(game_state, &*transposition_entry);
                 drop(transposition_entry);
-                self.cache_hits.fetch_add(1, Ordering::Relaxed);
+                self.reporter.set_cache_hit();
 
                 return Some(analysis);
             }
+
+            self.reporter.set_cache_miss();
         }
 
-        self.cache_misses.fetch_add(1, Ordering::Relaxed);
-        self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
+        self.reporter.set_analyzed_node();
 
         None
-    }
-
-    fn take_num_nodes_analysed(&self) -> usize {
-        self.num_nodes_analysed.swap(0, Ordering::Relaxed)
-    }
-
-    fn take_min_max_batch_size(&self) -> (usize, usize) {
-        (
-            self.min_batch_size.swap(std::usize::MAX, Ordering::Relaxed),
-            self.max_batch_size.swap(0, Ordering::Relaxed),
-        )
-    }
-
-    fn take_transposition_hits(&self) -> Option<(usize, usize, usize, usize)> {
-        self.transposition_table
-            .as_ref()
-            .as_ref()
-            .map(|transposition_table| {
-                (
-                    transposition_table.num_entries(),
-                    transposition_table.capacity(),
-                    self.cache_hits.swap(0, Ordering::Relaxed),
-                    self.cache_misses.swap(0, Ordering::Relaxed),
-                )
-            })
     }
 
     fn poll(&self, id: usize) -> Poll<GameStateAnalysis<A, V>> {
@@ -1047,6 +973,7 @@ where
     V: Value,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: Mapper<S, A, V, Te>,
+    Te: Send + 'static,
 {
     type Output = GameStateAnalysis<A, V>;
 

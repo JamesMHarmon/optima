@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
-#[derive(Debug)]
 #[allow(non_snake_case)]
 pub struct NodeDetails<A> {
     pub visits: usize,
@@ -24,6 +23,12 @@ impl<A: Display> Display for NodeDetails<A> {
             visits = self.visits,
             actions = actions
         )
+    }
+}
+
+impl<A: Debug + Display> Debug for NodeDetails<A> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(self, f)
     }
 }
 

@@ -11,3 +11,4 @@ name = "common"
 [dependencies]
 tokio = { version = "0.2", features = ["parking_lot", "rt-core"] }
 crossbeam-queue = "0.2"
+assert_approx_eq = "1.1"
