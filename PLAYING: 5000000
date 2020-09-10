@@ -1,0 +1,139 @@
+PLAYING: 5000000
+2020-09-09 12:41:12.140121: E tensorflow/core/grappler/optimizers/meta_optimizer.cc:502] layout failed: Invalid argument: The graph is already optimized by layout optimizer.
+2020-09-09 12:41:13.786073: E tensorflow/core/grappler/optimizers/meta_optimizer.cc:502] layout failed: Invalid argument: The graph is already optimized by layout optimizer.
+[2020-09-09T19:41:14Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:14Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:14Z INFO  model::tensorflow::model] NPS: 5422.41, Infered NPS: 3887.56, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:14Z INFO  model::tensorflow::model] Hits: %27.22, Cache Hydration: %0.26, Entries: 10921, Capacity: 4194304
+[2020-09-09T19:41:19Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:19Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:19Z INFO  model::tensorflow::model] NPS: 70980.65, Infered NPS: 32406.42, Min Batch Size: 3, Max Batch Size: 256
+[2020-09-09T19:41:19Z INFO  model::tensorflow::model] Hits: %54.38, Cache Hydration: %3.27, Entries: 137134, Capacity: 4194304
+[2020-09-09T19:41:24Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:24Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:24Z INFO  model::tensorflow::model] NPS: 88886.91, Infered NPS: 33213.19, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:24Z INFO  model::tensorflow::model] Hits: %62.70, Cache Hydration: %6.61, Entries: 277097, Capacity: 4194304
+[2020-09-09T19:41:29Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:29Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:29Z INFO  model::tensorflow::model] NPS: 117799.48, Infered NPS: 34373.70, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:29Z INFO  model::tensorflow::model] Hits: %70.79, Cache Hydration: %9.97, Entries: 418002, Capacity: 4194304
+[2020-09-09T19:41:34Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:34Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:34Z INFO  model::tensorflow::model] NPS: 120010.38, Infered NPS: 37827.98, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:34Z INFO  model::tensorflow::model] Hits: %68.47, Cache Hydration: %13.44, Entries: 563712, Capacity: 4194304
+[2020-09-09T19:41:39Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:39Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:39Z INFO  model::tensorflow::model] NPS: 118113.20, Infered NPS: 39503.60, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:39Z INFO  model::tensorflow::model] Hits: %66.55, Cache Hydration: %17.00, Entries: 713131, Capacity: 4194304
+[2020-09-09T19:41:44Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:44Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:44Z INFO  model::tensorflow::model] NPS: 108553.77, Infered NPS: 39867.86, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:44Z INFO  model::tensorflow::model] Hits: %63.28, Cache Hydration: %20.31, Entries: 851892, Capacity: 4194304
+[2020-09-09T19:41:49Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:49Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:49Z INFO  model::tensorflow::model] NPS: 133688.23, Infered NPS: 35463.95, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:49Z INFO  model::tensorflow::model] Hits: %73.47, Cache Hydration: %23.19, Entries: 972858, Capacity: 4194304
+[2020-09-09T19:41:54Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:54Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:54Z INFO  model::tensorflow::model] NPS: 124028.76, Infered NPS: 37899.76, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:54Z INFO  model::tensorflow::model] Hits: %69.45, Cache Hydration: %26.06, Entries: 1093094, Capacity: 4194304
+Some(NodeDetails { visits: 5000000, children: [
+
+// Old
+ (b2n, Nsa: 2749671, Qsa: 0.514, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 66.5 moves_left_head_score: 64.8, PUCT: 0.515),
+ (g2n, Nsa: 627728, Qsa: 0.505, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.6, PUCT: 0.508),
+ (h2n, Nsa: 437542, Qsa: 0.504, Msa: 0.00, Psa: 0.121, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (e2n, Nsa: 289442, Qsa: 0.503, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.7, PUCT: 0.509),
+ (a2n, Nsa: 258200, Qsa: 0.501, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.5, PUCT: 0.509),
+ (c2n, Nsa: 248126, Qsa: 0.501, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.7, PUCT: 0.509),
+ (f2n, Nsa: 208045, Qsa: 0.501, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.4 moves_left_head_score: 64.4, PUCT: 0.510),
+ (d2n, Nsa: 181245, Qsa: 0.499, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.5, PUCT: 0.510)] })
+
+// New
+ (g2n, Nsa: 2258081, Qsa: 0.511, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.0 moves_left_head_score: 64.6, PUCT: 0.512),
+ (b2n, Nsa: 752819, Qsa: 0.506, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.8, PUCT: 0.508),
+ (h2n, Nsa: 487923, Qsa: 0.504, Msa: 0.00, Psa: 0.121, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (e2n, Nsa: 379795, Qsa: 0.503, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.7, PUCT: 0.508),
+ (a2n, Nsa: 301758, Qsa: 0.502, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.5, PUCT: 0.508),
+ (d2n, Nsa: 291827, Qsa: 0.502, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (c2n, Nsa: 271119, Qsa: 0.501, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.7, PUCT: 0.509),
+ (f2n, Nsa: 256677, Qsa: 0.501, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.4, PUCT: 0.509)
+
+ // New2 49144
+ (g2n, Nsa: 2221652, Qsa: 0.511, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.1 moves_left_head_score: 64.6, PUCT: 0.512),
+ (b2n, Nsa: 754082, Qsa: 0.506, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.8, PUCT: 0.508),
+ (h2n, Nsa: 489034, Qsa: 0.504, Msa: 0.00, Psa: 0.121, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (e2n, Nsa: 395873, Qsa: 0.503, Msa: 0.00, Psa: 0.128, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.7, PUCT: 0.508),
+ (a2n, Nsa: 309238, Qsa: 0.502, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (d2n, Nsa: 295985, Qsa: 0.502, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (c2n, Nsa: 276753, Qsa: 0.502, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.7, PUCT: 0.508),
+ (f2n, Nsa: 257382, Qsa: 0.501, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.4, PUCT: 0.508)
+
+ // 1 visit
+ (b2n, Nsa: 3028270, Qsa: 0.514, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 66.2 moves_left_head_score: 64.8, PUCT: 0.515),
+ (g2n, Nsa: 757567, Qsa: 0.504, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.6, PUCT: 0.507),
+ (h2n, Nsa: 280855, Qsa: 0.502, Msa: 0.00, Psa: 0.121, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.6, PUCT: 0.508),
+ (c2n, Nsa: 241709, Qsa: 0.501, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.7, PUCT: 0.509),
+ (a2n, Nsa: 221460, Qsa: 0.500, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.5, PUCT: 0.509),
+ (e2n, Nsa: 178871, Qsa: 0.499, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.7, PUCT: 0.510),
+ (d2n, Nsa: 154234, Qsa: 0.498, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.6, PUCT: 0.510),
+ (f2n, Nsa: 137033, Qsa: 0.497, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.4, PUCT: 0.511)
+
+ // BinaryHeap Ordered: 50334
+ (g2n, Nsa: 2259233, Qsa: 0.511, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.0 moves_left_head_score: 64.6, PUCT: 0.512),
+ (b2n, Nsa: 740353, Qsa: 0.506, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.8, PUCT: 0.508),
+ (h2n, Nsa: 488752, Qsa: 0.504, Msa: 0.00, Psa: 0.121, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (e2n, Nsa: 390176, Qsa: 0.503, Msa: 0.00, Psa: 0.128, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.7, PUCT: 0.508),
+ (a2n, Nsa: 308495, Qsa: 0.502, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (d2n, Nsa: 290769, Qsa: 0.502, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (c2n, Nsa: 271863, Qsa: 0.501, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.7, PUCT: 0.508),
+ (f2n, Nsa: 250358, Qsa: 0.501, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.4 moves_left_head_score: 64.4, PUCT: 0.509)
+
+  // BinaryHeap Ordered 4096: 42236
+ (g2n, Nsa: 1913992, Qsa: 0.509, Msa: 0.00, Psa: 0.119, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.6, PUCT: 0.510),
+ (b2n, Nsa: 756832, Qsa: 0.506, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.8, PUCT: 0.508),
+ (h2n, Nsa: 564699, Qsa: 0.504, Msa: 0.00, Psa: 0.121, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.507),
+ (e2n, Nsa: 484341, Qsa: 0.504, Msa: 0.00, Psa: 0.128, Usa: 0.00, cpuct: 6.79, avg_game_length: 67.8 moves_left_head_score: 64.7, PUCT: 0.508),
+ (a2n, Nsa: 348633, Qsa: 0.502, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (d2n, Nsa: 333193, Qsa: 0.502, Msa: 0.00, Psa: 0.128, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.7 moves_left_head_score: 64.5, PUCT: 0.508),
+ (c2n, Nsa: 313313, Qsa: 0.502, Msa: 0.00, Psa: 0.126, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.6 moves_left_head_score: 64.7, PUCT: 0.508),
+ (f2n, Nsa: 284996, Qsa: 0.501, Msa: 0.00, Psa: 0.122, Usa: 0.01, cpuct: 6.79, avg_game_length: 67.5 moves_left_head_score: 64.4, PUCT: 0.508)
+
+	(b2n, Nsa: 2749671, Qsa: 0.514, Msa: 0.00, Psa: 0.125, Usa: 0.00, cpuct: 6.79, avg_game_length: 66.5 moves_left_head_score: 64.8, PUCT: 0.515)
+	(a2e, Nsa: 2143252, Qsa: 0.518, Msa: 0.00, Psa: 0.068, Usa: 0.00, cpuct: 6.20, avg_game_length: 67.2 moves_left_head_score: 64.3, PUCT: 0.518)
+	(g2n, Nsa: 356243, Qsa: 0.520, Msa: 0.00, Psa: 0.075, Usa: 0.00, cpuct: 5.95, avg_game_length: 67.8 moves_left_head_score: 64.3, PUCT: 0.522)
+	(e2n, Nsa: 35353, Qsa: 0.523, Msa: 0.00, Psa: 0.056, Usa: 0.00, cpuct: 4.20, avg_game_length: 68.2 moves_left_head_score: 64.3, PUCT: 0.527)
+	(h7s, Nsa: 5940, Qsa: 0.480, Msa: 0.00, Psa: 0.132, Usa: 0.01, cpuct: 2.28, avg_game_length: 68.4 moves_left_head_score: 64.3, PUCT: 0.490)
+	(p, Nsa: 759, Qsa: 0.490, Msa: 0.00, Psa: 0.080, Usa: 0.01, cpuct: 1.51, avg_game_length: 68.5 moves_left_head_score: 64.3, PUCT: 0.502)
+	(e3e, Nsa: 75, Qsa: 0.508, Msa: 0.00, Psa: 0.049, Usa: 0.02, cpuct: 1.29, avg_game_length: 68.1 moves_left_head_score: 64.5, PUCT: 0.531)
+	(g3e, Nsa: 54, Qsa: 0.501, Msa: 0.00, Psa: 0.064, Usa: 0.01, cpuct: 1.25, avg_game_length: 68.2 moves_left_head_score: 64.4, PUCT: 0.514)
+	(f3e, Nsa: 48, Qsa: 0.498, Msa: 0.00, Psa: 0.067, Usa: 0.01, cpuct: 1.25, avg_game_length: 68.3 moves_left_head_score: 64.5, PUCT: 0.511)
+	(g3w, Nsa: 43, Qsa: 0.500, Msa: 0.00, Psa: 0.064, Usa: 0.01, cpuct: 1.25, avg_game_length: 68.4 moves_left_head_score: 64.1, PUCT: 0.512)
+	(h6s, Nsa: 22, Qsa: 0.494, Msa: 0.00, Psa: 0.089, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.0 moves_left_head_score: 64.4, PUCT: 0.526)
+	(h5s, Nsa: 21, Qsa: 0.490, Msa: 0.00, Psa: 0.088, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.0 moves_left_head_score: 64.2, PUCT: 0.513)
+	(p, Nsa: 20, Qsa: 0.484, Msa: 0.00, Psa: 0.085, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.1 moves_left_head_score: 64.3, PUCT: 0.508)
+	(f3e, Nsa: 19, Qsa: 0.517, Msa: 0.00, Psa: 0.067, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.2 moves_left_head_score: 64.7, PUCT: 0.536)
+	(g3w, Nsa: 18, Qsa: 0.514, Msa: 0.00, Psa: 0.066, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.2 moves_left_head_score: 64.4, PUCT: 0.533)
+	(f3e, Nsa: 17, Qsa: 0.507, Msa: 0.00, Psa: 0.074, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.3 moves_left_head_score: 64.5, PUCT: 0.529)
+	(f2e, Nsa: 16, Qsa: 0.501, Msa: 0.00, Psa: 0.070, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.3 moves_left_head_score: 64.1, PUCT: 0.522)
+	(d7s, Nsa: 15, Qsa: 0.498, Msa: 0.00, Psa: 0.094, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.4 moves_left_head_score: 64.4, PUCT: 0.527)
+	(d6w, Nsa: 14, Qsa: 0.495, Msa: 0.00, Psa: 0.069, Usa: 0.02, cpuct: 1.25, avg_game_length: 69.5 moves_left_head_score: 64.3, PUCT: 0.518)
+	(c6w, Nsa: 13, Qsa: 0.487, Msa: 0.00, Psa: 0.079, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.5 moves_left_head_score: 64.1, PUCT: 0.513)
+	(b6e, Nsa: 12, Qsa: 0.478, Msa: 0.00, Psa: 0.075, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.7 moves_left_head_score: 64.2, PUCT: 0.504)
+	(b3e, Nsa: 11, Qsa: 0.525, Msa: 0.00, Psa: 0.084, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.7 moves_left_head_score: 64.6, PUCT: 0.555)
+	(d2e, Nsa: 10, Qsa: 0.521, Msa: 0.00, Psa: 0.084, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.7 moves_left_head_score: 64.0, PUCT: 0.553)
+	(c3w, Nsa: 9, Qsa: 0.514, Msa: 0.00, Psa: 0.071, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.8 moves_left_head_score: 64.3, PUCT: 0.542)
+	(g3w, Nsa: 8, Qsa: 0.506, Msa: 0.00, Psa: 0.080, Usa: 0.03, cpuct: 1.25, avg_game_length: 69.9 moves_left_head_score: 64.2, PUCT: 0.539)
+	(c6w, Nsa: 7, Qsa: 0.493, Msa: 0.00, Psa: 0.068, Usa: 0.03, cpuct: 1.25, avg_game_length: 70.0 moves_left_head_score: 64.5, PUCT: 0.523)
+	(b6w, Nsa: 6, Qsa: 0.487, Msa: 0.00, Psa: 0.071, Usa: 0.03, cpuct: 1.25, avg_game_length: 70.0 moves_left_head_score: 64.4, PUCT: 0.520)
+	(e7w, Nsa: 5, Qsa: 0.466, Msa: 0.00, Psa: 0.072, Usa: 0.04, cpuct: 1.25, avg_game_length: 70.2 moves_left_head_score: 64.2, PUCT: 0.503)
+	(p, Nsa: 4, Qsa: 0.429, Msa: 0.00, Psa: 0.083, Usa: 0.05, cpuct: 1.25, avg_game_length: 70.4 moves_left_head_score: 64.0, PUCT: 0.475)
+	(e2e, Nsa: 3, Qsa: 0.599, Msa: 0.00, Psa: 0.074, Usa: 0.05, cpuct: 1.25, avg_game_length: 70.5 moves_left_head_score: 64.8, PUCT: 0.646)
+	(b3n, Nsa: 2, Qsa: 0.611, Msa: 0.00, Psa: 0.080, Usa: 0.06, cpuct: 1.25, avg_game_length: 70.4 moves_left_head_score: 64.4, PUCT: 0.669)
+	(c2e, Nsa: 1, Qsa: 0.607, Msa: 0.00, Psa: 0.070, Usa: 0.06, cpuct: 1.25, avg_game_length: 70.4 moves_left_head_score: 64.4, PUCT: 0.670)
+	(p, Nsa: 0, Qsa: 0.000, Msa: 0.00, Psa: 0.066, Usa: 0.08, cpuct: 1.25, avg_game_length: 0.0 moves_left_head_score: 0.0, PUCT: 0.083)
+Elapsed: 46527
+[2020-09-09T19:41:59Z INFO  model::tensorflow::model] NPS: 0.00, Infered NPS: 0.00, Min Batch Size: 18446744073709551615, Max Batch Size: 0
+[2020-09-09T19:41:59Z INFO  model::tensorflow::model] Hits: %0.00, Cache Hydration: %0.00, Entries: 0, Capacity: 8388608
+[2020-09-09T19:41:59Z INFO  model::tensorflow::model] NPS: 111273.60, Infered NPS: 29538.00, Min Batch Size: 1, Max Batch Size: 256
+[2020-09-09T19:41:59Z INFO  model::tensorflow::model] Hits: %73.53, Cache Hydration: %28.20, Entries: 1182921, Capacity: 4194304

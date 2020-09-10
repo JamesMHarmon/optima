@@ -169,7 +169,7 @@ where
                 break;
             }
 
-            let batching_model_ref = batching_model.clone();
+            let batch_ref = batching_model.clone();
             let model_info = model_info.clone();
             let mapper = mapper.clone();
             let active_analyzers = active_analyzers.clone();
@@ -181,16 +181,14 @@ where
                 let predictor = Predictor::new(&model_info, input_dim);
 
                 loop {
-                    let (states_to_analyse, analyzed_states) =
-                        (&(*batching_model_ref).states_to_analyse).dequeue_chunk_with_split(
-                            |(id, state_to_analyse, waker)| match Self::try_immediate_analysis(
-                                &*batching_model_ref,
-                                &state_to_analyse,
-                            ) {
-                                Some(analysis) => Err((id, analysis, waker)),
-                                None => Ok((id, state_to_analyse, waker)),
-                            },
-                        );
+                    let (states_to_analyse, analyzed_states) = batch_ref
+                        .states_to_analyse
+                        .dequeue_chunk_with_split(|(id, state_to_analyse, waker)| match batch_ref
+                            .try_immediate_analysis(&state_to_analyse)
+                        {
+                            Some(analysis) => Err((id, analysis, waker)),
+                            None => Ok((id, state_to_analyse, waker)),
+                        });
 
                     if states_to_analyse.is_empty() && analyzed_states.is_empty() {
                         if active_analyzers.load(Ordering::Relaxed) == 0 {
@@ -198,6 +196,12 @@ where
                         }
 
                         std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+
+                    if !analyzed_states.is_empty() {
+                        batch_ref
+                            .states_analysed
+                            .wake_with_analysis(analyzed_states.into_iter());
                     }
 
                     if !states_to_analyse.is_empty() {
@@ -208,7 +212,7 @@ where
                         let predictions = predictor
                             .predict(game_states_to_predict, states_to_analyse.len())
                             .expect("Expected predict to be successful");
-                        batching_model_ref
+                        batch_ref
                             .provide_analysis(
                                 states_to_analyse.into_iter(),
                                 predictions,
@@ -218,21 +222,15 @@ where
                             .expect("Expected provide_analysis to be successful");
                     }
 
-                    for (id, analysis, waker) in analyzed_states {
-                        batching_model_ref
-                            .states_analysed
-                            .wake_with_analysis(id, analysis, waker);
-                    }
-
                     if thread_num == 0 {
                         let elapsed_mills = last_report.elapsed().as_millis();
                         if elapsed_mills >= 5_000 {
-                            let transposition_hits = batching_model_ref.take_transposition_hits();
-                            let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
+                            let transposition_hits = batch_ref.take_transposition_hits();
+                            let num_infer_nodes = batch_ref.take_num_nodes_analysed();
                             let num_transpo_nodes = transposition_hits
                                 .map_or(0, |(_entries, _capacity, hits, _misses)| hits);
                             let (min_batch_size, max_batch_size) =
-                                batching_model_ref.take_min_max_batch_size();
+                                batch_ref.take_min_max_batch_size();
                             let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
                             let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0
                                 / elapsed_mills as f32;
@@ -264,37 +262,6 @@ where
                 active_threads.fetch_sub(1, Ordering::Relaxed);
             });
         }
-    }
-
-    fn try_immediate_analysis(
-        batching_model: &BatchingModel<S, A, V, E, Map, Te>,
-        game_state: &S,
-    ) -> Option<GameStateAnalysis<A, V>> {
-        if let Some(value) = batching_model.engine.is_terminal_state(game_state) {
-            batching_model
-                .num_nodes_analysed
-                .fetch_add(1, Ordering::Relaxed);
-
-            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
-        }
-
-        if let Some(transposition_table) = &*batching_model.transposition_table {
-            if let Some(transposition_entry) =
-                transposition_table.get(batching_model.mapper.get_transposition_key(game_state))
-            {
-                let analysis = batching_model
-                    .mapper
-                    .map_transposition_entry_to_analysis(game_state, &*transposition_entry);
-                drop(transposition_entry);
-                batching_model.cache_hits.fetch_add(1, Ordering::Relaxed);
-
-                return Some(analysis);
-            }
-        }
-
-        batching_model.cache_misses.fetch_add(1, Ordering::Relaxed);
-
-        None
     }
 }
 
@@ -859,7 +826,7 @@ where
             .as_ref()
             .map(|ml| ml.iter().map(|v| v.to_f32()));
 
-        for (id, game_state, waker) in states {
+        let states_to_wake = states.map(|(id, game_state, waker)| {
             let mapper = &*self.mapper;
             let transposition_table_entry = mapper.map_output_to_transposition_entry(
                 &game_state,
@@ -872,19 +839,19 @@ where
                     .map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size)))
                     .unwrap_or(0.0),
             );
-
             let analysis =
                 mapper.map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
-
             if let Some(transposition_table) = &*self.transposition_table {
                 let transposition_key = self.mapper.get_transposition_key(&game_state);
                 transposition_table.set(transposition_key, transposition_table_entry);
             }
 
-            self.states_analysed.wake_with_analysis(id, analysis, waker);
-
             analysis_len += 1;
-        }
+
+            (id, analysis, waker)
+        });
+
+        self.states_analysed.wake_with_analysis(states_to_wake);
 
         ensure!(
             policy_head_iter.next().is_none(),
@@ -907,6 +874,33 @@ where
             .fetch_max(analysis_len, Ordering::Relaxed);
 
         Ok(())
+    }
+
+    fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, V>> {
+        if let Some(value) = self.engine.is_terminal_state(game_state) {
+            self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
+
+            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
+        }
+
+        if let Some(transposition_table) = &*self.transposition_table {
+            if let Some(transposition_entry) =
+                transposition_table.get(self.mapper.get_transposition_key(game_state))
+            {
+                let analysis = self
+                    .mapper
+                    .map_transposition_entry_to_analysis(game_state, &*transposition_entry);
+                drop(transposition_entry);
+                self.cache_hits.fetch_add(1, Ordering::Relaxed);
+
+                return Some(analysis);
+            }
+        }
+
+        self.cache_misses.fetch_add(1, Ordering::Relaxed);
+        self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
+
+        None
     }
 
     fn take_num_nodes_analysed(&self) -> usize {
@@ -952,14 +946,34 @@ where
     }
 }
 
-// struct StateToWake {
-//     id: usize,
-//     waker: Waker,
-// }
+struct StateToWake {
+    id: usize,
+    waker: Waker,
+}
+
+impl Ord for StateToWake {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.id.cmp(&self.id)
+    }
+}
+
+impl PartialOrd for StateToWake {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(other.id.cmp(&self.id))
+    }
+}
+
+impl PartialEq for StateToWake {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for StateToWake {}
 
 struct CompletedAnalysisOrdered<A, V> {
     states_analysed: IncrementingMap<GameStateAnalysis<A, V>>,
-    // states_to_wake: Mutex<(usize, BinaryHeap<StateToWake>)>,
+    states_to_wake: Mutex<(usize, BinaryHeap<StateToWake>)>,
     id_generator: AtomicUsize,
 }
 
@@ -967,7 +981,7 @@ impl<A, V> CompletedAnalysisOrdered<A, V> {
     fn with_capacity(n: usize) -> Self {
         Self {
             states_analysed: IncrementingMap::with_capacity(n),
-            // states_to_wake: Mutex::new((1, BinaryHeap::with_capacity(n))),
+            states_to_wake: Mutex::new((1, BinaryHeap::with_capacity(n))),
             id_generator: AtomicUsize::new(1),
         }
     }
@@ -976,31 +990,33 @@ impl<A, V> CompletedAnalysisOrdered<A, V> {
         self.id_generator.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn wake_with_analysis(&self, id: usize, analysis: GameStateAnalysis<A, V>, waker: Waker) {
-        self.states_analysed.insert(id, analysis);
+    fn wake_with_analysis<I>(&self, analysis: I)
+    where
+        I: Iterator<Item = (usize, GameStateAnalysis<A, V>, Waker)>,
+    {
+        let mut lock = self.states_to_wake.lock();
+        let (ref mut next_id_to_wake, ref mut states_to_wake) = *lock;
 
-        waker.wake();
+        for (id, analysis, waker) in analysis {
+            self.states_analysed.insert(id, analysis);
 
-        // let lock = self.states_to_wake.lock();
-        // let (ref next_id_to_wake, states_to_wake) = *lock;
+            if id == *next_id_to_wake {
+                *next_id_to_wake += 1;
+                waker.wake();
 
-        // if id == *next_id_to_wake {
-        //     *next_id_to_wake += 1;
-        //     waker.wake();
-
-        //     loop {
-        //         if let Some(val) = states_to_wake.peek_mut() {
-        //             let StateToWake { id, waker } = *val;
-        //             if id == *next_id_to_wake {
-        //                 let state_to_wake = PeekMut::pop(val);
-        //                 *next_id_to_wake += 1;
-        //                 state_to_wake.waker.wake();
-        //             }
-        //         }
-        //     }
-        // } else {
-        //     states_to_wake.push(StateToWake { id, waker })
-        // }
+                while let Some(val) = states_to_wake.peek_mut() {
+                    if val.id == *next_id_to_wake {
+                        let state_to_wake = PeekMut::pop(val);
+                        *next_id_to_wake += 1;
+                        state_to_wake.waker.wake();
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                states_to_wake.push(StateToWake { id, waker })
+            }
+        }
     }
 
     fn remove(&self, id: usize) -> Option<GameStateAnalysis<A, V>> {
