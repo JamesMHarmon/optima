@@ -11,8 +11,7 @@ pub trait Model {
     type State: GameState;
     type Action;
     type Value: Value;
-    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>
-        + Send;
+    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>;
 
     fn get_model_info(&self) -> &ModelInfo;
     fn train<I: Iterator<Item = PositionMetrics<Self::State, Self::Action, Self::Value>>>(

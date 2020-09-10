@@ -17,18 +17,28 @@ impl<T> ConcurrentChunkQueue<T> {
         self.inner.push(entry);
     }
 
-    pub fn dequeue_chunk(&self) -> Vec<T> {
+    pub fn dequeue_chunk_with_split<F, U>(&self, split: F) -> (Vec<T>, Vec<U>)
+    where
+        F: Fn(T) -> Result<T, U>,
+    {
         let mut chunk: Vec<_> = Vec::with_capacity(self.chunk_size);
+        let mut chunk2: Vec<_> = Vec::with_capacity(self.chunk_size);
         let mut len = 0;
         while let Ok(state_to_analyse) = self.inner.pop() {
-            chunk.push(state_to_analyse);
-            len += 1;
-
-            if len >= self.chunk_size {
-                break;
+            match split(state_to_analyse) {
+                Ok(state_to_analyse) => {
+                    chunk.push(state_to_analyse);
+                    len += 1;
+                    if len >= self.chunk_size {
+                        break;
+                    }
+                }
+                Err(other) => {
+                    chunk2.push(other);
+                }
             }
         }
 
-        chunk
+        (chunk, chunk2)
     }
 }

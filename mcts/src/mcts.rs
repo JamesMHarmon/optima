@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use futures::stream::{FuturesOrdered, StreamExt};
+use futures::stream::{FuturesUnordered, StreamExt};
 use futures_intrusive::sync::LocalManualResetEvent;
 use generational_arena::{Arena, Index};
 use log::warn;
@@ -303,14 +303,14 @@ where
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
         let mut alive = alive;
-        let mut searches = FuturesOrdered::new();
+        let mut searches = FuturesUnordered::new();
         let mut visits = self
             .get_focus_node_index()?
             .map(|node_index| arena_ref.get_mut().node(node_index).get_node_visits())
             .unwrap_or(0);
         let analyzer = &mut self.analyzer;
 
-        let mut traverse = |searches: &mut FuturesOrdered<_>| {
+        let mut traverse = |searches: &mut FuturesUnordered<_>| {
             if alive_flag && alive(visits) {
                 searches.push(Self::traverse_tree_and_expand(
                     root_node_index,

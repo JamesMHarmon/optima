@@ -2,8 +2,12 @@ use anyhow::{anyhow, ensure, Context as AnyhowContext, Result};
 use half::f16;
 use itertools::Itertools;
 use log::info;
+use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
+use std::collections::binary_heap::PeekMut;
+use std::collections::BinaryHeap;
 use std::fs::{self, File};
 use std::future::Future;
 use std::hash::Hash;
@@ -11,6 +15,7 @@ use std::io::{BufReader, Write};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
+use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -46,7 +51,6 @@ pub struct TensorflowModel<S, A, V, E, Map, Te> {
     batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
     active_analyzers: Arc<AtomicUsize>,
     active_threads: Arc<AtomicUsize>,
-    id_generator: Arc<AtomicUsize>,
     mapper: Arc<Map>,
     analysis_request_threads: usize,
     options: TensorflowModelOptions,
@@ -92,9 +96,10 @@ impl<S, A, V, E, Map, Te> TensorflowModel<S, A, V, E, Map, Te>
 where
     S: PartialEq + Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
-    V: Value,
+    V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Te: Send + Sync + 'static,
 {
     pub fn new(model_info: ModelInfo, engine: E, mapper: Map, tt_cache_size: usize) -> Self {
         let analysis_request_threads = std::env::var("ANALYSIS_REQUEST_THREADS")
@@ -135,7 +140,6 @@ where
             batching_model,
             active_analyzers: Arc::new(AtomicUsize::new(0)),
             active_threads: Arc::new(AtomicUsize::new(0)),
-            id_generator: Arc::new(AtomicUsize::new(0)),
             mapper,
             analysis_request_threads,
             options,
@@ -145,111 +149,152 @@ where
     pub fn create(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()> {
         create(model_info, options)
     }
-}
 
-#[allow(clippy::too_many_arguments)]
-fn create_analysis_threads<S, A, V, E, Map, Te>(
-    active_threads: &Arc<AtomicUsize>,
-    active_analyzers: &Arc<AtomicUsize>,
-    batching_model: &Arc<BatchingModel<S, A, V, E, Map, Te>>,
-    model_info: &ModelInfo,
-    mapper: &Arc<Map>,
-    analysis_request_threads: usize,
-    output_size: usize,
-    moves_left_size: usize,
-) where
-    S: PartialEq + Hash + Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static,
-    V: Value + Send + 'static,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
-    Te: Send + Sync + 'static,
-{
-    loop {
-        let thread_num = active_threads.fetch_add(1, Ordering::Relaxed);
+    #[allow(clippy::too_many_arguments)]
+    fn create_analysis_threads(
+        active_threads: &Arc<AtomicUsize>,
+        active_analyzers: &Arc<AtomicUsize>,
+        batching_model: &Arc<BatchingModel<S, A, V, E, Map, Te>>,
+        model_info: &ModelInfo,
+        mapper: &Arc<Map>,
+        analysis_request_threads: usize,
+        output_size: usize,
+        moves_left_size: usize,
+    ) {
+        loop {
+            let thread_num = active_threads.fetch_add(1, Ordering::Relaxed);
 
-        if thread_num >= analysis_request_threads {
-            active_threads.fetch_sub(1, Ordering::Relaxed);
-            break;
-        }
-
-        let batching_model_ref = batching_model.clone();
-        let model_info = model_info.clone();
-        let mapper = mapper.clone();
-        let active_analyzers = active_analyzers.clone();
-        let active_threads = active_threads.clone();
-
-        std::thread::spawn(move || {
-            let mut last_report = Instant::now();
-            let input_dim = mapper.get_input_dimensions();
-            let predictor = Predictor::new(&model_info, input_dim);
-
-            loop {
-                let states_to_analyse = (&(*batching_model_ref).states_to_analyse).dequeue_chunk();
-
-                if !states_to_analyse.is_empty() {
-                    let game_states_to_predict =
-                        states_to_analyse.iter().map(|(_, game_state, _)| {
-                            mapper.game_state_to_input(game_state, Mode::Infer)
-                        });
-                    let predictions = predictor
-                        .predict(game_states_to_predict, states_to_analyse.len())
-                        .expect("Expected predict to be successful");
-                    batching_model_ref
-                        .provide_analysis(
-                            states_to_analyse.into_iter(),
-                            predictions,
-                            output_size,
-                            moves_left_size,
-                        )
-                        .expect("Expected provide_analysis to be successful");
-                } else {
-                    if active_analyzers.load(Ordering::Relaxed) == 0 {
-                        break;
-                    }
-
-                    std::thread::sleep(std::time::Duration::from_millis(1));
-                }
-
-                if thread_num == 0 {
-                    let elapsed_mills = last_report.elapsed().as_millis();
-                    if elapsed_mills >= 5_000 {
-                        let transposition_hits = batching_model_ref.take_transposition_hits();
-                        let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
-                        let num_transpo_nodes = transposition_hits
-                            .map_or(0, |(_entries, _capacity, hits, _misses)| hits);
-                        let (min_batch_size, max_batch_size) =
-                            batching_model_ref.take_min_max_batch_size();
-                        let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
-                        let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0
-                            / elapsed_mills as f32;
-                        info!(
-                            "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
-                            total_nps=total_nps,
-                            infer_nps=infer_nps,
-                            min_batch_size=min_batch_size,
-                            max_batch_size=max_batch_size
-                        );
-                        if let Some((entries, capacity, hits, misses)) = transposition_hits {
-                            info!(
-                                "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
-                                if hits > 0 {
-                                    (hits as f32 / (hits + misses) as f32) * 100f32
-                                } else {
-                                    0f32
-                                },
-                                (entries as f32 / capacity as f32) * 100f32,
-                                entries,
-                                capacity
-                            );
-                        }
-                        last_report = Instant::now();
-                    }
-                }
+            if thread_num >= analysis_request_threads {
+                active_threads.fetch_sub(1, Ordering::Relaxed);
+                break;
             }
 
-            active_threads.fetch_sub(1, Ordering::Relaxed);
-        });
+            let batching_model_ref = batching_model.clone();
+            let model_info = model_info.clone();
+            let mapper = mapper.clone();
+            let active_analyzers = active_analyzers.clone();
+            let active_threads = active_threads.clone();
+
+            std::thread::spawn(move || {
+                let mut last_report = Instant::now();
+                let input_dim = mapper.get_input_dimensions();
+                let predictor = Predictor::new(&model_info, input_dim);
+
+                loop {
+                    let (states_to_analyse, analyzed_states) =
+                        (&(*batching_model_ref).states_to_analyse).dequeue_chunk_with_split(
+                            |(id, state_to_analyse, waker)| match Self::try_immediate_analysis(
+                                &*batching_model_ref,
+                                &state_to_analyse,
+                            ) {
+                                Some(analysis) => Err((id, analysis, waker)),
+                                None => Ok((id, state_to_analyse, waker)),
+                            },
+                        );
+
+                    if states_to_analyse.is_empty() && analyzed_states.is_empty() {
+                        if active_analyzers.load(Ordering::Relaxed) == 0 {
+                            break;
+                        }
+
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+
+                    if !states_to_analyse.is_empty() {
+                        let game_states_to_predict =
+                            states_to_analyse.iter().map(|(_, game_state, _)| {
+                                mapper.game_state_to_input(game_state, Mode::Infer)
+                            });
+                        let predictions = predictor
+                            .predict(game_states_to_predict, states_to_analyse.len())
+                            .expect("Expected predict to be successful");
+                        batching_model_ref
+                            .provide_analysis(
+                                states_to_analyse.into_iter(),
+                                predictions,
+                                output_size,
+                                moves_left_size,
+                            )
+                            .expect("Expected provide_analysis to be successful");
+                    }
+
+                    for (id, analysis, waker) in analyzed_states {
+                        batching_model_ref
+                            .states_analysed
+                            .wake_with_analysis(id, analysis, waker);
+                    }
+
+                    if thread_num == 0 {
+                        let elapsed_mills = last_report.elapsed().as_millis();
+                        if elapsed_mills >= 5_000 {
+                            let transposition_hits = batching_model_ref.take_transposition_hits();
+                            let num_infer_nodes = batching_model_ref.take_num_nodes_analysed();
+                            let num_transpo_nodes = transposition_hits
+                                .map_or(0, |(_entries, _capacity, hits, _misses)| hits);
+                            let (min_batch_size, max_batch_size) =
+                                batching_model_ref.take_min_max_batch_size();
+                            let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_mills as f32;
+                            let total_nps = (num_infer_nodes + num_transpo_nodes) as f32 * 1000.0
+                                / elapsed_mills as f32;
+                            info!(
+                                "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
+                                total_nps=total_nps,
+                                infer_nps=infer_nps,
+                                min_batch_size=min_batch_size,
+                                max_batch_size=max_batch_size
+                            );
+                            if let Some((entries, capacity, hits, misses)) = transposition_hits {
+                                info!(
+                                    "Hits: %{:.2}, Cache Hydration: %{:.2}, Entries: {}, Capacity: {}",
+                                    if hits > 0 {
+                                        (hits as f32 / (hits + misses) as f32) * 100f32
+                                    } else {
+                                        0f32
+                                    },
+                                    (entries as f32 / capacity as f32) * 100f32,
+                                    entries,
+                                    capacity
+                                );
+                            }
+                            last_report = Instant::now();
+                        }
+                    }
+                }
+
+                active_threads.fetch_sub(1, Ordering::Relaxed);
+            });
+        }
+    }
+
+    fn try_immediate_analysis(
+        batching_model: &BatchingModel<S, A, V, E, Map, Te>,
+        game_state: &S,
+    ) -> Option<GameStateAnalysis<A, V>> {
+        if let Some(value) = batching_model.engine.is_terminal_state(game_state) {
+            batching_model
+                .num_nodes_analysed
+                .fetch_add(1, Ordering::Relaxed);
+
+            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
+        }
+
+        if let Some(transposition_table) = &*batching_model.transposition_table {
+            if let Some(transposition_entry) =
+                transposition_table.get(batching_model.mapper.get_transposition_key(game_state))
+            {
+                let analysis = batching_model
+                    .mapper
+                    .map_transposition_entry_to_analysis(game_state, &*transposition_entry);
+                drop(transposition_entry);
+                batching_model.cache_hits.fetch_add(1, Ordering::Relaxed);
+
+                return Some(analysis);
+            }
+        }
+
+        batching_model.cache_misses.fetch_add(1, Ordering::Relaxed);
+
+        None
     }
 }
 
@@ -257,7 +302,7 @@ impl<S, A, V, E, Map, Te> ModelTrait for TensorflowModel<S, A, V, E, Map, Te>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
-    V: Value + Send + 'static,
+    V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
     Te: Send + Sync + 'static,
@@ -292,7 +337,7 @@ where
     fn get_game_state_analyzer(&self) -> Self::Analyzer {
         self.active_analyzers.fetch_add(1, Ordering::Relaxed);
 
-        create_analysis_threads(
+        Self::create_analysis_threads(
             &self.active_threads,
             &self.active_analyzers,
             &self.batching_model,
@@ -305,7 +350,6 @@ where
 
         Self::Analyzer {
             batching_model: self.batching_model.clone(),
-            id_generator: self.id_generator.clone(),
             active_analyzers: self.active_analyzers.clone(),
         }
     }
@@ -432,7 +476,6 @@ struct SessionAndOps {
 pub struct GameAnalyzer<S, A, V, E, Map, Te> {
     batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
     active_analyzers: Arc<AtomicUsize>,
-    id_generator: Arc<AtomicUsize>,
 }
 
 impl<S, A, V, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, V, E, Map, Te>
@@ -454,11 +497,7 @@ where
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
     fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S, A, V, E, Map, Te> {
-        GameStateAnalysisFuture::new(
-            game_state.to_owned(),
-            self.id_generator.fetch_add(1, Ordering::Relaxed),
-            self.batching_model.clone(),
-        )
+        GameStateAnalysisFuture::new(game_state.to_owned(), self.batching_model.clone())
     }
 }
 
@@ -754,9 +793,9 @@ fn run_cmd(cmd: &str) -> Result<()> {
     Ok(())
 }
 
-pub struct BatchingModel<S, A, V, E, Map, Te> {
+struct BatchingModel<S, A, V, E, Map, Te> {
     states_to_analyse: ConcurrentChunkQueue<(usize, S, Waker)>,
-    states_analysed: IncrementingMap<GameStateAnalysis<A, V>>,
+    states_analysed: CompletedAnalysisOrdered<A, V>,
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
@@ -772,7 +811,7 @@ where
     S: PartialEq + Hash,
     A: Clone,
     V: Value,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
+    E: GameEngine<State = S, Action = A, Value = V>,
     Map: Mapper<S, A, V, Te>,
 {
     fn new(
@@ -784,7 +823,7 @@ where
     ) -> Self {
         let analysis_capacity = batch_size * analysis_request_threads;
         let states_to_analyse = ConcurrentChunkQueue::new(batch_size, analysis_capacity);
-        let states_analysed = IncrementingMap::with_capacity(analysis_capacity);
+        let states_analysed = CompletedAnalysisOrdered::with_capacity(analysis_capacity);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(std::usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -842,8 +881,7 @@ where
                 transposition_table.set(transposition_key, transposition_table_entry);
             }
 
-            self.states_analysed.insert(id, analysis);
-            waker.wake();
+            self.states_analysed.wake_with_analysis(id, analysis, waker);
 
             analysis_len += 1;
         }
@@ -900,61 +938,88 @@ where
         let analysis = self.states_analysed.remove(id);
 
         match analysis {
-            Some(analysis) => {
-                self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
-                Poll::Ready(analysis)
-            }
+            Some(analysis) => Poll::Ready(analysis),
             None => Poll::Pending,
         }
     }
 
-    fn request(&self, id: usize, game_state: S, waker: &Waker) -> Poll<GameStateAnalysis<A, V>> {
-        if let Some(value) = self.engine.is_terminal_state(&game_state) {
-            self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
-            return Poll::Ready(GameStateAnalysis::new(value, Vec::new(), 0.0));
-        }
-
-        if let Some(transposition_table) = &*self.transposition_table {
-            if let Some(transposition_entry) =
-                transposition_table.get(self.mapper.get_transposition_key(&game_state))
-            {
-                let analysis = self
-                    .mapper
-                    .map_transposition_entry_to_analysis(&game_state, &*transposition_entry);
-                drop(transposition_entry);
-
-                self.cache_hits.fetch_add(1, Ordering::Relaxed);
-
-                return Poll::Ready(analysis);
-            }
-        }
-
-        self.cache_misses.fetch_add(1, Ordering::Relaxed);
+    fn request(&self, game_state: S, waker: &Waker) -> usize {
+        let id = self.states_analysed.get_id();
 
         self.states_to_analyse.push((id, game_state, waker.clone()));
 
-        Poll::Pending
+        id
+    }
+}
+
+// struct StateToWake {
+//     id: usize,
+//     waker: Waker,
+// }
+
+struct CompletedAnalysisOrdered<A, V> {
+    states_analysed: IncrementingMap<GameStateAnalysis<A, V>>,
+    // states_to_wake: Mutex<(usize, BinaryHeap<StateToWake>)>,
+    id_generator: AtomicUsize,
+}
+
+impl<A, V> CompletedAnalysisOrdered<A, V> {
+    fn with_capacity(n: usize) -> Self {
+        Self {
+            states_analysed: IncrementingMap::with_capacity(n),
+            // states_to_wake: Mutex::new((1, BinaryHeap::with_capacity(n))),
+            id_generator: AtomicUsize::new(1),
+        }
+    }
+
+    fn get_id(&self) -> usize {
+        self.id_generator.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn wake_with_analysis(&self, id: usize, analysis: GameStateAnalysis<A, V>, waker: Waker) {
+        self.states_analysed.insert(id, analysis);
+
+        waker.wake();
+
+        // let lock = self.states_to_wake.lock();
+        // let (ref next_id_to_wake, states_to_wake) = *lock;
+
+        // if id == *next_id_to_wake {
+        //     *next_id_to_wake += 1;
+        //     waker.wake();
+
+        //     loop {
+        //         if let Some(val) = states_to_wake.peek_mut() {
+        //             let StateToWake { id, waker } = *val;
+        //             if id == *next_id_to_wake {
+        //                 let state_to_wake = PeekMut::pop(val);
+        //                 *next_id_to_wake += 1;
+        //                 state_to_wake.waker.wake();
+        //             }
+        //         }
+        //     }
+        // } else {
+        //     states_to_wake.push(StateToWake { id, waker })
+        // }
+    }
+
+    fn remove(&self, id: usize) -> Option<GameStateAnalysis<A, V>> {
+        self.states_analysed.remove(id)
     }
 }
 
 pub struct GameStateAnalysisFuture<S, A, V, E, Map, Te> {
     game_state: Option<S>,
     id: usize,
-    has_requested: bool,
     batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
 }
 
 impl<S, A, V, E, Map, Te> GameStateAnalysisFuture<S, A, V, E, Map, Te> {
-    fn new(
-        game_state: S,
-        id: usize,
-        batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
-    ) -> Self {
+    fn new(game_state: S, batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>) -> Self {
         Self {
+            id: 0,
             game_state: Some(game_state),
-            id,
             batching_model,
-            has_requested: false,
         }
     }
 }
@@ -970,16 +1035,16 @@ where
     type Output = GameStateAnalysis<A, V>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.has_requested {
+        if self.id == 0 {
             let self_mut = self.get_mut();
-            self_mut.has_requested = true;
             let game_state = self_mut
                 .game_state
                 .take()
                 .expect("Expected game_state to exist");
-            self_mut
-                .batching_model
-                .request(self_mut.id, game_state, cx.waker())
+
+            self_mut.id = self_mut.batching_model.request(game_state, cx.waker());
+
+            Poll::Pending
         } else {
             (*self).batching_model.poll(self.id)
         }
