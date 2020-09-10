@@ -166,10 +166,10 @@ fn create_analysis_threads<S, A, V, E, Map, Te>(
     Te: Send + Sync + 'static,
 {
     loop {
-        let thread_num = active_threads.fetch_add(1, Ordering::SeqCst);
+        let thread_num = active_threads.fetch_add(1, Ordering::Relaxed);
 
         if thread_num >= analysis_request_threads {
-            active_threads.fetch_sub(1, Ordering::SeqCst);
+            active_threads.fetch_sub(1, Ordering::Relaxed);
             break;
         }
 
@@ -204,7 +204,7 @@ fn create_analysis_threads<S, A, V, E, Map, Te>(
                         )
                         .expect("Expected provide_analysis to be successful");
                 } else {
-                    if active_analyzers.load(Ordering::SeqCst) == 0 {
+                    if active_analyzers.load(Ordering::Relaxed) == 0 {
                         break;
                     }
 
@@ -248,7 +248,7 @@ fn create_analysis_threads<S, A, V, E, Map, Te>(
                 }
             }
 
-            active_threads.fetch_sub(1, Ordering::SeqCst);
+            active_threads.fetch_sub(1, Ordering::Relaxed);
         });
     }
 }
@@ -290,7 +290,7 @@ where
     }
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer {
-        self.active_analyzers.fetch_add(1, Ordering::SeqCst);
+        self.active_analyzers.fetch_add(1, Ordering::Relaxed);
 
         create_analysis_threads(
             &self.active_threads,
@@ -456,7 +456,7 @@ where
     fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S, A, V, E, Map, Te> {
         GameStateAnalysisFuture::new(
             game_state.to_owned(),
-            self.id_generator.fetch_add(1, Ordering::SeqCst),
+            self.id_generator.fetch_add(1, Ordering::Relaxed),
             self.batching_model.clone(),
         )
     }
@@ -464,7 +464,7 @@ where
 
 impl<S, A, V, E, Map, Te> Drop for GameAnalyzer<S, A, V, E, Map, Te> {
     fn drop(&mut self) {
-        self.active_analyzers.fetch_sub(1, Ordering::SeqCst);
+        self.active_analyzers.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
@@ -864,21 +864,21 @@ where
         );
 
         self.min_batch_size
-            .fetch_min(analysis_len, Ordering::SeqCst);
+            .fetch_min(analysis_len, Ordering::Relaxed);
         self.max_batch_size
-            .fetch_max(analysis_len, Ordering::SeqCst);
+            .fetch_max(analysis_len, Ordering::Relaxed);
 
         Ok(())
     }
 
     fn take_num_nodes_analysed(&self) -> usize {
-        self.num_nodes_analysed.swap(0, Ordering::SeqCst)
+        self.num_nodes_analysed.swap(0, Ordering::Relaxed)
     }
 
     fn take_min_max_batch_size(&self) -> (usize, usize) {
         (
-            self.min_batch_size.swap(std::usize::MAX, Ordering::SeqCst),
-            self.max_batch_size.swap(0, Ordering::SeqCst),
+            self.min_batch_size.swap(std::usize::MAX, Ordering::Relaxed),
+            self.max_batch_size.swap(0, Ordering::Relaxed),
         )
     }
 
@@ -890,8 +890,8 @@ where
                 (
                     transposition_table.num_entries(),
                     transposition_table.capacity(),
-                    self.cache_hits.swap(0, Ordering::SeqCst),
-                    self.cache_misses.swap(0, Ordering::SeqCst),
+                    self.cache_hits.swap(0, Ordering::Relaxed),
+                    self.cache_misses.swap(0, Ordering::Relaxed),
                 )
             })
     }
@@ -901,7 +901,7 @@ where
 
         match analysis {
             Some(analysis) => {
-                self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+                self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
                 Poll::Ready(analysis)
             }
             None => Poll::Pending,
@@ -910,7 +910,7 @@ where
 
     fn request(&self, id: usize, game_state: S, waker: &Waker) -> Poll<GameStateAnalysis<A, V>> {
         if let Some(value) = self.engine.is_terminal_state(&game_state) {
-            self.num_nodes_analysed.fetch_add(1, Ordering::SeqCst);
+            self.num_nodes_analysed.fetch_add(1, Ordering::Relaxed);
             return Poll::Ready(GameStateAnalysis::new(value, Vec::new(), 0.0));
         }
 
@@ -923,13 +923,13 @@ where
                     .map_transposition_entry_to_analysis(&game_state, &*transposition_entry);
                 drop(transposition_entry);
 
-                self.cache_hits.fetch_add(1, Ordering::SeqCst);
+                self.cache_hits.fetch_add(1, Ordering::Relaxed);
 
                 return Poll::Ready(analysis);
             }
         }
 
-        self.cache_misses.fetch_add(1, Ordering::SeqCst);
+        self.cache_misses.fetch_add(1, Ordering::Relaxed);
 
         self.states_to_analyse.push((id, game_state, waker.clone()));
 
