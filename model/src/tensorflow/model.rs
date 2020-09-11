@@ -1,4 +1,4 @@
-use anyhow::{anyhow, ensure, Context as AnyhowContext, Result};
+use anyhow::{anyhow, Context as AnyhowContext, Result};
 use common::chunk_queue::ConcurrentChunkQueue;
 use common::incrementing_map::IncrementingMap;
 use engine::engine::GameEngine;
@@ -179,18 +179,22 @@ where
             let active_analyzers = active_analyzers.clone();
             let active_threads = active_threads.clone();
 
-            std::thread::spawn(move || {
+            tokio::task::spawn_blocking(move || {
                 let input_dim = mapper.get_input_dimensions();
                 let predictor = Predictor::new(&model_info, input_dim);
-                let mut states_to_analyse = Vec::with_capacity(batch_size);
-                let mut analyzed_states = Vec::with_capacity(batch_size);
-
                 loop {
+                    let mut states_to_analyse = Vec::with_capacity(batch_size);
+                    let mut analyzed_states = Vec::with_capacity(batch_size);
+
                     for (id, state_to_analyse, waker) in batch_ref.states_to_analyse.draining_iter()
                     {
                         match batch_ref.try_immediate_analysis(&state_to_analyse) {
                             Some(analysis) => analyzed_states.push((id, analysis, waker)),
                             None => states_to_analyse.push((id, state_to_analyse, waker)),
+                        }
+
+                        if states_to_analyse.len() == batch_size {
+                            break;
                         }
                     }
 
@@ -203,9 +207,12 @@ where
                     }
 
                     if !analyzed_states.is_empty() {
-                        batch_ref
-                            .states_analysed
-                            .wake_with_analysis(analyzed_states.drain(..));
+                        let batch_ref_clone = batch_ref.clone();
+                        tokio::task::spawn_blocking(move || {
+                            batch_ref_clone
+                                .states_analysed
+                                .wake_with_analysis(analyzed_states.into_iter());
+                        });
                     }
 
                     if !states_to_analyse.is_empty() {
@@ -213,17 +220,24 @@ where
                             states_to_analyse.iter().map(|(_, game_state, _)| {
                                 mapper.game_state_to_input(game_state, Mode::Infer)
                             });
+
                         let predictions = predictor
                             .predict(game_states_to_predict, states_to_analyse.len())
                             .expect("Expected predict to be successful");
-                        batch_ref
-                            .provide_analysis(
-                                states_to_analyse.drain(..),
+
+                        let batch_ref_clone = batch_ref.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let results = batch_ref_clone.collect_analysis(
+                                states_to_analyse.into_iter(),
                                 predictions,
                                 output_size,
                                 moves_left_size,
-                            )
-                            .expect("Expected provide_analysis to be successful");
+                            );
+
+                            batch_ref_clone
+                                .states_analysed
+                                .wake_with_analysis(results.into_iter());
+                        });
                     }
                 }
 
@@ -769,13 +783,13 @@ where
         }
     }
 
-    fn provide_analysis<I: Iterator<Item = (usize, S, Waker)>>(
+    fn collect_analysis<I: Iterator<Item = (usize, S, Waker)>>(
         &self,
         states: I,
         analysis: AnalysisResults,
         output_size: usize,
         moves_left_size: usize,
-    ) -> Result<()> {
+    ) -> Vec<(usize, GameStateAnalysis<A, V>, Waker)> {
         let mut analysis_len = 0;
         let mut policy_head_iter = analysis.policy_head_output.iter();
         let mut value_head_iter = analysis.value_head_output.iter();
@@ -784,42 +798,42 @@ where
             .as_ref()
             .map(|ml| ml.iter().map(|v| v.to_f32()));
 
-        let states_to_wake = states.map(|(id, game_state, waker)| {
-            let mapper = &*self.mapper;
-            let transposition_table_entry = mapper.map_output_to_transposition_entry(
-                &game_state,
-                policy_head_iter.by_ref().take(output_size).copied(),
-                *value_head_iter
-                    .next()
-                    .expect("Expected value score to exist"),
-                moves_left_head_iter
-                    .as_mut()
-                    .map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size)))
-                    .unwrap_or(0.0),
-            );
-            let analysis =
-                mapper.map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
-            if let Some(transposition_table) = &*self.transposition_table {
-                let transposition_key = self.mapper.get_transposition_key(&game_state);
-                transposition_table.set(transposition_key, transposition_table_entry);
-            }
+        let states_to_wake = states
+            .map(|(id, game_state, waker)| {
+                let mapper = &*self.mapper;
+                let transposition_table_entry = mapper.map_output_to_transposition_entry(
+                    &game_state,
+                    policy_head_iter.by_ref().take(output_size).copied(),
+                    *value_head_iter
+                        .next()
+                        .expect("Expected value score to exist"),
+                    moves_left_head_iter
+                        .as_mut()
+                        .map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size)))
+                        .unwrap_or(0.0),
+                );
+                let analysis = mapper
+                    .map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
+                if let Some(transposition_table) = &*self.transposition_table {
+                    let transposition_key = self.mapper.get_transposition_key(&game_state);
+                    transposition_table.set(transposition_key, transposition_table_entry);
+                }
 
-            analysis_len += 1;
+                analysis_len += 1;
 
-            (id, analysis, waker)
-        });
+                (id, analysis, waker)
+            })
+            .collect();
 
-        self.states_analysed.wake_with_analysis(states_to_wake);
-
-        ensure!(
+        debug_assert!(
             policy_head_iter.next().is_none(),
             "Not all policy head values were used."
         );
-        ensure!(
+        debug_assert!(
             value_head_iter.next().is_none(),
             "Not all value head values were used."
         );
-        ensure!(
+        debug_assert!(
             moves_left_head_iter
                 .and_then(|mut iter| iter.next())
                 .is_none(),
@@ -828,7 +842,7 @@ where
 
         self.reporter.set_batch_size(analysis_len);
 
-        Ok(())
+        states_to_wake
     }
 
     fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, V>> {
