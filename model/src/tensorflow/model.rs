@@ -51,6 +51,7 @@ pub struct TensorflowModel<S, A, V, E, Map, Te> {
     mapper: Arc<Map>,
     analysis_request_threads: usize,
     options: TensorflowModelOptions,
+    batch_size: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -137,6 +138,7 @@ where
         let options = get_options(&model_info).expect("Could not load model options file");
 
         Self {
+            batch_size,
             model_info,
             batching_model,
             active_analyzers: Arc::new(AtomicUsize::new(0)),
@@ -161,6 +163,7 @@ where
         analysis_request_threads: usize,
         output_size: usize,
         moves_left_size: usize,
+        batch_size: usize,
     ) {
         loop {
             let thread_num = active_threads.fetch_add(1, Ordering::Relaxed);
@@ -179,16 +182,17 @@ where
             std::thread::spawn(move || {
                 let input_dim = mapper.get_input_dimensions();
                 let predictor = Predictor::new(&model_info, input_dim);
+                let mut states_to_analyse = Vec::with_capacity(batch_size);
+                let mut analyzed_states = Vec::with_capacity(batch_size);
 
                 loop {
-                    let (states_to_analyse, analyzed_states) = batch_ref
-                        .states_to_analyse
-                        .dequeue_chunk_with_split(|(id, state_to_analyse, waker)| match batch_ref
-                            .try_immediate_analysis(&state_to_analyse)
-                        {
-                            Some(analysis) => Err((id, analysis, waker)),
-                            None => Ok((id, state_to_analyse, waker)),
-                        });
+                    for (id, state_to_analyse, waker) in batch_ref.states_to_analyse.draining_iter()
+                    {
+                        match batch_ref.try_immediate_analysis(&state_to_analyse) {
+                            Some(analysis) => analyzed_states.push((id, analysis, waker)),
+                            None => states_to_analyse.push((id, state_to_analyse, waker)),
+                        }
+                    }
 
                     if states_to_analyse.is_empty() && analyzed_states.is_empty() {
                         if active_analyzers.load(Ordering::Relaxed) == 0 {
@@ -201,7 +205,7 @@ where
                     if !analyzed_states.is_empty() {
                         batch_ref
                             .states_analysed
-                            .wake_with_analysis(analyzed_states.into_iter());
+                            .wake_with_analysis(analyzed_states.drain(..));
                     }
 
                     if !states_to_analyse.is_empty() {
@@ -214,7 +218,7 @@ where
                             .expect("Expected predict to be successful");
                         batch_ref
                             .provide_analysis(
-                                states_to_analyse.into_iter(),
+                                states_to_analyse.drain(..),
                                 predictions,
                                 output_size,
                                 moves_left_size,
@@ -277,6 +281,7 @@ where
             self.analysis_request_threads,
             self.options.output_size,
             self.options.moves_left_size,
+            self.batch_size,
         );
 
         Self::Analyzer {
