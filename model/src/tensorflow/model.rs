@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use common::chunk_queue::ConcurrentChunkQueue;
-use common::incrementing_map::IncrementingMap;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
@@ -23,8 +22,10 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor};
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::Sender;
 
 use super::super::analytics::{self, GameStateAnalysis};
 use super::super::model::{Model as ModelTrait, TrainOptions};
@@ -186,11 +187,10 @@ where
                     let mut states_to_analyse = Vec::with_capacity(batch_size);
                     let mut analyzed_states = Vec::with_capacity(batch_size);
 
-                    for (id, state_to_analyse, waker) in batch_ref.states_to_analyse.draining_iter()
-                    {
+                    for (id, state_to_analyse, tx) in batch_ref.states_to_analyse.draining_iter() {
                         match batch_ref.try_immediate_analysis(&state_to_analyse) {
-                            Some(analysis) => analyzed_states.push((id, analysis, waker)),
-                            None => states_to_analyse.push((id, state_to_analyse, waker)),
+                            Some(analysis) => analyzed_states.push((id, analysis, tx)),
+                            None => states_to_analyse.push((id, state_to_analyse, tx)),
                         }
 
                         if states_to_analyse.len() == batch_size {
@@ -211,7 +211,7 @@ where
                         tokio::task::spawn_blocking(move || {
                             batch_ref_clone
                                 .states_analysed
-                                .wake_with_analysis(analyzed_states.into_iter());
+                                .send_analysis(analyzed_states.into_iter());
                         });
                     }
 
@@ -236,7 +236,7 @@ where
 
                             batch_ref_clone
                                 .states_analysed
-                                .wake_with_analysis(results.into_iter());
+                                .send_analysis(results.into_iter());
                         });
                     }
                 }
@@ -440,14 +440,43 @@ where
     type State = S;
     type Action = A;
     type Value = V;
-    type Future = GameStateAnalysisFuture<S, A, V, E, Map, Te>;
+    type Future = UnwrappedReceiver<GameStateAnalysis<A, V>>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &S) -> GameStateAnalysisFuture<S, A, V, E, Map, Te> {
-        GameStateAnalysisFuture::new(game_state.to_owned(), self.batching_model.clone())
+    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<GameStateAnalysis<A, V>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.batching_model.request(game_state.to_owned(), tx);
+
+        UnwrappedReceiver::new(rx)
+    }
+}
+
+use pin_project::pin_project;
+
+#[pin_project]
+pub struct UnwrappedReceiver<T> {
+    #[pin]
+    receiver: Receiver<T>,
+}
+
+impl<T> UnwrappedReceiver<T> {
+    fn new(receiver: Receiver<T>) -> Self {
+        UnwrappedReceiver { receiver }
+    }
+}
+
+impl<T> Future for UnwrappedReceiver<T> {
+    type Output = T;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
+        match self.as_mut().project().receiver.poll(cx) {
+            Poll::Ready(val) => Poll::Ready(val.expect("Expected a receivable value")),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
@@ -743,8 +772,15 @@ fn run_cmd(cmd: &str) -> Result<()> {
     Ok(())
 }
 
+type StatesToAnalyse<S, A, V> = (usize, S, Sender<GameStateAnalysis<A, V>>);
+type AnalysisToSend<A, V> = (
+    usize,
+    GameStateAnalysis<A, V>,
+    Sender<GameStateAnalysis<A, V>>,
+);
+
 struct BatchingModel<S, A, V, E, Map, Te> {
-    states_to_analyse: ConcurrentChunkQueue<(usize, S, Waker)>,
+    states_to_analyse: ConcurrentChunkQueue<StatesToAnalyse<S, A, V>>,
     states_analysed: CompletedAnalysisOrdered<A, V>,
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     engine: E,
@@ -783,13 +819,13 @@ where
         }
     }
 
-    fn collect_analysis<I: Iterator<Item = (usize, S, Waker)>>(
+    fn collect_analysis<I: Iterator<Item = StatesToAnalyse<S, A, V>>>(
         &self,
         states: I,
         analysis: AnalysisResults,
         output_size: usize,
         moves_left_size: usize,
-    ) -> Vec<(usize, GameStateAnalysis<A, V>, Waker)> {
+    ) -> Vec<AnalysisToSend<A, V>> {
         let mut analysis_len = 0;
         let mut policy_head_iter = analysis.policy_head_output.iter();
         let mut value_head_iter = analysis.value_head_output.iter();
@@ -798,8 +834,8 @@ where
             .as_ref()
             .map(|ml| ml.iter().map(|v| v.to_f32()));
 
-        let states_to_wake = states
-            .map(|(id, game_state, waker)| {
+        let states_to_tx = states
+            .map(|(id, game_state, tx)| {
                 let mapper = &*self.mapper;
                 let transposition_table_entry = mapper.map_output_to_transposition_entry(
                     &game_state,
@@ -821,7 +857,7 @@ where
 
                 analysis_len += 1;
 
-                (id, analysis, waker)
+                (id, analysis, tx)
             })
             .collect();
 
@@ -842,7 +878,7 @@ where
 
         self.reporter.set_batch_size(analysis_len);
 
-        states_to_wake
+        states_to_tx
     }
 
     fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, V>> {
@@ -873,60 +909,48 @@ where
         None
     }
 
-    fn poll(&self, id: usize) -> Poll<GameStateAnalysis<A, V>> {
-        let analysis = self.states_analysed.remove(id);
-
-        match analysis {
-            Some(analysis) => Poll::Ready(analysis),
-            None => Poll::Pending,
-        }
-    }
-
-    fn request(&self, game_state: S, waker: &Waker) -> usize {
+    fn request(&self, game_state: S, tx: Sender<GameStateAnalysis<A, V>>) {
         let id = self.states_analysed.get_id();
 
-        self.states_to_analyse.push((id, game_state, waker.clone()));
-
-        id
+        self.states_to_analyse.push((id, game_state, tx));
     }
 }
 
-struct StateToWake {
+struct StateToTransmit<A, V> {
     id: usize,
-    waker: Waker,
+    tx: Sender<GameStateAnalysis<A, V>>,
+    analysis: GameStateAnalysis<A, V>,
 }
 
-impl Ord for StateToWake {
+impl<A, V> Ord for StateToTransmit<A, V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other.id.cmp(&self.id)
     }
 }
 
-impl PartialOrd for StateToWake {
+impl<A, V> PartialOrd for StateToTransmit<A, V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(other.id.cmp(&self.id))
     }
 }
 
-impl PartialEq for StateToWake {
+impl<A, V> PartialEq for StateToTransmit<A, V> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl Eq for StateToWake {}
+impl<A, V> Eq for StateToTransmit<A, V> {}
 
 struct CompletedAnalysisOrdered<A, V> {
-    states_analysed: IncrementingMap<GameStateAnalysis<A, V>>,
-    states_to_wake: Mutex<(usize, BinaryHeap<StateToWake>)>,
+    states_to_tx: Mutex<(usize, BinaryHeap<StateToTransmit<A, V>>)>,
     id_generator: AtomicUsize,
 }
 
 impl<A, V> CompletedAnalysisOrdered<A, V> {
     fn with_capacity(n: usize) -> Self {
         Self {
-            states_analysed: IncrementingMap::with_capacity(n),
-            states_to_wake: Mutex::new((1, BinaryHeap::with_capacity(n))),
+            states_to_tx: Mutex::new((1, BinaryHeap::with_capacity(n))),
             id_generator: AtomicUsize::new(1),
         }
     }
@@ -935,80 +959,40 @@ impl<A, V> CompletedAnalysisOrdered<A, V> {
         self.id_generator.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn wake_with_analysis<I>(&self, analysis: I)
+    fn send_analysis<I>(&self, analysis: I)
     where
-        I: Iterator<Item = (usize, GameStateAnalysis<A, V>, Waker)>,
+        I: Iterator<
+            Item = (
+                usize,
+                GameStateAnalysis<A, V>,
+                Sender<GameStateAnalysis<A, V>>,
+            ),
+        >,
     {
-        let mut lock = self.states_to_wake.lock();
-        let (ref mut next_id_to_wake, ref mut states_to_wake) = *lock;
+        let mut lock = self.states_to_tx.lock();
+        let (ref mut next_id_to_tx, ref mut states_to_tx) = *lock;
 
-        for (id, analysis, waker) in analysis {
-            self.states_analysed.insert(id, analysis);
+        for (id, analysis, tx) in analysis {
+            if id == *next_id_to_tx {
+                *next_id_to_tx += 1;
+                if tx.send(analysis).is_err() {
+                    panic!("Failed to send analysis");
+                }
 
-            if id == *next_id_to_wake {
-                *next_id_to_wake += 1;
-                waker.wake();
-
-                while let Some(val) = states_to_wake.peek_mut() {
-                    if val.id == *next_id_to_wake {
-                        let state_to_wake = PeekMut::pop(val);
-                        *next_id_to_wake += 1;
-                        state_to_wake.waker.wake();
+                while let Some(val) = states_to_tx.peek_mut() {
+                    if val.id == *next_id_to_tx {
+                        let state_to_tx = PeekMut::pop(val);
+                        *next_id_to_tx += 1;
+                        if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
+                            panic!("Failed to send analysis");
+                        }
                     } else {
                         break;
                     }
                 }
             } else {
-                states_to_wake.push(StateToWake { id, waker })
+                states_to_tx.push(StateToTransmit { id, analysis, tx })
             }
-        }
-    }
-
-    fn remove(&self, id: usize) -> Option<GameStateAnalysis<A, V>> {
-        self.states_analysed.remove(id)
-    }
-}
-
-pub struct GameStateAnalysisFuture<S, A, V, E, Map, Te> {
-    game_state: Option<S>,
-    id: usize,
-    batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
-}
-
-impl<S, A, V, E, Map, Te> GameStateAnalysisFuture<S, A, V, E, Map, Te> {
-    fn new(game_state: S, batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>) -> Self {
-        Self {
-            id: 0,
-            game_state: Some(game_state),
-            batching_model,
-        }
-    }
-}
-
-impl<S, A, V, E, Map, Te> Future for GameStateAnalysisFuture<S, A, V, E, Map, Te>
-where
-    S: PartialEq + Hash + Unpin,
-    A: Clone,
-    V: Value,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te>,
-    Te: Send + 'static,
-{
-    type Output = GameStateAnalysis<A, V>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.id == 0 {
-            let self_mut = self.get_mut();
-            let game_state = self_mut
-                .game_state
-                .take()
-                .expect("Expected game_state to exist");
-
-            self_mut.id = self_mut.batching_model.request(game_state, cx.waker());
-
-            Poll::Pending
-        } else {
-            (*self).batching_model.poll(self.id)
         }
     }
 }

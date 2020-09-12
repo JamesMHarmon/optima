@@ -11,6 +11,7 @@ use super::play_model::{
 };
 use super::value::Value;
 use futures::future::Either;
+use model::analytics::GameStateAnalysis;
 use model::model::ModelOptions;
 use model::model::TrainOptions;
 use model::model_info::ModelInfo;
@@ -143,22 +144,8 @@ pub struct Analyzer {
 #[allow(clippy::type_complexity)]
 impl model::analytics::GameAnalyzer for Analyzer {
     type Future = Either<
-        GameStateAnalysisFuture<
-            Self::State,
-            Self::Action,
-            Self::Value,
-            Engine,
-            PlayMapper,
-            PlayTranspositionEntry,
-        >,
-        GameStateAnalysisFuture<
-            Self::State,
-            Self::Action,
-            Self::Value,
-            Engine,
-            PlaceMapper,
-            PlaceTranspositionEntry,
-        >,
+        UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Value>>,
+        UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Value>>,
     >;
     type Action = Action;
     type State = GameState;
