@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context as AnyhowContext, Result};
-use common::chunk_queue::ConcurrentChunkQueue;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
@@ -9,7 +8,6 @@ use log::info;
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 use std::fs::{self, File};
 use std::future::Future;
@@ -23,18 +21,19 @@ use std::sync::{
     Arc,
 };
 use std::task::{Context, Poll};
+use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor};
-use tokio::sync::oneshot::Receiver;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::{
+    mpsc, mpsc::UnboundedReceiver, mpsc::UnboundedSender, oneshot, oneshot::Receiver,
+    oneshot::Sender,
+};
 
 use super::super::analytics::{self, GameStateAnalysis};
 use super::super::model::{Model as ModelTrait, TrainOptions};
 use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
-use super::constants::{
-    ANALYSIS_REQUEST_BATCH_SIZE, ANALYSIS_REQUEST_THREADS, TRAIN_DATA_CHUNK_SIZE,
-};
+use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE, TRAIN_DATA_CHUNK_SIZE};
 use super::mode::Mode;
 use super::paths::Paths;
 use super::reporter::Reporter;
@@ -46,13 +45,12 @@ static ALLOCATOR: std::alloc::System = std::alloc::System;
 
 pub struct TensorflowModel<S, A, V, E, Map, Te> {
     model_info: ModelInfo,
-    batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
-    active_analyzers: Arc<AtomicUsize>,
-    active_threads: Arc<AtomicUsize>,
+    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
+    engine: Arc<E>,
     mapper: Arc<Map>,
-    analysis_request_threads: usize,
     options: TensorflowModelOptions,
     batch_size: usize,
+    tt_cache_size: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -101,13 +99,6 @@ where
     Te: Send + Sync + 'static,
 {
     pub fn new(model_info: ModelInfo, engine: E, mapper: Map, tt_cache_size: usize) -> Self {
-        let analysis_request_threads = std::env::var("ANALYSIS_REQUEST_THREADS")
-            .map(|v| {
-                v.parse::<usize>()
-                    .expect("ANALYSIS_REQUEST_THREADS must be a valid int")
-            })
-            .unwrap_or(ANALYSIS_REQUEST_THREADS);
-
         let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
             .map(|v| {
                 v.parse::<usize>()
@@ -119,33 +110,19 @@ where
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
         }
 
-        let mapper = Arc::new(mapper);
-        let transposition_table = Arc::new(if tt_cache_size > 0 {
-            Some(TranspositionTable::new(tt_cache_size))
-        } else {
-            None
-        });
-
-        let reporter = Arc::new(Reporter::new(transposition_table.clone()));
-
-        let batching_model = Arc::new(BatchingModel::new(
-            engine,
-            mapper.clone(),
-            transposition_table,
-            reporter,
-            analysis_request_threads,
-            batch_size,
-        ));
         let options = get_options(&model_info).expect("Could not load model options file");
+
+        let mapper = Arc::new(mapper);
+        let engine = Arc::new(engine);
+        let batching_model = Mutex::new(Weak::new());
 
         Self {
             batch_size,
             model_info,
             batching_model,
-            active_analyzers: Arc::new(AtomicUsize::new(0)),
-            active_threads: Arc::new(AtomicUsize::new(0)),
+            engine,
             mapper,
-            analysis_request_threads,
+            tt_cache_size,
             options,
         }
     }
@@ -154,96 +131,29 @@ where
         create(model_info, options)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn create_analysis_threads(
-        active_threads: &Arc<AtomicUsize>,
-        active_analyzers: &Arc<AtomicUsize>,
-        batching_model: &Arc<BatchingModel<S, A, V, E, Map, Te>>,
-        model_info: &ModelInfo,
-        mapper: &Arc<Map>,
-        analysis_request_threads: usize,
-        output_size: usize,
-        moves_left_size: usize,
-        batch_size: usize,
-    ) {
-        loop {
-            let thread_num = active_threads.fetch_add(1, Ordering::Relaxed);
+    fn create_batching_model(
+        &self,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+    ) -> BatchingModel<E, Map, Te> {
+        let transposition_table = Arc::new(if self.tt_cache_size > 0 {
+            Some(TranspositionTable::new(self.tt_cache_size))
+        } else {
+            None
+        });
 
-            if thread_num >= analysis_request_threads {
-                active_threads.fetch_sub(1, Ordering::Relaxed);
-                break;
-            }
+        let reporter = Arc::new(Reporter::new(transposition_table.clone()));
 
-            let batch_ref = batching_model.clone();
-            let model_info = model_info.clone();
-            let mapper = mapper.clone();
-            let active_analyzers = active_analyzers.clone();
-            let active_threads = active_threads.clone();
-
-            tokio::task::spawn_blocking(move || {
-                let mut predictor = Predictor::new(&model_info, mapper.get_input_dimensions());
-
-                loop {
-                    let mut states_to_analyse = Vec::with_capacity(batch_size);
-                    let mut analyzed_states = Vec::with_capacity(batch_size);
-
-                    for (id, state_to_analyse, tx) in batch_ref.states_to_analyse.draining_iter() {
-                        match batch_ref.try_immediate_analysis(&state_to_analyse) {
-                            Some(analysis) => analyzed_states.push((id, analysis, tx)),
-                            None => states_to_analyse.push((id, state_to_analyse, tx)),
-                        }
-
-                        if states_to_analyse.len() == batch_size {
-                            break;
-                        }
-                    }
-
-                    if states_to_analyse.is_empty() && analyzed_states.is_empty() {
-                        if active_analyzers.load(Ordering::Relaxed) == 0 {
-                            break;
-                        }
-
-                        std::thread::sleep(std::time::Duration::from_millis(1));
-                    }
-
-                    if !analyzed_states.is_empty() {
-                        let batch_ref_clone = batch_ref.clone();
-                        tokio::task::spawn_blocking(move || {
-                            batch_ref_clone
-                                .states_analysed
-                                .send_analysis(analyzed_states.into_iter());
-                        });
-                    }
-
-                    if !states_to_analyse.is_empty() {
-                        let game_states_to_predict =
-                            states_to_analyse.iter().map(|(_, game_state, _)| {
-                                mapper.game_state_to_input(game_state, Mode::Infer)
-                            });
-
-                        let predictions = predictor
-                            .predict(game_states_to_predict.flatten(), states_to_analyse.len())
-                            .expect("Expected predict to be successful");
-
-                        let batch_ref_clone = batch_ref.clone();
-                        // tokio::task::spawn_blocking(move || {
-                        let results = batch_ref_clone.collect_analysis(
-                            states_to_analyse.into_iter(),
-                            predictions,
-                            output_size,
-                            moves_left_size,
-                        );
-
-                        batch_ref_clone
-                            .states_analysed
-                            .send_analysis(results.into_iter());
-                        // });
-                    }
-                }
-
-                active_threads.fetch_sub(1, Ordering::Relaxed);
-            });
-        }
+        BatchingModel::new(
+            self.engine.clone(),
+            self.mapper.clone(),
+            transposition_table,
+            reporter,
+            self.model_info.clone(),
+            self.batch_size,
+            self.options.output_size,
+            self.options.moves_left_size,
+            receiver,
+        )
     }
 }
 
@@ -284,24 +194,22 @@ where
     }
 
     fn get_game_state_analyzer(&self) -> Self::Analyzer {
-        self.active_analyzers.fetch_add(1, Ordering::Relaxed);
+        let batching_model_ref = &mut *self.batching_model.lock();
+        let batching_model = batching_model_ref.upgrade();
 
-        Self::create_analysis_threads(
-            &self.active_threads,
-            &self.active_analyzers,
-            &self.batching_model,
-            &self.model_info,
-            &self.mapper,
-            self.analysis_request_threads,
-            self.options.output_size,
-            self.options.moves_left_size,
-            self.batch_size,
-        );
+        let batching_model = match batching_model {
+            None => {
+                let (sender, receiver) = mpsc::unbounded_channel();
+                let batching_model_arc = Arc::new((self.create_batching_model(receiver), sender));
 
-        Self::Analyzer {
-            batching_model: self.batching_model.clone(),
-            active_analyzers: self.active_analyzers.clone(),
-        }
+                *batching_model_ref = Arc::downgrade(&batching_model_arc);
+
+                batching_model_arc
+            }
+            Some(model_sender) => model_sender,
+        };
+
+        Self::Analyzer::new(batching_model)
     }
 }
 
@@ -445,9 +353,34 @@ struct SessionAndOps {
     op_moves_left_head: Option<Operation>,
 }
 
+type BatchingModelAndSender<S, A, V, E, Map, Te> = (
+    BatchingModel<E, Map, Te>,
+    UnboundedSender<StatesToAnalyse<S, A, V>>,
+);
+
 pub struct GameAnalyzer<S, A, V, E, Map, Te> {
-    batching_model: Arc<BatchingModel<S, A, V, E, Map, Te>>,
-    active_analyzers: Arc<AtomicUsize>,
+    batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>,
+    analysed_state_ordered: CompletedAnalysisOrdered,
+    analysed_state_sender: UnboundedSender<AnalysisToSend<A, V>>,
+}
+
+impl<S, A, V, E, Map, Te> GameAnalyzer<S, A, V, E, Map, Te>
+where
+    A: Send + 'static,
+    V: Send + 'static,
+{
+    fn new(batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>) -> Self {
+        let (analysed_state_sender, analyzed_state_receiver) = mpsc::unbounded_channel();
+
+        let analysed_state_ordered =
+            CompletedAnalysisOrdered::with_capacity(analyzed_state_receiver, 1);
+
+        Self {
+            batching_model,
+            analysed_state_ordered,
+            analysed_state_sender,
+        }
+    }
 }
 
 impl<S, A, V, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, V, E, Map, Te>
@@ -469,9 +402,17 @@ where
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
     fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<GameStateAnalysis<A, V>> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.batching_model.request(game_state.to_owned(), tx);
+        let (tx, rx) = oneshot::channel();
+        let id = self.analysed_state_ordered.get_id();
+        let sender = &self.batching_model.1;
+        sender
+            .send((
+                id,
+                game_state.to_owned(),
+                self.analysed_state_sender.clone(),
+                tx,
+            ))
+            .unwrap_or_else(|_| panic!("Channel Failure 3"));
 
         UnwrappedReceiver::new(rx)
     }
@@ -502,10 +443,323 @@ impl<T> Future for UnwrappedReceiver<T> {
     }
 }
 
-impl<S, A, V, E, Map, Te> Drop for GameAnalyzer<S, A, V, E, Map, Te> {
-    fn drop(&mut self) {
-        self.active_analyzers.fetch_sub(1, Ordering::Relaxed);
+type StatesToAnalyse<S, A, V> = (
+    usize,
+    S,
+    UnboundedSender<AnalysisToSend<A, V>>,
+    Sender<GameStateAnalysis<A, V>>,
+);
+
+type AnalysisToSend<A, V> = (
+    usize,
+    GameStateAnalysis<A, V>,
+    Sender<GameStateAnalysis<A, V>>,
+);
+
+struct BatchingModel<E, Map, Te> {
+    _transposition_table: Arc<Option<TranspositionTable<Te>>>,
+    _engine: Arc<E>,
+    _mapper: Arc<Map>,
+    _reporter: Arc<Reporter<Te>>,
+}
+
+impl<S, A, V, E, Map, Te> BatchingModel<E, Map, Te>
+where
+    S: PartialEq + Hash + Send + 'static,
+    A: Clone + Send + 'static,
+    V: Value + Send + 'static,
+    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
+    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Te: Send + 'static,
+{
+    fn new(
+        engine: Arc<E>,
+        mapper: Arc<Map>,
+        transposition_table: Arc<Option<TranspositionTable<Te>>>,
+        reporter: Arc<Reporter<Te>>,
+        model_info: ModelInfo,
+        batch_size: usize,
+        output_size: usize,
+        moves_left_size: usize,
+        states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+    ) -> Self {
+        Self::create_analysis_tasks(
+            engine.clone(),
+            mapper.clone(),
+            transposition_table.clone(),
+            reporter.clone(),
+            states_to_analyse_receiver,
+            model_info,
+            output_size,
+            moves_left_size,
+            batch_size,
+        );
+
+        Self {
+            _transposition_table: transposition_table,
+            _reporter: reporter,
+            _engine: engine,
+            _mapper: mapper,
+        }
     }
+
+    fn create_analysis_tasks(
+        engine: Arc<E>,
+        mapper: Arc<Map>,
+        transposition_table: Arc<Option<TranspositionTable<Te>>>,
+        reporter: Arc<Reporter<Te>>,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+        model_info: ModelInfo,
+        output_size: usize,
+        moves_left_size: usize,
+        batch_size: usize,
+    ) {
+        let model_info = model_info.clone();
+        let mapper = mapper.clone();
+        let (states_to_predict_tx, mut states_to_predict_rx) =
+            mpsc::unbounded_channel::<StatesToAnalyse<S, A, V>>();
+
+        let transposition_table_clone = transposition_table.clone();
+        let mapper_clone = mapper.clone();
+        let reporter_clone = reporter.clone();
+        let mut receiver = receiver;
+
+        tokio::task::spawn(async move {
+            let mut predictor = Predictor::new(&model_info, mapper.get_input_dimensions());
+            let mut states_to_analyse = Vec::with_capacity(batch_size);
+            let transposition_table = &*transposition_table;
+
+            while let Some(state_to_analyze) = states_to_predict_rx.recv().await {
+                states_to_analyse.push(state_to_analyze);
+
+                while let Ok(state_to_analyze) = states_to_predict_rx.try_recv() {
+                    states_to_analyse.push(state_to_analyze);
+
+                    if states_to_analyse.len() == batch_size {
+                        break;
+                    }
+                }
+
+                reporter.set_batch_size(states_to_analyse.len());
+
+                let game_states_to_predict =
+                    states_to_analyse.iter().map(|(_, game_state, _, _)| {
+                        mapper.game_state_to_input(game_state, Mode::Infer)
+                    });
+
+                let predictions = tokio::task::block_in_place(|| {
+                    predictor
+                        .predict(game_states_to_predict.flatten(), states_to_analyse.len())
+                        .expect("Expected predict to be successful")
+                });
+
+                let mut policy_head_iter = predictions.policy_head_output.iter();
+                let mut value_head_iter = predictions.value_head_output.iter();
+                let mut moves_left_head_iter = predictions
+                    .moves_left_head_output
+                    .as_ref()
+                    .map(|ml| ml.iter().map(|v| v.to_f32()));
+
+                for (id, game_state, tx, tx2) in states_to_analyse.drain(..) {
+                    let transposition_table_entry = mapper.map_output_to_transposition_entry(
+                        &game_state,
+                        policy_head_iter.by_ref().take(output_size).copied(),
+                        *value_head_iter
+                            .next()
+                            .expect("Expected value score to exist"),
+                        moves_left_head_iter
+                            .as_mut()
+                            .map(|iter| {
+                                moves_left_expected_value(iter.by_ref().take(moves_left_size))
+                            })
+                            .unwrap_or(0.0),
+                    );
+
+                    let analysis = mapper.map_transposition_entry_to_analysis(
+                        &game_state,
+                        &transposition_table_entry,
+                    );
+
+                    if let Some(transposition_table) = transposition_table {
+                        let transposition_key = mapper.get_transposition_key(&game_state);
+                        transposition_table.set(transposition_key, transposition_table_entry);
+                    }
+
+                    tx.send((id, analysis, tx2))
+                        .unwrap_or_else(|_| panic!("Channel Failure 4"));
+                }
+            }
+        });
+
+        tokio::task::spawn(async move {
+            while let Some((id, state_to_analyse, unordered_tx, tx)) = receiver.recv().await {
+                match Self::try_immediate_analysis(
+                    &state_to_analyse,
+                    &*transposition_table_clone,
+                    &*engine,
+                    &*mapper_clone,
+                    &*reporter_clone,
+                ) {
+                    Some(analysis) => {
+                        unordered_tx
+                            .send((id, analysis, tx))
+                            .unwrap_or_else(|_| panic!("Channel Failure 1"));
+                    }
+                    None => {
+                        states_to_predict_tx
+                            .send((id, state_to_analyse, unordered_tx, tx))
+                            .unwrap_or_else(|_| panic!("Channel Failure 2"));
+                    }
+                };
+            }
+        });
+    }
+
+    fn try_immediate_analysis(
+        game_state: &S,
+        transposition_table: &Option<TranspositionTable<Te>>,
+        engine: &E,
+        mapper: &Map,
+        reporter: &Reporter<Te>,
+    ) -> Option<GameStateAnalysis<A, V>> {
+        if let Some(value) = engine.is_terminal_state(game_state) {
+            reporter.set_terminal();
+
+            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
+        }
+
+        if let Some(transposition_table) = &*transposition_table {
+            if let Some(transposition_entry) =
+                transposition_table.get(mapper.get_transposition_key(game_state))
+            {
+                let analysis =
+                    mapper.map_transposition_entry_to_analysis(game_state, &*transposition_entry);
+                drop(transposition_entry);
+                reporter.set_cache_hit();
+
+                return Some(analysis);
+            }
+
+            reporter.set_cache_miss();
+        }
+
+        reporter.set_analyzed_node();
+
+        None
+    }
+}
+
+struct StateToTransmit<A, V> {
+    id: usize,
+    tx: Sender<GameStateAnalysis<A, V>>,
+    analysis: GameStateAnalysis<A, V>,
+}
+
+impl<A, V> Ord for StateToTransmit<A, V> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.id.cmp(&self.id)
+    }
+}
+
+impl<A, V> PartialOrd for StateToTransmit<A, V> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(other.id.cmp(&self.id))
+    }
+}
+
+impl<A, V> PartialEq for StateToTransmit<A, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<A, V> Eq for StateToTransmit<A, V> {}
+
+struct CompletedAnalysisOrdered {
+    id_generator: AtomicUsize,
+}
+
+impl CompletedAnalysisOrdered {
+    fn with_capacity<A, V>(
+        analyzed_state_receiver: UnboundedReceiver<AnalysisToSend<A, V>>,
+        n: usize,
+    ) -> Self
+    where
+        A: Send + 'static,
+        V: Send + 'static,
+    {
+        Self::create_ordering_task(analyzed_state_receiver, n);
+
+        Self {
+            id_generator: AtomicUsize::new(1),
+        }
+    }
+
+    fn get_id(&self) -> usize {
+        self.id_generator.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn create_ordering_task<A, V>(
+        receiver: UnboundedReceiver<(
+            usize,
+            GameStateAnalysis<A, V>,
+            Sender<GameStateAnalysis<A, V>>,
+        )>,
+        capacity: usize,
+    ) where
+        A: Send + 'static,
+        V: Send + 'static,
+    {
+        let mut receiver = receiver;
+        tokio::task::spawn(async move {
+            let mut analyzed_states_to_tx =
+                BinaryHeap::<StateToTransmit<A, V>>::with_capacity(capacity);
+            let mut next_id_to_tx: usize = 1;
+
+            while let Some(analysed_state) = receiver.recv().await {
+                let (id, analysis, tx) = analysed_state;
+                if id == next_id_to_tx {
+                    next_id_to_tx += 1;
+                    if tx.send(analysis).is_err() {
+                        panic!("Failed to send analysis");
+                    }
+
+                    while let Some(val) = analyzed_states_to_tx.peek_mut() {
+                        if val.id == next_id_to_tx {
+                            let state_to_tx = PeekMut::pop(val);
+                            next_id_to_tx += 1;
+                            if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
+                                panic!("Failed to send analysis");
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    analyzed_states_to_tx.push(StateToTransmit { id, analysis, tx })
+                }
+            }
+        });
+    }
+}
+
+pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {
+    moves_left_scores
+        .enumerate()
+        .map(|(i, s)| (i + 1) as f32 * s)
+        .fold(0.0f32, |s, e| s + e)
+}
+
+fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
+    if moves_left_size == 0 {
+        return vec![];
+    }
+
+    let moves_left = moves_left.max(0).min(moves_left_size);
+    let mut moves_left_one_hot = vec![0f32; moves_left_size];
+    moves_left_one_hot[moves_left - 1] = 1.0;
+
+    moves_left_one_hot
 }
 
 #[allow(non_snake_case)]
@@ -792,248 +1046,4 @@ fn run_cmd(cmd: &str) -> Result<()> {
     info!("OUTPUT: {:?}", result);
 
     Ok(())
-}
-
-type StatesToAnalyse<S, A, V> = (usize, S, Sender<GameStateAnalysis<A, V>>);
-type AnalysisToSend<A, V> = (
-    usize,
-    GameStateAnalysis<A, V>,
-    Sender<GameStateAnalysis<A, V>>,
-);
-
-struct BatchingModel<S, A, V, E, Map, Te> {
-    states_to_analyse: ConcurrentChunkQueue<StatesToAnalyse<S, A, V>>,
-    states_analysed: CompletedAnalysisOrdered<A, V>,
-    transposition_table: Arc<Option<TranspositionTable<Te>>>,
-    engine: E,
-    mapper: Arc<Map>,
-    reporter: Arc<Reporter<Te>>,
-}
-
-impl<S, A, V, E, Map, Te> BatchingModel<S, A, V, E, Map, Te>
-where
-    S: PartialEq + Hash,
-    A: Clone,
-    V: Value,
-    E: GameEngine<State = S, Action = A, Value = V>,
-    Map: Mapper<S, A, V, Te>,
-    Te: Send + 'static,
-{
-    fn new(
-        engine: E,
-        mapper: Arc<Map>,
-        transposition_table: Arc<Option<TranspositionTable<Te>>>,
-        reporter: Arc<Reporter<Te>>,
-        analysis_request_threads: usize,
-        batch_size: usize,
-    ) -> Self {
-        let analysis_capacity = batch_size * analysis_request_threads;
-        let states_to_analyse = ConcurrentChunkQueue::new(batch_size, analysis_capacity);
-        let states_analysed = CompletedAnalysisOrdered::with_capacity(analysis_capacity);
-
-        Self {
-            states_to_analyse,
-            states_analysed,
-            transposition_table,
-            reporter,
-            engine,
-            mapper,
-        }
-    }
-
-    fn collect_analysis<I: Iterator<Item = StatesToAnalyse<S, A, V>>>(
-        &self,
-        states: I,
-        analysis: AnalysisResults,
-        output_size: usize,
-        moves_left_size: usize,
-    ) -> Vec<AnalysisToSend<A, V>> {
-        let mut analysis_len = 0;
-        let mut policy_head_iter = analysis.policy_head_output.iter();
-        let mut value_head_iter = analysis.value_head_output.iter();
-        let mut moves_left_head_iter = analysis
-            .moves_left_head_output
-            .as_ref()
-            .map(|ml| ml.iter().map(|v| v.to_f32()));
-
-        let states_to_tx = states
-            .map(|(id, game_state, tx)| {
-                let mapper = &*self.mapper;
-                let transposition_table_entry = mapper.map_output_to_transposition_entry(
-                    &game_state,
-                    policy_head_iter.by_ref().take(output_size).copied(),
-                    *value_head_iter
-                        .next()
-                        .expect("Expected value score to exist"),
-                    moves_left_head_iter
-                        .as_mut()
-                        .map(|iter| moves_left_expected_value(iter.by_ref().take(moves_left_size)))
-                        .unwrap_or(0.0),
-                );
-                let analysis = mapper
-                    .map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
-                if let Some(transposition_table) = &*self.transposition_table {
-                    let transposition_key = self.mapper.get_transposition_key(&game_state);
-                    transposition_table.set(transposition_key, transposition_table_entry);
-                }
-
-                analysis_len += 1;
-
-                (id, analysis, tx)
-            })
-            .collect();
-
-        debug_assert!(
-            policy_head_iter.next().is_none(),
-            "Not all policy head values were used."
-        );
-        debug_assert!(
-            value_head_iter.next().is_none(),
-            "Not all value head values were used."
-        );
-        debug_assert!(
-            moves_left_head_iter
-                .and_then(|mut iter| iter.next())
-                .is_none(),
-            "Not all moves left head values were used."
-        );
-
-        self.reporter.set_batch_size(analysis_len);
-
-        states_to_tx
-    }
-
-    fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, V>> {
-        if let Some(value) = self.engine.is_terminal_state(game_state) {
-            self.reporter.set_terminal();
-
-            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
-        }
-
-        if let Some(transposition_table) = &*self.transposition_table {
-            if let Some(transposition_entry) =
-                transposition_table.get(self.mapper.get_transposition_key(game_state))
-            {
-                let analysis = self
-                    .mapper
-                    .map_transposition_entry_to_analysis(game_state, &*transposition_entry);
-                drop(transposition_entry);
-                self.reporter.set_cache_hit();
-
-                return Some(analysis);
-            }
-
-            self.reporter.set_cache_miss();
-        }
-
-        self.reporter.set_analyzed_node();
-
-        None
-    }
-
-    fn request(&self, game_state: S, tx: Sender<GameStateAnalysis<A, V>>) {
-        let id = self.states_analysed.get_id();
-
-        self.states_to_analyse.push((id, game_state, tx));
-    }
-}
-
-struct StateToTransmit<A, V> {
-    id: usize,
-    tx: Sender<GameStateAnalysis<A, V>>,
-    analysis: GameStateAnalysis<A, V>,
-}
-
-impl<A, V> Ord for StateToTransmit<A, V> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.id.cmp(&self.id)
-    }
-}
-
-impl<A, V> PartialOrd for StateToTransmit<A, V> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(other.id.cmp(&self.id))
-    }
-}
-
-impl<A, V> PartialEq for StateToTransmit<A, V> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<A, V> Eq for StateToTransmit<A, V> {}
-
-struct CompletedAnalysisOrdered<A, V> {
-    states_to_tx: Mutex<(usize, BinaryHeap<StateToTransmit<A, V>>)>,
-    id_generator: AtomicUsize,
-}
-
-impl<A, V> CompletedAnalysisOrdered<A, V> {
-    fn with_capacity(n: usize) -> Self {
-        Self {
-            states_to_tx: Mutex::new((1, BinaryHeap::with_capacity(n))),
-            id_generator: AtomicUsize::new(1),
-        }
-    }
-
-    fn get_id(&self) -> usize {
-        self.id_generator.fetch_add(1, Ordering::Relaxed)
-    }
-
-    fn send_analysis<I>(&self, analysis: I)
-    where
-        I: Iterator<
-            Item = (
-                usize,
-                GameStateAnalysis<A, V>,
-                Sender<GameStateAnalysis<A, V>>,
-            ),
-        >,
-    {
-        let mut lock = self.states_to_tx.lock();
-        let (ref mut next_id_to_tx, ref mut states_to_tx) = *lock;
-
-        for (id, analysis, tx) in analysis {
-            if id == *next_id_to_tx {
-                *next_id_to_tx += 1;
-                if tx.send(analysis).is_err() {
-                    panic!("Failed to send analysis");
-                }
-
-                while let Some(val) = states_to_tx.peek_mut() {
-                    if val.id == *next_id_to_tx {
-                        let state_to_tx = PeekMut::pop(val);
-                        *next_id_to_tx += 1;
-                        if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
-                            panic!("Failed to send analysis");
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            } else {
-                states_to_tx.push(StateToTransmit { id, analysis, tx })
-            }
-        }
-    }
-}
-
-pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {
-    moves_left_scores
-        .enumerate()
-        .map(|(i, s)| (i + 1) as f32 * s)
-        .fold(0.0f32, |s, e| s + e)
-}
-
-fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
-    if moves_left_size == 0 {
-        return vec![];
-    }
-
-    let moves_left = moves_left.max(0).min(moves_left_size);
-    let mut moves_left_one_hot = vec![0f32; moves_left_size];
-    moves_left_one_hot[moves_left - 1] = 1.0;
-
-    moves_left_one_hot
 }
