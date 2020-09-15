@@ -23,15 +23,17 @@ use std::sync::{
 };
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
-use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor};
-use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
+use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor, TensorType};
+use tokio::sync::{oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::super::analytics::{self, GameStateAnalysis};
 use super::super::model::{Model as ModelTrait, TrainOptions};
 use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
-use super::constants::{ANALYSIS_REQUEST_BATCH_SIZE, TRAIN_DATA_CHUNK_SIZE};
+use super::constants::{
+    ANALYSIS_REQUEST_BATCH_SIZE, ANALYSIS_REQUEST_THREADS, TRAIN_DATA_CHUNK_SIZE,
+};
 use super::mode::Mode;
 use super::paths::Paths;
 use super::reporter::Reporter;
@@ -44,6 +46,7 @@ static ALLOCATOR: std::alloc::System = std::alloc::System;
 pub struct TensorflowModel<S, A, V, E, Map, Te> {
     model_info: ModelInfo,
     batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
+    analysis_request_threads: usize,
     engine: Arc<E>,
     mapper: Arc<Map>,
     options: TensorflowModelOptions,
@@ -104,6 +107,13 @@ where
             })
             .unwrap_or(ANALYSIS_REQUEST_BATCH_SIZE);
 
+        let analysis_request_threads = std::env::var("ANALYSIS_REQUEST_THREADS")
+            .map(|v| {
+                v.parse::<usize>()
+                    .expect("ANALYSIS_REQUEST_THREADS must be a valid int")
+            })
+            .unwrap_or(ANALYSIS_REQUEST_THREADS);
+
         if std::env::var("TF_CPP_MIN_LOG_LEVEL").is_err() {
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
         }
@@ -115,6 +125,7 @@ where
         let batching_model = Mutex::new(Weak::new());
 
         Self {
+            analysis_request_threads,
             batch_size,
             model_info,
             batching_model,
@@ -148,6 +159,7 @@ where
             reporter,
             self.model_info.clone(),
             self.batch_size,
+            self.analysis_request_threads,
             self.options.output_size,
             self.options.moves_left_size,
             receiver,
@@ -213,12 +225,10 @@ where
 
 struct Predictor {
     session: SessionAndOps,
-    input_dimensions: [u64; 3],
-    input_tensors: Vec<Tensor<f16>>,
 }
 
 impl Predictor {
-    fn new(model_info: &ModelInfo, input_dimensions: [u64; 3]) -> Self {
+    fn new(model_info: &ModelInfo) -> Self {
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
@@ -264,12 +274,10 @@ impl Predictor {
                 op_policy_head,
                 op_moves_left_head,
             },
-            input_dimensions,
-            input_tensors: vec![],
         }
     }
 
-    fn predict(&self, tensor: &mut Tensor<f16>, batch_size: usize) -> Result<AnalysisResults> {
+    fn predict(&self, tensor: &Tensor<f16>) -> Result<AnalysisResults> {
         let session = &self.session;
 
         let mut output_step = SessionRunArgs::new();
@@ -306,30 +314,11 @@ impl Predictor {
         })
     }
 
-    fn get_tensor<'a>(
-        tensors: &'a mut Vec<Tensor<f16>>,
-        input_dims: &[u64; 3],
-        size: usize,
-    ) -> &'a mut Tensor<f16> {
-        while tensors.len() < size {
-            tensors.push(Tensor::new(&[
-                tensors.len() as u64 + 1,
-                input_dims[0],
-                input_dims[1],
-                input_dims[2],
-            ]));
+    fn fill_tensor<'a, T: Iterator<Item = &'a [f16]>>(tensor: &mut Tensor<f16>, inputs: T) {
+        for (i, input) in inputs.enumerate() {
+            let input_width = input.len();
+            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(&input);
         }
-
-        &mut tensors[size - 1]
-    }
-
-    fn fill_tensor(tensor: &mut Tensor<f16>, slice: &[f16]) {
-        // for (e, v) in tensor.iter_mut().zip(iter) {
-        //     e.clone_from(&v);
-        // }
-        let tensor = &mut tensor[..slice.len()];
-
-        tensor.copy_from_slice(slice);
     }
 }
 
@@ -474,6 +463,7 @@ where
         reporter: Arc<Reporter<Te>>,
         model_info: ModelInfo,
         batch_size: usize,
+        analysis_request_threads: usize,
         output_size: usize,
         moves_left_size: usize,
         states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
@@ -488,6 +478,7 @@ where
             output_size,
             moves_left_size,
             batch_size,
+            analysis_request_threads,
         );
 
         Self {
@@ -508,12 +499,12 @@ where
         output_size: usize,
         moves_left_size: usize,
         batch_size: usize,
+        analysis_request_threads: usize,
     ) {
         let model_info = model_info.clone();
         let mapper = mapper.clone();
-        // @TODO: Hardcoded
-        let (states_to_predict_tx, mut states_to_predict_rx) =
-            crossbeam::channel::unbounded::<StatesToAnalyse<S, A, V>>();
+
+        let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
 
         let transposition_table_clone = transposition_table.clone();
         let mapper_clone = mapper.clone();
@@ -533,48 +524,36 @@ where
                             .unwrap_or_else(|_| panic!("Channel Failure 1"));
                     }
                     None => {
+                        let input =
+                            mapper_clone.game_state_to_input(&state_to_analyse, Mode::Infer);
                         states_to_predict_tx
-                            .send((id, state_to_analyse, unordered_tx, tx))
+                            .send((id, state_to_analyse, input, unordered_tx, tx))
                             .unwrap_or_else(|_| panic!("Channel Failure 2"));
                     }
                 };
             }
         });
 
-        let predictor = Arc::new(Predictor::new(&model_info, mapper.get_input_dimensions()));
+        let predictor = Arc::new(Predictor::new(&model_info));
+        let (predicted_states_tx, predicted_states_rx) = crossbeam::channel::unbounded();
 
-        // @TODO: Hardcoded
-        for _ in 0..2 {
-            let transposition_table = transposition_table.clone();
+        for _ in 0..analysis_request_threads {
             let mapper = mapper.clone();
             let reporter = reporter.clone();
             let predictor = predictor.clone();
             let states_to_predict_rx = states_to_predict_rx.clone();
+            let predicted_states_tx = predicted_states_tx.clone();
 
             tokio::task::spawn_blocking(move || {
                 let dimensions = mapper.get_input_dimensions();
-                // let mut tensor_pool = vec![];
-                let mut states_to_analyse = Vec::with_capacity(batch_size);
-                let mut tensor = Tensor::new(&[
-                    batch_size as u64,
-                    dimensions[0],
-                    dimensions[1],
-                    dimensions[2],
-                ]);
-                let mut inputs = Vec::with_capacity(
-                    batch_size
-                        * dimensions[0] as usize
-                        * dimensions[1] as usize
-                        * dimensions[2] as usize,
-                );
+                let mut tensor_pool = TensorPool::new(dimensions);
 
                 while let Ok(state_to_analyze) = states_to_predict_rx.recv() {
-                    // @TODO: Move back up
-                    inputs.extend(mapper.game_state_to_input(&state_to_analyze.1, Mode::Infer));
+                    let mut states_to_analyse = Vec::with_capacity(batch_size);
+
                     states_to_analyse.push(state_to_analyze);
 
                     while let Ok(state_to_analyze) = states_to_predict_rx.try_recv() {
-                        inputs.extend(mapper.game_state_to_input(&state_to_analyze.1, Mode::Infer));
                         states_to_analyse.push(state_to_analyze);
 
                         if states_to_analyse.len() == batch_size {
@@ -582,64 +561,68 @@ where
                         }
                     }
 
+                    let tensor = tensor_pool.get(states_to_analyse.len());
+
                     reporter.set_batch_size(states_to_analyse.len());
 
-                    // let tensor = Predictor::get_tensor(
-                    //     &mut tensor_pool,
-                    //     &dimensions,
-                    //     states_to_analyse.len(),
-                    // );
-
-                    Predictor::fill_tensor(&mut tensor, &inputs);
-                    inputs.clear();
+                    Predictor::fill_tensor(
+                        tensor,
+                        states_to_analyse
+                            .iter()
+                            .map(|(_, _, input, _, _)| input.as_slice()),
+                    );
 
                     let predictions = predictor
-                        .predict(&mut tensor, states_to_analyse.len())
+                        .predict(tensor)
                         .expect("Expected predict to be successful");
 
-                    // let mapper = mapper.clone();
-                    // let transposition_table = transposition_table.clone();
-                    // tokio::task::spawn_blocking(move || {
-                    let mut policy_head_iter = predictions.policy_head_output.iter();
-                    let mut value_head_iter = predictions.value_head_output.iter();
-                    let mut moves_left_head_iter = predictions
-                        .moves_left_head_output
-                        .as_ref()
-                        .map(|ml| ml.iter().map(|v| v.to_f32()));
-
-                    let transposition_table = &*transposition_table;
-                    for (id, game_state, tx, tx2) in states_to_analyse.drain(..) {
-                        let transposition_table_entry = mapper.map_output_to_transposition_entry(
-                            &game_state,
-                            policy_head_iter.by_ref().take(output_size).copied(),
-                            *value_head_iter
-                                .next()
-                                .expect("Expected value score to exist"),
-                            moves_left_head_iter
-                                .as_mut()
-                                .map(|iter| {
-                                    moves_left_expected_value(iter.by_ref().take(moves_left_size))
-                                })
-                                .unwrap_or(0.0),
-                        );
-
-                        let analysis = mapper.map_transposition_entry_to_analysis(
-                            &game_state,
-                            &transposition_table_entry,
-                        );
-
-                        if let Some(transposition_table) = transposition_table {
-                            let transposition_key = mapper.get_transposition_key(&game_state);
-                            transposition_table.set(transposition_key, transposition_table_entry);
-                        }
-
-                        tx.send((id, analysis, tx2))
-                            .unwrap_or_else(|_| panic!("Channel Failure 4"));
-                    }
-                    // });
+                    predicted_states_tx
+                        .send((states_to_analyse, predictions))
+                        .unwrap_or_else(|_| panic!("Failed to send value in channel."));
                 }
             });
         }
+
+        tokio::task::spawn_blocking(move || {
+            while let Ok((analyzed_states, predictions)) = predicted_states_rx.recv() {
+                let mut policy_head_iter = predictions.policy_head_output.iter();
+                let mut value_head_iter = predictions.value_head_output.iter();
+                let mut moves_left_head_iter = predictions
+                    .moves_left_head_output
+                    .as_ref()
+                    .map(|ml| ml.iter().map(|v| v.to_f32()));
+
+                let transposition_table = &*transposition_table;
+                for (id, game_state, _, tx, tx2) in analyzed_states.into_iter() {
+                    let transposition_table_entry = mapper.map_output_to_transposition_entry(
+                        &game_state,
+                        policy_head_iter.by_ref().take(output_size).copied(),
+                        *value_head_iter
+                            .next()
+                            .expect("Expected value score to exist"),
+                        moves_left_head_iter
+                            .as_mut()
+                            .map(|iter| {
+                                moves_left_expected_value(iter.by_ref().take(moves_left_size))
+                            })
+                            .unwrap_or(0.0),
+                    );
+
+                    let analysis = mapper.map_transposition_entry_to_analysis(
+                        &game_state,
+                        &transposition_table_entry,
+                    );
+
+                    if let Some(transposition_table) = transposition_table {
+                        let transposition_key = mapper.get_transposition_key(&game_state);
+                        transposition_table.set(transposition_key, transposition_table_entry);
+                    }
+
+                    tx.send((id, analysis, tx2))
+                        .unwrap_or_else(|_| panic!("Channel Failure 4"));
+                }
+            }
+        });
     }
 
     fn try_immediate_analysis(
@@ -766,6 +749,35 @@ impl CompletedAnalysisOrdered {
                 }
             }
         });
+    }
+}
+
+struct TensorPool<T: TensorType> {
+    tensors: Vec<Tensor<T>>,
+    dimensions: [u64; 3],
+}
+
+impl<T: TensorType> TensorPool<T> {
+    fn new(dimensions: [u64; 3]) -> Self {
+        Self {
+            tensors: vec![],
+            dimensions,
+        }
+    }
+
+    fn get(&mut self, size: usize) -> &mut Tensor<T> {
+        let next_matching_power = (size as f64).log2().ceil() as usize + 1;
+        let tensors = &mut self.tensors;
+        while tensors.len() < next_matching_power {
+            tensors.push(Tensor::new(&[
+                2u32.pow(tensors.len() as u32) as u64,
+                self.dimensions[0],
+                self.dimensions[1],
+                self.dimensions[2],
+            ]));
+        }
+
+        &mut tensors[next_matching_power - 1]
     }
 }
 
