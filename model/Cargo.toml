@@ -13,6 +13,7 @@ common = { path = "../common" }
 engine = { path = "../engine" }
 
 anyhow = "1.0"
+crossbeam = "0.7"
 half = "1.6"
 itertools = "0.9"
 log = "0.4"
