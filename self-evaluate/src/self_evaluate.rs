@@ -9,6 +9,7 @@ use std::iter::{repeat, repeat_with};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
+use tokio::runtime::Handle;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
@@ -77,6 +78,7 @@ impl SelfEvaluate {
 
         let num_games_to_play = options.num_games;
         let batch_size = options.batch_size;
+        let runtime_handle = Handle::current();
 
         let match_result = crossbeam::scope(move |s| {
             let mut handles = vec![];
@@ -85,6 +87,7 @@ impl SelfEvaluate {
 
             for thread_num in 0..SELF_EVALUATE_PARALLELISM {
                 let game_results_tx = game_results_tx.clone();
+                let runtime_handle = runtime_handle.clone();
 
                 let num_games_to_play_this_thread = num_games_per_thread
                     + if thread_num == 0 {
@@ -120,7 +123,7 @@ impl SelfEvaluate {
                         options,
                     );
 
-                    common::runtime::block_on(f)
+                    runtime_handle.block_on(f)
                 }));
             }
 

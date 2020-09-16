@@ -116,7 +116,7 @@ where
 
     pub fn learn<M, T, F>(&mut self, model_factory: &F) -> Result<()>
     where
-        M: Model<Action = A, State = S, Analyzer = T, Value = V>,
+        M: Model<Action = A, State = S, Analyzer = T, Value = V> + Send + Sync,
         T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
         F: ModelFactory<M = M>,
         V: Clone + Send + Debug,
@@ -182,7 +182,7 @@ where
         options: &SelfLearnOptions,
     ) -> Result<()>
     where
-        M: Model<State = S, Action = A, Analyzer = T, Value = V>,
+        M: Model<State = S, Action = A, Analyzer = T, Value = V> + Send + Sync,
         T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
         V: Send + Debug,
     {
@@ -200,7 +200,6 @@ where
 
             for thread_num in 0..SELF_PLAY_PARALLELISM {
                 let game_results_tx = game_results_tx.clone();
-                let analyzer = model.get_game_state_analyzer();
                 let runtime_handle = runtime_handle.clone();
                 let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
 
@@ -232,7 +231,7 @@ where
                         self_play_batch_size,
                         game_results_tx,
                         engine,
-                        &analyzer,
+                        model,
                         &self_play_options
                     );
 
@@ -271,16 +270,16 @@ where
         Ok(())
     }
 
-    async fn play_games<T>(
+    async fn play_games<M>(
         num_games_to_play: usize,
         self_play_batch_size: usize,
         results_channel: Sender<SelfPlayMetrics<A, V>>,
         game_engine: &E,
-        analyzer: &T,
+        model: &M,
         self_play_options: &SelfPlayOptions,
     ) -> Result<()>
     where
-        T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
+        M: Model<Action = A, State = S, Value = V> + Send,
     {
         let mut num_games_to_play = num_games_to_play;
         let mut self_play_metric_stream = FuturesUnordered::new();
@@ -290,7 +289,7 @@ where
         for _ in 0..std::cmp::min(num_games_to_play, self_play_batch_size) {
             self_play_metric_stream.push(self_play::self_play(
                 game_engine,
-                analyzer,
+                model,
                 &self_play_options,
             ));
         }
@@ -306,7 +305,7 @@ where
             if num_games_to_play - self_play_metric_stream.len() > 0 {
                 self_play_metric_stream.push(self_play::self_play(
                     game_engine,
-                    analyzer,
+                    model,
                     &self_play_options,
                 ));
             }

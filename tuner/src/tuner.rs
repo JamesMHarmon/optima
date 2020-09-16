@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
+use tokio::runtime::Handle;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
@@ -90,6 +91,7 @@ impl Tuner {
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
         let batch_size = options.batch_size;
+        let runtime_handle = Handle::current();
         let players = players.iter().enumerate().collect::<Vec<_>>();
 
         crossbeam::scope(move |s| {
@@ -132,6 +134,7 @@ impl Tuner {
             {
                 let game_results_tx = game_results_tx.clone();
                 let num_games_to_play_this_thread = games_to_play.len();
+                let runtime_handle = runtime_handle.clone();
 
                 s.spawn(move |_| {
                     info!(
@@ -142,7 +145,7 @@ impl Tuner {
                     let f =
                         Self::play_games(games_to_play, batch_size, game_results_tx, game_engine);
 
-                    common::runtime::block_on(f).unwrap();
+                    runtime_handle.block_on(f).unwrap();
                 });
             }
 

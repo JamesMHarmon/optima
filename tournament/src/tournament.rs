@@ -8,6 +8,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
+use tokio::runtime::Handle;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
@@ -73,6 +74,7 @@ impl Tournament {
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
         let batch_size = options.batch_size;
+        let runtime_handle = Handle::current();
 
         let tournament_result = crossbeam::scope(move |s| {
             let games_to_play = generate_games_to_play(models, options.num_players)
@@ -97,6 +99,7 @@ impl Tournament {
             {
                 let game_results_tx = game_results_tx.clone();
                 let num_games_to_play_this_thread = games_to_play.len();
+                let runtime_handle = runtime_handle.clone();
 
                 handles.push(s.spawn(move |_| -> Result<()> {
                     info!(
@@ -112,7 +115,7 @@ impl Tournament {
                         options,
                     );
 
-                    common::runtime::block_on(f).unwrap();
+                    runtime_handle.block_on(f).unwrap();
 
                     Ok(())
                 }));

@@ -7,7 +7,7 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use mcts::mcts::{DirichletOptions, MCTSOptions, MCTS};
-use model::analytics::GameAnalyzer;
+use model::model::Model;
 use model::node_metrics::NodeMetrics;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,7 +59,7 @@ impl<A, V> SelfPlayMetrics<A, V> {
 #[allow(non_snake_case)]
 pub async fn self_play<'a, S, A, E, M, V>(
     game_engine: &'a E,
-    analytics: &'a M,
+    model: &'a M,
     options: &'a SelfPlayOptions,
 ) -> Result<SelfPlayMetrics<A, V>>
 where
@@ -67,19 +67,20 @@ where
     A: Clone + Eq + Debug,
     V: Value,
     E: 'a + GameEngine<State = S, Action = A, Value = V>,
-    M: 'a + GameAnalyzer<State = S, Action = A, Value = V>,
+    M: 'a + Model<State = S, Action = A, Value = V>,
 {
     let game_state: S = S::initial();
     let num_actions = 0;
     let cpuct_base = options.cpuct_base;
     let cpuct_init = options.cpuct_init;
     let cpuct_root_scaling = options.cpuct_root_scaling;
+    let analyzer = model.get_game_state_analyzer();
 
     let mut mcts = MCTS::with_capacity(
         game_state,
         num_actions,
         game_engine,
-        analytics,
+        &analyzer,
         MCTSOptions::<S, _, _>::new(
             Some(DirichletOptions {
                 epsilon: options.epsilon,

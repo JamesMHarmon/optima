@@ -24,7 +24,7 @@ use std::sync::{
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor, TensorType};
-use tokio::sync::{oneshot, oneshot::Receiver, oneshot::Sender};
+use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::super::analytics::{self, GameStateAnalysis};
 use super::super::model::{Model as ModelTrait, TrainOptions};
@@ -43,6 +43,7 @@ use super::transposition_table::TranspositionTable;
 #[cfg(feature = "tensorflow_system_alloc")]
 static ALLOCATOR: std::alloc::System = std::alloc::System;
 
+#[allow(clippy::type_complexity)]
 pub struct TensorflowModel<S, A, V, E, Map, Te> {
     model_info: ModelInfo,
     batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
@@ -344,7 +345,7 @@ type BatchingModelAndSender<S, A, V, E, Map, Te> = (
 pub struct GameAnalyzer<S, A, V, E, Map, Te> {
     batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>,
     analysed_state_ordered: CompletedAnalysisOrdered,
-    analysed_state_sender: UnboundedSender<AnalysisToSend<A, V>>,
+    analysed_state_sender: mpsc::UnboundedSender<AnalysisToSend<A, V>>,
 }
 
 impl<S, A, V, E, Map, Te> GameAnalyzer<S, A, V, E, Map, Te>
@@ -353,8 +354,7 @@ where
     V: Send + 'static,
 {
     fn new(batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>) -> Self {
-        // @TODO: Hardcoded
-        let (analysed_state_sender, analyzed_state_receiver) = crossbeam::channel::unbounded();
+        let (analysed_state_sender, analyzed_state_receiver) = mpsc::unbounded_channel();
 
         let analysed_state_ordered =
             CompletedAnalysisOrdered::with_capacity(analyzed_state_receiver, 1);
@@ -430,7 +430,7 @@ impl<T> Future for UnwrappedReceiver<T> {
 type StatesToAnalyse<S, A, V> = (
     usize,
     S,
-    UnboundedSender<AnalysisToSend<A, V>>,
+    mpsc::UnboundedSender<AnalysisToSend<A, V>>,
     Sender<GameStateAnalysis<A, V>>,
 );
 
@@ -456,6 +456,7 @@ where
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
     Te: Send + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         engine: Arc<E>,
         mapper: Arc<Map>,
@@ -489,6 +490,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
         engine: Arc<E>,
         mapper: Arc<Map>,
@@ -501,9 +503,6 @@ where
         batch_size: usize,
         analysis_request_threads: usize,
     ) {
-        let model_info = model_info.clone();
-        let mapper = mapper.clone();
-
         let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
 
         let transposition_table_clone = transposition_table.clone();
@@ -691,7 +690,7 @@ struct CompletedAnalysisOrdered {
 
 impl CompletedAnalysisOrdered {
     fn with_capacity<A, V>(
-        analyzed_state_receiver: UnboundedReceiver<AnalysisToSend<A, V>>,
+        analyzed_state_receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, V>>,
         n: usize,
     ) -> Self
     where
@@ -710,22 +709,19 @@ impl CompletedAnalysisOrdered {
     }
 
     fn create_ordering_task<A, V>(
-        receiver: UnboundedReceiver<(
-            usize,
-            GameStateAnalysis<A, V>,
-            Sender<GameStateAnalysis<A, V>>,
-        )>,
+        receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, V>>,
         capacity: usize,
     ) where
         A: Send + 'static,
         V: Send + 'static,
     {
-        tokio::task::spawn_blocking(move || {
+        tokio::task::spawn(async move {
             let mut analyzed_states_to_tx =
                 BinaryHeap::<StateToTransmit<A, V>>::with_capacity(capacity);
             let mut next_id_to_tx: usize = 1;
+            let mut receiver = receiver;
 
-            while let Ok(analysed_state) = receiver.recv() {
+            while let Some(analysed_state) = receiver.recv().await {
                 let (id, analysis, tx) = analysed_state;
                 if id == next_id_to_tx {
                     next_id_to_tx += 1;
