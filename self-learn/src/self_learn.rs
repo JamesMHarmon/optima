@@ -1,11 +1,11 @@
 use anyhow::Result;
+use crossbeam::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::mpsc;
 use std::time::Instant;
 
 use engine::engine::GameEngine;
@@ -190,7 +190,9 @@ where
         let starting_run_time = Instant::now();
         let mut num_games_to_play = num_games_to_play;
 
-        let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
+        let (game_results_tx, game_results_rx) = crossbeam::channel::unbounded();
+
+        let runtime_handle = tokio::runtime::Handle::current();
 
         crossbeam::scope(move |s| {
             let num_games_per_thread = num_games_to_play / SELF_PLAY_PARALLELISM;
@@ -199,6 +201,7 @@ where
             for thread_num in 0..SELF_PLAY_PARALLELISM {
                 let game_results_tx = game_results_tx.clone();
                 let analyzer = model.get_game_state_analyzer();
+                let runtime_handle = runtime_handle.clone();
                 let num_games_to_play_this_thread = num_games_per_thread + if thread_num == 0 { num_games_per_thread_remainder } else { 0 };
 
                 let self_play_options = SelfPlayOptions {
@@ -233,7 +236,7 @@ where
                         &self_play_options
                     );
 
-                    let res = common::runtime::block_on(f);
+                    let res = runtime_handle.block_on(f);
 
                     res.unwrap();
                 });
@@ -271,7 +274,7 @@ where
     async fn play_games<T>(
         num_games_to_play: usize,
         self_play_batch_size: usize,
-        results_channel: mpsc::Sender<SelfPlayMetrics<A, V>>,
+        results_channel: Sender<SelfPlayMetrics<A, V>>,
         game_engine: &E,
         analyzer: &T,
         self_play_options: &SelfPlayOptions,

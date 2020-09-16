@@ -56,7 +56,7 @@ where
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    fn spawn_timer(alive: Arc<AtomicBool>, inner: Arc<ReporterInner<Te>>) -> JoinHandle<()> {
+    fn spawn_timer(alive: Arc<AtomicBool>, inner: Arc<ReporterInner<Te>>) {
         tokio::task::spawn(async move {
             let duration = Duration::from_secs(5);
             let mut interval = time::interval(duration);
@@ -69,7 +69,7 @@ where
 
                 inner.report(duration);
             }
-        })
+        });
     }
 }
 
