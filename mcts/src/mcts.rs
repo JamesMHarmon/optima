@@ -34,8 +34,8 @@ pub struct DirichletOptions {
 pub struct MCTSOptions<S, C, T>
 where
     S: GameState,
-    C: Fn(&S, usize, usize, bool) -> f32,
-    T: Fn(&S, usize) -> f32,
+    C: Fn(&S, usize, bool) -> f32,
+    T: Fn(&S) -> f32,
 {
     dirichlet: Option<DirichletOptions>,
     fpu: f32,
@@ -55,8 +55,8 @@ where
 impl<S, C, T> MCTSOptions<S, C, T>
 where
     S: GameState,
-    C: Fn(&S, usize, usize, bool) -> f32,
-    T: Fn(&S, usize) -> f32,
+    C: Fn(&S, usize, bool) -> f32,
+    T: Fn(&S) -> f32,
 {
     pub fn new(
         dirichlet: Option<DirichletOptions>,
@@ -95,14 +95,13 @@ where
     V: Value,
     E: GameEngine,
     M: GameAnalyzer,
-    C: Fn(&S, usize, usize, bool) -> f32,
-    T: Fn(&S, usize) -> f32,
+    C: Fn(&S, usize, bool) -> f32,
+    T: Fn(&S) -> f32,
 {
     options: MCTSOptions<S, C, T>,
     game_engine: &'a E,
     analyzer: &'a M,
     starting_game_state: Option<S>,
-    starting_num_actions: Option<usize>,
     root: Option<Index>,
     arena: NodeArena<MCTSNode<S, A, V>>,
     focus_actions: Vec<A>,
@@ -116,12 +115,11 @@ where
     V: Value,
     E: 'a + GameEngine<State = S, Action = A, Value = V>,
     M: 'a + GameAnalyzer<State = S, Action = A, Value = V>,
-    C: Fn(&S, usize, usize, bool) -> f32,
-    T: Fn(&S, usize) -> f32,
+    C: Fn(&S, usize, bool) -> f32,
+    T: Fn(&S) -> f32,
 {
     pub fn new(
         game_state: S,
-        actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
         options: MCTSOptions<S, C, T>,
@@ -131,7 +129,6 @@ where
             game_engine,
             analyzer,
             starting_game_state: Some(game_state),
-            starting_num_actions: Some(actions),
             root: None,
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
@@ -140,7 +137,6 @@ where
 
     pub fn with_capacity(
         game_state: S,
-        actions: usize,
         game_engine: &'a E,
         analyzer: &'a M,
         options: MCTSOptions<S, C, T>,
@@ -151,7 +147,6 @@ where
             game_engine,
             analyzer,
             starting_game_state: Some(game_state),
-            starting_num_actions: Some(actions),
             root: None,
             arena: NodeArena::with_capacity(capacity * 2),
             focus_actions: vec![],
@@ -356,9 +351,8 @@ where
             let mut arena_mut = arena.get_mut();
             let node = arena_mut.node_mut(latest_index);
 
-            // If the node is a terminal node.
-            let children = &node.children;
-            if children.is_empty() {
+            if node.is_terminal() {
+                node.visits += 1;
                 Self::update_node_values(
                     &nodes_to_propagate_to_stack,
                     latest_index,
@@ -387,6 +381,7 @@ where
             let selected_child_node_node = &mut selected_child_node.node;
             let prev_visits = selected_child_node.visits;
             selected_child_node.visits += 1;
+            node.visits += 1;
 
             if let Some(selected_child_node_index) = selected_child_node_node.get_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
@@ -410,16 +405,11 @@ where
                 selected_child_node_node.mark_as_expanding();
                 let selected_action = selected_child_node.action.clone();
                 let new_game_state = game_engine.take_action(&node.game_state, &selected_action);
-                let prior_num_actions = node.num_actions;
 
                 drop(arena_mut);
 
-                let expanded_node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(
-                    new_game_state,
-                    prior_num_actions,
-                    analyzer,
-                )
-                .await;
+                let expanded_node =
+                    MCTS::<S, A, E, M, C, T, V>::expand_leaf(new_game_state, analyzer).await;
 
                 let mut arena_mut = arena.get_mut();
                 let expanded_node_index = arena_mut.insert(expanded_node);
@@ -493,7 +483,7 @@ where
             let temp = &self.options.temperature;
             let temperature_visit_offset = self.options.temperature_visit_offset;
             let game_state = &node.game_state;
-            let temp = temp(game_state, node.num_actions);
+            let temp = temp(game_state);
             drop(arena_ref);
 
             let child_node_details = self
@@ -562,9 +552,7 @@ where
         let game_engine = &self.game_engine;
 
         let arena_mut = &mut *self.arena.get_mut();
-        let root_node = arena_mut
-            .remove(root_index)
-            .ok_or_else(|| anyhow!("Root node should exist in arena."))?;
+        let root_node = arena_mut.remove(root_index);
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
         if let Err(err) = split_nodes {
@@ -582,20 +570,14 @@ where
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {
             if clear {
-                Self::clear_node_children(node_index, arena_mut);
+                Self::clear_node(node_index, arena_mut);
             }
 
             node_index
         } else {
-            let prior_num_actions = root_node.num_actions;
             let new_game_state = game_engine.take_action(&root_node.game_state, &action);
             let analyzer = &mut self.analyzer;
-            let node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(
-                new_game_state,
-                prior_num_actions,
-                analyzer,
-            )
-            .await;
+            let node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(new_game_state, analyzer).await;
             arena_mut.insert(node)
         };
 
@@ -605,18 +587,17 @@ where
     }
 
     fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<S, A, V>>) {
-        let children = arena
-            .remove(node_index)
-            .expect("Expected node in arena to exist.")
-            .children;
+        let children = arena.remove(node_index).children;
 
         for child_node_index in children.into_iter().filter_map(|n| n.node.get_index()) {
             Self::remove_nodes_from_arena(child_node_index, arena);
         }
     }
 
-    fn clear_node_children(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<S, A, V>>) {
-        let children = &mut arena.node_mut(node_index).children;
+    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<S, A, V>>) {
+        let node = arena.node_mut(node_index);
+        node.visits = 1;
+        let children = &mut node.children;
 
         for child in children.iter_mut() {
             child.visits = 0;
@@ -626,7 +607,7 @@ where
 
         let child_indexes: Vec<_> = children.iter().filter_map(|c| c.node.get_index()).collect();
         for child_index in child_indexes {
-            Self::clear_node_children(child_index, arena);
+            Self::clear_node(child_index, arena);
         }
     }
 
@@ -661,7 +642,7 @@ where
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
+        let cpuct = cpuct(&node.game_state, Nsb, is_root);
         let game_length_baseline =
             &Self::get_game_length_baseline(children, options.moves_left_threshold);
 
@@ -730,7 +711,7 @@ where
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(&node.game_state, node.num_actions, Nsb, is_root);
+        let cpuct = cpuct(&node.game_state, Nsb, is_root);
         let game_length_baseline =
             &Self::get_game_length_baseline(&children, options.moves_left_threshold);
 
@@ -770,14 +751,8 @@ where
         pucts
     }
 
-    async fn expand_leaf(
-        game_state: S,
-        prior_num_actions: usize,
-        analyzer: &M,
-    ) -> MCTSNode<S, A, V> {
-        let num_actions = prior_num_actions + 1;
-        MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(game_state, num_actions, analyzer)
-            .await
+    async fn expand_leaf(game_state: S, analyzer: &M) -> MCTSNode<S, A, V> {
+        MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(game_state, analyzer).await
     }
 
     async fn get_or_create_root_node(&mut self) -> Index {
@@ -788,22 +763,15 @@ where
         }
 
         let analyzer = &mut self.analyzer;
-        let starting_num_actions = &mut self.starting_num_actions;
         let starting_game_state = &mut self.starting_game_state;
 
         let starting_game_state = starting_game_state
             .take()
             .expect("Tried to use the same starting game state twice");
-        let starting_num_actions = starting_num_actions
-            .take()
-            .expect("Tried to use the same starting actions twice");
 
-        let root_node = MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(
-            starting_game_state,
-            starting_num_actions,
-            analyzer,
-        )
-        .await;
+        let root_node =
+            MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(starting_game_state, analyzer)
+                .await;
 
         let root_node_index = self.arena.get_mut().insert(root_node);
 
@@ -812,16 +780,11 @@ where
         root_node_index
     }
 
-    async fn analyse_and_create_node(
-        game_state: S,
-        actions: usize,
-        analyzer: &M,
-    ) -> MCTSNode<S, A, V> {
+    async fn analyse_and_create_node(game_state: S, analyzer: &M) -> MCTSNode<S, A, V> {
         let analysis_result = analyzer.get_state_analysis(&game_state).await;
 
         MCTSNode::new(
             game_state,
-            actions,
             analysis_result.value_score,
             analysis_result.policy_scores,
             analysis_result.moves_left,
@@ -847,7 +810,7 @@ where
     }
 
     fn get_Msa(
-        child: &MCTSChildNode<A>,
+        child: &MCTSEdge<A>,
         game_length_baseline: &GameLengthBaseline,
         options: &MCTSOptions<S, C, T>,
     ) -> f32 {
@@ -925,14 +888,14 @@ where
     }
 
     fn get_game_length_baseline(
-        nodes: &[MCTSChildNode<A>],
+        edges: &[MCTSEdge<A>],
         moves_left_threshold: f32,
     ) -> GameLengthBaseline {
         if moves_left_threshold >= 1.0 {
             return GameLengthBaseline::None;
         }
 
-        nodes
+        edges
             .iter()
             .max_by_key(|n| n.visits)
             .filter(|n| n.visits > 0)
@@ -971,19 +934,18 @@ enum GameLengthBaseline {
 impl<S, A, V> MCTSNode<S, A, V> {
     pub fn new(
         game_state: S,
-        num_actions: usize,
         value_score: V,
         policy_scores: Vec<ActionWithPolicy<A>>,
         moves_left_score: f32,
     ) -> Self {
         MCTSNode {
+            visits: 1,
             value_score,
             moves_left_score,
             game_state,
-            num_actions,
             children: policy_scores
                 .into_iter()
-                .map(|action_with_policy| MCTSChildNode {
+                .map(|action_with_policy| MCTSEdge {
                     visits: 0,
                     W: 0.0,
                     M: 0.0,
@@ -1003,7 +965,7 @@ struct NodeUpdateInfo {
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-struct MCTSChildNode<A> {
+struct MCTSEdge<A> {
     action: A,
     W: f32,
     M: f32,
@@ -1014,7 +976,7 @@ struct MCTSChildNode<A> {
 
 #[derive(Debug)]
 struct NodePUCT<'a, A> {
-    node: &'a MCTSChildNode<A>,
+    node: &'a MCTSEdge<A>,
     score: f32,
 }
 
@@ -1056,7 +1018,7 @@ impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
     }
 
     #[inline]
-    fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSChildNode<A> {
+    fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSEdge<A> {
         &mut self.0[index].children[child_index]
     }
 
@@ -1066,18 +1028,20 @@ impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
     }
 
     #[inline]
-    fn remove(&mut self, index: Index) -> Option<MCTSNode<S, A, V>> {
-        self.0.remove(index)
+    fn remove(&mut self, index: Index) -> MCTSNode<S, A, V> {
+        self.0
+            .remove(index)
+            .expect("Expected node to exist in the arena")
     }
 }
 
 #[derive(Debug)]
 struct MCTSNode<S, A, V> {
+    visits: usize,
     value_score: V,
     moves_left_score: f32,
     game_state: S,
-    num_actions: usize,
-    children: Vec<MCTSChildNode<A>>,
+    children: Vec<MCTSEdge<A>>,
 }
 
 impl<S, A, V> MCTSNode<S, A, V>
@@ -1085,15 +1049,19 @@ where
     A: Eq,
 {
     fn get_node_visits(&self) -> usize {
-        self.children.iter().map(|c| c.visits).sum::<usize>() + 1
+        self.visits
     }
 
-    fn get_child_of_action(&self, action: &A) -> Option<&MCTSChildNode<A>> {
+    fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
         self.children.iter().find(|c| c.action == *action)
     }
 
     fn get_position_of_action(&self, action: &A) -> Option<usize> {
         self.children.iter().position(|c| c.action == *action)
+    }
+
+    fn is_terminal(&self) -> bool {
+        self.children.is_empty()
     }
 }
 
@@ -1165,7 +1133,8 @@ mod tests {
         {
             assert_eq!(l_a, r_a);
             assert_approx_eq!(l_w, r_w, ERROR_DIFF_W);
-            let allowed_diff = ((*l_visits).max(*r_visits) as f32) * ERROR_DIFF + 0.9;
+            let max_visits = (*l_visits as usize).max(*r_visits as usize);
+            let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
             assert_approx_eq!(*l_visits as f32, *r_visits as f32, allowed_diff);
         }
     }
@@ -1173,13 +1142,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_is_deterministic() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state.to_owned(),
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1187,8 +1154,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1199,7 +1166,6 @@ mod tests {
 
         let mut mcts2 = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1207,8 +1173,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1229,13 +1195,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_chooses_best_p1_move() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1243,8 +1207,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 1.0,
-                |_, _| 0.0,
+                |_, _, _| 1.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1262,13 +1226,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_chooses_best_p2_move() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1276,8 +1238,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 1.0,
-                |_, _| 0.0,
+                |_, _, _| 1.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1299,13 +1261,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_should_overcome_policy_through_value() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1313,8 +1273,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 2.5,
-                |_, _| 0.0,
+                |_, _, _| 2.5,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1342,13 +1302,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_advance_to_next_works_without_search() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1356,8 +1314,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1374,13 +1332,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_metrics_returns_accurate_results() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1388,8 +1344,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 1.0,
-                |_, _| 0.0,
+                |_, _, _| 1.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1418,13 +1374,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_weights_policy_initially() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1432,8 +1386,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1462,13 +1416,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_with_single_node() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1476,8 +1428,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1506,13 +1458,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_with_two_nodes() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1520,8 +1470,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1550,13 +1500,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_works_from_provided_non_initial_game_state() {
         let game_state = CountingGameState::from_starting_count(true, 95);
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1564,8 +1512,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1594,13 +1542,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_correctly_handles_terminal_nodes_1() {
         let game_state = CountingGameState::from_starting_count(false, 99);
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1608,8 +1554,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1638,13 +1584,11 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_correctly_handles_terminal_nodes_2() {
         let game_state = CountingGameState::from_starting_count(true, 98);
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
 
         let mut mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1652,8 +1596,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1682,14 +1626,12 @@ mod tests {
     #[tokio::test]
     async fn test_mcts_clear_nodes_results_in_same_outcome() {
         let game_state = CountingGameState::initial();
-        let actions = 0;
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
         let search_num_visits = 800;
 
         let mut non_clear_mcts = MCTS::new(
             game_state.clone(),
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1697,8 +1639,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1725,7 +1667,6 @@ mod tests {
 
         let mut clear_mcts = MCTS::new(
             game_state.clone(),
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1733,8 +1674,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,
@@ -1752,7 +1693,6 @@ mod tests {
 
         let mut initial_mcts = MCTS::new(
             game_state,
-            actions,
             &game_engine,
             &analyzer,
             MCTSOptions::new(
@@ -1760,8 +1700,8 @@ mod tests {
                 0.0,
                 0.0,
                 true,
-                |_, _, _, _| 3.0,
-                |_, _| 0.0,
+                |_, _, _| 3.0,
+                |_| 0.0,
                 0.0,
                 1.0,
                 10.0,

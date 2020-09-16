@@ -55,7 +55,6 @@ impl Play {
 
             let mut mcts = MCTS::with_capacity(
                 S::initial(),
-                0,
                 game_engine,
                 &analyzer,
                 MCTSOptions::<S, _, _>::new(
@@ -63,11 +62,11 @@ impl Play {
                     options.fpu,
                     options.fpu_root,
                     options.logit_q,
-                    |_, _, Nsb, is_root| {
+                    |_, Nsb, is_root| {
                         (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
                             * if is_root { cpuct_root_scaling } else { 1.0 }
                     },
-                    |_, _| 0.0,
+                    |_| 0.0,
                     0.0,
                     options.moves_left_threshold,
                     options.moves_left_scale,

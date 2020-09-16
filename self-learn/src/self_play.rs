@@ -19,8 +19,8 @@ pub struct SelfPlayMetrics<A, V> {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SelfPlayOptions {
     pub temperature: f32,
-    pub temperature_max_actions: usize,
-    pub temperature_post_max_actions: f32,
+    pub temperature_max_moves: usize,
+    pub temperature_post_max_moves: f32,
     pub temperature_visit_offset: f32,
     pub visits: usize,
     pub fast_visits: usize,
@@ -70,7 +70,6 @@ where
     M: 'a + Model<State = S, Action = A, Value = V>,
 {
     let game_state: S = S::initial();
-    let num_actions = 0;
     let cpuct_base = options.cpuct_base;
     let cpuct_init = options.cpuct_init;
     let cpuct_root_scaling = options.cpuct_root_scaling;
@@ -78,7 +77,6 @@ where
 
     let mut mcts = MCTS::with_capacity(
         game_state,
-        num_actions,
         game_engine,
         &analyzer,
         MCTSOptions::<S, _, _>::new(
@@ -88,15 +86,16 @@ where
             options.fpu,
             options.fpu_root,
             options.logit_q,
-            |_, _, Nsb, is_root| {
+            |_, Nsb, is_root| {
                 (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
                     * if is_root { cpuct_root_scaling } else { 1.0 }
             },
-            |_, num_actions| {
-                if num_actions < options.temperature_max_actions {
+            |game_state| {
+                let move_number = game_engine.get_move_number(game_state);
+                if move_number < options.temperature_max_moves {
                     options.temperature
                 } else {
-                    options.temperature_post_max_actions
+                    options.temperature_post_max_moves
                 }
             },
             options.temperature_visit_offset,

@@ -483,8 +483,8 @@ fn get_default_options() -> Result<Options> {
         value_loss_weight: 0.5,
         moves_left_loss_weight: 0.1,
         temperature: 1.2,
-        temperature_max_actions: 30,
-        temperature_post_max_actions: 0.45,
+        temperature_max_moves: 15,
+        temperature_post_max_moves: 0.45,
         temperature_visit_offset: -0.9,
         visits: 800,
         fast_visits: 150,
@@ -512,8 +512,8 @@ fn get_default_options() -> Result<Options> {
         batch_size: self_learn_options.self_play_batch_size,
         parallelism: 32,
         temperature: self_learn_options.temperature,
-        temperature_max_actions: self_learn_options.temperature_max_actions,
-        temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
+        temperature_max_moves: self_learn_options.temperature_max_moves,
+        temperature_post_max_moves: self_learn_options.temperature_post_max_moves,
         visits: self_learn_options.visits * 5,
         fpu: self_learn_options.fpu,
         fpu_root: self_learn_options.fpu_root,
@@ -552,8 +552,8 @@ fn get_default_options() -> Result<Options> {
         cpuct_init: self_learn_options.cpuct_init,
         cpuct_root_scaling: self_learn_options.cpuct_root_scaling,
         temperature: self_learn_options.temperature,
-        temperature_max_actions: self_learn_options.temperature_max_actions,
-        temperature_post_max_actions: self_learn_options.temperature_post_max_actions,
+        temperature_max_moves: self_learn_options.temperature_max_moves,
+        temperature_post_max_moves: self_learn_options.temperature_post_max_moves,
         moves_left_threshold: self_learn_options.moves_left_threshold,
         moves_left_scale: self_learn_options.moves_left_scale,
         moves_left_factor: self_learn_options.moves_left_factor,
@@ -611,11 +611,11 @@ fn update_self_learn_options_from_matches(
     if let Some(temperature) = matches.value_of("temperature") {
         options.temperature = temperature.parse()?
     };
-    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") {
-        options.temperature_max_actions = temperature_max_actions.parse()?
+    if let Some(temperature_max_moves) = matches.value_of("temperature_max_moves") {
+        options.temperature_max_moves = temperature_max_moves.parse()?
     };
-    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") {
-        options.temperature_post_max_actions = temperature_post_max_actions.parse()?
+    if let Some(temperature_post_max_moves) = matches.value_of("temperature_post_max_moves") {
+        options.temperature_post_max_moves = temperature_post_max_moves.parse()?
     };
     if let Some(visits) = matches.value_of("visits") {
         options.visits = visits.parse()?
@@ -672,11 +672,11 @@ fn update_self_evaluate_options_from_matches(
     if let Some(temperature) = matches.value_of("temperature") {
         options.temperature = temperature.parse()?
     };
-    if let Some(temperature_max_actions) = matches.value_of("temperature_max_actions") {
-        options.temperature_max_actions = temperature_max_actions.parse()?
+    if let Some(temperature_max_moves) = matches.value_of("temperature_max_moves") {
+        options.temperature_max_moves = temperature_max_moves.parse()?
     };
-    if let Some(temperature_post_max_actions) = matches.value_of("temperature_post_max_actions") {
-        options.temperature_post_max_actions = temperature_post_max_actions.parse()?
+    if let Some(temperature_post_max_moves) = matches.value_of("temperature_post_max_moves") {
+        options.temperature_post_max_moves = temperature_post_max_moves.parse()?
     };
     if let Some(visits) = matches.value_of("visits") {
         options.visits = visits.parse()?

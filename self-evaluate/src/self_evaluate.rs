@@ -28,8 +28,8 @@ pub struct SelfEvaluateOptions {
     pub batch_size: usize,
     pub parallelism: usize,
     pub temperature: f32,
-    pub temperature_max_actions: usize,
-    pub temperature_post_max_actions: f32,
+    pub temperature_max_moves: usize,
+    pub temperature_post_max_moves: f32,
     pub visits: usize,
     pub fpu: f32,
     pub fpu_root: f32,
@@ -273,9 +273,9 @@ impl SelfEvaluate {
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
-        let temperature_max_actions = options.temperature_max_actions;
+        let temperature_max_moves = options.temperature_max_moves;
         let temperature = options.temperature;
-        let temperature_post_max_actions = options.temperature_post_max_actions;
+        let temperature_post_max_moves = options.temperature_post_max_moves;
         let visits = options.visits;
 
         let mut mctss: Vec<_> = players
@@ -283,7 +283,6 @@ impl SelfEvaluate {
             .map(|(_, analyzer)| {
                 MCTS::with_capacity(
                     S::initial(),
-                    0,
                     game_engine,
                     *analyzer,
                     MCTSOptions::<S, _, _>::new(
@@ -291,15 +290,16 @@ impl SelfEvaluate {
                         options.fpu,
                         options.fpu_root,
                         options.logit_q,
-                        |_, _, Nsb, is_root| {
+                        |_, Nsb, is_root| {
                             (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
                                 * if is_root { cpuct_root_scaling } else { 1.0 }
                         },
-                        |_, num_actions| {
-                            if num_actions < temperature_max_actions {
+                        |game_state| {
+                            let move_number = game_engine.get_move_number(game_state);
+                            if move_number < temperature_max_moves {
                                 temperature
                             } else {
-                                temperature_post_max_actions
+                                temperature_post_max_moves
                             }
                         },
                         0.0,
