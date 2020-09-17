@@ -283,8 +283,6 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "assert_approx_eq",
- "crossbeam-queue",
- "tokio",
 ]
 
 [[package]]
@@ -819,6 +817,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "common",
+ "crossbeam",
  "engine",
  "half",
  "itertools",
@@ -1264,6 +1263,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1282,6 +1282,7 @@ dependencies = [
  "self-evaluate",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1540,6 +1541,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1560,6 +1562,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

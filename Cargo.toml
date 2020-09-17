@@ -16,3 +16,11 @@ members = [
     "connect4",
     "quoridor"
 ]
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = true
+codegen-units = 1
