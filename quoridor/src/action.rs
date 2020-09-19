@@ -51,6 +51,17 @@ impl Coordinate {
         )
     }
 
+    pub fn invert_horizontal(&self, shift: bool) -> Coordinate {
+        Coordinate::new(
+            if shift {
+                Self::invert_column_shift(self.column)
+            } else {
+                Self::invert_column(self.column)
+            },
+            self.row,
+        )
+    }
+
     fn invert_column(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
         let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
@@ -122,6 +133,18 @@ impl Action {
             }
             Action::PlaceVerticalWall(coordinate) => {
                 Action::PlaceVerticalWall(coordinate.invert(true))
+            }
+        }
+    }
+
+    pub fn invert_horizontal(&self) -> Self {
+        match self {
+            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert_horizontal(false)),
+            Action::PlaceHorizontalWall(coordinate) => {
+                Action::PlaceHorizontalWall(coordinate.invert_horizontal(true))
+            }
+            Action::PlaceVerticalWall(coordinate) => {
+                Action::PlaceVerticalWall(coordinate.invert_horizontal(true))
             }
         }
     }

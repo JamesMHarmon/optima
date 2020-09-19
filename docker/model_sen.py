@@ -99,7 +99,7 @@ def PolicyHeadFullyConnected(x, filters, output_size):
     out = Dense(output_size, activation=None, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name='', full_name='policy_head')(out)
     return out
 
-def PolicyHeadConvolutional(x, filters, output_size):
+def ArimaaPolicyHeadConvolutional(x, filters, output_size):
     conv_block = ConvBlock(filters=filters, kernel_size=3, name='policy_head')(x)
 
     def create_move_dir_out(cropping, name):
@@ -126,6 +126,26 @@ def PolicyHeadConvolutional(x, filters, output_size):
 
     return out
 
+def QuoridorPolicyHeadConvolutional(x, filters, output_size):
+    conv_block = ConvBlock(filters=filters, kernel_size=3, name='policy_head')(x)
+
+    def create_action_out(cropping, name):
+        action_conv = Conv2D(1, kernel_size=3, use_bias=True, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name=name)(conv_block)
+        action_cropped = action_conv if cropping is None else Cropping2D(cropping, data_format=DATA_FORMAT, name=name + '/cropping_2d')(action_conv)
+        return Flatten()(action_cropped)
+
+    pawn_move = create_action_out(None, name='policy_head/pawn_move')
+    place_vertical = create_action_out(cropping=((1, 0), (0, 1)), name='policy_head/place_wall_vertical')
+    place_horizontal = create_action_out(cropping=((1, 0), (0, 1)), name='policy_head/place_wall_horizontal')
+
+    out = Concatenate(name='policy_head')([
+        pawn_move,
+        place_vertical,
+        place_horizontal,
+    ])
+
+    return out
+
 def MovesLeftHead(x, filters, moves_left_size):
     out = ConvBlock(filters=4, kernel_size=1, name='moves_left_head')(x)
 
@@ -142,9 +162,10 @@ def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_s
 
     value_head = ValueHead(net, num_filters)
 
-    # Hack to use the Convolutional head for the Arimaa Play Net
     if output_size == 225:
-        policy_head = PolicyHeadConvolutional(net, num_filters, output_size)
+        policy_head = ArimaaPolicyHeadConvolutional(net, num_filters, output_size)
+    if output_size == 209:
+        policy_head = QuoridorPolicyHeadConvolutional(net, num_filters, output_size)
     else:
         policy_head = PolicyHeadFullyConnected(net, num_filters, output_size)
 

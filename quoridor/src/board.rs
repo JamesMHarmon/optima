@@ -85,8 +85,7 @@ mod tests {
     fn coordinate_to_idx(coord: Coordinate) -> usize {
         let bit_board = coord.as_bit_board();
         let single_bit_index = single_bit_index(bit_board);
-        let vec_idx = map_board_idx_to_vec_idx(single_bit_index);
-        vec_idx
+        map_board_idx_to_vec_idx(single_bit_index)
     }
 
     fn value_at_coordinate(vec: &[f32], col: char, row: usize) -> f32 {
@@ -101,7 +100,7 @@ mod tests {
     #[test]
     fn test_map_board_idx_to_vec_idx_bottom_left() {
         let board_idx = 72;
-        let expected_vec_idx = 08;
+        let expected_vec_idx = 8;
         let actual_vec_index = map_board_idx_to_vec_idx(board_idx);
         assert_eq!(expected_vec_idx, actual_vec_index);
     }
@@ -125,7 +124,7 @@ mod tests {
     #[test]
     fn test_map_board_idx_to_vec_idx_top_right() {
         let board_idx = 72;
-        let expected_vec_idx = 08;
+        let expected_vec_idx = 8;
         let actual_vec_index = map_board_idx_to_vec_idx(board_idx);
         assert_eq!(expected_vec_idx, actual_vec_index);
     }

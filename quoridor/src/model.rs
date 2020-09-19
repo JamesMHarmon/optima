@@ -2,7 +2,8 @@ use super::action::{Action, Coordinate};
 use super::board::{map_board_to_arr_invertable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, INPUT_C, INPUT_H, INPUT_W, MOVES_LEFT_SIZE,
-    NUM_WALLS_PER_PLAYER, OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
+    NUM_WALLS_PER_PLAYER, OUTPUT_SIZE, PAWN_BOARD_SIZE, TRANSPOSITION_TABLE_CACHE_SIZE,
+    WALL_BOARD_SIZE,
 };
 use super::engine::Engine;
 use super::engine::GameState;
@@ -51,9 +52,9 @@ impl Mapper {
         game_state: &GameState,
         policy_scores: &[f16],
     ) -> Vec<ActionWithPolicy<Action>> {
-        let valid_pawn_moves = game_state.get_valid_pawn_move_actions().into_iter();
-        let valid_vert_walls = game_state.get_valid_vertical_wall_actions().into_iter();
-        let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions().into_iter();
+        let valid_pawn_moves = game_state.get_valid_pawn_move_actions();
+        let valid_vert_walls = game_state.get_valid_vertical_wall_actions();
+        let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions();
         let actions = valid_pawn_moves
             .chain(valid_vert_walls)
             .chain(valid_horiz_walls);
@@ -175,8 +176,24 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         &self,
         metrics: PositionMetrics<GameState, Action, Value>,
     ) -> Vec<PositionMetrics<GameState, Action, Value>> {
-        //@TODO: Add symmetries for Quoridor
-        vec![metrics]
+        let symmetrical_children = metrics
+            .policy
+            .children
+            .iter()
+            .map(|(a, q, v)| (a.invert_horizontal(), *q, *v))
+            .collect();
+
+        let symmetrical_pos = PositionMetrics {
+            game_state: metrics.game_state.get_horizontal_symmetry(),
+            policy: NodeMetrics {
+                visits: metrics.policy.visits,
+                children: symmetrical_children,
+            },
+            score: metrics.score.clone(),
+            moves_left: metrics.moves_left,
+        };
+
+        vec![metrics, symmetrical_pos]
     }
 
     fn policy_metrics_to_expected_output(
@@ -211,9 +228,8 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         (val * 2.0) - 1.0
     }
 
-    fn get_transposition_key(&self, _game_state: &GameState) -> u64 {
-        // @TODO: Add transpositions and enable cache
-        0
+    fn get_transposition_key(&self, game_state: &GameState) -> u64 {
+        game_state.get_transposition_hash()
     }
 
     fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
@@ -301,7 +317,12 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowModel::new(model_info.clone(), Engine::new(), mapper, 0)
+        TensorflowModel::new(
+            model_info.clone(),
+            Engine::new(),
+            mapper,
+            TRANSPOSITION_TABLE_CACHE_SIZE,
+        )
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {

@@ -1,6 +1,8 @@
 use super::action::Action;
 use super::board::map_board_to_arr;
-use super::constants::{INPUT_C, INPUT_H, INPUT_W, MOVES_LEFT_SIZE, OUTPUT_SIZE};
+use super::constants::{
+    INPUT_C, INPUT_H, INPUT_W, MOVES_LEFT_SIZE, OUTPUT_SIZE, TRANSPOSITION_TABLE_CACHE_SIZE,
+};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::value::Value;
@@ -202,7 +204,12 @@ impl model::model::ModelFactory for ModelFactory {
     fn get(&self, model_info: &ModelInfo) -> Self::M {
         let mapper = Mapper::new();
 
-        TensorflowModel::new(model_info.clone(), Engine::new(), mapper, 4000)
+        TensorflowModel::new(
+            model_info.clone(),
+            Engine::new(),
+            mapper,
+            TRANSPOSITION_TABLE_CACHE_SIZE,
+        )
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
