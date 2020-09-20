@@ -93,7 +93,7 @@ pub trait Mapper<S, A, V, Te> {
 
 impl<S, A, V, E, Map, Te> TensorflowModel<S, A, V, E, Map, Te>
 where
-    S: PartialEq + Hash + Send + Sync + 'static,
+    S: Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
@@ -369,7 +369,7 @@ where
 
 impl<S, A, V, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, V, E, Map, Te>
 where
-    S: Clone + PartialEq + Hash + Unpin,
+    S: Clone + Hash + Unpin,
     A: Clone,
     V: Value,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
@@ -449,7 +449,7 @@ struct BatchingModel<E, Map, Te> {
 
 impl<S, A, V, E, Map, Te> BatchingModel<E, Map, Te>
 where
-    S: PartialEq + Hash + Send + 'static,
+    S: Hash + Send + 'static,
     A: Clone + Send + 'static,
     V: Value + Send + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
