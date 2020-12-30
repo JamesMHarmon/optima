@@ -203,6 +203,10 @@ where
         self.focus_actions.push(action);
     }
 
+    pub fn get_focused_actions(&self) -> &[A] {
+        &self.focus_actions
+    }
+
     pub fn clear_focus(&mut self) {
         self.focus_actions.clear();
     }
