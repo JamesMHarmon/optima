@@ -692,7 +692,7 @@ where
                     "Invalid puct scores. Most likely all are 0. Move will be randomly selected."
                 );
                 warn!("{:?}", action_visits);
-                thread_rng().gen_range(0, action_visits.len())
+                thread_rng().gen_range(0..action_visits.len())
             }
             Ok(weighted_index) => weighted_index.sample(&mut thread_rng()),
         };

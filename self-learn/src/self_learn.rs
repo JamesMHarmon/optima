@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossbeam::Sender;
+use crossbeam::channel::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use serde::de::DeserializeOwned;

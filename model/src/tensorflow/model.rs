@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context as AnyhowContext, Result};
-use crossbeam::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
+use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
@@ -210,7 +210,7 @@ where
 
         let batching_model = match batching_model {
             None => {
-                let (sender, receiver) = crossbeam::unbounded();
+                let (sender, receiver) = crossbeam::channel::unbounded();
                 let batching_model_arc = Arc::new((self.create_batching_model(receiver), sender));
 
                 *batching_model_ref = Arc::downgrade(&batching_model_arc);
