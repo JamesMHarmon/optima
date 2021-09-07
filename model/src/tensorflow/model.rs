@@ -14,6 +14,7 @@ use std::fs::{self, File};
 use std::future::Future;
 use std::hash::Hash;
 use std::io::{BufReader, Write};
+use std::os::raw::c_int;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
@@ -23,7 +24,7 @@ use std::sync::{
 };
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
-use tensorflow::{Graph, Operation, Session, SessionOptions, SessionRunArgs, Tensor, TensorType};
+use tensorflow::{DEFAULT_SERVING_SIGNATURE_DEF_KEY, Graph, Operation, SavedModelBundle, Session, SessionOptions, SessionRunArgs, Tensor, TensorType};
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::super::analytics::{self, GameStateAnalysis};
@@ -245,7 +246,7 @@ impl Predictor {
 
         info!("{:?}", exported_model_path);
 
-        let session = Session::from_saved_model(
+        let model = SavedModelBundle::load(
             &SessionOptions::new(),
             &["serve"],
             &mut graph,
@@ -253,19 +254,37 @@ impl Predictor {
         )
         .expect("Expected to be able to load model");
 
+        let signature = model.meta_graph_def().get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY).expect(&format!("Failed to get signature: {}", DEFAULT_SERVING_SIGNATURE_DEF_KEY));
+
+        let input_tensor_info = signature.inputs().iter().next().expect("Expect at least one input in signature").1;
+        let value_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("value_head")).expect("'value_head' output in signature not found").1;
+        let policy_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("policy_head")).expect("'policy_head' output in signature not found").1;
+        let moves_left_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("moves_left_head")).map(|(_, s)| s);
+
+        let input_name = &input_tensor_info.name().name;
+        let value_head_name = &value_head_tensor_info.name().name;
+        let policy_head_name = &policy_head_tensor_info.name().name;
+        let moves_left_head_name = moves_left_head_tensor_info.map(|x| &x.name().name);
+
         let op_input = graph
-            .operation_by_name_required("input_1")
+            .operation_by_name_required(&input_name)
+            .map(|operation| OperationWithIndex { operation, index: input_tensor_info.name().index })
             .expect("Expected to find input operation");
         let op_value_head = graph
-            .operation_by_name_required("value_head/Tanh")
+            .operation_by_name_required(&value_head_name)
+            .map(|operation| OperationWithIndex { operation, index: value_head_tensor_info.name().index })
             .expect("Expected to find value_head operation");
         let op_policy_head = graph
-            .operation_by_name_required("policy_head/concat")
-            .or_else(|_| graph.operation_by_name_required("policy_head/BiasAdd"))
+            .operation_by_name_required(&policy_head_name)
+            .map(|operation| OperationWithIndex { operation, index: policy_head_tensor_info.name().index })
             .expect("Expected to find policy_head operation");
-        let op_moves_left_head = graph
-            .operation_by_name_required("moves_left_head/Softmax")
-            .ok();
+        let op_moves_left_head = moves_left_head_name.map(|name| graph
+            .operation_by_name_required(&name)
+            .map(|operation| OperationWithIndex { operation, index: moves_left_head_tensor_info.unwrap().name().index })
+            .ok())
+            .flatten();
+
+        let session = model.session;
 
         Self {
             session: SessionAndOps {
@@ -282,13 +301,13 @@ impl Predictor {
         let session = &self.session;
 
         let mut output_step = SessionRunArgs::new();
-        output_step.add_feed(&session.op_input, 0, &tensor);
-        let value_head_fetch_token = output_step.request_fetch(&session.op_value_head, 0);
-        let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head, 0);
+        output_step.add_feed(&session.op_input.operation, session.op_input.index, &tensor);
+        let value_head_fetch_token = output_step.request_fetch(&session.op_value_head.operation, session.op_value_head.index);
+        let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head.operation, session.op_policy_head.index);
         let moves_left_head_fetch_token = session
             .op_moves_left_head
             .as_ref()
-            .map(|op| output_step.request_fetch(op, 0));
+            .map(|op| output_step.request_fetch(&op.operation, session.op_policy_head.index));
 
         session
             .session
@@ -331,10 +350,15 @@ struct AnalysisResults {
 
 struct SessionAndOps {
     session: Session,
-    op_input: Operation,
-    op_value_head: Operation,
-    op_policy_head: Operation,
-    op_moves_left_head: Option<Operation>,
+    op_input: OperationWithIndex,
+    op_value_head: OperationWithIndex,
+    op_policy_head: OperationWithIndex,
+    op_moves_left_head: Option<OperationWithIndex>,
+}
+
+struct OperationWithIndex {
+    operation: Operation,
+    index: c_int
 }
 
 type BatchingModelAndSender<S, A, V, E, Map, Te> = (
@@ -916,8 +940,8 @@ where
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
-        -e NVIDIA_VISIBLE_DEVICES=1 \
-        -e CUDA_VISIBLE_DEVICES=1 \
+        -e NVIDIA_VISIBLE_DEVICES=0 \
+        -e CUDA_VISIBLE_DEVICES=0 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/train:latest",
         game_name = source_model_info.get_game_name(),
@@ -984,8 +1008,8 @@ fn create(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()
         -e MOVES_LEFT_SIZE={moves_left_size} \
         -e NUM_FILTERS={num_filters} \
         -e NUM_BLOCKS={num_blocks} \
-        -e NVIDIA_VISIBLE_DEVICES=1 \
-        -e CUDA_VISIBLE_DEVICES=1 \
+        -e NVIDIA_VISIBLE_DEVICES=0 \
+        -e CUDA_VISIBLE_DEVICES=0 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         quoridor_engine/create:latest",
         game_name = game_name,
@@ -1040,11 +1064,11 @@ fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> R
     let docker_cmd = format!(
         "docker run --rm \
         --gpus all \
-        -e NVIDIA_VISIBLE_DEVICES=1 \
-        -e CUDA_VISIBLE_DEVICES=1 \
+        -e NVIDIA_VISIBLE_DEVICES=0 \
+        -e CUDA_VISIBLE_DEVICES=0 \
         -e TF_FORCE_GPU_ALLOW_GROWTH=true \
         --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        tensorflow/tensorflow:latest-gpu \
+        tensorflow/tensorflow:2.6.0-gpu \
         usr/local/bin/saved_model_cli convert \
         --dir /{game_name}_runs/{run_name}/exported_models/{model_num} \
         --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{model_num} \

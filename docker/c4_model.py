@@ -1,5 +1,5 @@
-from keras.models import load_model
-from keras.optimizers import SGD
+from tensorflow.keras.models import load_model
+from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
@@ -83,15 +83,7 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
     model = create(num_filters, num_blocks, input_shape, output_size, moves_left_size)
     model.set_weights(model_weights)
 
-    # Fetch the Keras session and save the model
-    # The signature definition is defined by the input and output tensors
-    # And stored with the default serving key
-    with K.get_session() as sess:
-        tf.saved_model.simple_save(
-            sess,
-            export_model_path,
-            inputs={'input_image': model.input},
-            outputs={t.name: t for t in model.outputs})
+    tf.saved_model.save(model, export_model_path)
 
 def clear():
     K.clear_session()

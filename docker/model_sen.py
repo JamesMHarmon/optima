@@ -1,10 +1,10 @@
 import numpy as np
 import keras
-from keras.models import Model
-from keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
 from keras.layers.core import Activation, Layer
-from keras.optimizers import Nadam
-from keras import regularizers
+from tensorflow.keras.optimizers import Nadam
+from tensorflow.keras import regularizers
 
 DATA_FORMAT = 'channels_last'
 
