@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -247,6 +248,21 @@ where
                 })
                 .collect(),
         })
+    }
+
+    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<S, A, V>> + '_> {
+        let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
+        let arena_ref = self.arena.get();
+        let node = Ref::map(arena_ref, |arena_ref| arena_ref.node(root_index));
+        Ok(node)
+    }
+
+    pub fn get_node_of_edge(
+        &self,
+        edge: &MCTSEdge<A>,
+    ) -> Option<impl Deref<Target = MCTSNode<S, A, V>> + '_> {
+        edge.node_index()
+            .map(|index| Ref::map(self.arena.get(), |n| n.node(index)))
     }
 
     pub fn get_focus_node_details(&self) -> Result<Option<NodeDetails<A>>> {
@@ -969,13 +985,27 @@ struct NodeUpdateInfo {
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-struct MCTSEdge<A> {
+pub struct MCTSEdge<A> {
     action: A,
     W: f32,
     M: f32,
     visits: usize,
     policy_score: f32,
     node: MCTSNodeState,
+}
+
+impl<A> MCTSEdge<A> {
+    pub fn visits(&self) -> usize {
+        self.visits
+    }
+
+    pub fn node_index(&self) -> Option<Index> {
+        self.node.get_index()
+    }
+
+    pub fn action(&self) -> &A {
+        &self.action
+    }
 }
 
 #[derive(Debug)]
@@ -1040,7 +1070,7 @@ impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
 }
 
 #[derive(Debug)]
-struct MCTSNode<S, A, V> {
+pub struct MCTSNode<S, A, V> {
     visits: usize,
     value_score: V,
     moves_left_score: f32,
@@ -1052,20 +1082,28 @@ impl<S, A, V> MCTSNode<S, A, V>
 where
     A: Eq,
 {
-    fn get_node_visits(&self) -> usize {
+    pub fn get_node_visits(&self) -> usize {
         self.visits
     }
 
-    fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
-        self.children.iter().find(|c| c.action == *action)
+    pub fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
+        self.iter_edges().find(|c| c.action == *action)
     }
 
-    fn get_position_of_action(&self, action: &A) -> Option<usize> {
-        self.children.iter().position(|c| c.action == *action)
+    pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
+        self.iter_edges().position(|c| c.action == *action)
     }
 
-    fn is_terminal(&self) -> bool {
+    pub fn game_state(&self) -> &S {
+        &self.game_state
+    }
+
+    pub fn is_terminal(&self) -> bool {
         self.children.is_empty()
+    }
+
+    pub fn iter_edges(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
+        self.children.iter()
     }
 }
 
