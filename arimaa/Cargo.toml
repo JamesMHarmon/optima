@@ -12,6 +12,7 @@ name = "arimaa"
 common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
+arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
 
 anyhow = "1.0"
 half = "1.6"

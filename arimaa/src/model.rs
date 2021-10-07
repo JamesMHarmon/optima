@@ -1,6 +1,4 @@
-use super::action::Action;
 use super::engine::Engine;
-use super::engine::GameState;
 use super::place_model::{
     Mapper as PlaceMapper, ModelFactory as PlaceModelFactory,
     TranspositionEntry as PlaceTranspositionEntry,
@@ -13,12 +11,11 @@ use super::value::Value;
 use futures::future::Either;
 use model::analytics::GameStateAnalysis;
 use model::model::ModelOptions;
-use model::model::TrainOptions;
-use model::model_info::ModelInfo;
 use model::position_metrics::PositionMetrics;
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use model::tensorflow::model::TensorflowModel;
 use model::tensorflow::model::*;
+use model::{model::TrainOptions, model_info::ModelInfo};
 
 use anyhow::Result;
 

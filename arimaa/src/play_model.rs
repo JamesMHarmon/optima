@@ -1,4 +1,3 @@
-use super::action::{Action, Direction, Piece, Square};
 use super::board::set_board_bits_invertable;
 use super::constants::{
     PLAY_INPUT_C as INPUT_C, PLAY_INPUT_H as INPUT_H, PLAY_INPUT_SIZE as INPUT_SIZE,
@@ -6,9 +5,10 @@ use super::constants::{
     PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::engine::Engine;
-use super::engine::GameState;
 use super::symmetries::get_symmetries;
 use super::value::Value;
+use arimaa_engine::GameState;
+use arimaa_engine::{Action, Direction, Piece, Square};
 use engine::value::Value as ValueTrait;
 use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
@@ -233,38 +233,6 @@ fn set_board_state_squares(input: &mut [f16], game_state: &GameState) {
 
             let offset = player_offset + piece_offset;
             set_board_bits_invertable(input, offset, piece_bits, invert);
-        }
-    }
-}
-
-fn set_valid_move_squares(input: &mut [f16], game_state: &GameState, mode: Mode) {
-    let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
-    let invert = !is_p1_turn_to_move;
-    let valid_actions = match mode {
-        Mode::Train => game_state.valid_actions(),
-        Mode::Infer => game_state.valid_actions_no_exclusions(),
-    };
-
-    for valid_action in valid_actions {
-        let action = if invert {
-            valid_action.invert()
-        } else {
-            valid_action
-        };
-        match action {
-            Action::Move(square, direction) => {
-                let dir_channel_idx = match direction {
-                    Direction::Up => VALID_MOVES_CHANNEL_IDX,
-                    Direction::Right => VALID_MOVES_CHANNEL_IDX + 1,
-                    Direction::Down => VALID_MOVES_CHANNEL_IDX + 2,
-                    Direction::Left => VALID_MOVES_CHANNEL_IDX + 3,
-                };
-
-                let input_idx = square.get_index() * PLAY_INPUT_C + dir_channel_idx;
-                input[input_idx] = f16::ONE;
-            }
-            Action::Pass => set_all_bits_for_channel(input, VALID_MOVES_CHANNEL_IDX + 4),
-            Action::Place(_) => panic!("Place not valid for play."),
         }
     }
 }

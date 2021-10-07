@@ -37,10 +37,9 @@ fn invert_idx(idx: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::super::action::{Piece, Square};
     use super::super::constants::PLAY_INPUT_SIZE;
-    use super::super::engine::GameState;
     use super::*;
+    use arimaa_engine::{GameState, Piece, Square};
     use common::bits::single_bit_index_u64;
 
     fn square_to_idx(square: Square) -> usize {

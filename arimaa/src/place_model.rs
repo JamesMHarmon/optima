@@ -1,4 +1,3 @@
-use super::action::{Action, Piece};
 use super::board::set_placement_board_bits;
 use super::constants::{
     PLACE_INPUT_C as INPUT_C, PLACE_INPUT_H as INPUT_H, PLACE_INPUT_SIZE as INPUT_SIZE,
@@ -6,12 +5,9 @@ use super::constants::{
     PLACE_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::engine::Engine;
-use super::engine::GameState;
 use super::value::Value;
+use arimaa_engine::{Action, GameState, Piece};
 use engine::value::Value as ValueTrait;
-use model::analytics::ActionWithPolicy;
-use model::analytics::GameStateAnalysis;
-use model::logits::update_logit_policies_to_softmax;
 use model::model::ModelOptions;
 use model::model_info::ModelInfo;
 use model::node_metrics::NodeMetrics;
@@ -19,6 +15,10 @@ use model::position_metrics::PositionMetrics;
 use model::tensorflow::get_latest_model_info::get_latest_model_info;
 use model::tensorflow::mode::Mode;
 use model::tensorflow::model::{TensorflowModel, TensorflowModelOptions};
+use model::{
+    analytics::{ActionWithPolicy, GameStateAnalysis},
+    logits::update_logit_policies_to_softmax,
+};
 
 use anyhow::Result;
 use half::f16;

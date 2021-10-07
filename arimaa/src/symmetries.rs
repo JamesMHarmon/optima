@@ -2,10 +2,8 @@ use common::linked_list::List;
 use model::node_metrics::NodeMetrics;
 use model::position_metrics::PositionMetrics;
 
-use super::action::{map_bit_board_to_squares, Action, Piece};
-use super::engine::{GameState, Phase, PieceBoard, PieceBoardState, PlayPhase, PushPullState};
-use super::value::Value;
-use super::zobrist::Zobrist;
+use arimaa_engine::action::{map_bit_board_to_squares, Action, Piece};
+use arimaa_engine::{GameState, Value};
 
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Value>,
@@ -130,29 +128,31 @@ fn get_bit_board_horizontal_symmetry(bit_board: u64) -> u64 {
 mod tests {
     extern crate test;
 
-    use super::super::action::{Action, Direction, Piece, Square};
     use super::*;
+    use arimaa_engine::{Action, Direction, Piece, Square};
 
     fn step_num_symmetry_to_string(game_state: GameState, step_num: usize) -> String {
         let symmetries = get_symmetries_game_state(game_state);
         let game_state = symmetries.first().unwrap();
         let game_state_symmetry = symmetries.last().unwrap();
         let piece_board = game_state_symmetry.get_piece_board_for_step(step_num);
-        let game_state_symmetry_step = GameState::new(
-            game_state.is_p1_turn_to_move(),
-            game_state.get_move_number(),
-            Phase::PlayPhase(PlayPhase::initial(Zobrist::initial(), List::new())),
-            PieceBoard::new(
-                piece_board.get_player_piece_mask(true),
-                piece_board.get_bits_by_piece_type(Piece::Elephant),
-                piece_board.get_bits_by_piece_type(Piece::Camel),
-                piece_board.get_bits_by_piece_type(Piece::Horse),
-                piece_board.get_bits_by_piece_type(Piece::Dog),
-                piece_board.get_bits_by_piece_type(Piece::Cat),
-                piece_board.get_bits_by_piece_type(Piece::Rabbit),
-            ),
-            Zobrist::initial(),
-        );
+        let game_state_symmetry_step = "";
+
+        // GameState::new(
+        //     game_state.is_p1_turn_to_move(),
+        //     game_state.get_move_number(),
+        //     Phase::PlayPhase(PlayPhase::initial(Zobrist::initial(), List::new())),
+        //     PieceBoard::new(
+        //         piece_board.get_player_piece_mask(true),
+        //         piece_board.get_bits_by_piece_type(Piece::Elephant),
+        //         piece_board.get_bits_by_piece_type(Piece::Camel),
+        //         piece_board.get_bits_by_piece_type(Piece::Horse),
+        //         piece_board.get_bits_by_piece_type(Piece::Dog),
+        //         piece_board.get_bits_by_piece_type(Piece::Cat),
+        //         piece_board.get_bits_by_piece_type(Piece::Rabbit),
+        //     ),
+        //     Zobrist::initial(),
+        // );
 
         game_state_symmetry_step.to_string()
     }

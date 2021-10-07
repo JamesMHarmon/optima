@@ -1,15 +1,8 @@
-pub const ASCII_LETTER_A: u8 = 97;
+pub use arimaa_engine::constants::*;
 
 pub const MAX_NUMBER_OF_MOVES: usize = 512;
-pub const BOARD_WIDTH: usize = 8;
-pub const BOARD_HEIGHT: usize = 8;
-pub const BOARD_SIZE: usize = BOARD_WIDTH * BOARD_HEIGHT;
 
-pub const NUM_PIECE_TYPES: usize = 6;
-pub const NUM_PLAYERS: usize = 2;
 pub const BOARDS_PER_STATE: usize = NUM_PIECE_TYPES * 2;
-pub const MAX_NUM_STEPS: usize = 4;
-
 pub const STEP_NUM_CHANNELS: usize = MAX_NUM_STEPS - 1;
 pub const STEP_NUM_CHANNEL_IDX: usize = BOARDS_PER_STATE;
 pub const VALID_MOVES_CHANNEL_IDX: usize = STEP_NUM_CHANNEL_IDX + STEP_NUM_CHANNELS;
