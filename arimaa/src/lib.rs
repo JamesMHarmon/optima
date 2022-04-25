@@ -1,5 +1,4 @@
 #![feature(toowned_clone_into)]
-#![feature(vec_remove_item)]
 #![feature(test)]
 #![allow(clippy::inconsistent_digit_grouping)]
 
