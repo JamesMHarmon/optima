@@ -275,37 +275,39 @@ where
     }
 
     pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
-        let arena_ref = self.arena.get();
-        let mut node_index = *self
-            .root
-            .as_ref()
-            .ok_or_else(|| anyhow!("No root node found!"))?;
-        let mut nodes = vec![];
+        self.get_focus_node_index()?
+            .map(|mut node_index| {
 
-        loop {
-            let is_root = nodes.is_empty();
-            let mut children = self.get_node_details(node_index, is_root)?.children;
+                let mut nodes = vec![];
+                let arena_ref = self.arena.get();
 
-            if children.is_empty() {
-                break;
-            }
+                loop {
+                    let is_root = nodes.is_empty();
+                    let mut children = self.get_node_details(node_index, is_root)?.children;
 
-            let (action, puct) = children.swap_remove(0);
-            nodes.push((action.clone(), puct));
+                    if children.is_empty() {
+                        break;
+                    }
+                    
+                    let (action, puct) = children.swap_remove(0);
+                    nodes.push((action.clone(), puct));
+                    
+                    if let Some(child_index) = arena_ref
+                        .node(node_index)
+                        .get_child_of_action(&action)
+                        .and_then(|child| child.node.get_index())
+                        {
+                            node_index = child_index;
+                            continue;
+                        }
 
-            if let Some(child_index) = arena_ref
-                .node(node_index)
-                .get_child_of_action(&action)
-                .and_then(|child| child.node.get_index())
-            {
-                node_index = child_index;
-                continue;
-            }
+                    break;
+                }
 
-            break;
-        }
-
-        Ok(nodes)
+                Ok(nodes)
+            })
+            .ok_or_else(|| anyhow!("Focused action was not found"))
+            .flatten()
     }
 
     pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
@@ -865,7 +867,7 @@ where
     }
 
     fn get_focus_node_index(&self) -> Result<Option<Index>> {
-        let arena_mut = self.arena.get_mut();
+        let arena_ref = self.arena.get();
 
         let mut node_index = *self
             .root
@@ -873,7 +875,7 @@ where
             .ok_or_else(|| anyhow!("No root node found!"))?;
 
         for action in &self.focus_actions {
-            match arena_mut
+            match arena_ref
                 .node(node_index)
                 .get_child_of_action(action)
                 .and_then(|child| child.node.get_index())

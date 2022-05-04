@@ -5,7 +5,7 @@ use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
 use itertools::Itertools;
-use log::info;
+use log::{debug,info};
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -420,7 +420,7 @@ where
                 self.analysed_state_sender.clone(),
                 tx,
             ))
-            .unwrap_or_else(|_| panic!("Channel Failure 3"));
+            .unwrap_or_else(|_| debug!("Channel 3 Closed"));
 
         UnwrappedReceiver::new(rx)
     }
@@ -544,14 +544,14 @@ where
                     Some(analysis) => {
                         unordered_tx
                             .send((id, analysis, tx))
-                            .unwrap_or_else(|_| panic!("Channel Failure 1"));
+                            .unwrap_or_else(|_| debug!("Channel 1 Closed"));
                     }
                     None => {
                         let input =
                             mapper_clone.game_state_to_input(&state_to_analyse, Mode::Infer);
                         states_to_predict_tx
                             .send((id, state_to_analyse, input, unordered_tx, tx))
-                            .unwrap_or_else(|_| panic!("Channel Failure 2"));
+                            .unwrap_or_else(|_| debug!("Channel 2 Closed"));
                     }
                 };
             }
@@ -601,7 +601,7 @@ where
 
                     predicted_states_tx
                         .send((states_to_analyse, predictions))
-                        .unwrap_or_else(|_| panic!("Failed to send value in channel."));
+                        .unwrap_or_else(|_| debug!("Failed to send value in channel."));
                 }
             });
         }
@@ -642,7 +642,7 @@ where
                     }
 
                     tx.send((id, analysis, tx2))
-                        .unwrap_or_else(|_| panic!("Channel Failure 4"));
+                        .unwrap_or_else(|_| debug!("Channel 4 Closed"));
                 }
             }
         });
@@ -750,7 +750,7 @@ impl CompletedAnalysisOrdered {
                 if id == next_id_to_tx {
                     next_id_to_tx += 1;
                     if tx.send(analysis).is_err() {
-                        panic!("Failed to send analysis");
+                        debug!("Failed to send analysis 1");
                     }
 
                     while let Some(val) = analyzed_states_to_tx.peek_mut() {
@@ -758,7 +758,7 @@ impl CompletedAnalysisOrdered {
                             let state_to_tx = PeekMut::pop(val);
                             next_id_to_tx += 1;
                             if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
-                                panic!("Failed to send analysis");
+                                debug!("Failed to send analysis 2");
                             }
                         } else {
                             break;
