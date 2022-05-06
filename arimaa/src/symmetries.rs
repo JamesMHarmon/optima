@@ -2,8 +2,8 @@ use common::linked_list::List;
 use model::node_metrics::NodeMetrics;
 use model::position_metrics::PositionMetrics;
 
-use arimaa_engine::action::{map_bit_board_to_squares, Action, Piece};
-use arimaa_engine::{GameState, Value};
+use super::{Action, GameState, Piece, Value};
+use arimaa_engine::map_bit_board_to_squares;
 
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Value>,

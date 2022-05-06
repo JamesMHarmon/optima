@@ -1,14 +1,23 @@
-use engine::value::Value;
-
-use crate::constants::MAX_NUMBER_OF_MOVES;
-
-use super::value::Value;
+use super::MAX_NUMBER_OF_MOVES;
+use super::{Action, GameState, Value};
 
 pub struct Engine {}
 
+impl Engine {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl engine::engine::GameEngine for Engine {
-    type Action = arimaa_engine::Action;
-    type State = arimaa_engine::GameState;
+    type Action = Action;
+    type State = GameState;
     type Value = Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
@@ -30,7 +39,7 @@ impl engine::engine::GameEngine for Engine {
     fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal().map(|v| v.into()).or_else(|| {
             if game_state.get_move_number() >= MAX_NUMBER_OF_MOVES {
-                Value(arimaa_engine::Value([0.0, 0.0]));
+                Some([0.0, 0.0].into())
             } else {
                 None
             }

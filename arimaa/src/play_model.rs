@@ -5,9 +5,9 @@ use super::constants::{
     PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::engine::Engine;
+use super::game_state::GameState;
 use super::symmetries::get_symmetries;
 use super::value::Value;
-use arimaa_engine::GameState;
 use arimaa_engine::{Action, Direction, Piece, Square};
 use engine::value::Value as ValueTrait;
 use model::analytics::ActionWithPolicy;
@@ -97,9 +97,9 @@ impl Mapper {
         let curr_val = (value_output + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
         if game_state.is_p1_turn_to_move() {
-            Value([curr_val, opp_val])
+            [curr_val, opp_val].into()
         } else {
-            Value([opp_val, curr_val])
+            [opp_val, curr_val].into()
         }
     }
 }
@@ -209,7 +209,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
 }
 
 fn set_board_state_squares(input: &mut [f16], game_state: &GameState) {
-    let current_step_num = game_state.get_current_step();
+    let current_step_num = game_state.step();
     let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
     let invert = !is_p1_turn_to_move;
 
@@ -238,9 +238,9 @@ fn set_board_state_squares(input: &mut [f16], game_state: &GameState) {
 }
 
 fn set_step_num_squares(input: &mut [f16], game_state: &GameState) {
-    let current_step = game_state.get_current_step();
+    let current_step = game_state.step();
 
-    // Current step is base 0. However we start from 1 since the first step doesn't have a corresponding channel since 0 0 0 reoresents the first step.
+    // Current step is base 0. However we start from 1 since the first step doesn't have a corresponding channel since 0 0 0 represents the first step.
     for step_num in 1..=current_step {
         let step_num_channel_idx = STEP_NUM_CHANNEL_IDX + step_num - 1;
 

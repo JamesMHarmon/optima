@@ -5,8 +5,9 @@ use super::constants::{
     PLACE_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::engine::Engine;
+use super::game_state::GameState;
 use super::value::Value;
-use arimaa_engine::{Action, GameState, Piece};
+use arimaa_engine::{Action, Piece};
 use engine::value::Value as ValueTrait;
 use model::model::ModelOptions;
 use model::model_info::ModelInfo;
@@ -81,9 +82,9 @@ impl Mapper {
         let curr_val = (value_output + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
         if game_state.is_p1_turn_to_move() {
-            Value([curr_val, opp_val])
+            [curr_val, opp_val].into()
         } else {
-            Value([opp_val, curr_val])
+            [opp_val, curr_val].into()
         }
     }
 }

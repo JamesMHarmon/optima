@@ -1,4 +1,5 @@
 use super::engine::Engine;
+use super::game_state::GameState;
 use super::place_model::{
     Mapper as PlaceMapper, ModelFactory as PlaceModelFactory,
     TranspositionEntry as PlaceTranspositionEntry,
@@ -8,6 +9,7 @@ use super::play_model::{
     TranspositionEntry as PlayTranspositionEntry,
 };
 use super::value::Value;
+use arimaa_engine::Action;
 use futures::future::Either;
 use model::analytics::GameStateAnalysis;
 use model::model::ModelOptions;
