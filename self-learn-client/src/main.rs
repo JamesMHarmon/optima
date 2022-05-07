@@ -262,7 +262,7 @@ fn create(game_name: &str, run_name: &str, options: &Options) -> Result<()> {
         return Err(anyhow!("run_name cannot contain any '_' characters"));
     }
 
-    initialize_directories_and_files(&game_name, &run_name, &options)?;
+    initialize_directories_and_files(game_name, run_name, options)?;
 
     Ok(())
 }
@@ -771,7 +771,7 @@ fn update_tournament_options_from_matches(
 }
 
 fn get_options(game_name: &str, run_name: &str) -> Result<Options> {
-    let run_directory = get_run_directory(&game_name, &run_name);
+    let run_directory = get_run_directory(game_name, run_name);
     get_config(&run_directory)
 }
 

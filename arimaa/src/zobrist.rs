@@ -58,7 +58,7 @@ impl Zobrist {
             0
         };
         let piece_board_value =
-            get_piece_board_value(&prev_game_state.get_piece_board(), new_piece_board);
+            get_piece_board_value(prev_game_state.get_piece_board(), new_piece_board);
         let step_value = get_step_value(prev_game_state.get_current_step(), new_step);
 
         let hash = self.hash ^ player_to_move_value ^ piece_board_value ^ step_value;

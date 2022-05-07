@@ -81,7 +81,7 @@ impl Play {
                     println!("Illegal Action: {:?}", &action);
                     continue;
                 }
-                state = game_engine.take_action(&state, &action);
+                state = game_engine.take_action(&state, action);
             }
 
             while game_engine.is_terminal_state(&state).is_none() {
@@ -94,7 +94,7 @@ impl Play {
                 let input = input.trim();
                 println!("Read: {}", input);
 
-                if input == "" {
+                if input.is_empty() {
                     println!("PLAYING: {}", visits);
                     total_visits += visits;
                     mcts.search_visits(total_visits).await?;

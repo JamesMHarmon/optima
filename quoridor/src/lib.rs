@@ -1,4 +1,5 @@
 #![allow(clippy::inconsistent_digit_grouping)]
+#![allow(clippy::unusual_byte_groupings)]
 
 #[macro_use]
 mod bits;

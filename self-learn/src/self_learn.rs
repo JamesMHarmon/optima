@@ -290,7 +290,7 @@ where
             self_play_metric_stream.push(self_play::self_play(
                 game_engine,
                 model,
-                &self_play_options,
+                self_play_options,
             ));
         }
 
@@ -306,7 +306,7 @@ where
                 self_play_metric_stream.push(self_play::self_play(
                     game_engine,
                     model,
-                    &self_play_options,
+                    self_play_options,
                 ));
             }
         }

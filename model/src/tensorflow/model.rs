@@ -254,7 +254,7 @@ impl Predictor {
         )
         .expect("Expected to be able to load model");
 
-        let signature = model.meta_graph_def().get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY).expect(&format!("Failed to get signature: {}", DEFAULT_SERVING_SIGNATURE_DEF_KEY));
+        let signature = model.meta_graph_def().get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY).unwrap_or_else(|_| panic!("Failed to get signature: {}", DEFAULT_SERVING_SIGNATURE_DEF_KEY));
 
         let input_tensor_info = signature.inputs().iter().next().expect("Expect at least one input in signature").1;
         let value_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("value_head")).expect("'value_head' output in signature not found").1;
@@ -267,19 +267,19 @@ impl Predictor {
         let moves_left_head_name = moves_left_head_tensor_info.map(|x| &x.name().name);
 
         let op_input = graph
-            .operation_by_name_required(&input_name)
+            .operation_by_name_required(input_name)
             .map(|operation| OperationWithIndex { operation, index: input_tensor_info.name().index })
             .expect("Expected to find input operation");
         let op_value_head = graph
-            .operation_by_name_required(&value_head_name)
+            .operation_by_name_required(value_head_name)
             .map(|operation| OperationWithIndex { operation, index: value_head_tensor_info.name().index })
             .expect("Expected to find value_head operation");
         let op_policy_head = graph
-            .operation_by_name_required(&policy_head_name)
+            .operation_by_name_required(policy_head_name)
             .map(|operation| OperationWithIndex { operation, index: policy_head_tensor_info.name().index })
             .expect("Expected to find policy_head operation");
         let op_moves_left_head = moves_left_head_name.map(|name| graph
-            .operation_by_name_required(&name)
+            .operation_by_name_required(name)
             .map(|operation| OperationWithIndex { operation, index: moves_left_head_tensor_info.unwrap().name().index })
             .ok())
             .flatten();
@@ -301,7 +301,7 @@ impl Predictor {
         let session = &self.session;
 
         let mut output_step = SessionRunArgs::new();
-        output_step.add_feed(&session.op_input.operation, session.op_input.index, &tensor);
+        output_step.add_feed(&session.op_input.operation, session.op_input.index, tensor);
         let value_head_fetch_token = output_step.request_fetch(&session.op_value_head.operation, session.op_value_head.index);
         let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head.operation, session.op_policy_head.index);
         let moves_left_head_fetch_token = session
@@ -337,7 +337,7 @@ impl Predictor {
     fn fill_tensor<'a, T: Iterator<Item = &'a [f16]>>(tensor: &mut Tensor<f16>, inputs: T) {
         for (i, input) in inputs.enumerate() {
             let input_width = input.len();
-            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(&input);
+            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(input);
         }
     }
 }
@@ -843,7 +843,7 @@ where
 
     let model_options = get_options(source_model_info)?;
     let moves_left_size = model_options.moves_left_size;
-    let source_paths = Paths::from_model_info(&source_model_info);
+    let source_paths = Paths::from_model_info(source_model_info);
     let source_base_path = source_paths.get_base_path();
 
     let mut train_data_file_names = vec![];

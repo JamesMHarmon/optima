@@ -536,7 +536,7 @@ impl GameState {
                 ]
                 .iter()
                 {
-                    if shift_pieces_in_direction(lesser_opp_pieces, &direction) & square_bit != 0 {
+                    if shift_pieces_in_direction(lesser_opp_pieces, direction) & square_bit != 0 {
                         let source_opp_piece_square = Square::from_bit_board(
                             shift_pieces_in_opp_direction(square_bit, direction),
                         );
@@ -601,7 +601,7 @@ impl GameState {
         ]
         .iter()
         {
-            let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, &direction)
+            let pushing_piece_bit = shift_pieces_in_opp_direction(square_bit, direction)
                 & curr_player_non_frozen_piece_mask;
             if pushing_piece_bit != 0
                 && get_piece_type_at_bit(pushing_piece_bit, piece_board) > pushed_piece
@@ -996,7 +996,7 @@ impl GameState {
         let hash_history = &play_phase.hash_history;
 
         if let Action::Move(_, _) = action {
-            let new_piece_board = &self.piece_board.take_action(&action).0;
+            let new_piece_board = &self.piece_board.take_action(action).0;
             let new_hash_no_player_switch =
                 self.hash
                     .move_piece(self, new_piece_board, 0, self.is_p1_turn_to_move());
@@ -1313,7 +1313,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
 
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
         assert_eq!(
             game_state.unwrap_play_phase().push_pull_state,
@@ -1336,7 +1336,7 @@ mod tests {
             0b__11111111__11111110__00000001__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 3), Direction::Up));
         let piece_board = game_state.get_piece_board();
@@ -1349,7 +1349,7 @@ mod tests {
             0b__11111111__11111110__00000000__00000001__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('a', 4), Direction::Up));
         let piece_board = game_state.get_piece_board();
@@ -1362,7 +1362,7 @@ mod tests {
             0b__11111111__11111110__00000000__00000000__00000001__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 3);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state = game_state.take_action(&Action::Move(Square::new('b', 2), Direction::Up));
         let piece_board = game_state.get_piece_board();
@@ -1375,7 +1375,7 @@ mod tests {
             0b__11111111__11111100__00000010__00000000__00000001__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1394,7 +1394,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Down));
@@ -1408,7 +1408,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
@@ -1422,7 +1422,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 3);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 4), Direction::Down));
@@ -1436,7 +1436,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1455,7 +1455,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Left));
@@ -1469,7 +1469,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('c', 6), Direction::Left));
@@ -1483,7 +1483,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 3);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('b', 6), Direction::Left));
@@ -1497,7 +1497,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1516,7 +1516,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 6), Direction::Right));
@@ -1530,7 +1530,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('e', 6), Direction::Right));
@@ -1544,7 +1544,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 3);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('f', 6), Direction::Right));
@@ -1558,7 +1558,7 @@ mod tests {
             0b__11111111__11111111__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1576,7 +1576,7 @@ mod tests {
             0b__11111111__11111011__00000000__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1595,7 +1595,7 @@ mod tests {
             0b__11111111__11111001__00000110__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1614,7 +1614,7 @@ mod tests {
             0b__11111111__11110011__00001100__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1634,7 +1634,7 @@ mod tests {
             0b__11111111__11111101__00000100__00000000__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 2);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1656,7 +1656,7 @@ mod tests {
             0b__11111111__11111001__00000100__00000100__00000000__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -1680,7 +1680,7 @@ mod tests {
             0b__11111111__11111001__00000010__00000000__00000100__00000000__00000000__00000000
         );
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]
@@ -2330,7 +2330,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
     }
 
     #[test]
@@ -2353,7 +2353,7 @@ mod tests {
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(true), true);
+        assert!(game_state.can_pass(true));
     }
 
     #[test]
@@ -2376,17 +2376,17 @@ mod tests {
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('d', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
     }
 
     #[test]
     fn test_can_pass_during_place_phase() {
         let game_state = GameState::initial();
 
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
 
         let game_state = game_state.take_action(&Action::Place(Piece::Elephant));
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
     }
 
     #[test]
@@ -2407,18 +2407,18 @@ mod tests {
             .parse()
             .unwrap();
 
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(true), true);
+        assert!(game_state.can_pass(true));
 
         let game_state = game_state.take_action(&Action::Move(Square::new('c', 4), Direction::Up));
-        assert_eq!(game_state.can_pass(true), false);
+        assert!(!game_state.can_pass(true));
 
         let game_state =
             game_state.take_action(&Action::Move(Square::new('c', 5), Direction::Down));
-        assert_eq!(game_state.can_pass(true), true);
+        assert!(game_state.can_pass(true));
     }
 
     #[test]
@@ -2902,12 +2902,12 @@ mod tests {
             game_state.take_action(&Action::Move(Square::new('d', 7), Direction::Down));
 
         assert_eq!(game_state.unwrap_play_phase().get_step(), 1);
-        assert_eq!(game_state.p1_turn_to_move, true);
+        assert!(game_state.p1_turn_to_move);
 
         let game_state = game_state.take_action(&Action::Pass);
 
         assert_eq!(game_state.unwrap_play_phase().get_step(), 0);
-        assert_eq!(game_state.p1_turn_to_move, false);
+        assert!(!game_state.p1_turn_to_move);
     }
 
     #[test]

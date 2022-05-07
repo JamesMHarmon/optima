@@ -110,7 +110,7 @@ impl Tuner {
 
                         let model = model_map
                             .entry(key)
-                            .or_insert_with(|| model_factory.get(&model_info));
+                            .or_insert_with(|| model_factory.get(model_info));
 
                         Player {
                             id: *p_id,
@@ -202,8 +202,8 @@ impl Tuner {
         Ok(())
     }
 
-    async fn play_games<'a, S, A, E, T>(
-        games_to_play: Vec<Vec<Player<'a, T>>>,
+    async fn play_games<S, A, E, T>(
+        games_to_play: Vec<Vec<Player<'_, T>>>,
         batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         game_engine: &E,
@@ -241,9 +241,9 @@ impl Tuner {
     }
 
     #[allow(non_snake_case)]
-    async fn play_game<'a, S, A, E, T>(
+    async fn play_game<S, A, E, T>(
         game_engine: &E,
-        players: Vec<Player<'a, T>>,
+        players: Vec<Player<'_, T>>,
     ) -> Result<GameResult<A>>
     where
         S: GameState,

@@ -628,7 +628,7 @@ mod test {
         let json = "\"b2w\"";
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
+            serde_json::from_str::<Action>(json).unwrap(),
             Action::Move(Square::new('b', 2), Direction::Left),
         );
     }
@@ -638,7 +638,7 @@ mod test {
         let json = "\"d\"";
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
+            serde_json::from_str::<Action>(json).unwrap(),
             Action::Place(Piece::Dog),
         );
     }
@@ -647,6 +647,6 @@ mod test {
     fn test_action_deser_pass() {
         let json = "\"p\"";
 
-        assert_eq!(serde_json::from_str::<Action>(&json).unwrap(), Action::Pass,);
+        assert_eq!(serde_json::from_str::<Action>(json).unwrap(), Action::Pass,);
     }
 }

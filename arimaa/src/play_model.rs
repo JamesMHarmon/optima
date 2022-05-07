@@ -370,7 +370,7 @@ impl model::model::ModelFactory for ModelFactory {
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
-        Ok(get_latest_model_info(model_info)?)
+        get_latest_model_info(model_info)
     }
 }
 
@@ -604,9 +604,9 @@ mod tests {
             let expected_step_channel_not_set =
                 std::iter::repeat(0.0).take(BOARD_SIZE).collect::<Vec<_>>();
 
-            let actual_step_channel_1 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX);
-            let actual_step_channel_2 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX + 1);
-            let actual_step_channel_3 = get_channel_as_vec(&input, STEP_NUM_CHANNEL_IDX + 2);
+            let actual_step_channel_1 = get_channel_as_vec(input, STEP_NUM_CHANNEL_IDX);
+            let actual_step_channel_2 = get_channel_as_vec(input, STEP_NUM_CHANNEL_IDX + 1);
+            let actual_step_channel_3 = get_channel_as_vec(input, STEP_NUM_CHANNEL_IDX + 2);
 
             assert_eq!(
                 &actual_step_channel_1,
