@@ -5,7 +5,7 @@ use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
 use itertools::Itertools;
-use log::{debug,info};
+use log::{debug, info};
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,10 @@ use std::sync::{
 };
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
-use tensorflow::{DEFAULT_SERVING_SIGNATURE_DEF_KEY, Graph, Operation, SavedModelBundle, Session, SessionOptions, SessionRunArgs, Tensor, TensorType};
+use tensorflow::{
+    Graph, Operation, SavedModelBundle, Session, SessionOptions, SessionRunArgs, Tensor,
+    TensorType, DEFAULT_SERVING_SIGNATURE_DEF_KEY,
+};
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::super::analytics::{self, GameStateAnalysis};
@@ -254,12 +257,39 @@ impl Predictor {
         )
         .expect("Expected to be able to load model");
 
-        let signature = model.meta_graph_def().get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY).unwrap_or_else(|_| panic!("Failed to get signature: {}", DEFAULT_SERVING_SIGNATURE_DEF_KEY));
+        let signature = model
+            .meta_graph_def()
+            .get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to get signature: {}",
+                    DEFAULT_SERVING_SIGNATURE_DEF_KEY
+                )
+            });
 
-        let input_tensor_info = signature.inputs().iter().next().expect("Expect at least one input in signature").1;
-        let value_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("value_head")).expect("'value_head' output in signature not found").1;
-        let policy_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("policy_head")).expect("'policy_head' output in signature not found").1;
-        let moves_left_head_tensor_info = signature.outputs().iter().find(|(s, _)| s.contains("moves_left_head")).map(|(_, s)| s);
+        let input_tensor_info = signature
+            .inputs()
+            .iter()
+            .next()
+            .expect("Expect at least one input in signature")
+            .1;
+        let value_head_tensor_info = signature
+            .outputs()
+            .iter()
+            .find(|(s, _)| s.contains("value_head"))
+            .expect("'value_head' output in signature not found")
+            .1;
+        let policy_head_tensor_info = signature
+            .outputs()
+            .iter()
+            .find(|(s, _)| s.contains("policy_head"))
+            .expect("'policy_head' output in signature not found")
+            .1;
+        let moves_left_head_tensor_info = signature
+            .outputs()
+            .iter()
+            .find(|(s, _)| s.contains("moves_left_head"))
+            .map(|(_, s)| s);
 
         let input_name = &input_tensor_info.name().name;
         let value_head_name = &value_head_tensor_info.name().name;
@@ -268,20 +298,35 @@ impl Predictor {
 
         let op_input = graph
             .operation_by_name_required(input_name)
-            .map(|operation| OperationWithIndex { operation, index: input_tensor_info.name().index })
+            .map(|operation| OperationWithIndex {
+                operation,
+                index: input_tensor_info.name().index,
+            })
             .expect("Expected to find input operation");
         let op_value_head = graph
             .operation_by_name_required(value_head_name)
-            .map(|operation| OperationWithIndex { operation, index: value_head_tensor_info.name().index })
+            .map(|operation| OperationWithIndex {
+                operation,
+                index: value_head_tensor_info.name().index,
+            })
             .expect("Expected to find value_head operation");
         let op_policy_head = graph
             .operation_by_name_required(policy_head_name)
-            .map(|operation| OperationWithIndex { operation, index: policy_head_tensor_info.name().index })
+            .map(|operation| OperationWithIndex {
+                operation,
+                index: policy_head_tensor_info.name().index,
+            })
             .expect("Expected to find policy_head operation");
-        let op_moves_left_head = moves_left_head_name.map(|name| graph
-            .operation_by_name_required(name)
-            .map(|operation| OperationWithIndex { operation, index: moves_left_head_tensor_info.unwrap().name().index })
-            .ok())
+        let op_moves_left_head = moves_left_head_name
+            .map(|name| {
+                graph
+                    .operation_by_name_required(name)
+                    .map(|operation| OperationWithIndex {
+                        operation,
+                        index: moves_left_head_tensor_info.unwrap().name().index,
+                    })
+                    .ok()
+            })
             .flatten();
 
         let session = model.session;
@@ -302,8 +347,14 @@ impl Predictor {
 
         let mut output_step = SessionRunArgs::new();
         output_step.add_feed(&session.op_input.operation, session.op_input.index, tensor);
-        let value_head_fetch_token = output_step.request_fetch(&session.op_value_head.operation, session.op_value_head.index);
-        let policy_head_fetch_token = output_step.request_fetch(&session.op_policy_head.operation, session.op_policy_head.index);
+        let value_head_fetch_token = output_step.request_fetch(
+            &session.op_value_head.operation,
+            session.op_value_head.index,
+        );
+        let policy_head_fetch_token = output_step.request_fetch(
+            &session.op_policy_head.operation,
+            session.op_policy_head.index,
+        );
         let moves_left_head_fetch_token = session
             .op_moves_left_head
             .as_ref()
@@ -358,7 +409,7 @@ struct SessionAndOps {
 
 struct OperationWithIndex {
     operation: Operation,
-    index: c_int
+    index: c_int,
 }
 
 type BatchingModelAndSender<S, A, V, E, Map, Te> = (
