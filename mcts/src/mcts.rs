@@ -322,7 +322,7 @@ where
         let options = &self.options;
         let arena_ref = &self.arena;
         let focus_actions = &self.focus_actions;
-        let game_state = self.game_state.clone();
+        let game_state = &self.game_state;
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
         let mut alive = alive;
@@ -338,7 +338,7 @@ where
                 searches.push(Self::traverse_tree_and_expand(
                     root_node_index,
                     arena_ref,
-                    game_state.clone(),
+                    game_state,
                     focus_actions,
                     game_engine,
                     analyzer,
@@ -366,7 +366,7 @@ where
     async fn traverse_tree_and_expand(
         root_index: Index,
         arena: &NodeArena<MCTSNode<A, V>>,
-        game_state: S,
+        game_state: &S,
         focus_actions: &[A],
         game_engine: &E,
         analyzer: &M,
@@ -375,7 +375,7 @@ where
         let mut depth = 0;
         let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec![];
         let mut latest_index = root_index;
-        let mut game_state = game_state;
+        let mut game_state = Cow::Borrowed(game_state);
         let mut move_number = game_engine.get_move_number(&game_state);
 
         loop {
@@ -412,7 +412,8 @@ where
 
             let selected_child_node = &mut node.children[selected_child_node_children_index];
 
-            game_state = game_engine.take_action(&game_state, selected_child_node.action());
+            game_state =
+                Cow::Owned(game_engine.take_action(&game_state, selected_child_node.action()));
             move_number = game_engine.get_move_number(&game_state);
 
             let selected_child_node_node = &mut selected_child_node.node;
@@ -489,9 +490,6 @@ where
         let value_score = &value_node.value_score.clone();
         let value_node_moves_left_score = value_node.moves_left_score;
         let value_node_game_length = value_node_move_num as f32 + value_node_moves_left_score;
-
-        // game_engine.get_move_number(&value_node.game_state)
-        // let player_to_move = game_engine.get_player_to_move(&node_to_update_parent.game_state);
 
         for NodeUpdateInfo {
             parent_node_index,
@@ -570,7 +568,7 @@ where
             .map(|(n, m)| (n.action.clone(), m))
             .collect();
 
-        children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
+        children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(x_puct));
 
         Ok(NodeDetails {
             visits: node.get_node_visits(),
@@ -596,6 +594,8 @@ where
             return Err(err);
         }
 
+        self.game_state = game_engine.take_action(&self.game_state, &action);
+
         let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
@@ -609,9 +609,7 @@ where
 
             node_index
         } else {
-            let new_game_state = game_engine.take_action(&self.game_state, &action);
-            let node = Self::analyse_and_create_node(&new_game_state, &self.analyzer).await;
-            self.game_state = new_game_state;
+            let node = Self::analyse_and_create_node(&self.game_state, self.analyzer).await;
             arena_mut.insert(node)
         };
 
@@ -749,7 +747,7 @@ where
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
-            &Self::get_game_length_baseline(&children, options.moves_left_threshold);
+            &Self::get_game_length_baseline(children, options.moves_left_threshold);
 
         let mut pucts = Vec::with_capacity(children.len());
 
@@ -794,7 +792,7 @@ where
             return *root_node_index;
         }
 
-        let root_node = Self::analyse_and_create_node(&self.game_state, &self.analyzer).await;
+        let root_node = Self::analyse_and_create_node(&self.game_state, self.analyzer).await;
 
         let root_node_index = self.arena.get_mut().insert(root_node);
 
