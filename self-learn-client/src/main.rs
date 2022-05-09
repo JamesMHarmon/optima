@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate clap;
 
+use dotenv::dotenv;
 use arimaa::engine::Engine as ArimaaEngine;
 use arimaa::model::ModelFactory as ArimaaModelFactory;
 use clap::App;
@@ -40,6 +41,8 @@ pub struct Options {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
+
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let yaml = load_yaml!("cli.yml");
