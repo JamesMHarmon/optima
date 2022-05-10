@@ -1,18 +1,18 @@
 pub use arimaa_engine::constants::*;
 
-pub const MAX_NUMBER_OF_MOVES: usize = 512;
+pub const MAX_NUMBER_OF_MOVES: usize = 256;
 
-pub const BOARDS_PER_STATE: usize = NUM_PIECE_TYPES * 2;
+pub const BOARD_PIECES_NUM_CHANNELS: usize = NUM_PIECE_TYPES * 2;
 pub const STEP_NUM_CHANNELS: usize = MAX_NUM_STEPS - 1;
-pub const STEP_NUM_CHANNEL_IDX: usize = BOARDS_PER_STATE;
-pub const VALID_MOVES_CHANNEL_IDX: usize = STEP_NUM_CHANNEL_IDX + STEP_NUM_CHANNELS;
-pub const VALID_MOVES_NUM_CHANNELS: usize = 5;
-pub const TRAP_CHANNELS: usize = 1;
-pub const TRAP_CHANNEL_IDX: usize = VALID_MOVES_CHANNEL_IDX + VALID_MOVES_NUM_CHANNELS;
+pub const STEP_NUM_CHANNEL_IDX: usize = BOARD_PIECES_NUM_CHANNELS;
+pub const BANNED_PIECES_CHANNEL_IDX: usize = STEP_NUM_CHANNEL_IDX + STEP_NUM_CHANNELS;
+pub const BANNED_PIECES_NUM_CHANNELS: usize = 1;
+pub const TRAP_NUM_CHANNELS: usize = 1;
+pub const TRAP_CHANNEL_IDX: usize = BANNED_PIECES_CHANNEL_IDX + BANNED_PIECES_NUM_CHANNELS;
 pub const PLAY_INPUT_H: usize = BOARD_HEIGHT;
 pub const PLAY_INPUT_W: usize = BOARD_WIDTH;
 pub const PLAY_INPUT_C: usize =
-    BOARDS_PER_STATE + STEP_NUM_CHANNELS + VALID_MOVES_NUM_CHANNELS + TRAP_CHANNELS;
+    BOARD_PIECES_NUM_CHANNELS + STEP_NUM_CHANNELS + BANNED_PIECES_NUM_CHANNELS + TRAP_NUM_CHANNELS;
 pub const PLAY_INPUT_SIZE: usize = BOARD_SIZE * PLAY_INPUT_C;
 pub const PLAY_MOVES_LEFT_SIZE: usize = 128;
 
@@ -27,11 +27,30 @@ pub const PLACE_BOARD_SIZE: usize = PLACE_INPUT_W * PLACE_INPUT_H;
 pub const PLACE_OUTPUT_SIZE: usize = NUM_PIECE_TYPES;
 pub const PLACE_MOVES_LEFT_SIZE: usize = 0;
 
-pub const NUM_UP_MOVES: usize = BOARD_SIZE - BOARD_WIDTH;
-pub const NUM_RIGHT_MOVES: usize = BOARD_SIZE - BOARD_HEIGHT;
-pub const NUM_DOWN_MOVES: usize = BOARD_SIZE - BOARD_WIDTH;
-pub const NUM_LEFT_MOVES: usize = BOARD_SIZE - BOARD_HEIGHT;
+pub const NUM_PIECE_MOVES: usize =
+    // Single direction moves
+    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 1)) +
+    // Double direction moves
+    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 2)) +
+    // Bi direction two step moves
+    4 * ((BOARD_WIDTH - 1) * (BOARD_HEIGHT -1)) +
+    // Triple direction move
+    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 3)) +
+    // Bi direction tri step moves
+    8 * ((BOARD_WIDTH - 1) * (BOARD_HEIGHT - 2)) +
+    // Quad direction move
+    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 4)) +
+    // Bi direction bi direction four step moves
+    4 * ((BOARD_WIDTH - 2) * (BOARD_HEIGHT - 2)) +
+    // Tri direction uno direction four step moves
+    8 * ((BOARD_WIDTH - 3) * (BOARD_HEIGHT - 1));
+
+pub const NUM_PUSH_PULL_MOVES: usize =
+    // Perpendicular push pull moves
+    8 * ((BOARD_WIDTH - 1) * (BOARD_HEIGHT - 1)) +
+    // linear push pull moves
+    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 1));
+
 pub const PASS_MOVES: usize = 1;
 
-pub const PLAY_OUTPUT_SIZE: usize =
-    NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES + PASS_MOVES;
+pub const PLAY_OUTPUT_SIZE: usize = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES;

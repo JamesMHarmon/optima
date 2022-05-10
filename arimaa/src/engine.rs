@@ -38,7 +38,7 @@ impl engine::engine::GameEngine for Engine {
 
     fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal().map(|v| v.into()).or_else(|| {
-            if game_state.get_move_number() >= MAX_NUMBER_OF_MOVES {
+            if game_state.get_move_number() > MAX_NUMBER_OF_MOVES {
                 Some([0.0, 0.0].into())
             } else {
                 None

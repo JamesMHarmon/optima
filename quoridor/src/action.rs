@@ -437,7 +437,7 @@ mod test {
         let json = "\"i9\"";
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
+            serde_json::from_str::<Action>(json).unwrap(),
             Action::MovePawn(Coordinate::new('i', 9)),
         );
     }
@@ -447,7 +447,7 @@ mod test {
         let json = "\"b6h\"";
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
+            serde_json::from_str::<Action>(json).unwrap(),
             Action::PlaceHorizontalWall(Coordinate::new('b', 6)),
         );
     }
@@ -457,7 +457,7 @@ mod test {
         let json = "\"d1v\"";
 
         assert_eq!(
-            serde_json::from_str::<Action>(&json).unwrap(),
+            serde_json::from_str::<Action>(json).unwrap(),
             Action::PlaceVerticalWall(Coordinate::new('d', 1)),
         );
     }

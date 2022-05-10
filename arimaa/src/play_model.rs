@@ -8,7 +8,7 @@ use super::engine::Engine;
 use super::game_state::GameState;
 use super::symmetries::get_symmetries;
 use super::value::Value;
-use arimaa_engine::{Action, Direction, Piece, Square};
+use arimaa_engine::{Action, Direction, MoveDirection, Piece, Square};
 use engine::value::Value as ValueTrait;
 use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
@@ -28,14 +28,15 @@ use log::error;
 /*
     Layers:
     In:
+    3 current step
     6 curr piece boards
     6 opp piece boards
-    x 4 (position at start of move, position after first action, second action, third action take)
-    1 current step
+    1 banned pieces board
     1 trap squares
 
     Out:
-    4 directional boards (substract irrelevant squares)
+    40 directional boards (substract irrelevant squares)
+    12 push pull boards
     1 pass bit
 */
 
@@ -151,9 +152,11 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
                     map_action_to_policy_output_idx(action)
                 };
 
-                if r[policy_index] != 0.0 {
-                    error!("Policy value already exists {:?}", action);
-                }
+                assert!(
+                    r[policy_index] == 0.0,
+                    "Policy value already exists {:?}",
+                    action
+                );
 
                 r[policy_index] = *visits as f32 / total_visits;
 
@@ -264,7 +267,7 @@ fn set_trap_squares(input: &mut [f16]) {
 
 fn map_action_to_policy_output_idx(action: &Action) -> usize {
     match action {
-        Action::Move(square, direction) => match direction {
+        Action::Move(square, path) => match path {
             Direction::Up => map_coord_to_policy_output_idx_up(square),
             Direction::Right => map_coord_to_policy_output_idx_right(square) + NUM_UP_MOVES,
             Direction::Down => {
@@ -279,6 +282,59 @@ fn map_action_to_policy_output_idx(action: &Action) -> usize {
         },
         Action::Pass => NUM_UP_MOVES + NUM_RIGHT_MOVES + NUM_DOWN_MOVES + NUM_LEFT_MOVES,
         _ => panic!("Action not expected"),
+    }
+}
+
+fn map_direction_to_idx(square: &Square, direction: MoveDirection) -> usize {
+    let square_index = square.get_index() as usize;
+
+    match direction {
+        MoveDirection::N => square_index - BOARD_WIDTH,
+        MoveDirection::E => {
+            let num_squares_to_skip = square_index / BOARD_WIDTH;
+            square_index - num_squares_to_skip
+        }
+        MoveDirection::S => square_index,
+        MoveDirection::W => {
+            let num_squares_to_skip = square_index / BOARD_WIDTH;
+            square_index - num_squares_to_skip - 1
+        }
+        MoveDirection::NN => 0,
+        MoveDirection::NE => 0,
+        MoveDirection::NW => 0,
+        MoveDirection::EE => 0,
+        MoveDirection::ES => 0,
+        MoveDirection::SS => 0,
+        MoveDirection::SW => 0,
+        MoveDirection::WW => 0,
+        MoveDirection::NNN => 0,
+        MoveDirection::NNE => 0,
+        MoveDirection::NNW => 0,
+        MoveDirection::NEE => 0,
+        MoveDirection::NWW => 0,
+        MoveDirection::EEE => 0,
+        MoveDirection::EES => 0,
+        MoveDirection::ESS => 0,
+        MoveDirection::SSS => 0,
+        MoveDirection::SSW => 0,
+        MoveDirection::SWW => 0,
+        MoveDirection::WWW => 0,
+        MoveDirection::NNNN => 0,
+        MoveDirection::NNNE => 0,
+        MoveDirection::NNNW => 0,
+        MoveDirection::NNEE => 0,
+        MoveDirection::NNWW => 0,
+        MoveDirection::NEEE => 0,
+        MoveDirection::NWWW => 0,
+        MoveDirection::EEEE => 0,
+        MoveDirection::EEES => 0,
+        MoveDirection::EESS => 0,
+        MoveDirection::ESSS => 0,
+        MoveDirection::SSSS => 0,
+        MoveDirection::SSSW => 0,
+        MoveDirection::SSWW => 0,
+        MoveDirection::SWWW => 0,
+        MoveDirection::WWWW => 0,
     }
 }
 
