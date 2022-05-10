@@ -1,12 +1,12 @@
-use arimaa_engine::{Action, PieceBoard, Value};
-use std::ops::Deref;
+use arimaa_engine::{Action, GameState as ArimaaGameState, PieceBoard, Value};
+use std::{fmt::{Display, self}, ops::Deref};
 
 #[derive(Hash, Debug, Clone)]
-pub struct GameState(arimaa_engine::GameState);
+pub struct GameState(ArimaaGameState);
 
 impl GameState {
     pub fn new(p1_turn_to_move: bool, move_number: usize, piece_board: PieceBoard) -> Self {
-        GameState(arimaa_engine::GameState::new(
+        GameState(ArimaaGameState::new(
             p1_turn_to_move,
             move_number,
             piece_board,
@@ -55,14 +55,20 @@ impl GameState {
     }
 }
 
-impl engine::GameState for GameState {
+impl Display for GameState {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        ArimaaGameState::fmt(&self.0, fmt)
+    }
+}
+
+impl engine::game_state::GameState for GameState {
     fn initial() -> Self {
-        GameState(arimaa_engine::GameState::initial())
+        GameState(ArimaaGameState::initial())
     }
 }
 
 impl Deref for GameState {
-    type Target = arimaa_engine::GameState;
+    type Target = ArimaaGameState;
 
     fn deref(&self) -> &<Self as Deref>::Target {
         &self.0

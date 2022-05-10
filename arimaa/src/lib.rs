@@ -1,5 +1,4 @@
 #![feature(toowned_clone_into)]
-#![feature(vec_remove_item)]
 #![feature(test)]
 #![allow(clippy::inconsistent_digit_grouping)]
 
@@ -14,7 +13,8 @@ pub mod play_model;
 pub mod symmetries;
 pub mod value;
 
-pub use self::model::*;
+pub use crate::model::*;
+pub use crate::engine::Engine;
 
 use arimaa_engine::{Action, Piece};
 use constants::*;

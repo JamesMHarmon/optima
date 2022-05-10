@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate clap;
 
-use arimaa::engine::Engine as ArimaaEngine;
+use arimaa::Engine as ArimaaEngine;
 use arimaa::model::ModelFactory as ArimaaModelFactory;
 use clap::App;
 use connect4::engine::Engine as Connect4Engine;
