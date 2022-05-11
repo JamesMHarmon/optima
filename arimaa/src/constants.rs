@@ -46,10 +46,12 @@ pub const NUM_PIECE_MOVES: usize =
     8 * ((BOARD_WIDTH - 3) * (BOARD_HEIGHT - 1));
 
 pub const NUM_PUSH_PULL_MOVES: usize =
-    // Perpendicular push pull moves
-    8 * ((BOARD_WIDTH - 1) * (BOARD_HEIGHT - 1)) +
-    // linear push pull moves
-    4 * (BOARD_WIDTH * (BOARD_HEIGHT - 1));
+    // Horizontal push pull moves
+    2 * ((BOARD_WIDTH - 2) * BOARD_HEIGHT) +
+    // Vertical push pull moves
+    2 * (BOARD_WIDTH * (BOARD_HEIGHT - 2)) +
+    // Perpendicular
+    8 * ((BOARD_WIDTH - 1) * (BOARD_HEIGHT - 1));
 
 pub const PASS_MOVES: usize = 1;
 
