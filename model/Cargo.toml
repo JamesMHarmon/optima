@@ -14,7 +14,7 @@ engine = { path = "../engine" }
 
 anyhow = "1.0"
 crossbeam = "0.8"
-half = "1.6"
+half = "1.8"
 itertools = "0.10"
 log = "0.4"
 npy = "0.4"

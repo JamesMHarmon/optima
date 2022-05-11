@@ -144,6 +144,17 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         let invert = !game_state.is_p1_turn_to_move();
         let inputs: Vec<f32> = vec![0f32; OUTPUT_SIZE];
 
+        assert_eq!(
+            policy_metrics.visits - 1,
+            policy_metrics
+                .children
+                .iter()
+                .map(|(_, _, v)| v)
+                .sum::<usize>(),
+            "Sum of policy metrics should match policy metrics visits. {:?}",
+            policy_metrics
+        );
+
         policy_metrics
             .children
             .iter()
@@ -329,14 +340,13 @@ fn static_sparse_piece_move_map() -> &'static Vec<u16> {
         let valid_moves = get_valid_paths_with_squares();
         assert_eq!(valid_moves.len(), NUM_PIECE_MOVES);
 
-        let mut sparse_map = Vec::with_capacity(16321);
-        sparse_map.resize(16321, 0);
+        let mut sparse_map = vec![u16::MAX; 16321];
 
         for (idx, (square, path)) in valid_moves.iter().enumerate() {
             let sparse_idx = map_square_path_to_sparse_idx(square, path);
 
             assert_eq!(
-                sparse_map[sparse_idx], 0,
+                sparse_map[sparse_idx], u16::MAX,
                 "Collision found while filling sparse map"
             );
 
@@ -371,14 +381,13 @@ fn static_sparse_push_pull_map() -> &'static Vec<u16> {
             "The number of valid push pull moves should be correct."
         );
 
-        let mut sparse_map = Vec::with_capacity(16321);
-        sparse_map.resize(16321, 0);
+        let mut sparse_map = vec![u16::MAX; 16321];
 
         for (idx, (square, dir)) in valid_moves.iter().enumerate() {
             let sparse_idx = map_square_push_pull_to_sparse_idx(square, dir);
 
             assert_eq!(
-                sparse_map[sparse_idx], 0,
+                sparse_map[sparse_idx], u16::MAX,
                 "Collision found while filling sparse map"
             );
 
@@ -1116,18 +1125,18 @@ mod tests {
     #[test]
     fn test_game_state_to_input_rabbits_step_2() {
         let game_state: GameState = "
-                 1g
-                  +-----------------+
-                 8| r               |
-                 7|                 |
-                 6|     x     x     |
-                 5|                 |
-                 4|       E         |
-                 3|     x     x     |
-                 2|                 |
-                 1| R               |
-                  +-----------------+
-                    a b c d e f g h"
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
             .parse()
             .unwrap();
 
@@ -1154,20 +1163,128 @@ mod tests {
     }
 
     #[test]
+    fn test_game_state_to_input_as_silver() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        let mapper = Mapper::new();
+        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let expected: Vec<_> = string_to_vec(
+            "
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 1",
+        );
+
+        let actual = get_channel_as_vec(&input, 5);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 1 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0",
+        );
+
+        let actual = get_channel_as_vec(&input, 6);
+        assert_eq!(actual, expected);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            0 0 0 0 0 0 0 1
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0",
+        );
+
+        let actual = get_channel_as_vec(&input, 11);
+        assert_eq!(actual, expected);
+
+        assert_eq!(count_set_bits(&input), 3 + 0 + 0 + 4); // pieces, step, banned pieces, traps
+    }
+
+    #[test]
+    fn test_game_state_to_input_banned_piece_as_silver() {
+        let game_state: GameState = "
+             1s
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x     x     |
+             5|                 |
+             4|       E         |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        let mapper = Mapper::new();
+        let game_state = game_state.take_action(&"a8s".parse().unwrap());
+        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 1
+            0 0 0 0 0 0 0 0",
+        );
+
+        let actual = get_channel_as_vec(&input, BANNED_PIECES_CHANNEL_IDX);
+        assert_eq!(actual, expected);
+
+        assert_eq!(count_set_bits(&input), 3 + 64 + 1 + 4); // pieces, step, banned pieces, traps
+    }
+
+    #[test]
     fn test_game_state_to_input_rabbits_step_4() {
         let game_state: GameState = "
-                 1g
-                  +-----------------+
-                 8| r               |
-                 7|                 |
-                 6|     x r   x     |
-                 5|       E         |
-                 4|                 |
-                 3|     x     x     |
-                 2|                 |
-                 1| R               |
-                  +-----------------+
-                    a b c d e f g h"
+             1g
+              +-----------------+
+             8| r               |
+             7|                 |
+             6|     x r   x     |
+             5|       E         |
+             4|                 |
+             3|     x     x     |
+             2|                 |
+             1| R               |
+              +-----------------+
+                a b c d e f g h"
             .parse()
             .unwrap();
 
@@ -1304,6 +1421,93 @@ mod tests {
         assert_eq!(actual, expected);
 
         assert_eq!(count_set_bits(&input), 3 + 3 * 64 + 0 + 4); // pieces, step, banned pieces, traps
+    }
+
+    #[test]
+    fn test_policy_metrics_to_expected_output() {
+        let game_state: GameState = "
+            1g
+             +-----------------+
+            8| r               |
+            7|                 |
+            6|     x     x     |
+            5|                 |
+            4|       E         |
+            3|     x     x     |
+            2|                 |
+            1| R               |
+             +-----------------+
+               a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        let policy_metrics = NodeMetrics {
+            visits: 11,
+            children: vec![("a7n".parse().unwrap(), 0.0, 7), ("pa7nn".parse().unwrap(), 0.0, 2), ("p".parse().unwrap(), 0.0, 1)],
+        };
+
+        let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
+        let pass_idx = OUTPUT_SIZE - 1;
+        assert_eq!(output.len(), OUTPUT_SIZE);
+        assert_eq!(output[0], 0.7, "Policy for a7n should be 7 visit / 10 visits");
+        assert_eq!(output[NUM_PIECE_MOVES], 0.2, "Policy for pa7nn should be 7 visit / 10 visits");
+        assert_eq!(output[pass_idx], 0.1, "Policy for pass should be 1 visit / 10 visits");
+    }
+
+    #[test]
+    fn test_policy_metrics_to_expected_output_silver() {
+        let game_state: GameState = "
+            1s
+             +-----------------+
+            8| r               |
+            7|                 |
+            6|     x     x     |
+            5|                 |
+            4|       E         |
+            3|     x     x     |
+            2|                 |
+            1| R               |
+             +-----------------+
+               a b c d e f g h"
+            .parse()
+            .unwrap();
+
+            let policy_metrics = NodeMetrics {
+                visits: 11,
+                children: vec![("h2s".parse().unwrap(), 0.0, 7), ("ph2ss".parse().unwrap(), 0.0, 2), ("p".parse().unwrap(), 0.0, 1)],
+            };
+    
+            let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
+            let pass_idx = OUTPUT_SIZE - 1;
+            assert_eq!(output.len(), OUTPUT_SIZE);
+            assert_eq!(output[0], 0.7, "Policy for h2s should be 7 visit / 10 visits");
+            assert_eq!(output[NUM_PIECE_MOVES], 0.2, "Policy for ph2ss should be 7 visit / 10 visits");
+            assert_eq!(output[pass_idx], 0.1, "Policy for pass should be 1 visit / 10 visits");
+    }
+
+    #[test]
+    fn test_policy_to_valid_actions() {
+        let game_state: GameState = "
+            1g
+             +-----------------+
+            8| r               |
+            7|                 |
+            6|     x     x     |
+            5|                 |
+            4|       E         |
+            3|     x     x     |
+            2|                 |
+            1| R               |
+             +-----------------+
+               a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
+        policy_scores[0] = f16::from_f32(1.0);
+        let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
+
+        dbg!(output);
     }
 
     #[bench]
