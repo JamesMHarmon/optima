@@ -1551,7 +1551,8 @@ mod tests {
 
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
 
-        policy_scores[map_action_to_policy_output_idx(&"a1n".parse().unwrap())] = f16::from_f32(1.0);
+        policy_scores[map_action_to_policy_output_idx(&"a1n".parse().unwrap())] =
+            f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
         assert_eq!(output[0].action, "a1n".parse().unwrap());
@@ -1582,7 +1583,8 @@ mod tests {
 
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
 
-        policy_scores[map_action_to_policy_output_idx(&"d4n".parse().unwrap())] = f16::from_f32(1.0);
+        policy_scores[map_action_to_policy_output_idx(&"d4n".parse().unwrap())] =
+            f16::from_f32(1.0);
         policy_scores[map_action_to_policy_output_idx(&"p".parse().unwrap())] = f16::from_f32(5.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
@@ -1616,7 +1618,9 @@ mod tests {
 
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
 
-        policy_scores[map_action_to_policy_output_idx(&"b8s".parse::<Action>().unwrap().invert())] = f16::from_f32(1.0);
+        policy_scores
+            [map_action_to_policy_output_idx(&"b8s".parse::<Action>().unwrap().invert())] =
+            f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
         assert_eq!(output[0].action, "b8e".parse().unwrap());

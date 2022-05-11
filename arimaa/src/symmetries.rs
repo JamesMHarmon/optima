@@ -206,7 +206,6 @@ mod tests {
         );
         let game_state = game_state.take_action(&"a2e".parse().unwrap());
 
-
         assert_eq!(
             get_symmetries_game_state(game_state.clone())[1].to_string(),
             "5g
@@ -243,10 +242,10 @@ mod tests {
         );
     }
 
-        #[test]
-        #[allow(non_snake_case)]
-        fn test_get_symmetries() {
-            let game_state: GameState = "
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_get_symmetries() {
+        let game_state: GameState = "
                 5g
                  +-----------------+
                 8|   r     r   r   |
@@ -259,85 +258,79 @@ mod tests {
                 1| R         M     |
                  +-----------------+
                    a b c d e f g h"
-                .parse()
-                .unwrap();
+            .parse()
+            .unwrap();
 
-            let game_state = game_state.take_action(&"a1n".parse().unwrap());
-            let game_state =
-                game_state.take_action(&"a2e".parse().unwrap());
-            let game_state =
-                game_state.take_action(&"b2e".parse().unwrap());
+        let game_state = game_state.take_action(&"a1n".parse().unwrap());
+        let game_state = game_state.take_action(&"a2e".parse().unwrap());
+        let game_state = game_state.take_action(&"b2e".parse().unwrap());
 
-            let mut symmetries = get_symmetries(PositionMetrics {
-                score: [0.0, 1.0].into(),
-                game_state,
-                policy: NodeMetrics {
-                    visits: 800,
-                    children: vec![
-                        ("c2n".parse().unwrap(), 0.0, 500),
-                        (
-                            "a2e".parse().unwrap(),
-                            0.0,
-                            250,
-                        ),
-                        ("c2w".parse().unwrap(), 0.0, 50),
-                    ],
+        let mut symmetries = get_symmetries(PositionMetrics {
+            score: [0.0, 1.0].into(),
+            game_state,
+            policy: NodeMetrics {
+                visits: 800,
+                children: vec![
+                    ("c2n".parse().unwrap(), 0.0, 500),
+                    ("a2e".parse().unwrap(), 0.0, 250),
+                    ("c2w".parse().unwrap(), 0.0, 50),
+                ],
+            },
+            moves_left: 0,
+        });
+
+        let PositionMetrics {
+            score: symmetrical_score,
+            game_state: symmetrical_game_state,
+            policy:
+                NodeMetrics {
+                    visits: symmetrical_visits,
+                    children: symmetrical_children,
                 },
-                moves_left: 0,
-            });
+            ..
+        } = symmetries.pop().unwrap();
 
-            let PositionMetrics {
-                score: symmetrical_score,
-                game_state: symmetrical_game_state,
-                policy:
-                    NodeMetrics {
-                        visits: symmetrical_visits,
-                        children: symmetrical_children,
-                    },
-                ..
-            } = symmetries.pop().unwrap();
+        let PositionMetrics {
+            score: original_score,
+            game_state: original_game_state,
+            policy:
+                NodeMetrics {
+                    visits: original_visits,
+                    children: original_children,
+                },
+            ..
+        } = symmetries.pop().unwrap();
 
-            let PositionMetrics {
-                score: original_score,
-                game_state: original_game_state,
-                policy:
-                    NodeMetrics {
-                        visits: original_visits,
-                        children: original_children,
-                    },
-                ..
-            } = symmetries.pop().unwrap();
+        assert_eq!(symmetrical_score, original_score);
+        assert_eq!(symmetrical_visits, original_visits);
+        assert_eq!(original_children.len(), symmetrical_children.len());
 
-            assert_eq!(symmetrical_score, original_score);
-            assert_eq!(symmetrical_visits, original_visits);
-            assert_eq!(original_children.len(), symmetrical_children.len());
-
-            for (
-                (original_action, original_w, original_visits),
-                (symmetrical_action, symmetrical_w, symmetrical_visits),
-            ) in original_children.into_iter().zip(symmetrical_children)
-            {
-                match original_action {
-                    Action::Move(original_square, original_direction) => match symmetrical_action {
-                        Action::Move(symmetrical_square, symmetrical_direction) => {
-                            assert_eq!(original_square, symmetrical_square.invert_horizontal());
-                            assert_eq!(
-                                original_direction,
-                                symmetrical_direction.invert_horizontal()
-                            );
-                        }
-                        _ => panic!(),
-                    },
+        for (
+            (original_action, original_w, original_visits),
+            (symmetrical_action, symmetrical_w, symmetrical_visits),
+        ) in original_children.into_iter().zip(symmetrical_children)
+        {
+            match original_action {
+                Action::Move(original_square, original_direction) => match symmetrical_action {
+                    Action::Move(symmetrical_square, symmetrical_direction) => {
+                        assert_eq!(original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(
+                            original_direction,
+                            symmetrical_direction.invert_horizontal()
+                        );
+                    }
                     _ => panic!(),
-                }
-
-                assert_eq!(original_visits, symmetrical_visits);
-                assert_eq!(original_w, symmetrical_w);
+                },
+                _ => panic!(),
             }
 
-            assert_eq!(
-                original_game_state.to_string(),
-                "5g
+            assert_eq!(original_visits, symmetrical_visits);
+            assert_eq!(original_w, symmetrical_w);
+        }
+
+        assert_eq!(
+            original_game_state.to_string(),
+            "5g
  +-----------------+
 8|   r     r   r   |
 7|                 |
@@ -366,6 +359,6 @@ mod tests {
  +-----------------+
    a b c d e f g h
 "
-            );
-        }
+        );
+    }
 }
