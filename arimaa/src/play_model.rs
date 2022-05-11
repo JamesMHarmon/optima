@@ -319,12 +319,12 @@ fn is_direction_valid_from_square(square: Square, move_direction: MoveDirection)
         shifted_sq = shifted_sq.shift_in_direction(direction);
     }
 
-    return true;
+    true
 }
 
 fn get_valid_paths_with_squares() -> Vec<(Square, MoveDirection, ArrayVec<[Path; 6]>)> {
     arimaa_engine::get_path_permutations_by_move_direction()
-        .into_iter()
+        .iter()
         .flat_map(|move_direction| {
             (0..64).map(move |idx| (Square::from_index(idx), move_direction))
         })

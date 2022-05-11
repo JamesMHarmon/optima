@@ -1,13 +1,12 @@
 #[macro_use]
 extern crate clap;
 
-use dotenv::dotenv;
-use arimaa::engine::Engine as ArimaaEngine;
 use arimaa::model::ModelFactory as ArimaaModelFactory;
 use arimaa::Engine as ArimaaEngine;
 use clap::App;
 use connect4::engine::Engine as Connect4Engine;
 use connect4::model::ModelFactory as Connect4ModelFactory;
+use dotenv::dotenv;
 use env_logger::Env;
 use log::info;
 use model::model::{ModelFactory, ModelOptions};
