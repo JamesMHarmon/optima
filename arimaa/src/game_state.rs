@@ -1,5 +1,8 @@
+use anyhow::Result;
+use std::fmt::{self, Display};
+use std::{ops::Deref, str::FromStr};
+
 use arimaa_engine::{Action, GameState as ArimaaGameState, PieceBoard, Value};
-use std::{fmt::{Display, self}, ops::Deref};
 
 #[derive(Hash, Debug, Clone)]
 pub struct GameState(ArimaaGameState);
@@ -58,6 +61,14 @@ impl GameState {
 impl Display for GameState {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         ArimaaGameState::fmt(&self.0, fmt)
+    }
+}
+
+impl FromStr for GameState {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(GameState(ArimaaGameState::from_str(s)?))
     }
 }
 
