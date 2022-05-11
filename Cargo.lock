@@ -49,6 +49,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "tinyvec",
 ]
 
 [[package]]

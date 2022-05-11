@@ -1,6 +1,7 @@
 use anyhow::Result;
 use half::f16;
 use once_cell::sync::OnceCell;
+use tinyvec::ArrayVec;
 
 use super::board::set_board_bits_invertable;
 use super::constants::{
@@ -293,7 +294,7 @@ fn map_action_to_policy_output_idx(
 ) -> usize {
     match action {
         Action::Move(square, path) => {
-            move_map[map_square_path_to_sparse_idx(square, path)] as usize
+            move_map[map_square_path_to_sparse_idx(*square, *path)] as usize
         }
         Action::PushPull(square, dir) => {
             NUM_PIECE_MOVES
@@ -304,12 +305,12 @@ fn map_action_to_policy_output_idx(
     }
 }
 
-fn map_square_path_to_sparse_idx(square: &Square, path: &Path) -> usize {
+fn map_square_path_to_sparse_idx(square: Square, path: Path) -> usize {
     (((square.get_index() as u16) << 8) ^ (path.as_u8() as u16)) as usize
 }
 
-fn is_direction_valid_from_square(square: &Square, move_direction: &MoveDirection) -> bool {
-    let mut shifted_sq = *square;
+fn is_direction_valid_from_square(square: Square, move_direction: MoveDirection) -> bool {
+    let mut shifted_sq = square;
     for direction in move_direction.directions() {
         if !shifted_sq.can_shift_in_direction(direction) {
             return false;
@@ -321,16 +322,16 @@ fn is_direction_valid_from_square(square: &Square, move_direction: &MoveDirectio
     return true;
 }
 
-fn get_valid_paths_with_squares() -> Vec<(Square, Path)> {
-    MoveDirection::move_directions()
+fn get_valid_paths_with_squares() -> Vec<(Square, MoveDirection, ArrayVec<[Path; 6]>)> {
+    arimaa_engine::get_path_permutations_by_move_direction()
         .into_iter()
         .flat_map(|move_direction| {
             (0..64).map(move |idx| (Square::from_index(idx), move_direction))
         })
-        .filter(|(square, move_direction)| is_direction_valid_from_square(square, move_direction))
-        .map(|(square, move_direction)| {
-            (square, Path::from(move_direction.directions().as_slice()))
+        .filter(|(square, (move_direction, _))| {
+            is_direction_valid_from_square(*square, *move_direction)
         })
+        .map(|(square, (move_direction, paths))| (square, *move_direction, *paths))
         .collect()
 }
 
@@ -340,17 +341,20 @@ fn static_sparse_piece_move_map() -> &'static Vec<u16> {
         let valid_moves = get_valid_paths_with_squares();
         assert_eq!(valid_moves.len(), NUM_PIECE_MOVES);
 
-        let mut sparse_map = vec![u16::MAX; 16321];
+        let mut sparse_map = vec![u16::MAX; 16361];
 
-        for (idx, (square, path)) in valid_moves.iter().enumerate() {
-            let sparse_idx = map_square_path_to_sparse_idx(square, path);
+        for (idx, (square, _, paths)) in valid_moves.into_iter().enumerate() {
+            for path in paths {
+                let sparse_idx = map_square_path_to_sparse_idx(square, path);
 
-            assert_eq!(
-                sparse_map[sparse_idx], u16::MAX,
-                "Collision found while filling sparse map"
-            );
+                assert_eq!(
+                    sparse_map[sparse_idx],
+                    u16::MAX,
+                    "Collision found while filling sparse map"
+                );
 
-            sparse_map[sparse_idx] = idx as u16;
+                sparse_map[sparse_idx] = idx as u16;
+            }
         }
 
         sparse_map
@@ -358,7 +362,7 @@ fn static_sparse_piece_move_map() -> &'static Vec<u16> {
 }
 
 fn map_square_push_pull_to_sparse_idx(square: &Square, dir: &PushPullDirection) -> usize {
-    (((square.get_index() as u16) << 8) ^ (dir.as_u8() as u16)) as usize
+    (((square.get_index() as u16) << 4) ^ (dir.as_u8() as u16)) as usize
 }
 
 fn get_valid_push_pulls_with_squares() -> Vec<(Square, PushPullDirection)> {
@@ -381,13 +385,14 @@ fn static_sparse_push_pull_map() -> &'static Vec<u16> {
             "The number of valid push pull moves should be correct."
         );
 
-        let mut sparse_map = vec![u16::MAX; 16321];
+        let mut sparse_map = vec![u16::MAX; 1019];
 
         for (idx, (square, dir)) in valid_moves.iter().enumerate() {
             let sparse_idx = map_square_push_pull_to_sparse_idx(square, dir);
 
             assert_eq!(
-                sparse_map[sparse_idx], u16::MAX,
+                sparse_map[sparse_idx],
+                u16::MAX,
                 "Collision found while filling sparse map"
             );
 
@@ -444,6 +449,7 @@ mod tests {
     extern crate test;
 
     use super::*;
+    use itertools::Itertools;
     use model::tensorflow::model::Mapper as MapperTrait;
     use test::Bencher;
 
@@ -497,14 +503,28 @@ mod tests {
     fn test_map_action_to_policy_output_idx_piece_move_all() {
         let mut num_asserts = 0;
 
-        for (i, (square, path)) in get_valid_paths_with_squares().into_iter().enumerate() {
-            let action = Action::Move(square, path);
-            let idx = map_action_to_policy_output_idx(&action);
-            assert_eq!(i, idx);
+        for (i, (square, _, paths)) in get_valid_paths_with_squares().into_iter().enumerate() {
+            for path in paths {
+                let action = Action::Move(square, path);
+                let idx = map_action_to_policy_output_idx(&action);
+                assert_eq!(i, idx);
+            }
             num_asserts += 1;
         }
 
         assert_eq!(num_asserts, NUM_PIECE_MOVES)
+    }
+
+    #[test]
+    fn test_valid_paths_is_in_the_correct_order_of_move_dirs() {
+        for (dir_a, dir_b) in get_valid_paths_with_squares()
+            .into_iter()
+            .map(|(_, dir, _)| dir)
+            .dedup()
+            .zip(MoveDirection::move_directions())
+        {
+            assert_eq!(dir_a, dir_b);
+        }
     }
 
     #[test]
@@ -1443,15 +1463,28 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
-            children: vec![("a7n".parse().unwrap(), 0.0, 7), ("pa7nn".parse().unwrap(), 0.0, 2), ("p".parse().unwrap(), 0.0, 1)],
+            children: vec![
+                ("a7n".parse().unwrap(), 0.0, 7),
+                ("pa7nn".parse().unwrap(), 0.0, 2),
+                ("p".parse().unwrap(), 0.0, 1),
+            ],
         };
 
         let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
         let pass_idx = OUTPUT_SIZE - 1;
         assert_eq!(output.len(), OUTPUT_SIZE);
-        assert_eq!(output[0], 0.7, "Policy for a7n should be 7 visit / 10 visits");
-        assert_eq!(output[NUM_PIECE_MOVES], 0.2, "Policy for pa7nn should be 7 visit / 10 visits");
-        assert_eq!(output[pass_idx], 0.1, "Policy for pass should be 1 visit / 10 visits");
+        assert_eq!(
+            output[0], 0.7,
+            "Policy for a7n should be 7 visit / 10 visits"
+        );
+        assert_eq!(
+            output[NUM_PIECE_MOVES], 0.2,
+            "Policy for pa7nn should be 7 visit / 10 visits"
+        );
+        assert_eq!(
+            output[pass_idx], 0.1,
+            "Policy for pass should be 1 visit / 10 visits"
+        );
     }
 
     #[test]
@@ -1472,17 +1505,30 @@ mod tests {
             .parse()
             .unwrap();
 
-            let policy_metrics = NodeMetrics {
-                visits: 11,
-                children: vec![("h2s".parse().unwrap(), 0.0, 7), ("ph2ss".parse().unwrap(), 0.0, 2), ("p".parse().unwrap(), 0.0, 1)],
-            };
-    
-            let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
-            let pass_idx = OUTPUT_SIZE - 1;
-            assert_eq!(output.len(), OUTPUT_SIZE);
-            assert_eq!(output[0], 0.7, "Policy for h2s should be 7 visit / 10 visits");
-            assert_eq!(output[NUM_PIECE_MOVES], 0.2, "Policy for ph2ss should be 7 visit / 10 visits");
-            assert_eq!(output[pass_idx], 0.1, "Policy for pass should be 1 visit / 10 visits");
+        let policy_metrics = NodeMetrics {
+            visits: 11,
+            children: vec![
+                ("h2s".parse().unwrap(), 0.0, 7),
+                ("ph2ss".parse().unwrap(), 0.0, 2),
+                ("p".parse().unwrap(), 0.0, 1),
+            ],
+        };
+
+        let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
+        let pass_idx = OUTPUT_SIZE - 1;
+        assert_eq!(output.len(), OUTPUT_SIZE);
+        assert_eq!(
+            output[0], 0.7,
+            "Policy for h2s should be 7 visit / 10 visits"
+        );
+        assert_eq!(
+            output[NUM_PIECE_MOVES], 0.2,
+            "Policy for ph2ss should be 7 visit / 10 visits"
+        );
+        assert_eq!(
+            output[pass_idx], 0.1,
+            "Policy for pass should be 1 visit / 10 visits"
+        );
     }
 
     #[test]
@@ -1504,10 +1550,81 @@ mod tests {
             .unwrap();
 
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
-        policy_scores[0] = f16::from_f32(1.0);
+
+        policy_scores[map_action_to_policy_output_idx(&"a1n".parse().unwrap())] = f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        dbg!(output);
+        assert_eq!(output[0].action, "a1n".parse().unwrap());
+        assert_eq!(output[0].policy_score, 0.04316948);
+        assert_eq!(output[1].policy_score, 0.018761378);
+        assert_eq!(output.len(), 52);
+    }
+
+    #[test]
+    fn test_policy_to_valid_actions_2() {
+        let mut game_state: GameState = "
+            1g
+             +-----------------+
+            8| r               |
+            7|                 |
+            6|     x     x     |
+            5|                 |
+            4|       E         |
+            3|     x     x     |
+            2|                 |
+            1| R               |
+             +-----------------+
+               a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        game_state = game_state.take_action(&"a1n".parse().unwrap());
+
+        let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
+
+        policy_scores[map_action_to_policy_output_idx(&"d4n".parse().unwrap())] = f16::from_f32(1.0);
+        policy_scores[map_action_to_policy_output_idx(&"p".parse().unwrap())] = f16::from_f32(5.0);
+        let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
+
+        assert_eq!(output[0].action, "d4n".parse().unwrap());
+        assert_eq!(output[0].policy_score, 0.025623035);
+        assert_eq!(output[1].policy_score, 0.011135726);
+        assert_eq!(output[24].action, "p".parse().unwrap());
+        assert_eq!(output[24].policy_score, 0.7182553);
+        assert_eq!(output.len(), 25);
+    }
+
+    #[test]
+    fn test_policy_to_valid_actions_as_silver() {
+        let mut game_state: GameState = "
+            1s
+             +-----------------+
+            8| r r             |
+            7|                 |
+            6|     x     x     |
+            5|                 |
+            4|       E         |
+            3|     x     x     |
+            2|                 |
+            1| R               |
+             +-----------------+
+               a b c d e f g h"
+            .parse()
+            .unwrap();
+
+        game_state = game_state.take_action(&"a8s".parse().unwrap());
+
+        let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
+
+        policy_scores[map_action_to_policy_output_idx(&"b8s".parse::<Action>().unwrap().invert())] = f16::from_f32(1.0);
+        let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
+
+        assert_eq!(output[0].action, "b8e".parse().unwrap());
+        assert_eq!(output[0].policy_score, 0.07518246);
+        assert_eq!(output[1].action, "b8s".parse().unwrap());
+        assert_eq!(output[1].policy_score, 0.17299303);
+        assert_eq!(output[11].policy_score, 0.07518246);
+        assert_eq!(output.len(), 12);
     }
 
     #[bench]
