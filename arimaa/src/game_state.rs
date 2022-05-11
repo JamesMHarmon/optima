@@ -56,6 +56,10 @@ impl GameState {
     pub fn is_play_phase(&self) -> bool {
         self.0.is_play_phase()
     }
+
+    pub fn get_vertical_symmetry(&self) -> Self {
+        Self(self.0.get_vertical_symmetry())
+    }
 }
 
 impl Display for GameState {
