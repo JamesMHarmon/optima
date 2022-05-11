@@ -5,7 +5,7 @@ use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
 use itertools::Itertools;
-use log::info;
+use log::{debug, info};
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -260,10 +260,12 @@ impl Predictor {
         let signature = model
             .meta_graph_def()
             .get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY)
-            .expect(&format!(
-                "Failed to get signature: {}",
-                DEFAULT_SERVING_SIGNATURE_DEF_KEY
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to get signature: {}",
+                    DEFAULT_SERVING_SIGNATURE_DEF_KEY
+                )
+            });
 
         let input_tensor_info = signature
             .inputs()
@@ -295,21 +297,21 @@ impl Predictor {
         let moves_left_head_name = moves_left_head_tensor_info.map(|x| &x.name().name);
 
         let op_input = graph
-            .operation_by_name_required(&input_name)
+            .operation_by_name_required(input_name)
             .map(|operation| OperationWithIndex {
                 operation,
                 index: input_tensor_info.name().index,
             })
             .expect("Expected to find input operation");
         let op_value_head = graph
-            .operation_by_name_required(&value_head_name)
+            .operation_by_name_required(value_head_name)
             .map(|operation| OperationWithIndex {
                 operation,
                 index: value_head_tensor_info.name().index,
             })
             .expect("Expected to find value_head operation");
         let op_policy_head = graph
-            .operation_by_name_required(&policy_head_name)
+            .operation_by_name_required(policy_head_name)
             .map(|operation| OperationWithIndex {
                 operation,
                 index: policy_head_tensor_info.name().index,
@@ -318,7 +320,7 @@ impl Predictor {
         let op_moves_left_head = moves_left_head_name
             .map(|name| {
                 graph
-                    .operation_by_name_required(&name)
+                    .operation_by_name_required(name)
                     .map(|operation| OperationWithIndex {
                         operation,
                         index: moves_left_head_tensor_info.unwrap().name().index,
@@ -344,7 +346,7 @@ impl Predictor {
         let session = &self.session;
 
         let mut output_step = SessionRunArgs::new();
-        output_step.add_feed(&session.op_input.operation, session.op_input.index, &tensor);
+        output_step.add_feed(&session.op_input.operation, session.op_input.index, tensor);
         let value_head_fetch_token = output_step.request_fetch(
             &session.op_value_head.operation,
             session.op_value_head.index,
@@ -386,7 +388,7 @@ impl Predictor {
     fn fill_tensor<'a, T: Iterator<Item = &'a [f16]>>(tensor: &mut Tensor<f16>, inputs: T) {
         for (i, input) in inputs.enumerate() {
             let input_width = input.len();
-            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(&input);
+            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(input);
         }
     }
 }
@@ -469,7 +471,7 @@ where
                 self.analysed_state_sender.clone(),
                 tx,
             ))
-            .unwrap_or_else(|_| panic!("Channel Failure 3"));
+            .unwrap_or_else(|_| debug!("Channel 3 Closed"));
 
         UnwrappedReceiver::new(rx)
     }
@@ -593,14 +595,14 @@ where
                     Some(analysis) => {
                         unordered_tx
                             .send((id, analysis, tx))
-                            .unwrap_or_else(|_| panic!("Channel Failure 1"));
+                            .unwrap_or_else(|_| debug!("Channel 1 Closed"));
                     }
                     None => {
                         let input =
                             mapper_clone.game_state_to_input(&state_to_analyse, Mode::Infer);
                         states_to_predict_tx
                             .send((id, state_to_analyse, input, unordered_tx, tx))
-                            .unwrap_or_else(|_| panic!("Channel Failure 2"));
+                            .unwrap_or_else(|_| debug!("Channel 2 Closed"));
                     }
                 };
             }
@@ -650,7 +652,7 @@ where
 
                     predicted_states_tx
                         .send((states_to_analyse, predictions))
-                        .unwrap_or_else(|_| panic!("Failed to send value in channel."));
+                        .unwrap_or_else(|_| debug!("Failed to send value in channel."));
                 }
             });
         }
@@ -691,7 +693,7 @@ where
                     }
 
                     tx.send((id, analysis, tx2))
-                        .unwrap_or_else(|_| panic!("Channel Failure 4"));
+                        .unwrap_or_else(|_| debug!("Channel 4 Closed"));
                 }
             }
         });
@@ -799,7 +801,7 @@ impl CompletedAnalysisOrdered {
                 if id == next_id_to_tx {
                     next_id_to_tx += 1;
                     if tx.send(analysis).is_err() {
-                        panic!("Failed to send analysis");
+                        debug!("Failed to send analysis 1");
                     }
 
                     while let Some(val) = analyzed_states_to_tx.peek_mut() {
@@ -807,7 +809,7 @@ impl CompletedAnalysisOrdered {
                             let state_to_tx = PeekMut::pop(val);
                             next_id_to_tx += 1;
                             if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
-                                panic!("Failed to send analysis");
+                                debug!("Failed to send analysis 2");
                             }
                         } else {
                             break;
@@ -892,7 +894,7 @@ where
 
     let model_options = get_options(source_model_info)?;
     let moves_left_size = model_options.moves_left_size;
-    let source_paths = Paths::from_model_info(&source_model_info);
+    let source_paths = Paths::from_model_info(source_model_info);
     let source_base_path = source_paths.get_base_path();
 
     let mut train_data_file_names = vec![];

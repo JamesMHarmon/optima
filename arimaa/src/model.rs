@@ -63,7 +63,7 @@ impl model::model::ModelFactory for ModelFactory {
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
-        Ok(get_latest_model_info(model_info)?)
+        get_latest_model_info(model_info)
     }
 }
 

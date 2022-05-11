@@ -1,6 +1,7 @@
 #![feature(toowned_clone_into)]
 #![feature(test)]
 #![allow(clippy::inconsistent_digit_grouping)]
+#![allow(clippy::unusual_byte_groupings)]
 
 mod board;
 mod engine;

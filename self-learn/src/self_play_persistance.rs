@@ -61,7 +61,7 @@ impl SelfPlayPersistance {
 
         let mut file_paths = file_paths
             .into_iter()
-            .filter(|p| get_model_num(p) <= model_num)
+            .filter(|p| get_model_num(p.to_path_buf()) <= model_num)
             .collect::<Vec<_>>();
 
         file_paths.sort();
@@ -74,7 +74,7 @@ impl SelfPlayPersistance {
     ) -> Result<Box<dyn Iterator<Item = SelfPlayMetrics<A, V>>>> {
         info!("Reading File: {:?}", file_path);
         let file = File::open(file_path);
-        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
+        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str("").unwrap());
 
         match file {
             Err(_) => Ok(Box::new(empty_iter)),
@@ -97,14 +97,14 @@ impl SelfPlayPersistance {
     fn get_game_files_in_dir(games_dir: &Path) -> Result<Vec<PathBuf>> {
         let file_paths: Vec<PathBuf> = fs::read_dir(games_dir)?
             .filter_map(|e| e.map(|e| e.path()).ok())
-            .filter(|p| p.is_file() && file_path_is_valid_game_file(p))
+            .filter(|p| p.is_file() && file_path_is_valid_game_file(p.to_path_buf()))
             .collect();
 
         Ok(file_paths)
     }
 }
 
-fn file_path_is_valid_game_file(path: &PathBuf) -> bool {
+fn file_path_is_valid_game_file(path: PathBuf) -> bool {
     if let Some(game_name) = path.file_stem() {
         if let Some(game_name) = game_name.to_str() {
             return ModelInfo::is_model_name(game_name);
@@ -114,7 +114,7 @@ fn file_path_is_valid_game_file(path: &PathBuf) -> bool {
     false
 }
 
-fn get_model_num(path: &PathBuf) -> usize {
+fn get_model_num(path: PathBuf) -> usize {
     let file_stem = path.file_stem().unwrap().to_str().unwrap();
     ModelInfo::from_model_name(file_stem).get_model_num()
 }
@@ -134,7 +134,7 @@ where
     V: DeserializeOwned,
 {
     pub fn new(file_paths: Vec<PathBuf>) -> Self {
-        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str(&"").unwrap());
+        let empty_iter = (0..0).take(0).map(|_| serde_json::from_str("").unwrap());
         Self {
             file_paths,
             metrics: Box::new(empty_iter),

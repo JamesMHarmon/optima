@@ -214,7 +214,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
                 let input_idx = if invert {
                     map_action_to_input_idx(&action.invert())
                 } else {
-                    map_action_to_input_idx(&action)
+                    map_action_to_input_idx(action)
                 };
 
                 r[input_idx] = *visits as f32 / total_visits;
@@ -326,7 +326,7 @@ impl model::model::ModelFactory for ModelFactory {
     }
 
     fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
-        Ok(get_latest_model_info(model_info)?)
+        get_latest_model_info(model_info)
     }
 }
 

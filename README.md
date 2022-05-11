@@ -50,6 +50,10 @@ AZG can play a variety of games as well as allows support for implementing addit
 
 AZG
 
+## Install
+
+[Installation Instructions](./INSTALL.md)
+
 ## TODO
 
 * Masking of the policy head.

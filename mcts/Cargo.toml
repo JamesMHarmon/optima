@@ -16,7 +16,7 @@ model = { path = "../model" }
 anyhow = "1.0"
 rand = "0.8"
 rand_distr = "0.4"
-tokio = { version = "0.2", features = ["parking_lot"] }
+tokio = { version = "1.18", features = ["parking_lot", "macros"] }
 async-std = "1.6"
 futures = "0.3"
 generational-arena = "0.2"

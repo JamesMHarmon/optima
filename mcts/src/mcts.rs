@@ -7,6 +7,7 @@ use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
 use rand_distr::Dirichlet;
+use std::borrow::Cow;
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::cell::RefMut;
@@ -25,7 +26,7 @@ use super::node_details::{NodeDetails, PUCT};
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
-use model::analytics::{ActionWithPolicy, GameAnalyzer};
+use model::analytics::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
 use model::node_metrics::NodeMetrics;
 
 pub struct DirichletOptions {
@@ -102,9 +103,9 @@ where
     options: MCTSOptions<S, C, T>,
     game_engine: &'a E,
     analyzer: &'a M,
-    starting_game_state: Option<S>,
+    game_state: S,
     root: Option<Index>,
-    arena: NodeArena<MCTSNode<S, A, V>>,
+    arena: NodeArena<MCTSNode<A, V>>,
     focus_actions: Vec<A>,
 }
 
@@ -129,7 +130,7 @@ where
             options,
             game_engine,
             analyzer,
-            starting_game_state: Some(game_state),
+            game_state,
             root: None,
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
@@ -147,7 +148,7 @@ where
             options,
             game_engine,
             analyzer,
-            starting_game_state: Some(game_state),
+            game_state,
             root: None,
             arena: NodeArena::with_capacity(capacity * 2),
             focus_actions: vec![],
@@ -250,7 +251,7 @@ where
         })
     }
 
-    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<S, A, V>> + '_> {
+    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, V>> + '_> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let arena_ref = self.arena.get();
         let node = Ref::map(arena_ref, |arena_ref| arena_ref.node(root_index));
@@ -260,7 +261,7 @@ where
     pub fn get_node_of_edge(
         &self,
         edge: &MCTSEdge<A>,
-    ) -> Option<impl Deref<Target = MCTSNode<S, A, V>> + '_> {
+    ) -> Option<impl Deref<Target = MCTSNode<A, V>> + '_> {
         edge.node_index()
             .map(|index| Ref::map(self.arena.get(), |n| n.node(index)))
     }
@@ -269,43 +270,49 @@ where
         self.get_focus_node_index()?
             .map(|node_index| {
                 let is_root = self.focus_actions.is_empty();
-                self.get_node_details(node_index, is_root)
+                let game_state = self.get_focus_node_game_state();
+                self.get_node_details(node_index, &game_state, is_root)
             })
             .transpose()
     }
 
     pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
-        let arena_ref = self.arena.get();
-        let mut node_index = *self
-            .root
-            .as_ref()
-            .ok_or_else(|| anyhow!("No root node found!"))?;
-        let mut nodes = vec![];
+        self.get_focus_node_index()?
+            .map(|mut node_index| {
+                let mut game_state = self.get_focus_node_game_state();
+                let mut nodes = vec![];
+                let arena_ref = self.arena.get();
 
-        loop {
-            let is_root = nodes.is_empty();
-            let mut children = self.get_node_details(node_index, is_root)?.children;
+                loop {
+                    let is_root = nodes.is_empty();
+                    let mut children = self
+                        .get_node_details(node_index, &game_state, is_root)?
+                        .children;
 
-            if children.is_empty() {
-                break;
-            }
+                    if children.is_empty() {
+                        break;
+                    }
 
-            let (action, puct) = children.swap_remove(0);
-            nodes.push((action.clone(), puct));
+                    let (action, puct) = children.swap_remove(0);
+                    nodes.push((action.clone(), puct));
 
-            if let Some(child_index) = arena_ref
-                .node(node_index)
-                .get_child_of_action(&action)
-                .and_then(|child| child.node.get_index())
-            {
-                node_index = child_index;
-                continue;
-            }
+                    if let Some(child_index) = arena_ref
+                        .node(node_index)
+                        .get_child_of_action(&action)
+                        .and_then(|child| child.node.get_index())
+                    {
+                        game_state = self.game_engine.take_action(&game_state, &action);
+                        node_index = child_index;
+                        continue;
+                    }
 
-            break;
-        }
+                    break;
+                }
 
-        Ok(nodes)
+                Ok(nodes)
+            })
+            .ok_or_else(|| anyhow!("Focused action was not found"))
+            .flatten()
     }
 
     pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
@@ -315,6 +322,7 @@ where
         let options = &self.options;
         let arena_ref = &self.arena;
         let focus_actions = &self.focus_actions;
+        let game_state = &self.game_state;
         let mut max_depth: usize = 0;
         let mut alive_flag = true;
         let mut alive = alive;
@@ -330,6 +338,7 @@ where
                 searches.push(Self::traverse_tree_and_expand(
                     root_node_index,
                     arena_ref,
+                    game_state,
                     focus_actions,
                     game_engine,
                     analyzer,
@@ -356,7 +365,8 @@ where
 
     async fn traverse_tree_and_expand(
         root_index: Index,
-        arena: &NodeArena<MCTSNode<S, A, V>>,
+        arena: &NodeArena<MCTSNode<A, V>>,
+        game_state: &S,
         focus_actions: &[A],
         game_engine: &E,
         analyzer: &M,
@@ -365,6 +375,8 @@ where
         let mut depth = 0;
         let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec![];
         let mut latest_index = root_index;
+        let mut game_state = Cow::Borrowed(game_state);
+        let mut move_number = game_engine.get_move_number(&game_state);
 
         loop {
             depth += 1;
@@ -376,8 +388,8 @@ where
                 Self::update_node_values(
                     &nodes_to_propagate_to_stack,
                     latest_index,
+                    move_number,
                     &mut *arena_mut,
-                    game_engine,
                 );
                 break;
             }
@@ -389,15 +401,21 @@ where
                     node.get_position_of_action(focus_action)
                         .ok_or_else(|| anyhow!("Focused action was not found"))?
                 } else {
-                    MCTS::<S, A, E, M, C, T, V>::select_path(node, is_root, options)?
+                    MCTS::<S, A, E, M, C, T, V>::select_path(node, &game_state, is_root, options)?
                 };
 
             nodes_to_propagate_to_stack.push(NodeUpdateInfo {
                 parent_node_index: latest_index,
+                parent_node_player_to_move: game_engine.get_player_to_move(&game_state),
                 node_child_index: selected_child_node_children_index,
             });
 
             let selected_child_node = &mut node.children[selected_child_node_children_index];
+
+            game_state =
+                Cow::Owned(game_engine.take_action(&game_state, selected_child_node.action()));
+            move_number = game_engine.get_move_number(&game_state);
+
             let selected_child_node_node = &mut selected_child_node.node;
             let prev_visits = selected_child_node.visits;
             selected_child_node.visits += 1;
@@ -409,8 +427,8 @@ where
                     Self::update_node_values(
                         &nodes_to_propagate_to_stack,
                         selected_child_node_index,
+                        move_number,
                         &mut *arena_mut,
-                        game_engine,
                     );
                     break;
                 }
@@ -423,13 +441,9 @@ where
             // If the node is yet to be expanded and is not already expanded, then start expanding it.
             if selected_child_node_node.is_unexpanded() {
                 selected_child_node_node.mark_as_expanding();
-                let selected_action = selected_child_node.action.clone();
-                let new_game_state = game_engine.take_action(&node.game_state, &selected_action);
-
                 drop(arena_mut);
 
-                let expanded_node =
-                    MCTS::<S, A, E, M, C, T, V>::expand_leaf(new_game_state, analyzer).await;
+                let expanded_node = Self::analyse_and_create_node(&game_state, analyzer).await;
 
                 let mut arena_mut = arena.get_mut();
                 let expanded_node_index = arena_mut.insert(expanded_node);
@@ -442,8 +456,8 @@ where
                 Self::update_node_values(
                     &nodes_to_propagate_to_stack,
                     expanded_node_index,
+                    move_number,
                     &mut *arena_mut,
-                    game_engine,
                 );
 
                 break;
@@ -469,26 +483,25 @@ where
     fn update_node_values(
         nodes_to_update: &[NodeUpdateInfo],
         value_node_index: Index,
-        arena: &mut NodeArenaInner<MCTSNode<S, A, V>>,
-        game_engine: &E,
+        value_node_move_num: usize,
+        arena: &mut NodeArenaInner<MCTSNode<A, V>>,
     ) {
         let value_node = &arena.node(value_node_index);
         let value_score = &value_node.value_score.clone();
-        let value_node_move_num = game_engine.get_move_number(&value_node.game_state);
         let value_node_moves_left_score = value_node.moves_left_score;
         let value_node_game_length = value_node_move_num as f32 + value_node_moves_left_score;
 
         for NodeUpdateInfo {
             parent_node_index,
             node_child_index,
+            parent_node_player_to_move,
         } in nodes_to_update
         {
             let node_to_update_parent = arena.node_mut(*parent_node_index);
             // Update value of W from the parent node's perspective.
             // This is because the parent chooses which child node to select, and as such will want the one with the
             // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
-            let player_to_move = game_engine.get_player_to_move(&node_to_update_parent.game_state);
-            let score = value_score.get_value_for_player(player_to_move);
+            let score = value_score.get_value_for_player(*parent_node_player_to_move);
 
             let mut node_to_update = &mut node_to_update_parent.children[*node_child_index];
             node_to_update.W += score;
@@ -498,22 +511,15 @@ where
 
     fn _select_action(&mut self, use_temp: bool) -> Result<A> {
         if let Some(node_index) = &self.get_focus_node_index()? {
-            let arena_ref = self.arena.get();
-            let node = arena_ref.node(*node_index);
+            let game_state = self.get_focus_node_game_state();
             let temp = &self.options.temperature;
-            let temperature_visit_offset = self.options.temperature_visit_offset;
-            let game_state = &node.game_state;
-            let temp = temp(game_state);
-            drop(arena_ref);
+            let temp = temp(&game_state);
 
             let child_node_details = self
-                .get_node_details(*node_index, self.focus_actions.is_empty())?
+                .get_node_details(*node_index, &game_state, self.focus_actions.is_empty())?
                 .children;
 
             if child_node_details.is_empty() {
-                let arena_mut = self.arena.get_mut();
-                let node = arena_mut.node(*node_index);
-                let game_state = &node.game_state;
                 return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
             }
 
@@ -530,7 +536,7 @@ where
                 let chosen_index = Self::select_action_using_temperature(
                     &candidates,
                     temp,
-                    temperature_visit_offset,
+                    self.options.temperature_visit_offset,
                 )?;
                 candidates[chosen_index].0
             };
@@ -543,11 +549,17 @@ where
         ))
     }
 
-    fn get_node_details(&self, node_index: Index, is_root: bool) -> Result<NodeDetails<A>> {
+    fn get_node_details(
+        &self,
+        node_index: Index,
+        game_state: &S,
+        is_root: bool,
+    ) -> Result<NodeDetails<A>> {
         let arena_ref = self.arena.get();
         let node = arena_ref.node(node_index);
 
-        let metrics = Self::get_PUCT_for_nodes(node, &*arena_ref, is_root, &self.options);
+        let metrics =
+            Self::get_PUCT_for_nodes(node, game_state, &*arena_ref, is_root, &self.options);
 
         let mut children: Vec<_> = node
             .children
@@ -556,7 +568,7 @@ where
             .map(|(n, m)| (n.action.clone(), m))
             .collect();
 
-        children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(&x_puct));
+        children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(x_puct));
 
         Ok(NodeDetails {
             visits: node.get_node_visits(),
@@ -582,6 +594,8 @@ where
             return Err(err);
         }
 
+        self.game_state = game_engine.take_action(&self.game_state, &action);
+
         let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
@@ -595,9 +609,7 @@ where
 
             node_index
         } else {
-            let new_game_state = game_engine.take_action(&root_node.game_state, &action);
-            let analyzer = &mut self.analyzer;
-            let node = MCTS::<S, A, E, M, C, T, V>::expand_leaf(new_game_state, analyzer).await;
+            let node = Self::analyse_and_create_node(&self.game_state, self.analyzer).await;
             arena_mut.insert(node)
         };
 
@@ -606,7 +618,7 @@ where
         Ok(())
     }
 
-    fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<S, A, V>>) {
+    fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
         let children = arena.remove(node_index).children;
 
         for child_node_index in children.into_iter().filter_map(|n| n.node.get_index()) {
@@ -614,7 +626,7 @@ where
         }
     }
 
-    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<S, A, V>>) {
+    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
         let node = arena.node_mut(node_index);
         node.visits = 1;
         let children = &mut node.children;
@@ -632,7 +644,7 @@ where
     }
 
     fn split_node_children_by_action<'b>(
-        current_root: &'b MCTSNode<S, A, V>,
+        current_root: &'b MCTSNode<A, V>,
         action: &A,
     ) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>)> {
         let matching_action = current_root
@@ -649,7 +661,8 @@ where
     }
 
     fn select_path(
-        node: &MCTSNode<S, A, V>,
+        node: &MCTSNode<A, V>,
+        game_state: &S,
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Result<usize> {
@@ -662,7 +675,7 @@ where
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(&node.game_state, Nsb, is_root);
+        let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
             &Self::get_game_length_baseline(children, options.moves_left_threshold);
 
@@ -717,8 +730,9 @@ where
     }
 
     fn get_PUCT_for_nodes(
-        node: &MCTSNode<S, A, V>,
-        arena: &NodeArenaInner<MCTSNode<S, A, V>>,
+        node: &MCTSNode<A, V>,
+        game_state: &S,
+        arena: &NodeArenaInner<MCTSNode<A, V>>,
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Vec<PUCT> {
@@ -731,9 +745,9 @@ where
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
-        let cpuct = cpuct(&node.game_state, Nsb, is_root);
+        let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
-            &Self::get_game_length_baseline(&children, options.moves_left_threshold);
+            &Self::get_game_length_baseline(children, options.moves_left_threshold);
 
         let mut pucts = Vec::with_capacity(children.len());
 
@@ -771,10 +785,6 @@ where
         pucts
     }
 
-    async fn expand_leaf(game_state: S, analyzer: &M) -> MCTSNode<S, A, V> {
-        MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(game_state, analyzer).await
-    }
-
     async fn get_or_create_root_node(&mut self) -> Index {
         let root = &mut self.root;
 
@@ -782,16 +792,7 @@ where
             return *root_node_index;
         }
 
-        let analyzer = &mut self.analyzer;
-        let starting_game_state = &mut self.starting_game_state;
-
-        let starting_game_state = starting_game_state
-            .take()
-            .expect("Tried to use the same starting game state twice");
-
-        let root_node =
-            MCTS::<S, A, E, M, C, T, V>::analyse_and_create_node(starting_game_state, analyzer)
-                .await;
+        let root_node = Self::analyse_and_create_node(&self.game_state, self.analyzer).await;
 
         let root_node_index = self.arena.get_mut().insert(root_node);
 
@@ -800,18 +801,11 @@ where
         root_node_index
     }
 
-    async fn analyse_and_create_node(game_state: S, analyzer: &M) -> MCTSNode<S, A, V> {
-        let analysis_result = analyzer.get_state_analysis(&game_state).await;
-
-        MCTSNode::new(
-            game_state,
-            analysis_result.value_score,
-            analysis_result.policy_scores,
-            analysis_result.moves_left,
-        )
+    async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, V> {
+        analyzer.get_state_analysis(game_state).await.into()
     }
 
-    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<S, A, V>, dirichlet: &DirichletOptions) {
+    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
         let policy_scores: Vec<f32> = node
             .children
             .iter()
@@ -865,7 +859,7 @@ where
     }
 
     fn get_focus_node_index(&self) -> Result<Option<Index>> {
-        let arena_mut = self.arena.get_mut();
+        let arena_ref = self.arena.get();
 
         let mut node_index = *self
             .root
@@ -873,7 +867,7 @@ where
             .ok_or_else(|| anyhow!("No root node found!"))?;
 
         for action in &self.focus_actions {
-            match arena_mut
+            match arena_ref
                 .node(node_index)
                 .get_child_of_action(action)
                 .and_then(|child| child.node.get_index())
@@ -884,6 +878,16 @@ where
         }
 
         Ok(Some(node_index))
+    }
+
+    fn get_focus_node_game_state(&self) -> S {
+        let mut game_state = Cow::Borrowed(&self.game_state);
+
+        for action in &self.focus_actions {
+            game_state = Cow::Owned(self.game_engine.take_action(&*game_state, action))
+        }
+
+        game_state.into_owned()
     }
 
     fn generate_noise(policy_scores: Vec<f32>, dirichlet: &DirichletOptions) -> Vec<f32> {
@@ -951,9 +955,8 @@ enum GameLengthBaseline {
 }
 
 #[allow(non_snake_case)]
-impl<S, A, V> MCTSNode<S, A, V> {
+impl<A, V> MCTSNode<A, V> {
     pub fn new(
-        game_state: S,
         value_score: V,
         policy_scores: Vec<ActionWithPolicy<A>>,
         moves_left_score: f32,
@@ -962,7 +965,6 @@ impl<S, A, V> MCTSNode<S, A, V> {
             visits: 1,
             value_score,
             moves_left_score,
-            game_state,
             children: policy_scores
                 .into_iter()
                 .map(|action_with_policy| MCTSEdge {
@@ -978,9 +980,20 @@ impl<S, A, V> MCTSNode<S, A, V> {
     }
 }
 
+impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
+    fn from(analysis: GameStateAnalysis<A, V>) -> Self {
+        MCTSNode::new(
+            analysis.value_score,
+            analysis.policy_scores,
+            analysis.moves_left,
+        )
+    }
+}
+
 struct NodeUpdateInfo {
     parent_node_index: Index,
     node_child_index: usize,
+    parent_node_player_to_move: usize,
 }
 
 #[allow(non_snake_case)]
@@ -1040,14 +1053,14 @@ impl<T> NodeArenaInner<T> {
     }
 }
 
-impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
+impl<A, V> NodeArenaInner<MCTSNode<A, V>> {
     #[inline]
-    fn node(&self, index: Index) -> &MCTSNode<S, A, V> {
+    fn node(&self, index: Index) -> &MCTSNode<A, V> {
         &self.0[index]
     }
 
     #[inline]
-    fn node_mut(&mut self, index: Index) -> &mut MCTSNode<S, A, V> {
+    fn node_mut(&mut self, index: Index) -> &mut MCTSNode<A, V> {
         &mut self.0[index]
     }
 
@@ -1057,12 +1070,12 @@ impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
     }
 
     #[inline]
-    fn insert(&mut self, node: MCTSNode<S, A, V>) -> Index {
+    fn insert(&mut self, node: MCTSNode<A, V>) -> Index {
         self.0.insert(node)
     }
 
     #[inline]
-    fn remove(&mut self, index: Index) -> MCTSNode<S, A, V> {
+    fn remove(&mut self, index: Index) -> MCTSNode<A, V> {
         self.0
             .remove(index)
             .expect("Expected node to exist in the arena")
@@ -1070,15 +1083,14 @@ impl<S, A, V> NodeArenaInner<MCTSNode<S, A, V>> {
 }
 
 #[derive(Debug)]
-pub struct MCTSNode<S, A, V> {
+pub struct MCTSNode<A, V> {
     visits: usize,
     value_score: V,
     moves_left_score: f32,
-    game_state: S,
     children: Vec<MCTSEdge<A>>,
 }
 
-impl<S, A, V> MCTSNode<S, A, V>
+impl<A, V> MCTSNode<A, V>
 where
     A: Eq,
 {
@@ -1092,10 +1104,6 @@ where
 
     pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
         self.iter_edges().position(|c| c.action == *action)
-    }
-
-    pub fn game_state(&self) -> &S {
-        &self.game_state
     }
 
     pub fn is_terminal(&self) -> bool {
