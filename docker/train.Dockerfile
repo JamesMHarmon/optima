@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.6.0-gpu
+FROM tensorflow/tensorflow:2.8.0-gpu
 
 WORKDIR /usr/local/bin
 

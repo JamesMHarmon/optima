@@ -237,7 +237,7 @@ impl Predictor {
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
+            "{game_name}_runs/{run_name}/exported_models/{model_num}",
             game_name = model_info.get_game_name(),
             run_name = model_info.get_run_name(),
             model_num = model_info.get_model_num(),
@@ -1025,12 +1025,6 @@ where
         fs::remove_file(path)?;
     }
 
-    create_tensorrt_model(
-        source_model_info.get_game_name(),
-        source_model_info.get_run_name(),
-        target_model_info.get_model_num(),
-    )?;
-
     info!("Training process complete");
 
     Ok(())
@@ -1076,8 +1070,6 @@ fn create(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()
 
     run_cmd(&docker_cmd)?;
 
-    create_tensorrt_model(game_name, run_name, 1)?;
-
     info!("Model creation process complete");
 
     Ok(())
@@ -1107,33 +1099,6 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
     let file_path_lossy = format!("{}", file_path.to_string_lossy());
     let mut file = File::create(file_path).context(file_path_lossy)?;
     writeln!(file, "{}", serialized_options)?;
-
-    Ok(())
-}
-
-fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
-    let docker_cmd = format!(
-        "docker run --rm \
-        --gpus all \
-        -e NVIDIA_VISIBLE_DEVICES=0 \
-        -e CUDA_VISIBLE_DEVICES=0 \
-        -e TF_FORCE_GPU_ALLOW_GROWTH=true \
-        --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        tensorflow/tensorflow:2.6.0-gpu \
-        usr/local/bin/saved_model_cli convert \
-        --dir /{game_name}_runs/{run_name}/exported_models/{model_num} \
-        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{model_num} \
-        --tag_set serve \
-        tensorrt \
-        --precision_mode FP16 \
-        --max_batch_size 512 \
-        --is_dynamic_op False",
-        game_name = game_name,
-        run_name = run_name,
-        model_num = model_num
-    );
-
-    run_cmd(&docker_cmd)?;
 
     Ok(())
 }
