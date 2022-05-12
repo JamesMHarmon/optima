@@ -191,7 +191,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
     }
 
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
-        game_state.get_transposition_hash()
+        game_state.get_transposition_hash() ^ game_state.get_banned_piece_mask()
     }
 
     fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
