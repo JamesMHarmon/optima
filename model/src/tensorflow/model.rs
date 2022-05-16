@@ -894,6 +894,7 @@ where
 
     let model_options = get_options(source_model_info)?;
     let moves_left_size = model_options.moves_left_size;
+    let train_batch_size = options.train_batch_size;
     let source_paths = Paths::from_model_info(source_model_info);
     let source_base_path = source_paths.get_base_path();
 
@@ -906,6 +907,9 @@ where
                 .expect("TRAIN_DATA_CHUNK_SIZE must be a valid int")
         })
         .unwrap_or(TRAIN_DATA_CHUNK_SIZE);
+
+    // Round the chunk size to be divisible by the batch_size
+    let train_data_chunk_size = (train_data_chunk_size / train_batch_size) * train_batch_size;
 
     for (i, sample_metrics) in sample_metrics
         .chunks(train_data_chunk_size)
@@ -923,32 +927,33 @@ where
             let rng = &mut rand::thread_rng();
             let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
-            for metric in sample_metrics_chunk {
+            // Round the number of metrics to be divisible by the batch_size
+            let train_data_by_batch_size = (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
+
+            for metric in sample_metrics_chunk.into_iter().take(train_data_by_batch_size) {
                 let metric_symmetires = mapper.get_symmetries(metric);
                 let metric = metric_symmetires
                     .choose(rng)
                     .expect("Expected at least one metric to return from symmetries.");
+
+                let policy_output =
+                    mapper.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);
+                let value_output =
+                    mapper.map_value_to_value_output(&metric.game_state, &metric.score);
+                let moves_left_output =
+                    map_moves_left_to_one_hot(metric.moves_left, moves_left_size);
+
+                let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+                assert!(f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32, "Policy output should sum to 1.0 but actual sum is {}", sum_of_policy);
 
                 for record in mapper
                     .game_state_to_input(&metric.game_state, Mode::Train)
                     .into_iter()
                     .map(f16::to_f32)
                     .chain(
-                        mapper
-                            .policy_metrics_to_expected_output(&metric.game_state, &metric.policy)
+                        policy_output
                             .into_iter()
-                            .chain(
-                                std::iter::once(
-                                    mapper.map_value_to_value_output(
-                                        &metric.game_state,
-                                        &metric.score,
-                                    ),
-                                )
-                                .chain(map_moves_left_to_one_hot(
-                                    metric.moves_left,
-                                    moves_left_size,
-                                )),
-                            ),
+                            .chain(std::iter::once(value_output).chain(moves_left_output)),
                     )
                 {
                     wtr.push(&record).unwrap();
