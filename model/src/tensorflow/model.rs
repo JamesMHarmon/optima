@@ -237,7 +237,7 @@ impl Predictor {
         let mut graph = Graph::new();
 
         let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/tensorrt_models/{model_num}",
+            "{game_name}_runs/{run_name}/exported_models/{model_num}",
             game_name = model_info.get_game_name(),
             run_name = model_info.get_run_name(),
             model_num = model_info.get_model_num(),
@@ -900,8 +900,15 @@ where
     let mut train_data_file_names = vec![];
     let mut handles = vec![];
 
+    let train_data_chunk_size = std::env::var("TRAIN_DATA_CHUNK_SIZE")
+        .map(|v| {
+            v.parse::<usize>()
+                .expect("TRAIN_DATA_CHUNK_SIZE must be a valid int")
+        })
+        .unwrap_or(TRAIN_DATA_CHUNK_SIZE);
+
     for (i, sample_metrics) in sample_metrics
-        .chunks(TRAIN_DATA_CHUNK_SIZE)
+        .chunks(train_data_chunk_size)
         .into_iter()
         .enumerate()
     {
@@ -1025,12 +1032,6 @@ where
         fs::remove_file(path)?;
     }
 
-    create_tensorrt_model(
-        source_model_info.get_game_name(),
-        source_model_info.get_run_name(),
-        target_model_info.get_model_num(),
-    )?;
-
     info!("Training process complete");
 
     Ok(())
@@ -1076,8 +1077,6 @@ fn create(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()
 
     run_cmd(&docker_cmd)?;
 
-    create_tensorrt_model(game_name, run_name, 1)?;
-
     info!("Model creation process complete");
 
     Ok(())
@@ -1107,33 +1106,6 @@ fn write_options(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Re
     let file_path_lossy = format!("{}", file_path.to_string_lossy());
     let mut file = File::create(file_path).context(file_path_lossy)?;
     writeln!(file, "{}", serialized_options)?;
-
-    Ok(())
-}
-
-fn create_tensorrt_model(game_name: &str, run_name: &str, model_num: usize) -> Result<()> {
-    let docker_cmd = format!(
-        "docker run --rm \
-        --gpus all \
-        -e NVIDIA_VISIBLE_DEVICES=0 \
-        -e CUDA_VISIBLE_DEVICES=0 \
-        -e TF_FORCE_GPU_ALLOW_GROWTH=true \
-        --mount type=bind,source=\"$(pwd)/{game_name}_runs\",target=/{game_name}_runs \
-        tensorflow/tensorflow:2.6.0-gpu \
-        usr/local/bin/saved_model_cli convert \
-        --dir /{game_name}_runs/{run_name}/exported_models/{model_num} \
-        --output_dir /{game_name}_runs/{run_name}/tensorrt_models/{model_num} \
-        --tag_set serve \
-        tensorrt \
-        --precision_mode FP16 \
-        --max_batch_size 512 \
-        --is_dynamic_op False",
-        game_name = game_name,
-        run_name = run_name,
-        model_num = model_num
-    );
-
-    run_cmd(&docker_cmd)?;
 
     Ok(())
 }

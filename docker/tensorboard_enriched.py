@@ -1,10 +1,10 @@
 import tensorflow as tf
 import numpy as np
-import keras
-from keras import backend as K
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import Callback
 from get_gradient_norm import get_gradient_norm, get_gradient_norm_func
 
-class TensorBoardEnriched(keras.callbacks.Callback):
+class TensorBoardEnriched(Callback):
     def __init__(self, log_dir):
         super().__init__() 
         self.writer = tf.summary.FileWriter(logdir=log_dir)

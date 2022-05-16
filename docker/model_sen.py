@@ -1,10 +1,7 @@
-import numpy as np
-import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply, Concatenate, Cropping2D
-from keras.layers.core import Activation, Layer
-from tensorflow.keras.optimizers import Nadam
 from tensorflow.keras import regularizers
+from tensorflow.keras import layers as keras_layers
 
 DATA_FORMAT = 'channels_last'
 ARIMAA_PIECE_MOVES = ['N','E','S','W','NN','NE','NW','EE','ES','SS','SW','WW','NNN','NNE','NNW','NEE','NWW','EEE','EES','ESS','SSS','SSW','SWW','WWW','NNNN','NNNE','NNNW','NNEE','NNWW','NEEE','NWWW','EEEE','EEES','EESS','ESSS','SSSS','SSSW','SSWW','SWWW','WWWW']
@@ -17,10 +14,10 @@ def l2_reg_policy():
     return regularizers.l2(1e-4)
 
 def Flatten():
-    return keras.layers.Flatten(data_format=DATA_FORMAT)
+    return keras_layers.Flatten(data_format=DATA_FORMAT)
 
 def Conv2D(filters, kernel_size, name, use_bias=False, bias_regularizer=None, kernel_regularizer=l2_reg()):
-    return keras.layers.Conv2D(
+    return keras_layers.Conv2D(
         filters=filters,
         kernel_size=kernel_size,
         padding='same',
@@ -32,13 +29,13 @@ def Conv2D(filters, kernel_size, name, use_bias=False, bias_regularizer=None, ke
         name=name + '/conv2d')
 
 def BatchNorm(scale, name):
-    return keras.layers.BatchNormalization(
+    return keras_layers.BatchNormalization(
         scale=scale,
         epsilon=1e-5,
         name=name + '/bn')
 
 def Dense(units, name, activation, full_name=None, bias_regularizer=None, kernel_regularizer=l2_reg()):
-    return keras.layers.Dense(
+    return keras_layers.Dense(
         units,
         activation=activation,
         kernel_initializer='glorot_normal',

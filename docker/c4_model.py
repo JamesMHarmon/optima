@@ -1,15 +1,9 @@
 from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
+from tensorflow.keras.losses import categorical_crossentropy as keras_categorical_crossentropy
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
-from os import listdir
-from os.path import isfile, join
-from pathlib import Path
-import os
-import numpy as np
-import keras
-import math
 import model_sen
 import warmup_lr_scheduler
 
@@ -89,7 +83,7 @@ def clear():
     K.clear_session()
 
 def categorical_crossentropy_from_logits(y_true, y_pred):
-    return keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=True, label_smoothing=0)
+    return keras_categorical_crossentropy(y_true, y_pred, from_logits=True, label_smoothing=0)
 
 def clip_to_be_divisible(*args, divisor):
     size = args[0].shape[0]

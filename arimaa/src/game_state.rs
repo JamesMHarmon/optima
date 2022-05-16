@@ -33,7 +33,7 @@ impl GameState {
         self.0.valid_actions_no_exclusions()
     }
 
-    pub fn get_piece_board(&self) -> PieceBoard {
+    pub fn get_piece_board(&self) -> &PieceBoard {
         self.0.get_piece_board()
     }
 
