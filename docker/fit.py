@@ -28,9 +28,6 @@ class Fit:
         ending_step = self._initial_step + num_train_steps - 1
         starting_val_step = ending_step - num_val_steps + 1
 
-        for metric in self._accuracy_metrics:
-            metric.reset_states()
-
         epoch_logs = self._get_epoch_logs()
         callbacks.on_epoch_begin(epoch, epoch_logs)
         callbacks.on_train_begin()
@@ -41,8 +38,7 @@ class Fit:
             batch_logs = self._step(data, training=True)
             callbacks.on_train_batch_end(step_num, batch_logs)
 
-        logs = self._get_and_reset_accuracy()
-        callbacks.on_train_end(logs)
+        callbacks.on_train_end({})
         callbacks.on_test_begin()
 
         for step_num in range(starting_val_step, ending_step + 1):
@@ -52,9 +48,8 @@ class Fit:
             callbacks.on_test_batch_begin(step_num)
             batch_logs = self._step(data, training=False)
             callbacks.on_test_batch_end(step_num, batch_logs)
-            
-        logs = self._get_and_reset_accuracy()
-        callbacks.on_test_end(logs)
+
+        callbacks.on_test_end({})
 
         epoch_logs = self._get_epoch_logs()
         callbacks.on_epoch_end(epoch, epoch_logs)
@@ -79,13 +74,12 @@ class Fit:
                 loss = tf.reduce_mean(loss_fn(target, prediction))
                 loss *= weight
 
-                sys.stdout.flush()
                 total_loss += loss
                 logs[f'loss/{name} loss'] = loss
                 
                 if name in self._accuracy_metrics:
-                    metric = self._accuracy_metrics[name]
-                    metric.update_state(target, prediction)    
+                    metric_fn = self._accuracy_metrics[name]
+                    logs[f'accuracy/{name}'] = tf.reduce_mean(metric_fn(target, prediction))
                     
             for loss_layer in model.losses:
                 logs[f'loss_layer/{loss_layer.name}'] = loss_layer
@@ -104,24 +98,16 @@ class Fit:
             model.optimizer.apply_gradients(zip(clipped_grads, model.trainable_variables))
             
         return logs
-    
-    def _get_and_reset_accuracy(self):
-        logs = {}
-        for name, metric in self._accuracy_metrics:
-            logs[f'{name} accuracy'] = metric.result()
-            metric.reset_states()
-            
-        return logs
-    
+
     def _get_epoch_logs(self):
         logs = {
-            'num steps': self._generator.__len__(),
-            'epoch': self._initial_epoch,
-            'batch_size': self._batch_size,
-            'clip_norm': self._clip_norm
+            'info/num steps': self._generator.__len__(),
+            'info/epoch': self._initial_epoch,
+            'info/batch_size': self._batch_size,
+            'norm/clip_norm_value': self._clip_norm
         }
         
         for name in self._model.output_names:
-            logs[f'weight/{name}'] = self._model.compiled_loss._loss_weights[name]
+            logs[f'info/weight/{name}'] = self._model.compiled_loss._loss_weights[name]
 
         return logs

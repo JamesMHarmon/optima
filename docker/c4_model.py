@@ -33,6 +33,13 @@ def compile(model, learning_rate, policy_loss_weight, value_loss_weight, moves_l
         loss=loss_funcs,
         loss_weights=loss_weights)
 
+def metrics(model):
+    accuracy_metrics = { "policy_head": crossentropy_acc }
+
+    if any("moves_left" in output.name for output in model.outputs):
+        accuracy_metrics["moves_left_head"] = crossentropy_with_policy_mask_acc
+
+    return accuracy_metrics
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
     model = load(model_path)
@@ -65,3 +72,10 @@ def convert_policy_mask(target, predicted):
 def crossentropy_with_policy_mask_loss(target, predicted):
     target, predicted = convert_policy_mask(target, predicted)
     return tf.nn.softmax_cross_entropy_with_logits(labels=tf.stop_gradient(target), logits=predicted)
+
+def crossentropy_with_policy_mask_acc(target, predicted):
+    target, predicted = convert_policy_mask(target, predicted)
+    return crossentropy_acc(target, predicted)
+
+def crossentropy_acc(target, predicted):
+    return tf.cast(tf.equal(tf.argmax(input=target, axis=1), tf.argmax(input=predicted, axis=1)), tf.float32)

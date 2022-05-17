@@ -1,5 +1,6 @@
 import os
 import c4_model as c4
+import json
 from tensorboard_enriched import TensorBoardEnriched
 from split_file_data_generator import SplitFileDataGenerator
 from warmup_lr_scheduler import WarmupLearningRateScheduler
@@ -10,13 +11,13 @@ if __name__== "__main__":
     target_model_path       = os.environ['TARGET_MODEL_PATH']
     export_model_path       = os.environ['EXPORT_MODEL_PATH']
     tensor_board_path       = os.environ['TENSOR_BOARD_PATH']
+    train_state_path        = os.environ['TRAIN_STATE_PATH']
 
     data_paths              = os.environ['DATA_PATHS'].split(',')
     total_samples           = int(os.environ['TOTAL_SAMPLES'])
     train_ratio             = float(os.environ['TRAIN_RATIO'])
     train_batch_size        = int(os.environ['TRAIN_BATCH_SIZE'])
-    epochs                  = int(os.environ['EPOCHS'])
-    initial_epoch           = int(os.environ['INITIAL_EPOCH'])
+    epoch                   = int(os.environ['EPOCH'])
     max_grad_norm           = float(os.environ['MAX_GRAD_NORM'])
     learning_rate           = float(os.environ['LEARNING_RATE'])
     policy_loss_weight      = float(os.environ['POLICY_LOSS_WEIGHT'])
@@ -33,9 +34,17 @@ if __name__== "__main__":
 
     input_size = input_h * input_w * input_c
     value_size = 1
+    train_ratio = 1.0
 
     c4.clear()
     model = c4.load(source_model_path)
+
+    if epoch == 1 and not os.path.isfile(train_state_path):
+        with open(train_state_path, 'w') as f:
+            json.dump({ 'steps': 0 }, f, indent = 4)
+
+    with open(train_state_path, 'r') as f:
+        initial_step = int(json.load(f)['steps'] + 1)
 
     lr_schedule = WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000)
     tensor_board = TensorBoardEnriched(log_dir=tensor_board_path)
@@ -63,18 +72,27 @@ if __name__== "__main__":
         moves_left_loss_weight=moves_left_loss_weight
     )
 
+    accuracy_metrics = c4.metrics(model)
+
     Fit(
         model=model,
         data_generator=generator,
         batch_size=train_batch_size,
-        initial_epoch=initial_epoch,
+        initial_epoch=epoch,
         initial_step=initial_step,
         train_size=train_ratio,
         clip_norm=max_grad_norm,
-        accuracy_metrics={},
+        accuracy_metrics=accuracy_metrics,
         callbacks=callbacks
     ).fit()
 
     model.save(target_model_path)
+
+    with open(train_state_path, 'r') as f:
+        train_state = json.load(f)
+
+    with open(train_state_path, 'w') as f:
+        train_state['steps'] = initial_step - 1 + int(total_samples / train_batch_size)
+        json.dump(train_state, f, indent = 4)
 
     c4.export(target_model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), output_size, moves_left_size)

@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback
+from metric import Metrics
 
 class TensorBoardEnriched(Callback):
     def __init__(self, log_dir):
@@ -10,6 +11,7 @@ class TensorBoardEnriched(Callback):
         self._step = None
         self._log_every_n_steps = 10
         self._epoch_begin_logs = None
+        self._metrics = Metrics()
 
     def on_epoch_begin(self, epoch, logs={}):
         self.writer = tf.summary.create_file_writer(logdir=self._log_dir)
@@ -25,10 +27,17 @@ class TensorBoardEnriched(Callback):
         self._write_logs(logs)
 
     def on_train_batch_end(self, step, logs={}):
+        metrics = self._metrics
+
+        for name, value in logs.items():
+            metrics.update(name, value)
+
         if step % self._log_every_n_steps == 0:
-            self._write_logs(logs)
+            metric_logs = metrics.aggregate()
+            self._write_logs(metric_logs)
             self._write_learning_rate()
-        
+            metrics.reset()
+
     def on_train_end(self, logs=None):
         self._write_learning_rate()
         
@@ -44,7 +53,7 @@ class TensorBoardEnriched(Callback):
     
     def _write_learning_rate(self):
         lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
-        self._write_value("learning rate", val=lr)
+        self._write_value("info/learning rate", val=lr)
         
     def _write_weights(self):
         with self.writer.as_default(step=self._step):

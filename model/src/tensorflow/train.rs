@@ -49,19 +49,21 @@ where
     let mut train_data_file_names = vec![];
     let mut handles = vec![];
 
-    let train_data_chunk_size = std::env::var("TRAIN_DATA_CHUNK_SIZE")
+    let mut train_data_chunk_size = std::env::var("TRAIN_DATA_CHUNK_SIZE")
         .map(|v| {
             v.parse::<usize>()
                 .expect("TRAIN_DATA_CHUNK_SIZE must be a valid int")
         })
         .unwrap_or(TRAIN_DATA_CHUNK_SIZE);
 
-    let train_data_chunk_size_before_round = train_data_chunk_size;
-    let train_data_chunk_size = (train_data_chunk_size / train_batch_size) * train_batch_size;
-    info!(
-        "Reduced train_data_chunk_size from {} to {} be a multiple of batch size",
-        train_data_chunk_size_before_round, train_data_chunk_size
-    );
+    if train_data_chunk_size & train_batch_size != 0 {
+        let train_data_chunk_size_before_round = train_data_chunk_size;
+        train_data_chunk_size = (train_data_chunk_size / train_batch_size) * train_batch_size;
+        info!(
+            "Reduced train_data_chunk_size from {} to {} be a multiple of batch size",
+            train_data_chunk_size_before_round, train_data_chunk_size
+        );
+    }
 
     let total_samples = Arc::new(AtomicUsize::new(0));
 
@@ -82,13 +84,15 @@ where
             let rng = &mut rand::thread_rng();
             let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
-            let train_data_by_batch_size =
-                (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
-            info!(
-                "Reduced train_data_by_batch_size from {} to {} to be a multiple of batch size",
-                sample_metrics_chunk.len(),
-                train_data_by_batch_size
-            );
+            let mut train_data_by_batch_size = sample_metrics_chunk.len();
+            if sample_metrics_chunk.len() % train_batch_size != 0 {
+                train_data_by_batch_size = (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
+                info!(
+                    "Reduced train_data_by_batch_size from {} to {} to be a multiple of batch size",
+                    sample_metrics_chunk.len(),
+                    train_data_by_batch_size
+                );
+            }
 
             total_samples.fetch_add(train_data_by_batch_size, Ordering::SeqCst);
 
@@ -155,12 +159,12 @@ where
         -e TARGET_MODEL_PATH=/{game_name}_runs/{run_name}/models/{game_name}_{run_name}_{target_model_num:0>5}.h5 \
         -e EXPORT_MODEL_PATH=/{game_name}_runs/{run_name}/exported_models/{target_model_num} \
         -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
-        -e INITIAL_EPOCH={initial_epoch} \
+        -e TRAIN_STATE_PATH=/{game_name}_runs/{run_name}/train_state.json \
+        -e EPOCH={initial_epoch} \
         -e DATA_PATHS={train_data_paths} \
         -e TOTAL_SAMPLES={total_samples} \
         -e TRAIN_RATIO={train_ratio} \
         -e TRAIN_BATCH_SIZE={train_batch_size} \
-        -e EPOCHS={epochs} \
         -e MAX_GRAD_NORM={max_grad_norm} \
         -e LEARNING_RATE={learning_rate} \
         -e POLICY_LOSS_WEIGHT={policy_loss_weight} \
@@ -183,8 +187,7 @@ where
         target_model_num = target_model_info.get_model_num(),
         train_ratio = options.train_ratio,
         train_batch_size = options.train_batch_size,
-        epochs = (source_model_info.get_model_num() - 1) + options.epochs,
-        initial_epoch = (source_model_info.get_model_num() - 1),
+        initial_epoch = source_model_info.get_model_num(),
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
         total_samples = total_samples.load(Ordering::SeqCst),
         learning_rate = options.learning_rate,
