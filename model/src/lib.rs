@@ -6,3 +6,5 @@ pub mod position_metrics;
 
 pub mod logits;
 pub mod tensorflow;
+
+pub use model_info::*;

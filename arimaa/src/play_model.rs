@@ -22,9 +22,7 @@ use model::model::ModelOptions;
 use model::model_info::ModelInfo;
 use model::node_metrics::NodeMetrics;
 use model::position_metrics::PositionMetrics;
-use model::tensorflow::get_latest_model_info::get_latest_model_info;
-use model::tensorflow::mode::Mode;
-use model::tensorflow::model::{TensorflowModel, TensorflowModelOptions};
+use model::tensorflow::{get_latest_model_info, Mode, TensorflowModel, TensorflowModelOptions};
 
 /*
     Layers:

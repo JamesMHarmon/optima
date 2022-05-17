@@ -9,14 +9,13 @@ use super::play_model::{
     TranspositionEntry as PlayTranspositionEntry,
 };
 use super::value::Value;
+
 use arimaa_engine::Action;
 use futures::future::Either;
 use model::analytics::GameStateAnalysis;
 use model::model::ModelOptions;
 use model::position_metrics::PositionMetrics;
-use model::tensorflow::get_latest_model_info::get_latest_model_info;
-use model::tensorflow::model::TensorflowModel;
-use model::tensorflow::model::*;
+use model::tensorflow::{get_latest_model_info, GameAnalyzer, TensorflowModel, UnwrappedReceiver};
 use model::{model::TrainOptions, model_info::ModelInfo};
 
 use anyhow::Result;
