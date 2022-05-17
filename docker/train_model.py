@@ -1,17 +1,18 @@
 import os
-import json
 import c4_model as c4
-import numpy as np
 from tensorboard_enriched import TensorBoardEnriched
+from split_file_data_generator import SplitFileDataGenerator
+from warmup_lr_scheduler import WarmupLearningRateScheduler
+from fit import Fit
 
 if __name__== "__main__":
-
     source_model_path       = os.environ['SOURCE_MODEL_PATH']
     target_model_path       = os.environ['TARGET_MODEL_PATH']
     export_model_path       = os.environ['EXPORT_MODEL_PATH']
     tensor_board_path       = os.environ['TENSOR_BOARD_PATH']
 
     data_paths              = os.environ['DATA_PATHS'].split(',')
+    total_samples           = int(os.environ['TOTAL_SAMPLES'])
     train_ratio             = float(os.environ['TRAIN_RATIO'])
     train_batch_size        = int(os.environ['TRAIN_BATCH_SIZE'])
     epochs                  = int(os.environ['EPOCHS'])
@@ -31,27 +32,48 @@ if __name__== "__main__":
     num_blocks              = int(os.environ['NUM_BLOCKS'])
 
     input_size = input_h * input_w * input_c
-    yv_size = 1
+    value_size = 1
 
-    print(data_paths)
     c4.clear()
     model = c4.load(source_model_path)
+
+    lr_schedule = WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000)
     tensor_board = TensorBoardEnriched(log_dir=tensor_board_path)
 
-    for (i, path) in enumerate(data_paths):
-        print("Loading Data: " + path)
-        dataset = np.load(path).reshape(-1, input_size + output_size + moves_left_size + yv_size)
-        X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
-        start_index = input_size
-        yp = dataset[:,start_index:start_index + output_size]
-        start_index += output_size
-        yv = dataset[:,start_index]
-        start_index += yv_size
-        ym = dataset[:,start_index:]
+    callbacks = [lr_schedule, tensor_board]
 
-        callbacks = [tensor_board] if i == 0 else []
+    generator = SplitFileDataGenerator(
+        batch_size=train_batch_size,
+        files=data_paths,
+        total_samples=total_samples,
+        input_size=input_size,
+        output_size=output_size,
+        moves_left_size=moves_left_size,
+        value_size=value_size,
+        input_h=input_h,
+        input_w=input_w,
+        input_c=input_c,
+    )
 
-        c4.train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs + i, initial_epoch + i, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks)
+    c4.compile(
+        model=model,
+        learning_rate=learning_rate,
+        policy_loss_weight=policy_loss_weight,
+        value_loss_weight=value_loss_weight,
+        moves_left_loss_weight=moves_left_loss_weight
+    )
+
+    Fit(
+        model=model,
+        data_generator=generator,
+        batch_size=train_batch_size,
+        initial_epoch=initial_epoch,
+        initial_step=initial_step,
+        train_size=train_ratio,
+        clip_norm=max_grad_norm,
+        accuracy_metrics={},
+        callbacks=callbacks
+    ).fit()
 
     model.save(target_model_path)
 

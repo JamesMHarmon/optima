@@ -143,7 +143,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         let push_pull_map = static_sparse_push_pull_map().as_slice();
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let invert = !game_state.is_p1_turn_to_move();
-        let inputs: Vec<f32> = vec![0f32; OUTPUT_SIZE];
+        let inputs: Vec<f32> = vec![-1f32; OUTPUT_SIZE];
 
         assert_eq!(
             policy_metrics.visits - 1,
@@ -169,7 +169,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
                 };
 
                 assert!(
-                    r[policy_index] == 0.0,
+                    r[policy_index] == -1f32,
                     "Policy value already exists {:?}",
                     action
                 );

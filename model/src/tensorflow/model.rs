@@ -908,8 +908,11 @@ where
         })
         .unwrap_or(TRAIN_DATA_CHUNK_SIZE);
 
-    // Round the chunk size to be divisible by the batch_size
+    let train_data_chunk_size_before_round = train_data_chunk_size;
     let train_data_chunk_size = (train_data_chunk_size / train_batch_size) * train_batch_size;
+    info!("Reduced train_data_chunk_size from {} to {} be a multiple of batch size", train_data_chunk_size_before_round, train_data_chunk_size);
+
+    let total_samples = Arc::new(AtomicUsize::new(0));
 
     for (i, sample_metrics) in sample_metrics
         .chunks(train_data_chunk_size)
@@ -921,14 +924,17 @@ where
         info!("Writing data to {:?}", &train_data_path);
         train_data_file_names.push(train_data_file_name);
         let sample_metrics_chunk = sample_metrics.collect::<Vec<_>>();
+        let total_samples = total_samples.clone();
         let mapper = mapper.clone();
 
         handles.push(std::thread::spawn(move || {
             let rng = &mut rand::thread_rng();
             let mut wtr = npy::OutFile::open(train_data_path).unwrap();
 
-            // Round the number of metrics to be divisible by the batch_size
             let train_data_by_batch_size = (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
+            info!("Reduced train_data_by_batch_size from {} to {} to be a multiple of batch size", sample_metrics_chunk.len(), train_data_by_batch_size);
+
+            total_samples.fetch_add(train_data_by_batch_size, Ordering::SeqCst);
 
             for metric in sample_metrics_chunk.into_iter().take(train_data_by_batch_size) {
                 let metric_symmetires = mapper.get_symmetries(metric);
@@ -988,6 +994,7 @@ where
         -e TENSOR_BOARD_PATH=/{game_name}_runs/{run_name}/tensorboard \
         -e INITIAL_EPOCH={initial_epoch} \
         -e DATA_PATHS={train_data_paths} \
+        -e TOTAL_SAMPLES={total_samples} \
         -e TRAIN_RATIO={train_ratio} \
         -e TRAIN_BATCH_SIZE={train_batch_size} \
         -e EPOCHS={epochs} \
@@ -1016,6 +1023,7 @@ where
         epochs = (source_model_info.get_model_num() - 1) + options.epochs,
         initial_epoch = (source_model_info.get_model_num() - 1),
         train_data_paths = train_data_paths.map(|p| format!("\"{}\"", p)).join(","),
+        total_samples = total_samples.load(Ordering::SeqCst),
         learning_rate = options.learning_rate,
         max_grad_norm = options.max_grad_norm,
         policy_loss_weight = options.policy_loss_weight,

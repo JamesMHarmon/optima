@@ -2,13 +2,12 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy as keras_categorical_crossentropy
-from sklearn.model_selection import train_test_split
+from tensorflow.keras.losses import mean_squared_error
 import tensorflow as tf
-import model_sen
-import warmup_lr_scheduler
+from model_sen import create_model
 
 def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    model = model_sen.create_model(
+    model = create_model(
         num_filters,
         num_blocks,
         input_shape,
@@ -19,48 +18,21 @@ def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     return model
 
 def load(model_path):
-    return load_model(model_path, custom_objects={'categorical_crossentropy_from_logits': categorical_crossentropy_from_logits})
+    return load_model(model_path, custom_objects={'crossentropy_with_policy_mask_loss': crossentropy_with_policy_mask_loss})
 
-def train(model, X, yv, yp, ym, train_ratio, train_batch_size, epochs, initial_epoch, max_grad_norm, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, callbacks):
-    X_train, X_test, yv_train, yv_test, yp_train, yp_test, ym_train, ym_test = train_test_split(
-        X,
-        yv,
-        yp,
-        ym,
-        train_size=train_ratio,
-        shuffle=False)
-
-    X_train, yv_train, yp_train, ym_train = clip_to_be_divisible(X_train, yv_train, yp_train, ym_train, divisor=train_batch_size)
-
-    if len(X_train) == 0:
-        return
-
-    y_trains = { "value_head": yv_train, "policy_head": yp_train }
-    y_tests = { "value_head": yv_test, "policy_head": yp_test }
-    loss_funcs = { "value_head": "mean_squared_error", "policy_head": categorical_crossentropy_from_logits }
+def compile(model, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight):
+    loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight }
 
     if any("moves_left" in output.name for output in model.outputs):
-        y_trains['moves_left_head'] = ym_train
-        y_tests['moves_left_head'] = ym_test
-        loss_funcs['moves_left_head'] = "categorical_crossentropy"
+        loss_funcs['moves_left_head'] = keras_categorical_crossentropy
         loss_weights['moves_left_head'] = moves_left_loss_weight
 
-    steps_per_epoch = X_train.shape[0] // train_batch_size
-    lr_schedule = warmup_lr_scheduler.WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000, steps_per_epoch=steps_per_epoch)
-
     model.compile(
-        optimizer=SGD(lr=learning_rate, momentum=0.9, nesterov=True, clipnorm=max_grad_norm),
+        optimizer=SGD(lr=learning_rate, momentum=0.9, nesterov=True),
         loss=loss_funcs,
         loss_weights=loss_weights)
 
-    model.fit(X_train, y_trains,
-        batch_size=train_batch_size,
-        epochs=epochs,
-        initial_epoch=initial_epoch,
-        verbose=1,
-        validation_data=(X_test, y_tests),
-        callbacks=callbacks + [lr_schedule])
 
 def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
     model = load(model_path)
@@ -82,15 +54,14 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
 def clear():
     K.clear_session()
 
-def categorical_crossentropy_from_logits(y_true, y_pred):
-    return keras_categorical_crossentropy(y_true, y_pred, from_logits=True, label_smoothing=0)
+def convert_policy_mask(target, predicted):
+    is_masked_move = tf.less(target, 0)
+    masked_move_logit = tf.zeros_like(predicted) - 1.0e10
+    predicted = tf.where(is_masked_move, masked_move_logit, predicted)
+    # clamp all targets to be > 0
+    target = tf.nn.relu(target)
+    return target, predicted
 
-def clip_to_be_divisible(*args, divisor):
-    size = args[0].shape[0]
-    clipped_size = (size // divisor) * divisor
-
-    result = []
-    for arg in args:
-      result.append(arg[:clipped_size])
-
-    return tuple(result)
+def crossentropy_with_policy_mask_loss(target, predicted):
+    target, predicted = convert_policy_mask(target, predicted)
+    return tf.nn.softmax_cross_entropy_with_logits(labels=tf.stop_gradient(target), logits=predicted)
