@@ -17,7 +17,7 @@ pub mod value;
 pub use crate::engine::Engine;
 pub use crate::model::*;
 
-use arimaa_engine::Action;
-use constants::*;
-use game_state::*;
-use value::*;
+pub use arimaa_engine::{Action, Direction, Piece, Square, convert_piece_to_letter};
+pub use constants::*;
+pub use game_state::*;
+pub use value::*;
