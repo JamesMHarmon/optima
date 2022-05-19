@@ -8,7 +8,7 @@ from model_sen import create_model
 from policy_head import get_policy_head_fn_by_output_size
 
 def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    policy_head = get_policy_head_fn_by_output_size(num_filters, output_size)
+    policy_head = get_policy_head_fn_by_output_size(output_size)
 
     model = create_model(
         num_filters,

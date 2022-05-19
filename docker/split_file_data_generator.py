@@ -1,5 +1,6 @@
 from tensorflow.keras.utils import Sequence
 import numpy as np
+import sys
 
 class SplitFileDataGenerator(Sequence):
     'Generates data for Keras'
@@ -55,6 +56,7 @@ class SplitFileDataGenerator(Sequence):
         path = self._files[file_idx]
         
         print('Loading file: ', path)
+        sys.stdout.flush()
 
         dataset = np.load(path).reshape(-1, input_size + output_size + moves_left_size + value_size)
         X = dataset[:,0:input_size].reshape(dataset.shape[0],input_h,input_w,input_c)
