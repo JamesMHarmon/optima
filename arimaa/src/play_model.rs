@@ -167,7 +167,7 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
                 };
 
                 assert!(
-                    r[policy_index] == -1f32,
+                    (r[policy_index] - -1f32).abs() <= f32::EPSILON,
                     "Policy value already exists {:?}",
                     action
                 );
