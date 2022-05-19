@@ -1,6 +1,6 @@
-use std::process::{Command, Stdio};
 use anyhow::Result;
 use log::info;
+use std::process::{Command, Stdio};
 
 pub fn run_cmd(cmd: &str) -> Result<()> {
     info!("\n");

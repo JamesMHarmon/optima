@@ -86,7 +86,8 @@ where
 
             let mut train_data_by_batch_size = sample_metrics_chunk.len();
             if sample_metrics_chunk.len() % train_batch_size != 0 {
-                train_data_by_batch_size = (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
+                train_data_by_batch_size =
+                    (sample_metrics_chunk.len() / train_batch_size) * train_batch_size;
                 info!(
                     "Reduced train_data_by_batch_size from {} to {} to be a multiple of batch size",
                     sample_metrics_chunk.len(),
