@@ -341,7 +341,7 @@ impl Predictor {
         let moves_left_head_fetch_token = session
             .op_moves_left_head
             .as_ref()
-            .map(|op| output_step.request_fetch(&op.operation, session.op_policy_head.index));
+            .map(|op| output_step.request_fetch(&op.operation, op.index));
 
         session
             .session

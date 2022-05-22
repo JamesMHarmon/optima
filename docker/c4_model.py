@@ -38,10 +38,10 @@ def compile(model, learning_rate, policy_loss_weight, value_loss_weight, moves_l
         loss_weights=loss_weights)
 
 def metrics(model):
-    accuracy_metrics = { "policy_head": crossentropy_acc }
+    accuracy_metrics = { "policy_head": crossentropy_with_policy_mask_acc }
 
     if any("moves_left" in output.name for output in model.outputs):
-        accuracy_metrics["moves_left_head"] = crossentropy_with_policy_mask_acc
+        accuracy_metrics["moves_left_head"] = crossentropy_acc
 
     return accuracy_metrics
 
