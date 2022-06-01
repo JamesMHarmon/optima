@@ -72,11 +72,10 @@ class Fit:
                 weight = model.compiled_loss._loss_weights[name]
 
                 loss = tf.reduce_mean(loss_fn(target, prediction))
-                loss *= weight
-
-                total_loss += loss
                 logs[f'loss/{name} loss'] = loss
-                
+
+                total_loss += loss * weight
+
                 if name in self._accuracy_metrics:
                     metric_fn = self._accuracy_metrics[name]
                     logs[f'accuracy/{name}'] = tf.reduce_mean(metric_fn(target, prediction))

@@ -6,10 +6,10 @@ from tensorflow.keras import layers as keras_layers
 DATA_FORMAT = 'channels_last'
 
 def l2_reg():
-    return regularizers.l2(2e-5)
+    return regularizers.l2(1e-5)
 
 def l2_reg_policy():
-    return regularizers.l2(8e-5)
+    return regularizers.l2(4e-5)
 
 def Flatten():
     return keras_layers.Flatten(data_format=DATA_FORMAT)

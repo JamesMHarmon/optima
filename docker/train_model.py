@@ -23,6 +23,7 @@ if __name__== "__main__":
     policy_loss_weight      = float(os.environ['POLICY_LOSS_WEIGHT'])
     value_loss_weight       = float(os.environ['VALUE_LOSS_WEIGHT'])
     moves_left_loss_weight  = float(os.environ['MOVES_LEFT_LOSS_WEIGHT'])
+    step_ratio              = float(os.environ['STEP_RATIO'])
 
     input_h                 = int(os.environ['INPUT_H'])
     input_w                 = int(os.environ['INPUT_W'])
@@ -47,7 +48,7 @@ if __name__== "__main__":
         initial_step = int(json.load(f)['steps'] + 1)
 
     lr_schedule = WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=1000)
-    tensor_board = TensorBoardEnriched(log_dir=tensor_board_path)
+    tensor_board = TensorBoardEnriched(log_dir=tensor_board_path, step_ratio=step_ratio)
 
     callbacks = [lr_schedule, tensor_board]
 

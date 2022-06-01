@@ -5,9 +5,10 @@ from tensorflow.keras.callbacks import Callback
 from metric import Metrics
 
 class TensorBoardEnriched(Callback):
-    def __init__(self, log_dir):
+    def __init__(self, log_dir, step_ratio=1.0):
         super().__init__()
         self._log_dir = log_dir
+        self._step_ratio = step_ratio
         self._step = None
         self._log_every_n_steps = 10
         self._epoch_begin_logs = None
@@ -56,11 +57,11 @@ class TensorBoardEnriched(Callback):
         self._write_value("info/learning rate", val=lr)
         
     def _write_weights(self):
-        with self.writer.as_default(step=self._step):
+        with self.writer.as_default(step=int(self._step * self._step_ratio)):
             for w in self.model.weights:
                 tf.summary.histogram(w.name, w)
 
     def _write_value(self, tag, val):
-        with self.writer.as_default(step=self._step):
+        with self.writer.as_default(step=int(self._step * self._step_ratio)):
             tf.summary.scalar(tag, data=val)
             self.writer.flush()
