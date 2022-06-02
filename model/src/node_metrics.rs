@@ -22,7 +22,7 @@ where
         let metrics = &self
             .children
             .iter()
-            .map(|(a, _, v)| (a, v))
+            .map(|(a, q, v)| (a, q, v))
             .collect::<Vec<_>>();
 
         let mut tup = serializer.serialize_tuple(2)?;
@@ -60,11 +60,11 @@ where
         S: SeqAccess<'de>,
     {
         let visits = seq.next_element()?.unwrap();
-        let metrics: Vec<(A, usize)> = seq.next_element()?.unwrap();
+        let metrics: Vec<(A, f32, usize)> = seq.next_element()?.unwrap();
 
         Ok(NodeMetrics {
             visits,
-            children: metrics.into_iter().map(|(a, v)| (a, 0.0, v)).collect(),
+            children: metrics.into_iter().map(|(a, q, v)| (a, q, v)).collect(),
         })
     }
 }

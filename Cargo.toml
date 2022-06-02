@@ -9,6 +9,7 @@ members = [
     "self-evaluate",
     "self-learn",
     "self-learn-client",
+    "self-play",
     "tournament",
     "tuner",
 

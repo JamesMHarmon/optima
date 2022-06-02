@@ -8,3 +8,5 @@ pub mod logits;
 pub mod tensorflow;
 
 pub use model_info::*;
+pub use node_metrics::*;
+pub use analytics::*;
