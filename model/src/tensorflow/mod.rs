@@ -10,6 +10,7 @@ mod model_options;
 mod reporter;
 mod run_cmd;
 mod train;
+mod archive;
 
 use constants::*;
 use create::*;

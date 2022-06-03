@@ -12,34 +12,32 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use model::analytics::GameAnalyzer;
-use model::model::{Model, ModelFactory, ModelArena};
-use model::model_info::ModelInfo;
+use model::{Latest, Model, ModelInfo, Load};
 use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
 
-pub fn play_self<F, M, MA, E, T, S, A, V>(
+pub fn play_self<F, M, E, T, S, A, V>(
     model_factory: &F,
-    model_arena: &MA,
     engine: &E,
     self_play_persistance: &mut SelfPlayPersistance,
     self_play_options: &SelfPlayOptions,
 ) -> Result<()>
 where
-    F: ModelFactory<M = M> + Sync,
+    F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
     M: Model<State = S, Action = A, Analyzer = T, Value = V> + Send + Sync,
-    MA: ModelArena + Sync,
     E: GameEngine<State = S, Action = A, Value = V> + Sync,
     T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
     S: GameState + Send,
     A: Serialize + Debug + Eq + Clone + Send,
     V: Value + Serialize + Debug + Send,
+    <F as Latest>::MR: Debug + Eq + Send
 {
     let starting_run_time = Instant::now();
     let (game_results_tx, game_results_rx) = crossbeam::channel::unbounded();
     let runtime_handle = tokio::runtime::Handle::current();
 
-    let latest_model_info = model_arena.latest_certified()?;
-    let latest_model = model_factory.get(&latest_model_info);
-    let latest_model: Arc<Mutex<M>> = Arc::new(Mutex::new(latest_model));
+    let latest_model_ref = model_factory.latest()?;
+    let latest_model = model_factory.load(&latest_model_ref).unwrap();
+    let latest_model: Arc<Mutex<(M, _)>> = Arc::new(Mutex::new((latest_model, latest_model_ref)));
 
     crossbeam::scope(move |s| {
         for thread_num in 0..self_play_options.self_play_parallelism {
@@ -51,7 +49,7 @@ where
                 info!("Starting Thread: {}", thread_num);
                 let latest_model_analyzer = || {
                     let latest_model = latest_model.lock().unwrap();
-                    (latest_model.get_game_state_analyzer(), latest_model.get_model_info().clone())
+                    (latest_model.0.get_game_state_analyzer(), latest_model.0.get_model_info().clone())
                 };
 
                 let f = play_games(
@@ -70,16 +68,16 @@ where
 
         s.spawn(move |_| {
             loop {
-                let new_latest_model = model_arena.latest_certified().unwrap();
+                let new_latest_model_ref = model_factory.latest().unwrap();
                 {
                     let mut latest_model = latest_model.lock().unwrap();
-                    let latest_model_info = latest_model.get_model_info();
-                    if new_latest_model.get_model_name() != latest_model_info.get_model_name() || new_latest_model.get_model_num() != latest_model_info.get_model_num() {
-                        let new_latest_model = model_factory.get(&new_latest_model);
-                        
-                        info!("Updating latest model from {:?} to {:?}", latest_model_info, new_latest_model.get_model_info());
 
-                        *latest_model = new_latest_model;
+                    if new_latest_model_ref != latest_model.1 {
+                        let new_latest_model = model_factory.load(&new_latest_model_ref).unwrap();
+
+                        info!("Updating latest model from {:?} to {:?}", latest_model.1, new_latest_model.get_model_info());
+
+                        *latest_model = (new_latest_model, new_latest_model_ref);
                     }
                 }
 

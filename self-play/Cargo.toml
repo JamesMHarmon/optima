@@ -10,7 +10,6 @@ engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
 mcts = { path = "../mcts" }
-self-evaluate = { path = "../self-evaluate" }
 arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
 
 anyhow = "1.0"
