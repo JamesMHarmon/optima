@@ -6,7 +6,6 @@ pub mod transposition_table;
 mod constants;
 mod create;
 mod get_latest_model_info;
-mod model_options;
 mod reporter;
 mod run_cmd;
 mod train;
@@ -14,7 +13,6 @@ mod archive;
 
 use constants::*;
 use create::*;
-use model_options::*;
 use paths::*;
 use reporter::*;
 use run_cmd::*;
