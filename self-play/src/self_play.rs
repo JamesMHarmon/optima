@@ -12,7 +12,7 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use model::analytics::GameAnalyzer;
-use model::{Latest, Model, ModelInfo, Load};
+use model::{Latest, Analyzer, ModelInfo, Load, Info};
 use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
 
 pub fn play_self<F, M, E, T, S, A, V>(
@@ -23,7 +23,7 @@ pub fn play_self<F, M, E, T, S, A, V>(
 ) -> Result<()>
 where
     F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
-    M: Model<State = S, Action = A, Analyzer = T, Value = V> + Send + Sync,
+    M: Analyzer<State = S, Action = A, Analyzer = T, Value = V> + Info + Send + Sync,
     E: GameEngine<State = S, Action = A, Value = V> + Sync,
     T: GameAnalyzer<Action = A, State = S, Value = V> + Send,
     S: GameState + Send,
@@ -49,7 +49,7 @@ where
                 info!("Starting Thread: {}", thread_num);
                 let latest_model_analyzer = || {
                     let latest_model = latest_model.lock().unwrap();
-                    (latest_model.0.get_game_state_analyzer(), latest_model.0.get_model_info().clone())
+                    (latest_model.0.analyzer(), latest_model.0.info().clone())
                 };
 
                 let f = play_games(
@@ -75,7 +75,7 @@ where
                     if new_latest_model_ref != latest_model.1 {
                         let new_latest_model = model_factory.load(&new_latest_model_ref).unwrap();
 
-                        info!("Updating latest model from {:?} to {:?}", latest_model.1, new_latest_model.get_model_info());
+                        info!("Updating latest model from {:?} to {:?}", latest_model.1, new_latest_model.info());
 
                         *latest_model = (new_latest_model, new_latest_model_ref);
                     }

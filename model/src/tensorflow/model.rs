@@ -4,26 +4,29 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
-use log::{debug, info};
+use log::debug;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::BinaryHeap;
 use std::future::Future;
 use std::hash::Hash;
 use std::os::raw::c_int;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
+use tempfile::TempDir;
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::super::analytics::{self, GameStateAnalysis};
-use super::super::model::{Model as ModelTrait, TrainOptions};
+use super::super::model::{Analyzer, Info, Train, TrainOptions};
 use super::super::model_info::ModelInfo;
 use super::super::node_metrics::NodeMetrics;
 use super::super::position_metrics::PositionMetrics;
+use super::archive::unarchive;
 use super::*;
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
@@ -33,6 +36,7 @@ static ALLOCATOR: std::alloc::System = std::alloc::System;
 #[allow(clippy::type_complexity)]
 pub struct TensorflowModel<S, A, V, E, Map, Te> {
     model_info: ModelInfo,
+    model_dir: Arc<TempDir>,
     batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
     analysis_request_threads: usize,
     engine: Arc<E>,
@@ -87,7 +91,7 @@ where
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
     Te: Send + Sync + 'static,
 {
-    pub fn new(model_info: ModelInfo, engine: E, mapper: Map, tt_cache_size: usize) -> Self {
+    pub fn load(path: &Path, engine: E, mapper: Map, tt_cache_size: usize) -> Result<Self> {
         let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
             .map(|v| {
                 v.parse::<usize>()
@@ -106,22 +110,24 @@ where
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
         }
 
-        let options = get_options(&model_info).expect("Could not load model options file");
+        let (model_dir, options, model_info) = unarchive(path)?;
 
         let mapper = Arc::new(mapper);
         let engine = Arc::new(engine);
+        let model_dir = Arc::new(model_dir);
         let batching_model = Mutex::new(Weak::new());
 
-        Self {
+        Ok(Self {
             analysis_request_threads,
             batch_size,
             model_info,
+            model_dir,
             batching_model,
             engine,
             mapper,
             tt_cache_size,
             options,
-        }
+        })
     }
 
     pub fn create(model_info: &ModelInfo, options: &TensorflowModelOptions) -> Result<()> {
@@ -143,9 +149,9 @@ where
         BatchingModel::new(
             self.engine.clone(),
             self.mapper.clone(),
+            self.model_dir.clone(),
             transposition_table,
             reporter,
-            self.model_info.clone(),
             self.batch_size,
             self.analysis_request_threads,
             self.options.output_size,
@@ -155,23 +161,16 @@ where
     }
 }
 
-impl<S, A, V, E, Map, Te> ModelTrait for TensorflowModel<S, A, V, E, Map, Te>
+impl<S, A, V, E, Map, Te> Train for TensorflowModel<S, A, V, E, Map, Te>
 where
-    S: GameState + Send + Sync + Unpin + 'static,
-    A: Clone + Send + Sync + 'static,
-    V: Value + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
+    S: Send + 'static,
+    A: Send + 'static,
+    V: Send + 'static,
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
-    Te: Send + Sync + 'static,
 {
     type State = S;
     type Action = A;
     type Value = V;
-    type Analyzer = GameAnalyzer<S, A, V, E, Map, Te>;
-
-    fn get_model_info(&self) -> &ModelInfo {
-        &self.model_info
-    }
 
     fn train<I>(
         &self,
@@ -190,8 +189,23 @@ where
             options,
         )
     }
+}
 
-    fn get_game_state_analyzer(&self) -> Self::Analyzer {
+impl<S, A, V, E, Map, Te> Analyzer for TensorflowModel<S, A, V, E, Map, Te>
+where
+    S: GameState + Send + Sync + Unpin + 'static,
+    A: Clone + Send + Sync + 'static,
+    V: Value + Send + Sync + 'static,
+    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
+    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Te: Send + Sync + 'static,
+{
+    type State = S;
+    type Action = A;
+    type Value = V;
+    type Analyzer = GameAnalyzer<S, A, V, E, Map, Te>;
+
+    fn analyzer(&self) -> Self::Analyzer {
         let batching_model_ref = &mut *self.batching_model.lock();
         let batching_model = batching_model_ref.upgrade();
 
@@ -211,34 +225,22 @@ where
     }
 }
 
+impl<S, A, V, E, Map, Te> Info for TensorflowModel<S, A, V, E, Map, Te> {
+    fn info(&self) -> &ModelInfo {
+        &self.model_info
+    }
+}
+
 struct Predictor {
     session: SessionAndOps,
 }
 
 impl Predictor {
-    fn new(model_info: &ModelInfo) -> Self {
+    fn new(path: &Path) -> Self {
         let mut graph = Graph::new();
 
-        let exported_model_path = format!(
-            "{game_name}_runs/{run_name}/exported_models/{model_num}",
-            game_name = model_info.get_game_name(),
-            run_name = model_info.get_run_name(),
-            model_num = model_info.get_model_num(),
-        );
-
-        let exported_model_path = std::env::current_dir()
-            .expect("Expected to be able to open the model directory")
-            .join(exported_model_path);
-
-        info!("{:?}", exported_model_path);
-
-        let model = SavedModelBundle::load(
-            &SessionOptions::new(),
-            &["serve"],
-            &mut graph,
-            exported_model_path,
-        )
-        .expect("Expected to be able to load model");
+        let model = SavedModelBundle::load(&SessionOptions::new(), &["serve"], &mut graph, path)
+            .expect("Expected to be able to load model");
 
         let signature = model
             .meta_graph_def()
@@ -518,9 +520,9 @@ where
     fn new(
         engine: Arc<E>,
         mapper: Arc<Map>,
+        model_dir: Arc<TempDir>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
-        model_info: ModelInfo,
         batch_size: usize,
         analysis_request_threads: usize,
         output_size: usize,
@@ -530,10 +532,10 @@ where
         Self::create_analysis_tasks(
             engine.clone(),
             mapper.clone(),
+            model_dir.clone(),
             transposition_table.clone(),
             reporter.clone(),
             states_to_analyse_receiver,
-            model_info,
             output_size,
             moves_left_size,
             batch_size,
@@ -552,10 +554,10 @@ where
     fn create_analysis_tasks(
         engine: Arc<E>,
         mapper: Arc<Map>,
+        model_dir: Arc<TempDir>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
-        model_info: ModelInfo,
         output_size: usize,
         moves_left_size: usize,
         batch_size: usize,
@@ -591,7 +593,7 @@ where
             }
         });
 
-        let predictor = Arc::new(Predictor::new(&model_info));
+        let predictor = Arc::new(Predictor::new(&model_dir.path()));
         let (predicted_states_tx, predicted_states_rx) = crossbeam::channel::unbounded();
 
         for _ in 0..analysis_request_threads {

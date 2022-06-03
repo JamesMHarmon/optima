@@ -10,12 +10,13 @@ use tar::Header;
 use tempfile::tempdir;
 use tempfile::TempDir;
 
-use super::super::{ModelInfo, ModelOptions};
+use super::super::ModelInfo;
+use super::TensorflowModelOptions;
 
 pub fn archive(
     archive: impl AsRef<Path>,
     model: impl AsRef<Path>,
-    model_options: &ModelOptions,
+    model_options: &TensorflowModelOptions,
     model_info: &ModelInfo,
 ) -> Result<()> {
     let file = File::create(archive)?;
@@ -33,11 +34,13 @@ pub fn archive(
     Ok(())
 }
 
-pub fn unarchive<P: AsRef<Path>>(archive: P) -> Result<(TempDir, ModelOptions, ModelInfo)> {
+pub fn unarchive<P: AsRef<Path>>(
+    archive: P,
+) -> Result<(TempDir, TensorflowModelOptions, ModelInfo)> {
     let file = File::open(archive)?;
     let enc = GzDecoder::new(file);
     let mut archive = tar::Archive::new(enc);
-    let mut model_options: Option<ModelOptions> = None;
+    let mut model_options: Option<TensorflowModelOptions> = None;
     let mut model_info: Option<ModelInfo> = None;
     let temp_dir = tempdir()?;
     println!(
@@ -85,7 +88,7 @@ pub fn read_archived_info<P: AsRef<Path>>(archive: P) -> Result<ModelInfo> {
     Err(anyhow!("Could not find model info within archived model."))
 }
 
-pub fn read_archived_options<P: AsRef<Path>>(archive: P) -> Result<ModelOptions> {
+pub fn read_archived_options<P: AsRef<Path>>(archive: P) -> Result<TensorflowModelOptions> {
     let file = File::open(archive)?;
     let enc = GzDecoder::new(file);
     let mut archive = tar::Archive::new(enc);
