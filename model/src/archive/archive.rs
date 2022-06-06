@@ -6,12 +6,64 @@ use serde::Serialize;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use tar::Header;
-use tempfile::tempdir;
-use tempfile::TempDir;
+use tempfile::{tempdir, TempDir};
 
-use super::super::ModelInfo;
-use super::TensorflowModelOptions;
+use super::super::tensorflow::TensorflowModelOptions;
+use super::super::{Analyzer, GameAnalyzer, ModelInfo};
+
+pub struct Archive<M> {
+    inner: M,
+    temp_dir: Arc<TempDir>,
+}
+
+impl<M> Archive<M> {
+    pub fn new(model: M, temp_dir: TempDir) -> Self {
+        Self {
+            inner: model,
+            temp_dir: Arc::new(temp_dir),
+        }
+    }
+
+    pub fn inner(&self) -> &M {
+        &self.inner
+    }
+}
+
+pub struct ArchiveAnalyzer<A> {
+    inner: A,
+    // Keep this reference around so that the temp directory is not dropped.
+    _temp_dir: Arc<TempDir>,
+}
+
+impl<An> GameAnalyzer for ArchiveAnalyzer<An>
+where
+    An: GameAnalyzer,
+{
+    type Action = An::Action;
+    type State = An::State;
+    type Value = An::Value;
+    type Future = An::Future;
+
+    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
+        self.inner.get_state_analysis(game_state)
+    }
+}
+
+impl<M: Analyzer> Analyzer for Archive<M> {
+    type State = M::State;
+    type Action = M::Action;
+    type Value = M::Value;
+    type Analyzer = ArchiveAnalyzer<M::Analyzer>;
+
+    fn analyzer(&self) -> ArchiveAnalyzer<M::Analyzer> {
+        ArchiveAnalyzer {
+            inner: self.inner.analyzer(),
+            _temp_dir: self.temp_dir.clone(),
+        }
+    }
+}
 
 pub fn archive(
     archive: impl AsRef<Path>,
@@ -37,7 +89,8 @@ pub fn archive(
 pub fn unarchive<P: AsRef<Path>>(
     archive: P,
 ) -> Result<(TempDir, TensorflowModelOptions, ModelInfo)> {
-    let file = File::open(archive)?;
+    let archive = archive.as_ref();
+    let file = File::open(archive).with_context(|| format!("Failed to open {:?}", archive))?;
     let enc = GzDecoder::new(file);
     let mut archive = tar::Archive::new(enc);
     let mut model_options: Option<TensorflowModelOptions> = None;
@@ -57,10 +110,10 @@ pub fn unarchive<P: AsRef<Path>>(
             model_options = Some(serde_json::from_reader(file)?);
         } else if path.ends_with(Path::new("model-info.json")) {
             model_info = Some(serde_json::from_reader(file)?);
-        } else if dbg!(&path).starts_with(model_prefix) {
-            let dest = dbg!(path.strip_prefix("model/")?);
+        } else if path.starts_with(model_prefix) {
+            let dest = path.strip_prefix("model/")?;
 
-            let dest = dbg!(temp_dir.path().join(&dest));
+            let dest = temp_dir.path().join(&dest);
             file.unpack(&dest)?;
         }
     }
