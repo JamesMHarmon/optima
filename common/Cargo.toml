@@ -9,4 +9,6 @@ publish = false
 name = "common"
 
 [dependencies]
+anyhow = "1.0"
 assert_approx_eq = "1.1"
+hocon = "0.9"

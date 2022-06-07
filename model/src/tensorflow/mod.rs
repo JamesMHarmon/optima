@@ -9,7 +9,6 @@ mod get_latest_model_info;
 mod reporter;
 mod run_cmd;
 mod train;
-mod archive;
 
 use constants::*;
 use create::*;

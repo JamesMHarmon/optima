@@ -29,6 +29,9 @@ impl SelfPlayPersistance {
         model_info: ModelInfo,
     ) -> Result<()> {
         let file_path = self.generate_file_path_for_game(&model_info);
+
+        fs::create_dir_all(file_path.parent().expect("Path should always have a parent"))?;
+
         let file = File::create(file_path)?;
         let compressor = GzEncoder::new(file, Compression::default());
         serde_json::to_writer(compressor, self_play_metrics)?;
