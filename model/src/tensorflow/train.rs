@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use engine::game_state::GameState;
 use half::f16;
 use itertools::Itertools;
 use log::info;
@@ -12,7 +11,6 @@ use std::sync::Arc;
 use super::super::model::TrainOptions;
 use super::super::model_info::ModelInfo;
 use super::super::position_metrics::PositionMetrics;
-use super::model_options::get_options;
 use super::*;
 
 pub fn get_model_dir(model_info: &ModelInfo) -> PathBuf {
@@ -23,13 +21,14 @@ pub fn get_model_dir(model_info: &ModelInfo) -> PathBuf {
 pub fn train<S, A, V, I, Map, Te>(
     source_model_info: &ModelInfo,
     target_model_info: &ModelInfo,
+    model_options: TensorflowModelOptions,
     sample_metrics: I,
     mapper: Arc<Map>,
     options: &TrainOptions,
 ) -> Result<()>
 where
-    S: GameState + Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static,
+    S: Send + 'static,
+    A: Send + 'static,
     V: Send + 'static,
     I: Iterator<Item = PositionMetrics<S, A, V>>,
     Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
@@ -40,7 +39,6 @@ where
         target_model_info.get_model_name()
     );
 
-    let model_options = get_options(source_model_info)?;
     let moves_left_size = model_options.moves_left_size;
     let train_batch_size = options.train_batch_size;
     let source_paths = Paths::from_model_info(source_model_info);

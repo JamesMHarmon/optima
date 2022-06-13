@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use super::analytics::GameAnalyzer;
 use super::model_info::ModelInfo;
-use super::position_metrics::PositionMetrics;
 
 pub trait Analyzer {
     type State;
@@ -12,19 +11,6 @@ pub trait Analyzer {
     type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>;
 
     fn analyzer(&self) -> Self::Analyzer;
-}
-
-pub trait Train {
-    type State;
-    type Action;
-    type Value;
-
-    fn train<I: Iterator<Item = PositionMetrics<Self::State, Self::Action, Self::Value>>>(
-        &self,
-        target_model_info: &ModelInfo,
-        sample_metrics: I,
-        options: &TrainOptions,
-    ) -> Result<()>;
 }
 
 pub trait Load {

@@ -11,22 +11,17 @@ use std::collections::BinaryHeap;
 use std::future::Future;
 use std::hash::Hash;
 use std::os::raw::c_int;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
-use tempfile::TempDir;
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
-use super::super::analytics::{self, GameStateAnalysis};
-use super::super::model::{Analyzer, Info, Train, TrainOptions};
-use super::super::model_info::ModelInfo;
-use super::super::node_metrics::NodeMetrics;
-use super::super::position_metrics::PositionMetrics;
-use super::archive::unarchive;
+use super::super::{analytics, ActionWithPolicy, GameStateAnalysis, ModelInfo, NodeMetrics};
+use super::super::{Analyzer, Info};
 use super::*;
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
@@ -36,7 +31,7 @@ static ALLOCATOR: std::alloc::System = std::alloc::System;
 #[allow(clippy::type_complexity)]
 pub struct TensorflowModel<S, A, V, E, Map, Te> {
     model_info: ModelInfo,
-    model_dir: Arc<TempDir>,
+    model_dir: PathBuf,
     batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
     analysis_request_threads: usize,
     engine: Arc<E>,
@@ -57,16 +52,35 @@ pub struct TensorflowModelOptions {
     pub moves_left_size: usize,
 }
 
-pub trait Mapper<S, A, V, Te> {
+pub trait Dimension {
+    fn dimensions(&self) -> [u64; 3];
+}
+
+pub trait InputMap<S> {
     fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<half::f16>;
-    fn get_input_dimensions(&self) -> [u64; 3];
-    fn get_symmetries(&self, metric: PositionMetrics<S, A, V>) -> Vec<PositionMetrics<S, A, V>>;
+}
+
+pub trait PolicyMap<S, A> {
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &S,
         policy: &NodeMetrics<A>,
     ) -> Vec<f32>;
+
+    fn policy_to_valid_actions(
+        &self,
+        game_state: &S,
+        policy_scores: &[f16],
+    ) -> Vec<ActionWithPolicy<A>>;
+}
+
+pub trait ValueMap<S, V> {
     fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
+
+    fn map_value_output_to_value(&self, game_state: &S, value_output: f32) -> V;
+}
+
+pub trait TranspositionMap<S, A, V, Te> {
     fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
         &self,
         game_state: &S,
@@ -74,11 +88,13 @@ pub trait Mapper<S, A, V, Te> {
         value: f16,
         moves_left: f32,
     ) -> Te;
+
     fn map_transposition_entry_to_analysis(
         &self,
         game_state: &S,
         transposition_entry: &Te,
     ) -> GameStateAnalysis<A, V>;
+
     fn get_transposition_key(&self, game_state: &S) -> u64;
 }
 
@@ -88,10 +104,24 @@ where
     A: Clone + Send + Sync + 'static,
     V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Map: InputMap<S>
+        + PolicyMap<S, A>
+        + ValueMap<S, V>
+        + TranspositionMap<S, A, V, Te>
+        + Dimension
+        + Send
+        + Sync
+        + 'static,
     Te: Send + Sync + 'static,
 {
-    pub fn load(path: &Path, engine: E, mapper: Map, tt_cache_size: usize) -> Result<Self> {
+    pub fn load(
+        model_dir: PathBuf,
+        options: TensorflowModelOptions,
+        model_info: ModelInfo,
+        engine: E,
+        mapper: Map,
+        tt_cache_size: usize,
+    ) -> Result<Self> {
         let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
             .map(|v| {
                 v.parse::<usize>()
@@ -110,11 +140,8 @@ where
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
         }
 
-        let (model_dir, options, model_info) = unarchive(path)?;
-
         let mapper = Arc::new(mapper);
         let engine = Arc::new(engine);
-        let model_dir = Arc::new(model_dir);
         let batching_model = Mutex::new(Weak::new());
 
         Ok(Self {
@@ -161,43 +188,20 @@ where
     }
 }
 
-impl<S, A, V, E, Map, Te> Train for TensorflowModel<S, A, V, E, Map, Te>
-where
-    S: Send + 'static,
-    A: Send + 'static,
-    V: Send + 'static,
-    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
-{
-    type State = S;
-    type Action = A;
-    type Value = V;
-
-    fn train<I>(
-        &self,
-        target_model_info: &ModelInfo,
-        sample_metrics: I,
-        options: &TrainOptions,
-    ) -> Result<()>
-    where
-        I: Iterator<Item = PositionMetrics<S, A, V>>,
-    {
-        super::train(
-            &self.model_info,
-            target_model_info,
-            sample_metrics,
-            self.mapper.clone(),
-            options,
-        )
-    }
-}
-
 impl<S, A, V, E, Map, Te> Analyzer for TensorflowModel<S, A, V, E, Map, Te>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
     V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Map: InputMap<S>
+        + PolicyMap<S, A>
+        + ValueMap<S, V>
+        + TranspositionMap<S, A, V, Te>
+        + Dimension
+        + Send
+        + Sync
+        + 'static,
     Te: Send + Sync + 'static,
 {
     type State = S;
@@ -433,7 +437,7 @@ where
     A: Clone,
     V: Value,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te>,
+    Map: InputMap<S> + PolicyMap<S, A> + ValueMap<S, V> + TranspositionMap<S, A, V, Te>,
     Te: Send + Sync + 'static,
 {
     type State = S;
@@ -513,14 +517,21 @@ where
     A: Clone + Send + 'static,
     V: Value + Send + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: Mapper<S, A, V, Te> + Send + Sync + 'static,
+    Map: InputMap<S>
+        + PolicyMap<S, A>
+        + ValueMap<S, V>
+        + TranspositionMap<S, A, V, Te>
+        + Dimension
+        + Send
+        + Sync
+        + 'static,
     Te: Send + 'static,
 {
     #[allow(clippy::too_many_arguments)]
     fn new(
         engine: Arc<E>,
         mapper: Arc<Map>,
-        model_dir: Arc<TempDir>,
+        model_dir: PathBuf,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         batch_size: usize,
@@ -532,7 +543,7 @@ where
         Self::create_analysis_tasks(
             engine.clone(),
             mapper.clone(),
-            model_dir.clone(),
+            model_dir,
             transposition_table.clone(),
             reporter.clone(),
             states_to_analyse_receiver,
@@ -554,7 +565,7 @@ where
     fn create_analysis_tasks(
         engine: Arc<E>,
         mapper: Arc<Map>,
-        model_dir: Arc<TempDir>,
+        model_dir: PathBuf,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
@@ -593,7 +604,7 @@ where
             }
         });
 
-        let predictor = Arc::new(Predictor::new(&model_dir.path()));
+        let predictor = Arc::new(Predictor::new(&model_dir));
         let (predicted_states_tx, predicted_states_rx) = crossbeam::channel::unbounded();
 
         for _ in 0..analysis_request_threads {
@@ -604,7 +615,7 @@ where
             let predicted_states_tx = predicted_states_tx.clone();
 
             tokio::task::spawn_blocking(move || {
-                let dimensions = mapper.get_input_dimensions();
+                let dimensions = mapper.dimensions();
                 let mut tensor_pool = TensorPool::new(dimensions);
 
                 while let Ok(state_to_analyze) = states_to_predict_rx.recv() {

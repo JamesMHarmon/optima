@@ -1,19 +1,20 @@
+use std::path::PathBuf;
+
 use super::board::set_placement_board_bits;
 use super::constants::{
     PLACE_INPUT_C as INPUT_C, PLACE_INPUT_H as INPUT_H, PLACE_INPUT_SIZE as INPUT_SIZE,
-    PLACE_INPUT_W as INPUT_W, PLACE_MOVES_LEFT_SIZE as MOVES_LEFT_SIZE,
-    PLACE_OUTPUT_SIZE as OUTPUT_SIZE, *,
+    PLACE_INPUT_W as INPUT_W, PLACE_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::engine::Engine;
 use super::game_state::GameState;
 use super::value::Value;
 use arimaa_engine::{Action, Piece};
 use engine::value::Value as ValueTrait;
-use model::model::ModelOptions;
 use model::model_info::ModelInfo;
 use model::node_metrics::NodeMetrics;
-use model::position_metrics::PositionMetrics;
-use model::tensorflow::{get_latest_model_info, Mode, TensorflowModel, TensorflowModelOptions};
+use model::tensorflow::{
+    InputMap, Mode, PolicyMap, TensorflowModel, TensorflowModelOptions, TranspositionMap, ValueMap,
+};
 use model::{
     analytics::{ActionWithPolicy, GameStateAnalysis},
     logits::update_logit_policies_to_softmax,
@@ -51,43 +52,18 @@ impl ModelFactory {
 pub struct Mapper {}
 
 impl Mapper {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {}
-    }
-
-    fn policy_to_valid_actions(
-        &self,
-        game_state: &GameState,
-        policy_scores: &[f16],
-    ) -> Vec<ActionWithPolicy<Action>> {
-        let mut valid_actions_with_policies: Vec<_> = game_state
-            .valid_actions()
-            .into_iter()
-            .map(|action| {
-                let policy_index = map_action_to_policy_output_idx(&action);
-                let policy_score = policy_scores[policy_index];
-
-                ActionWithPolicy::new(action, policy_score.to_f32())
-            })
-            .collect();
-
-        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
-
-        valid_actions_with_policies
-    }
-
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
-        let opp_val = 1.0 - curr_val;
-        if game_state.is_p1_turn_to_move() {
-            [curr_val, opp_val].into()
-        } else {
-            [opp_val, curr_val].into()
-        }
     }
 }
 
-impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEntry> for Mapper {
+impl model::tensorflow::Dimension for Mapper {
+    fn dimensions(&self) -> [u64; 3] {
+        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
+    }
+}
+
+impl InputMap<GameState> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
         let mut input: Vec<f16> = vec![f16::ZERO; INPUT_SIZE];
 
@@ -138,18 +114,9 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
 
         input
     }
+}
 
-    fn get_symmetries(
-        &self,
-        metrics: PositionMetrics<GameState, Action, Value>,
-    ) -> Vec<PositionMetrics<GameState, Action, Value>> {
-        vec![metrics]
-    }
-
-    fn get_input_dimensions(&self) -> [u64; 3] {
-        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
-    }
-
+impl PolicyMap<GameState, Action> for Mapper {
     fn policy_metrics_to_expected_output(
         &self,
         _game_state: &GameState,
@@ -169,6 +136,29 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
             })
     }
 
+    fn policy_to_valid_actions(
+        &self,
+        game_state: &GameState,
+        policy_scores: &[f16],
+    ) -> Vec<ActionWithPolicy<Action>> {
+        let mut valid_actions_with_policies: Vec<_> = game_state
+            .valid_actions()
+            .into_iter()
+            .map(|action| {
+                let policy_index = map_action_to_policy_output_idx(&action);
+                let policy_score = policy_scores[policy_index];
+
+                ActionWithPolicy::new(action, policy_score.to_f32())
+            })
+            .collect();
+
+        update_logit_policies_to_softmax(&mut valid_actions_with_policies);
+
+        valid_actions_with_policies
+    }
+}
+
+impl ValueMap<GameState, Value> for Mapper {
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         let player_to_move = if game_state.is_p1_turn_to_move() {
             1
@@ -179,6 +169,18 @@ impl model::tensorflow::model::Mapper<GameState, Action, Value, TranspositionEnt
         (val * 2.0) - 1.0
     }
 
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
+        let curr_val = (value_output + 1.0) / 2.0;
+        let opp_val = 1.0 - curr_val;
+        if game_state.is_p1_turn_to_move() {
+            [curr_val, opp_val].into()
+        } else {
+            [opp_val, curr_val].into()
+        }
+    }
+}
+
+impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
         game_state.get_transposition_hash()
     }
@@ -241,29 +243,13 @@ fn insert_input_channel_bits(input: &mut [f16], offset: usize, bits: u64) {
     set_placement_board_bits(input, offset, bits);
 }
 
-impl model::model::ModelFactory for ModelFactory {
-    type M = TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
-    type O = ModelOptions;
-
-    fn create(&self, model_info: &ModelInfo, options: &Self::O) -> Self::M {
-        TensorflowModel::<GameState, Action, Value, Engine, Mapper, TranspositionEntry>::create(
-            model_info,
-            &TensorflowModelOptions {
-                num_filters: options.number_of_filters,
-                num_blocks: options.number_of_residual_blocks,
-                channel_height: INPUT_H,
-                channel_width: INPUT_W,
-                channels: INPUT_C,
-                output_size: OUTPUT_SIZE,
-                moves_left_size: MOVES_LEFT_SIZE,
-            },
-        )
-        .unwrap();
-
-        self.get(model_info)
-    }
-
-    fn get(&self, model_info: &ModelInfo) -> Self::M {
+impl ModelFactory {
+    pub fn load(
+        &self,
+        model_dir: PathBuf,
+        model_options: TensorflowModelOptions,
+        model_info: ModelInfo,
+    ) -> Result<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>> {
         let mapper = Mapper::new();
 
         let table_size = std::env::var("PLACE_TABLE_SIZE")
@@ -273,10 +259,13 @@ impl model::model::ModelFactory for ModelFactory {
             })
             .unwrap_or(800);
 
-        TensorflowModel::new(model_info.clone(), Engine::new(), mapper, table_size)
-    }
-
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo> {
-        get_latest_model_info(model_info)
+        TensorflowModel::load(
+            model_dir,
+            model_options,
+            model_info,
+            Engine::new(),
+            mapper,
+            table_size,
+        )
     }
 }
