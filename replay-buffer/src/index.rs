@@ -31,6 +31,10 @@ impl Index {
     pub fn games(&self) -> usize {
         self.files.len()
     }
+
+    pub fn iter<'a>(&'a self) -> impl DoubleEndedIterator<Item=PathBuf> + 'a {
+        self.files.iter().map(|(d, _)| d.path())
+    }
 }
 
 fn get_game_files(games_dir: &Path) -> Result<Vec<(DirEntry, SystemTime)>> {

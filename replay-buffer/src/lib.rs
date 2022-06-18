@@ -47,10 +47,8 @@ fn replay_buffer(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
 #[pyclass]
 struct ReplayBuffer {
-    min_visits: usize,
     index: Index,
-    sampler: Sampler,
-    cache_dir: PathBuf
+    sample_loader: SampleLoader<Sampler>,
 }
 
 #[pymethods]
@@ -65,18 +63,35 @@ impl ReplayBuffer {
         let cache_dir = cache_dir.unwrap_or_else(|| "buffer_cache".to_string());
         let cache_dir = PathBuf::from(cache_dir);
 
+        let sampler = Sampler::new(mode);
+        let input_size = sampler.input_size();
+        let policy_size = sampler.policy_size();
+        let moves_left_size = sampler.moves_left_size();
+        let num_values_in_sample = input_size + policy_size + 1 + moves_left_size;
+        let index_res = Index::new(PathBuf::from(games_dir));
+        let index = index_res
+            .map_err(|_| PyErr::new::<PyFileNotFoundError, _>("Failed to index game files."))?;
+
         Ok(Self {
-            index: Index::new(PathBuf::from(games_dir))
-                .map_err(|_| PyErr::new::<PyFileNotFoundError, _>("Failed to index game files."))?,
-            min_visits,
-            cache_dir,
-            sampler: Sampler::new(mode),
+            index,
+            sample_loader: SampleLoader {
+                cache_dir,
+                min_visits,
+                num_values_in_sample,
+                sampler,
+            },
         })
     }
 
-    fn sample<'py>(&self, py: Python<'py>, samples: usize, start_idx: usize, end_idx: usize) -> PyResult<&'py PyDict> {
+    fn sample<'py>(
+        &self,
+        py: Python<'py>,
+        samples: usize,
+        start_idx: usize,
+        end_idx: usize,
+    ) -> PyResult<&'py PyDict> {
         let num_samples = samples;
-        let min_visits = self.min_visits;
+        let sampler = &self.sample_loader.sampler;
 
         let failures = AtomicUsize::new(0);
 
@@ -86,7 +101,7 @@ impl ReplayBuffer {
                 loop {
                     let sample_path = self.index.sample(start_idx, end_idx);
 
-                    if let Ok(sample) = load_and_sample_metrics(&sample_path, &self.cache_dir, min_visits, &self.sampler) {
+                    if let Ok(sample) = self.sample_loader.load_and_sample_metrics(&sample_path) {
                         if let Some(sample) = sample {
                             return sample;
                         } else {
@@ -104,10 +119,10 @@ impl ReplayBuffer {
             })
             .collect();
 
-        let mut x = Vec::with_capacity(num_samples * self.sampler.input_size());
-        let mut yp = Vec::with_capacity(num_samples * self.sampler.policy_size());
+        let mut x = Vec::with_capacity(num_samples * sampler.input_size());
+        let mut yp = Vec::with_capacity(num_samples * sampler.policy_size());
         let mut yv = Vec::with_capacity(num_samples);
-        let mut ym = Vec::with_capacity(num_samples * self.sampler.moves_left_size());
+        let mut ym = Vec::with_capacity(num_samples * sampler.moves_left_size());
 
         for input_outputs in samples {
             x.extend_from_slice(&input_outputs.input);
@@ -130,155 +145,166 @@ impl ReplayBuffer {
     fn games(&self) -> usize {
         self.index.games()
     }
-}
 
-fn load_and_sample_metrics<S: Sample>(
-    metrics_path: impl AsRef<Path>,
-    cache_dir: impl AsRef<Path>,
-    min_visits: usize,
-    sampler: &S,
-) -> Result<Option<InputAndTargets>>
-where
-    S::State: GameState,
-    S::Action: de::DeserializeOwned + Serialize,
-    S::Value: de::DeserializeOwned + Serialize + Clone,
-{
-    let input_size = sampler.input_size();
-    let policy_size = sampler.policy_size();
-    let moves_left_size = sampler.moves_left_size();
-    let num_values_in_sample = input_size + policy_size + 1 + moves_left_size;
-
-    let mut sample_reader = load_and_cache_samples(
-        metrics_path,
-        cache_dir,
-        min_visits,
-        num_values_in_sample,
-        sampler,
-    )?;
-
-    let num_samples = sample_reader.num_samples()?;
-
-    if num_samples == 0 {
-        return Ok(None);
+    fn avg_num_samples_per_game(&mut self, look_back: usize) -> f32 {
+        self.index
+            .iter()
+            .rev()
+            .take(look_back)
+            .filter_map(|path| {
+                let mut sampler = self.sample_loader.load_and_cache_samples(path).ok()?;
+                sampler.num_samples().ok()
+            })
+            .zip(1..)
+            .fold(0., |s, (e, i)| {
+                (e as f32 + s * (i as f32 - 1.0) as f32) / i as f32
+            })
     }
-
-    let rand_sample_idx = rand::thread_rng().gen_range(0..num_samples);
-
-    let mut vals = sample_reader.read_sample(rand_sample_idx)?.into_iter();
-
-    let inputs_and_targets = InputAndTargets {
-        input: vals.by_ref().take(input_size).collect(),
-        policy_output: vals.by_ref().take(policy_size).collect(),
-        value_output: vals.next().unwrap(),
-        moves_left_output: vals.by_ref().take(moves_left_size).collect(),
-    };
-
-    assert_matches!(vals.next(), None, "No more vals should be left");
-
-    Ok(Some(inputs_and_targets))
 }
 
-fn load_and_cache_samples<S: Sample>(
-    metrics_path: impl AsRef<Path>,
-    cache_dir: impl AsRef<Path>,
+struct SampleLoader<S> {
+    cache_dir: PathBuf,
     min_visits: usize,
     num_values_in_sample: usize,
-    sampler: &S,
-) -> Result<SampleFileReader<BufReader<File>>>
-where
-    S::State: GameState,
-    S::Action: de::DeserializeOwned + Serialize,
-    S::Value: de::DeserializeOwned + Serialize + Clone,
-{
-    let cache_path = &metrics_path_for_cache(&metrics_path, cache_dir)?;
+    sampler: S,
+}
 
-    let read_cache_file = move || -> Result<SampleFileReader<BufReader<File>>> {
-        let file = File::open(cache_path)?;
+impl<S> SampleLoader<S> {
+    fn load_and_sample_metrics(
+        &self,
+        metrics_path: impl AsRef<Path>,
+    ) -> Result<Option<InputAndTargets>>
+    where
+        S: Sample,
+        S::State: GameState,
+        S::Action: de::DeserializeOwned + Serialize,
+        S::Value: de::DeserializeOwned + Serialize + Clone,
+    {
+        let input_size = self.sampler.input_size();
+        let policy_size = self.sampler.policy_size();
+        let moves_left_size = self.sampler.moves_left_size();
 
-        let res = try {
-            let buff_reader = BufReader::new(file);
-            SampleFile::new(num_values_in_sample).read(buff_reader)
+        let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
+
+        let num_samples = sample_reader.num_samples()?;
+
+        if num_samples == 0 {
+            return Ok(None);
+        }
+
+        let rand_sample_idx = rand::thread_rng().gen_range(0..num_samples);
+
+        let mut vals = sample_reader.read_sample(rand_sample_idx)?.into_iter();
+
+        let inputs_and_targets = InputAndTargets {
+            input: vals.by_ref().take(input_size).collect(),
+            policy_output: vals.by_ref().take(policy_size).collect(),
+            value_output: vals.next().unwrap(),
+            moves_left_output: vals.by_ref().take(moves_left_size).collect(),
         };
 
-        if matches!(res, Err(_)) {
-            println!("Failed to read {:?}", cache_path);
-        }
+        assert_matches!(vals.next(), None, "No more vals should be left");
 
-        res
-    };
-
-    let mut buffered_samples = read_cache_file();
-
-    if matches!(buffered_samples, Err(_)) {
-        let samples = load_samples(metrics_path, min_visits, sampler)?;
-        let mut vals = Vec::with_capacity(samples.len() * num_values_in_sample);
-        for metrics in samples {
-            let inputs_and_targets = sampler.metric_to_input_and_targets(&metrics);
-            vals.extend(inputs_and_targets.input);
-            vals.extend(inputs_and_targets.policy_output);
-            vals.push(inputs_and_targets.value_output);
-            vals.extend(inputs_and_targets.moves_left_output);
-        }
-
-        if !cache_path.exists() {
-            fs::create_dir_all(&cache_path.parent().unwrap())?;
-
-            let file = File::create(cache_path)?;
-            let buff_writer = BufWriter::new(file);
-            SampleFile::new(num_values_in_sample).write(buff_writer, &vals)?;
-        } else {
-            warn!("Path exits but was not loaded {:?}", cache_path);
-        }
-
-        buffered_samples = read_cache_file();
+        Ok(Some(inputs_and_targets))
     }
 
-    buffered_samples
-}
+    fn load_and_cache_samples(
+        &self,
+        metrics_path: impl AsRef<Path>,
+    ) -> Result<SampleFileReader<BufReader<File>>>
+    where
+        S: Sample,
+        S::State: GameState,
+        S::Action: de::DeserializeOwned + Serialize,
+        S::Value: de::DeserializeOwned + Serialize + Clone,
+    {
+        let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
-#[allow(clippy::type_complexity)]
-fn load_samples<S: Sample>(
-    metrics_path: impl AsRef<Path>,
-    min_visits: usize,
-    sampler: &S,
-) -> Result<Vec<PositionMetrics<S::State, S::Action, S::Value>>>
-where
-    S::State: GameState,
-    S::Action: de::DeserializeOwned + Serialize,
-    S::Value: de::DeserializeOwned + Serialize + Clone,
-{
-    let file = std::fs::File::open(&metrics_path)
-        .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
-    let file = GzDecoder::new(file);
-    let metrics: SelfPlayMetrics<<S as Sample>::Action, <S as Sample>::Value> =
-        serde_json::from_reader(file)
-            .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
+        let read_cache_file = move || -> Result<SampleFileReader<BufReader<File>>> {
+            let file = File::open(cache_path)?;
 
-    let samples = sampler.metrics_to_samples(metrics, min_visits);
+            let res = try {
+                let buff_reader = BufReader::new(file);
+                SampleFile::new(self.num_values_in_sample).read(buff_reader)
+            };
 
-    Ok(samples)
-}
+            if matches!(res, Err(_)) {
+                println!("Failed to read {:?}", cache_path);
+            }
 
-// input 4 + 1
-// output 70
-// moves left 1
+            res
+        };
 
-fn metrics_path_for_cache(
-    metrics_path: impl AsRef<Path>,
-    cache_dir: impl AsRef<Path>,
-) -> Result<PathBuf> {
-    let mut components = metrics_path.as_ref().components().collect::<Vec<_>>();
+        let mut buffered_samples = read_cache_file();
 
-    components.reverse();
+        if matches!(buffered_samples, Err(_)) {
+            let samples = self.load_samples(metrics_path)?;
+            let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
+            for metrics in samples {
+                let inputs_and_targets = self.sampler.metric_to_input_and_targets(&metrics);
+                vals.extend(inputs_and_targets.input);
+                vals.extend(inputs_and_targets.policy_output);
+                vals.push(inputs_and_targets.value_output);
+                vals.extend(inputs_and_targets.moves_left_output);
+            }
 
-    let mut components = components.into_iter();
+            if !cache_path.exists() {
+                fs::create_dir_all(&cache_path.parent().unwrap())?;
 
-    let metrics_file_name = components.next().unwrap().as_os_str();
-    let model_dir = components.next().unwrap().as_os_str();
+                let file = File::create(cache_path)?;
+                let buff_writer = BufWriter::new(file);
+                SampleFile::new(self.num_values_in_sample).write(buff_writer, &vals)?;
+            } else {
+                warn!("Path exits but was not loaded {:?}", cache_path);
+            }
 
-    Ok(cache_dir
-        .as_ref()
-        .to_path_buf()
-        .join(model_dir)
-        .join(metrics_file_name))
+            buffered_samples = read_cache_file();
+        }
+
+        buffered_samples
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn load_samples(
+        &self,
+        metrics_path: impl AsRef<Path>,
+    ) -> Result<Vec<PositionMetrics<S::State, S::Action, S::Value>>>
+    where
+        S: Sample,
+        S::State: GameState,
+        S::Action: de::DeserializeOwned + Serialize,
+        S::Value: de::DeserializeOwned + Serialize + Clone,
+    {
+        let file = std::fs::File::open(&metrics_path)
+            .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
+        let file = GzDecoder::new(file);
+        let metrics: SelfPlayMetrics<<S as Sample>::Action, <S as Sample>::Value> =
+            serde_json::from_reader(file)
+                .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
+
+        let samples = self.sampler.metrics_to_samples(metrics, self.min_visits);
+
+        Ok(samples)
+    }
+
+    // input 4 + 1
+    // output 70
+    // moves left 1
+
+    fn metrics_path_for_cache(&self, metrics_path: impl AsRef<Path>) -> Result<PathBuf> {
+        let mut components = metrics_path.as_ref().components().collect::<Vec<_>>();
+
+        components.reverse();
+
+        let mut components = components.into_iter();
+
+        let metrics_file_name = components.next().unwrap().as_os_str();
+        let model_dir = components.next().unwrap().as_os_str();
+
+        Ok(self
+            .cache_dir
+            .to_path_buf()
+            .join(model_dir)
+            .join(metrics_file_name))
+    }
 }
