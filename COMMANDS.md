@@ -13,6 +13,6 @@ export TF_CPP_MIN_LOG_LEVEL = 2
 
 cargo build --release && cp ./target/release/libreplay_buffer.so ./model_py/replay_buffer.so
 docker build -f docker/train.Dockerfile -t quoridor_engine/train:latest .
-docker run --rm -it -p 8888:8888 --gpus all --mount type=bind,source=\"$(pwd)/Arimaa_runs\",target=/Arimaa_runs quoridor_engine/train:latest
+docker run --rm -it -p 8888:8888 --gpus all --mount type=bind,source="${PWD}/Arimaa_runs",target=/Arimaa_runs quoridor_engine/train:latest
 
-docker cp ./target/release/libreplay_buffer.so c1b3ffaa43e8:/tf/replay_buffer.so
+cargo build --release && cp ./target/release/libreplay_buffer.so ./model_py/replay_buffer.so && docker cp model_py/ determined_brattain:/tf
