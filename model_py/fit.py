@@ -63,14 +63,15 @@ class Fit:
         logs = {}
 
         with tf.GradientTape() as tape:
-            predictions = model(data['X'], training=training)
+            input, targets = data
+            predictions = model(input, training=training)
 
             total_loss = sum(model.losses)
             logs['loss/model loss'] = total_loss
 
             for name, prediction in zip(model.output_names, predictions):
                 loss_fn = model.loss[name]
-                target = data[name]
+                target = targets[name]
                 weight = model.compiled_loss._loss_weights[name]
 
                 loss = tf.reduce_mean(loss_fn(target, prediction))

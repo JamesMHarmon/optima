@@ -7,7 +7,7 @@ import tensorflow as tf
 
 class DataGenerator(Sequence):
     'Generates data for Keras'
-    def __init__(self, *, replay_buffer, epoch, batch_size=2048, games_per_epoch=32_000, window_size=500_000, avg_num_samples_per_pos=0.5, window_warmup=0.5):
+    def __init__(self, *, replay_buffer, epoch, batch_size=2048, games_per_epoch=32_000, window_size=500_000, avg_num_samples_per_pos=0.5, window_warmup=0.5, shapes=None):
         self._replay_buffer = replay_buffer 
         self._epoch = int(epoch)
         self._batch_size = int(batch_size)
@@ -16,21 +16,27 @@ class DataGenerator(Sequence):
         self._avg_num_samples_per_pos = float(avg_num_samples_per_pos)
         self._window_warmup = float(window_warmup)
         self._num_games = 0
+        self._shape = shapes
 
         avg_num_samples_per_game = replay_buffer.avg_num_samples_per_game(look_back=games_per_epoch)
         if avg_num_samples_per_game < 1:
             avg_num_samples_per_game = 10
 
-        self._steps = (games_per_epoch * avg_num_samples_per_game * avg_num_samples_per_pos) // batch_size 
+        self._steps = int(games_per_epoch * avg_num_samples_per_game * avg_num_samples_per_pos) // batch_size 
 
+    def to_tensor(self, sample, shape):
+        shape = (self._batch_size, ) + shape
+        sample = sample.reshape(shape)
+        return tf.convert_to_tensor(sample, dtype=tf.float32)
+        
 
     def __len__(self):
         return self._steps
 
     def __getitem__(self, index):
         adj_window_size = min(self._window_size, self._epoch * self._games_per_epoch * self._window_warmup)
-        end_idx = math.floor(((self._epoch - 1) * self._games_per_epoch) + ((index + 1) / self._steps) * self._games_per_epoch)
-        start_idx = max(0, end_idx - adj_window_size)
+        end_idx = int(math.floor(((self._epoch - 1) * self._games_per_epoch) + ((index + 1) / self._steps) * self._games_per_epoch))
+        start_idx = int(max(0, end_idx - adj_window_size))
 
         if self._num_games <= end_idx:
             while True:
@@ -46,10 +52,10 @@ class DataGenerator(Sequence):
         sample = self._replay_buffer.sample(self._batch_size, start_idx=start_idx, end_idx=end_idx)
 
         return (
-            tf.convert_to_tensor(sample['X'], dtype=tf.float32),
+            self.to_tensor(sample['X'], self._shape['X']),
             {
-                'policy_head': tf.convert_to_tensor(sample['yp'], dtype=tf.float32),
-                'value_head': tf.convert_to_tensor(sample['yv'], dtype=tf.float32),
-                'moves_left_head': tf.convert_to_tensor(sample['ym'], dtype=tf.float32)
+                'policy_head': self.to_tensor(sample['yp'], self._shape['yp']),
+                'value_head': self.to_tensor(sample['yv'], self._shape['yv']),
+                'moves_left_head': self.to_tensor(sample['ym'], self._shape['ym'])
             }
         )
