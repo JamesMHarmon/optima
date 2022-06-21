@@ -12,9 +12,11 @@ pub struct ConfigLoader {
 
 impl ConfigLoader {
     pub fn new(path: impl AsRef<Path>, scope: String) -> Result<Self> {
+        let path = path.as_ref();
+        assert!(path.is_file(), "The config file was {:?} not found", path);
+
         let env = std::env::vars().collect::<HashMap<_, _>>();
 
-        let path = path.as_ref();
         let hocon = HoconLoader::new()
             .load_file(path)
             .with_context(|| format!("Failed to find or load config file at: {:?}", path))?

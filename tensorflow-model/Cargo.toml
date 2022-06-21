@@ -5,9 +5,6 @@ authors = ["James Harmon <JamesMHarmon@gmail.com>"]
 edition = "2021"
 publish = false
 
-# [lib]
-# name = "tensorflow-model"
-
 [features]
 default = ["all"]
 all = ["dep:tensorflow"]

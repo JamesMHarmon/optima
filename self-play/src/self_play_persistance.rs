@@ -73,7 +73,7 @@ impl SelfPlayPersistance {
             "{}_{}_{}.gz",
             model_info.get_run_name(),
             model_info.get_model_num(),
-            UuidB64::new()
+            UuidB64::new().to_string().replace(|c: char| !c.is_alphanumeric(), "")
         ))
     }
 }

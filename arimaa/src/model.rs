@@ -3,9 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
 
-use crate::PlaceTranspositionEntry;
-use crate::PlayTranspositionEntry;
-
+use super::{PlaceTranspositionEntry,PlayTranspositionEntry};
 use super::engine::Engine;
 use super::game_state::GameState;
 use super::place_mappings::Mapper as PlaceMapper;
@@ -19,10 +17,10 @@ use futures::future::Either;
 use model::{GameStateAnalysis, Latest, Load, ModelInfo};
 use tensorflow_model::{unarchive, Archive as ArchiveModel, ArchiveAnalyzer};
 use tensorflow_model::{GameAnalyzer, TensorflowModel, UnwrappedReceiver};
-
 use anyhow::{Context, Result};
 use tempfile::{tempdir, TempDir};
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
 
 #[derive(Default)]
