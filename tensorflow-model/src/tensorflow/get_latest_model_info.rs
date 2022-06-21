@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use log::info;
 use std::fs;
 
-use super::super::model_info::ModelInfo;
+use ::model::ModelInfo;
 use super::paths::Paths;
 
 pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo> {

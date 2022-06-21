@@ -1,8 +1,8 @@
 use engine::GameState;
 use half::f16;
-use model::tensorflow::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
+use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 
 pub trait Sample
 where

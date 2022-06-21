@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::super::model_info::ModelInfo;
+use ::model::ModelInfo;
 
 pub struct Paths<'a> {
     model_info: &'a ModelInfo,

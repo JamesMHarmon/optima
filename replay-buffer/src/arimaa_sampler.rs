@@ -1,13 +1,10 @@
-use arimaa::place_model::Mapper as PlaceMapper;
-use arimaa::play_model::Mapper as PlayMapper;
-use arimaa::{
-    Action, GameState, Value, PLACE_INPUT_SIZE, PLACE_MOVES_LEFT_SIZE, PLACE_OUTPUT_SIZE,
-    PLAY_INPUT_SIZE, PLAY_MOVES_LEFT_SIZE, PLAY_OUTPUT_SIZE,
-};
+use arimaa::{Action, GameState, Value, PLACE_INPUT_SIZE, PLACE_MOVES_LEFT_SIZE};
+use arimaa::{PlaceMapper, PlayMapper};
+use arimaa::{PLACE_OUTPUT_SIZE, PLAY_INPUT_SIZE, PLAY_MOVES_LEFT_SIZE, PLAY_OUTPUT_SIZE};
 use engine::GameEngine;
 use half::f16;
-use model::tensorflow::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 use model::{ActionWithPolicy, NodeMetrics};
+use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 
 use super::sample::Sample;
 

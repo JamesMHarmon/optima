@@ -1021,12 +1021,6 @@ impl<A> MCTSEdge<A> {
     }
 }
 
-#[derive(Debug)]
-struct NodePUCT<'a, A> {
-    node: &'a MCTSEdge<A>,
-    score: f32,
-}
-
 struct NodeArena<T>(RefCell<NodeArenaInner<T>>);
 
 impl<T> NodeArena<T> {

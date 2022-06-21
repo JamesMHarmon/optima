@@ -2,5 +2,6 @@
 **/*.rs.bk
 .ipynb_checkpoints
 **/*.pyc
-/*_runs/**/*.*
+/*_runs/*
 .vscode/
+**/buffer_cache/*

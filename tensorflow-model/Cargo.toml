@@ -1,0 +1,35 @@
+[package]
+name = "tensorflow-model"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2021"
+publish = false
+
+# [lib]
+# name = "tensorflow-model"
+
+[features]
+default = ["all"]
+all = ["dep:tensorflow"]
+traits = []
+
+[dependencies]
+common = { path = "../common" }
+engine = { path = "../engine" }
+model = { path = "../model" }
+
+anyhow = { version = "1.0" }
+crossbeam = { version = "0.8" }
+flate2 = { version = "1.0" }
+half = { version = "1.8" }
+itertools = { version = "0.10" }
+log = { version = "0.4" }
+parking_lot = { version = "0.12" }
+pin-project ={ version = "1.0" }
+rand = { version = "0.8" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+tar = { version = "0.4.38" }
+tempfile = { version = "3.3.0" }
+tensorflow = { version = "0.18", features = ["tensorflow_gpu"], optional = true }
+tokio = { version = "1.18", features = ["parking_lot", "sync", "rt", "rt-multi-thread", "time"] }

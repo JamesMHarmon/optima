@@ -11,7 +11,7 @@ use tar::Header;
 use tempfile::{tempdir, TempDir};
 
 use super::super::tensorflow::TensorflowModelOptions;
-use super::super::{Analyzer, GameAnalyzer, ModelInfo};
+use ::model::{Analyzer, GameAnalyzer, ModelInfo};
 
 pub struct Archive<M> {
     inner: M,

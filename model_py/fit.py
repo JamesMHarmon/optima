@@ -53,6 +53,8 @@ class Fit:
 
         epoch_logs = self._get_epoch_logs()
         callbacks.on_epoch_end(epoch, epoch_logs)
+
+        return num_steps
     
     @tf.function
     def _step(self, data, **kwargs):

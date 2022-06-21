@@ -10,13 +10,14 @@ edition = "2021"
 name = "replay_buffer"
 
 # "cdylib" is necessary to produce a shared library for Python to import from.
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 engine = { path = "../engine" }
 model = { path = "../model" }
-self-play = { path = "../self-play" }
-arimaa = { path = "../arimaa" }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = ["traits"] }
+self-play = { path = "../self-play", default-features = false, features = ["traits"] }
+arimaa = { path = "../arimaa", default-features = false, features = ["mappings"] }
 
 anyhow = "1.0.57"
 bytemuck = "1.9.1"
