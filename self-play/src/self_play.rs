@@ -57,7 +57,7 @@ where
                     game_results_tx,
                     engine,
                     latest_model_analyzer,
-                    &self_play_options
+                    self_play_options
                 );
 
                 let res = runtime_handle.block_on(f);

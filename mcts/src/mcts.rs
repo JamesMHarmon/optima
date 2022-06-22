@@ -220,7 +220,7 @@ where
             let mut root_node = self.arena.get_mut();
 
             Self::apply_dirichlet_noise_to_node(
-                &mut root_node.node_mut(root_node_index),
+                root_node.node_mut(root_node_index),
                 dirichlet,
             );
         }
@@ -583,7 +583,7 @@ where
 
         let game_engine = &self.game_engine;
 
-        let arena_mut = &mut *self.arena.get_mut();
+        let mut arena_mut = self.arena.get_mut();
         let root_node = arena_mut.remove(root_index);
         let split_nodes = Self::split_node_children_by_action(&root_node, &action);
 
@@ -599,18 +599,19 @@ where
         let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
 
         for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
-            Self::remove_nodes_from_arena(node_index, arena_mut);
+            Self::remove_nodes_from_arena(node_index, &mut arena_mut);
         }
+        drop(arena_mut);
 
         let chosen_node = if let Some(node_index) = chosen_node.get_index() {
             if clear {
-                Self::clear_node(node_index, arena_mut);
+                Self::clear_node(node_index, &mut self.arena.get_mut());
             }
 
             node_index
         } else {
             let node = Self::analyse_and_create_node(&self.game_state, self.analyzer).await;
-            arena_mut.insert(node)
+            self.arena.get_mut().insert(node)
         };
 
         self.root.replace(chosen_node);

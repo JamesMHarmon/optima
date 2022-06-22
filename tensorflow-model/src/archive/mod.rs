@@ -1,3 +1,3 @@
-pub mod archive;
+pub mod archiver;
 
-pub use archive::*;
+pub use archiver::*;

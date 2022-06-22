@@ -32,7 +32,7 @@ impl Index {
         self.files.len()
     }
 
-    pub fn iter<'a>(&'a self) -> impl DoubleEndedIterator<Item=PathBuf> + 'a {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item=PathBuf> + '_ {
         self.files.iter().map(|(d, _)| d.path())
     }
 }

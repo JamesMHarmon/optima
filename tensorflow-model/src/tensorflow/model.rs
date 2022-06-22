@@ -19,8 +19,8 @@ use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
-use ::model::{analytics, GameStateAnalysis, ModelInfo, Analyzer, Info};
 use super::*;
+use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
 #[cfg(feature = "tensorflow_system_alloc")]
@@ -243,17 +243,15 @@ impl Predictor {
                 index: policy_head_tensor_info.name().index,
             })
             .expect("Expected to find policy_head operation");
-        let op_moves_left_head = moves_left_head_name
-            .map(|name| {
-                graph
-                    .operation_by_name_required(name)
-                    .map(|operation| OperationWithIndex {
-                        operation,
-                        index: moves_left_head_tensor_info.unwrap().name().index,
-                    })
-                    .ok()
-            })
-            .flatten();
+        let op_moves_left_head = moves_left_head_name.and_then(|name| {
+            graph
+                .operation_by_name_required(name)
+                .map(|operation| OperationWithIndex {
+                    operation,
+                    index: moves_left_head_tensor_info.unwrap().name().index,
+                })
+                .ok()
+        });
 
         let session = model.session;
 

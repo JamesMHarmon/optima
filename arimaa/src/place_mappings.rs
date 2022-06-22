@@ -15,11 +15,12 @@ use model::node_metrics::NodeMetrics;
 use tensorflow_model::{InputMap, Mode, PolicyMap};
 use tensorflow_model::{TranspositionMap, ValueMap};
 
+#[derive(Default)]
 pub struct Mapper {}
 
 impl Mapper {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 }
 

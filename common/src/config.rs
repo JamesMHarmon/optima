@@ -1,6 +1,10 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    any,
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use hocon::{Hocon, HoconLoader};
 
 #[derive(Debug)]
@@ -8,12 +12,13 @@ pub struct ConfigLoader {
     hocon: Hocon,
     env: HashMap<String, String>,
     scope: String,
+    path: PathBuf,
 }
 
 impl ConfigLoader {
     pub fn new(path: impl AsRef<Path>, scope: String) -> Result<Self> {
         let path = path.as_ref();
-        assert!(path.is_file(), "The config file was {:?} not found", path);
+        assert!(path.is_file(), "The config file {:?} was not found", path);
 
         let env = std::env::vars().collect::<HashMap<_, _>>();
 
@@ -22,7 +27,23 @@ impl ConfigLoader {
             .with_context(|| format!("Failed to find or load config file at: {:?}", path))?
             .hocon()?;
 
-        Ok(Self { hocon, env, scope })
+        if !matches!(hocon, Hocon::Hash(_)) {
+            return Err(anyhow!(
+                "Top level of config {:?} must be an object",
+                path
+            ));
+        }
+
+        if let Hocon::Hash(ref hash) = hocon && hash.is_empty() {
+            return Err(anyhow!("Configurations not found in file {:?}", path));
+        }
+
+        Ok(Self {
+            hocon,
+            env,
+            scope,
+            path: path.to_path_buf(),
+        })
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
@@ -32,12 +53,27 @@ impl ConfigLoader {
 
         let scope = &self.hocon[self.scope.as_str()];
         if matches!(scope, Hocon::Hash(_)) {
-            if let Some(value) = Self::map_hocon(&scope, name) {
+            if let Some(value) = Self::map_hocon(scope, name) {
                 return Some(value);
             }
         }
 
         Self::map_hocon(&self.hocon, name)
+    }
+
+    // Gets a path setting from the config and resolves the path to be relative to the config file.
+    pub fn get_relative_path(&self, name: &str) -> Result<PathBuf> {
+        self.get(name)
+            .ok_or_else(|| anyhow!("Property {} not found in config.", name))?
+            .as_string()
+            .ok_or_else(|| anyhow!("Property {} not a valid string.", name))
+            .and_then(|v| {
+                self
+                    .path
+                    .parent()
+                    .ok_or_else(|| anyhow!("No parent directory for config {:?}", self.path))
+                    .map(|p| p.join(v))
+            })
     }
 
     pub fn load<T: Config>(&self) -> Result<T> {

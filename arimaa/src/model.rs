@@ -3,7 +3,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
 
-use super::{PlaceTranspositionEntry,PlayTranspositionEntry};
 use super::engine::Engine;
 use super::game_state::GameState;
 use super::place_mappings::Mapper as PlaceMapper;
@@ -11,14 +10,15 @@ use super::place_model::ModelFactory as PlaceModelFactory;
 use super::play_mappings::Mapper as PlayMapper;
 use super::play_model::ModelFactory as PlayModelFactory;
 use super::value::Value;
+use super::{PlaceTranspositionEntry, PlayTranspositionEntry};
 
+use anyhow::{Context, Result};
 use arimaa_engine::Action;
 use futures::future::Either;
 use model::{GameStateAnalysis, Latest, Load, ModelInfo};
+use tempfile::{tempdir, TempDir};
 use tensorflow_model::{unarchive, Archive as ArchiveModel, ArchiveAnalyzer};
 use tensorflow_model::{GameAnalyzer, TensorflowModel, UnwrappedReceiver};
-use anyhow::{Context, Result};
-use tempfile::{tempdir, TempDir};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
@@ -101,58 +101,6 @@ pub struct Model {
         TensorflowModel<GameState, Action, Value, Engine, PlaceMapper, PlaceTranspositionEntry>,
     >,
 }
-
-// #[allow(clippy::unnecessary_filter_map)]
-// impl model::model::Model for Model {
-//     type State = GameState;
-//     type Action = Action;
-//     type Value = Value;
-//     type Analyzer = Analyzer;
-
-//     fn get_model_info(&self) -> &ModelInfo {
-//         self.play_model.get_model_info()
-//     }
-
-//     fn train<I>(
-//         &self,
-//         target_model_info: &ModelInfo,
-//         sample_metrics: I,
-//         options: &TrainOptions,
-//     ) -> Result<()>
-//     where
-//         I: Iterator<Item = PositionMetrics<Self::State, Self::Action, Self::Value>>,
-//     {
-//         let mut place_samples = Vec::new();
-
-//         let play_sample_iter = sample_metrics.filter_map(|sample_metric| {
-//             if sample_metric.game_state.is_play_phase() {
-//                 Some(sample_metric)
-//             } else {
-//                 place_samples.push(sample_metric);
-//                 None
-//             }
-//         });
-
-//         self.play_model
-//             .train(target_model_info, play_sample_iter, options)?;
-
-//         let place_model_info = map_to_place_model_info(target_model_info);
-
-//         let max_grad_norm = std::env::var("PLACE_MAX_GRAD_NORM")
-//             .map(|v| {
-//                 v.parse::<f32>()
-//                     .expect("PLACE_MAX_GRAD_NORM must be a valid number")
-//             })
-//             .unwrap_or(options.max_grad_norm);
-
-//         let place_options = TrainOptions {
-//             max_grad_norm,
-//             ..(*options)
-//         };
-//         self.place_model
-//             .train(&place_model_info, place_samples.into_iter(), &place_options)
-//     }
-// }
 
 impl model::Analyzer for Model {
     type State = GameState;
