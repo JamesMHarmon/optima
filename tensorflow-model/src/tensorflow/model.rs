@@ -46,7 +46,7 @@ where
     V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: InputMap<S>
-        + PolicyMap<S, A>
+        + PolicyMap<S, A, V>
         + ValueMap<S, V>
         + TranspositionMap<S, A, V, Te>
         + Dimension
@@ -132,7 +132,7 @@ where
     V: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: InputMap<S>
-        + PolicyMap<S, A>
+        + PolicyMap<S, A, V>
         + ValueMap<S, V>
         + TranspositionMap<S, A, V, Te>
         + Dimension
@@ -372,7 +372,7 @@ where
     A: Clone,
     V: Value,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: InputMap<S> + PolicyMap<S, A> + ValueMap<S, V> + TranspositionMap<S, A, V, Te>,
+    Map: InputMap<S> + PolicyMap<S, A, V> + ValueMap<S, V> + TranspositionMap<S, A, V, Te>,
     Te: Send + Sync + 'static,
 {
     type State = S;
@@ -453,7 +453,7 @@ where
     V: Value + Send + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: InputMap<S>
-        + PolicyMap<S, A>
+        + PolicyMap<S, A, V>
         + ValueMap<S, V>
         + TranspositionMap<S, A, V, Te>
         + Dimension

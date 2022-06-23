@@ -1,8 +1,11 @@
 use anyhow::{anyhow, Result};
+use common::div_or_zero;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_intrusive::sync::LocalManualResetEvent;
 use generational_arena::{Arena, Index};
+use itertools::Itertools;
 use log::warn;
+use model::NodeChildMetrics;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
@@ -219,36 +222,16 @@ where
         if let Some(dirichlet) = &self.options.dirichlet {
             let mut root_node = self.arena.get_mut();
 
-            Self::apply_dirichlet_noise_to_node(
-                root_node.node_mut(root_node_index),
-                dirichlet,
-            );
+            Self::apply_dirichlet_noise_to_node(root_node.node_mut(root_node_index), dirichlet);
         }
     }
 
-    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A>> {
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, V>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let arena_ref = self.arena.get_mut();
         let root = arena_ref.node(root_index);
 
-        Ok(NodeMetrics {
-            visits: root.get_node_visits(),
-            children: root
-                .children
-                .iter()
-                .map(|n| {
-                    (
-                        n.action.clone(),
-                        if n.visits == 0 {
-                            0.0
-                        } else {
-                            n.W / n.visits as f32
-                        },
-                        n.visits,
-                    )
-                })
-                .collect(),
-        })
+        Ok(root.into())
     }
 
     pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, V>> + '_> {
@@ -991,6 +974,34 @@ impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
     }
 }
 
+impl<A, V> Into<NodeMetrics<A, V>> for &MCTSNode<A, V>
+where
+    A: Clone,
+    V: Clone,
+{
+    fn into(self) -> NodeMetrics<A, V> {
+        NodeMetrics {
+            visits: self.visits,
+            value: self.value_score.clone(),
+            children: self.children.iter().map(|e| e.into()).collect_vec(),
+        }
+    }
+}
+
+impl<A> Into<NodeChildMetrics<A>> for &MCTSEdge<A>
+where
+    A: Clone,
+{
+    fn into(self) -> NodeChildMetrics<A> {
+        NodeChildMetrics::new(
+            self.action.clone(),
+            div_or_zero(self.W, self.visits as f32),
+            div_or_zero(self.M, self.visits as f32),
+            self.visits,
+        )
+    }
+}
+
 struct NodeUpdateInfo {
     parent_node_index: Index,
     node_child_index: usize,
@@ -1155,612 +1166,5 @@ impl MCTSNodeState {
             Self::ExpandingWithWaiters(reset_event) => reset_event.clone(),
             _ => panic!("Node state is not currently expanding"),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::counting_game::{
-        CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState,
-    };
-    use super::*;
-    use assert_approx_eq::assert_approx_eq;
-
-    const ERROR_DIFF: f32 = 0.02;
-    const ERROR_DIFF_W: f32 = 0.01;
-
-    fn assert_metrics(left: &NodeMetrics<CountingAction>, right: &NodeMetrics<CountingAction>) {
-        assert_eq!(left.visits, right.visits);
-        assert_eq!(left.children.len(), right.children.len());
-
-        for ((l_a, l_w, l_visits), (r_a, r_w, r_visits)) in
-            left.children.iter().zip(right.children.iter())
-        {
-            assert_eq!(l_a, r_a);
-            assert_approx_eq!(l_w, r_w, ERROR_DIFF_W);
-            let max_visits = (*l_visits as usize).max(*r_visits as usize);
-            let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
-            assert_approx_eq!(*l_visits as f32, *r_visits as f32, allowed_diff);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_mcts_is_deterministic() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state.to_owned(),
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        let mut mcts2 = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(800).await.unwrap();
-        mcts2.search_visits(800).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-        let metrics2 = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(&metrics, &metrics2);
-    }
-
-    #[tokio::test]
-    async fn test_mcts_chooses_best_p1_move() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action().unwrap();
-
-        assert_eq!(action, CountingAction::Increment);
-    }
-
-    #[tokio::test]
-    async fn test_mcts_chooses_best_p2_move() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.advance_to_action(CountingAction::Increment)
-            .await
-            .unwrap();
-
-        mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action().unwrap();
-
-        assert_eq!(action, CountingAction::Decrement);
-    }
-
-    #[tokio::test]
-    async fn test_mcts_should_overcome_policy_through_value() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 2.5,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.advance_to_action(CountingAction::Increment)
-            .await
-            .unwrap();
-
-        mcts.search_visits(800).await.unwrap();
-        let details = mcts.get_focus_node_details().unwrap().unwrap();
-        let (action, _) = details.children.first().unwrap();
-
-        assert_eq!(*action, CountingAction::Stay);
-
-        mcts.search_visits(8000).await.unwrap();
-        let action = mcts.select_action().unwrap();
-
-        assert_eq!(action, CountingAction::Decrement);
-    }
-
-    #[tokio::test]
-    async fn test_mcts_advance_to_next_works_without_search() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.advance_to_action(CountingAction::Increment)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_mcts_metrics_returns_accurate_results() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(800).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 800,
-                children: vec![
-                    (CountingAction::Increment, 0.509, 312),
-                    (CountingAction::Decrement, 0.49, 182),
-                    (CountingAction::Stay, 0.5, 304),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_weights_policy_initially() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(100).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 100,
-                children: vec![
-                    (CountingAction::Increment, 0.51, 31),
-                    (CountingAction::Decrement, 0.49, 29),
-                    (CountingAction::Stay, 0.5, 40),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_works_with_single_node() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(1).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 1,
-                children: vec![
-                    (CountingAction::Increment, 0.0, 0),
-                    (CountingAction::Decrement, 0.0, 0),
-                    (CountingAction::Stay, 0.0, 0),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_works_with_two_nodes() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(2).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 2,
-                children: vec![
-                    (CountingAction::Increment, 0.0, 0),
-                    (CountingAction::Decrement, 0.0, 0),
-                    (CountingAction::Stay, 0.5, 1),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_works_from_provided_non_initial_game_state() {
-        let game_state = CountingGameState::from_starting_count(true, 95);
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(8000).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 8000,
-                children: vec![
-                    (CountingAction::Increment, 0.956, 5374),
-                    (CountingAction::Decrement, 0.938, 798),
-                    (CountingAction::Stay, 0.948, 1827),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_correctly_handles_terminal_nodes_1() {
-        let game_state = CountingGameState::from_starting_count(false, 99);
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(800).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 800,
-                children: vec![
-                    (CountingAction::Increment, 0.0, 8),
-                    (CountingAction::Decrement, 0.02, 701),
-                    (CountingAction::Stay, 0.005, 91),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_correctly_handles_terminal_nodes_2() {
-        let game_state = CountingGameState::from_starting_count(true, 98);
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-
-        let mut mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        mcts.search_visits(800).await.unwrap();
-
-        let metrics = mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(
-            &metrics,
-            &NodeMetrics {
-                visits: 800,
-                children: vec![
-                    (CountingAction::Increment, 0.982, 400),
-                    (CountingAction::Decrement, 0.968, 122),
-                    (CountingAction::Stay, 0.977, 278),
-                ],
-            },
-        );
-    }
-
-    #[tokio::test]
-    async fn test_mcts_clear_nodes_results_in_same_outcome() {
-        let game_state = CountingGameState::initial();
-        let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
-        let search_num_visits = 800;
-
-        let mut non_clear_mcts = MCTS::new(
-            game_state.clone(),
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        non_clear_mcts
-            .search_visits(search_num_visits)
-            .await
-            .unwrap();
-        let action = non_clear_mcts.select_action().unwrap();
-        non_clear_mcts
-            .advance_to_action_retain(action)
-            .await
-            .unwrap();
-        non_clear_mcts
-            .search_visits(search_num_visits)
-            .await
-            .unwrap();
-
-        let non_clear_metrics = non_clear_mcts.get_root_node_metrics().unwrap();
-
-        let mut clear_mcts = MCTS::new(
-            game_state.clone(),
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        clear_mcts.search_visits(search_num_visits).await.unwrap();
-        let action = clear_mcts.select_action().unwrap();
-        clear_mcts.advance_to_action(action.clone()).await.unwrap();
-        clear_mcts.search_visits(search_num_visits).await.unwrap();
-
-        let clear_metrics = clear_mcts.get_root_node_metrics().unwrap();
-
-        let mut initial_mcts = MCTS::new(
-            game_state,
-            &game_engine,
-            &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                true,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
-        );
-
-        initial_mcts.advance_to_action(action).await.unwrap();
-        initial_mcts.search_visits(search_num_visits).await.unwrap();
-
-        let initial_metrics = initial_mcts.get_root_node_metrics().unwrap();
-
-        assert_metrics(&initial_metrics, &clear_metrics);
-        assert_metrics(&non_clear_metrics, &clear_metrics);
     }
 }

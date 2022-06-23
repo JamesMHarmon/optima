@@ -162,7 +162,7 @@ mod test {
     }
 
     #[bench]
-    fn do_it(b: &mut test::Bencher) {
+    fn bench_read_sample(b: &mut test::Bencher) {
         with_random_file_data(move |_file, _data, sample_len| {
             b.iter(|| {
                 let file = File::open("./test_cust_file").unwrap();
@@ -178,7 +178,7 @@ mod test {
     }
 
     #[test]
-    fn is_correct() {
+    fn file_load_has_correct_data_test() {
         with_random_file_data(|mut file, data, sample_len| {
             let mut rng = rand::thread_rng();
 

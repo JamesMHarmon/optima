@@ -1,4 +1,4 @@
-use model::node_metrics::NodeMetrics;
+use model::{node_metrics::NodeMetrics, NodeChildMetrics};
 use model::position_metrics::PositionMetrics;
 
 use super::{Action, GameState, Value};
@@ -25,15 +25,16 @@ pub fn get_symmetries(
         .collect()
 }
 
-fn get_symmetries_node_metrics(metrics: NodeMetrics<Action>) -> Vec<NodeMetrics<Action>> {
+fn get_symmetries_node_metrics(metrics: NodeMetrics<Action, Value>) -> Vec<NodeMetrics<Action, Value>> {
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|(a, w, visits)| (a.invert_horizontal(), *w, *visits))
+        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits()))
         .collect();
 
     let metrics_symmetry = NodeMetrics {
         visits: metrics.visits,
+        value: metrics.value.clone(),
         children: children_symmetry,
     };
 
@@ -55,6 +56,7 @@ mod tests {
 
     use super::*;
     use arimaa_engine::Action;
+    use model::NodeChildMetrics;
 
     #[test]
     fn test_game_state_symmetry_step_0() {
@@ -270,10 +272,11 @@ mod tests {
             game_state,
             policy: NodeMetrics {
                 visits: 800,
+                value: Value::new([0.0, 0.0]),
                 children: vec![
-                    ("c2n".parse().unwrap(), 0.0, 500),
-                    ("a2e".parse().unwrap(), 0.0, 250),
-                    ("c2w".parse().unwrap(), 0.0, 50),
+                    NodeChildMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
+                    NodeChildMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
+                    NodeChildMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,
@@ -286,6 +289,7 @@ mod tests {
                 NodeMetrics {
                     visits: symmetrical_visits,
                     children: symmetrical_children,
+                    ..
                 },
             ..
         } = symmetries.pop().unwrap();
@@ -297,6 +301,7 @@ mod tests {
                 NodeMetrics {
                     visits: original_visits,
                     children: original_children,
+                    ..
                 },
             ..
         } = symmetries.pop().unwrap();
@@ -306,16 +311,16 @@ mod tests {
         assert_eq!(original_children.len(), symmetrical_children.len());
 
         for (
-            (original_action, original_w, original_visits),
-            (symmetrical_action, symmetrical_w, symmetrical_visits),
+            original,
+            symmetrical,
         ) in original_children.into_iter().zip(symmetrical_children)
         {
-            match original_action {
-                Action::Move(original_square, original_direction) => match symmetrical_action {
+            match original.action() {
+                Action::Move(original_square, original_direction) => match symmetrical.action() {
                     Action::Move(symmetrical_square, symmetrical_direction) => {
-                        assert_eq!(original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(*original_square, symmetrical_square.invert_horizontal());
                         assert_eq!(
-                            original_direction,
+                            *original_direction,
                             symmetrical_direction.invert_horizontal()
                         );
                     }
@@ -324,8 +329,8 @@ mod tests {
                 _ => panic!(),
             }
 
-            assert_eq!(original_visits, symmetrical_visits);
-            assert_eq!(original_w, symmetrical_w);
+            assert_eq!(original.visits(), symmetrical.visits());
+            assert_eq!(original.Q(), symmetrical.Q());
         }
 
         assert_eq!(

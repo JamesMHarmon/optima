@@ -109,11 +109,11 @@ impl InputMap<GameState> for ArimaaSampler {
     }
 }
 
-impl PolicyMap<GameState, Action> for ArimaaSampler {
+impl PolicyMap<GameState, Action, Value> for ArimaaSampler {
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &GameState,
-        metric: &NodeMetrics<Action>,
+        metric: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         if self.is_play_mode {
             self.play_model_mapper

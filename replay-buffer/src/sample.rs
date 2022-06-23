@@ -7,7 +7,7 @@ use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 pub trait Sample
 where
     Self: InputMap<Self::State>,
-    Self: PolicyMap<Self::State, Self::Action>,
+    Self: PolicyMap<Self::State, Self::Action, Self::Value>,
     Self: ValueMap<Self::State, Self::Value>,
     Self: Dimension,
 {

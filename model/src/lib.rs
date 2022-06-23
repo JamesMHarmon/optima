@@ -7,7 +7,7 @@ pub mod position_metrics;
 
 pub use ::common::*;
 pub use analytics::*;
-pub use model::*;
+pub use crate::model::*;
 pub use model_info::*;
 pub use node_metrics::*;
 pub use position_metrics::*;

@@ -24,11 +24,11 @@ pub trait InputMap<S> {
     fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<half::f16>;
 }
 
-pub trait PolicyMap<S, A> {
+pub trait PolicyMap<S, A, V> {
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &S,
-        policy: &NodeMetrics<A>,
+        policy: &NodeMetrics<A, V>,
     ) -> Vec<f32>;
 
     fn policy_to_valid_actions(

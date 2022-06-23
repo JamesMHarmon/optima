@@ -49,11 +49,11 @@ impl InputMap<GameState> for Mapper {
     }
 }
 
-impl PolicyMap<GameState, Action> for Mapper {
+impl PolicyMap<GameState, Action, Value> for Mapper {
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action>,
+        policy_metrics: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         let move_map = static_sparse_piece_move_map().as_slice();
         let push_pull_map = static_sparse_push_pull_map().as_slice();
@@ -66,7 +66,7 @@ impl PolicyMap<GameState, Action> for Mapper {
             policy_metrics
                 .children
                 .iter()
-                .map(|(_, _, v)| v)
+                .map(|m| m.visits())
                 .sum::<usize>(),
             "Sum of policy metrics should match policy metrics visits. {:?}",
             policy_metrics
@@ -75,22 +75,22 @@ impl PolicyMap<GameState, Action> for Mapper {
         policy_metrics
             .children
             .iter()
-            .fold(inputs, |mut r, (action, _w, visits)| {
+            .fold(inputs, |mut r, m| {
                 // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
                 // at the board from the perspective of player 1, but with the pieces inverted.
                 let policy_index = if invert {
-                    map_action_to_policy_output_idx(move_map, push_pull_map, &action.invert())
+                    map_action_to_policy_output_idx(move_map, push_pull_map, &m.action().invert())
                 } else {
-                    map_action_to_policy_output_idx(move_map, push_pull_map, action)
+                    map_action_to_policy_output_idx(move_map, push_pull_map, m.action())
                 };
 
                 assert!(
                     (r[policy_index] - -1f32).abs() <= f32::EPSILON,
                     "Policy value already exists {:?}",
-                    action
+                    m.action()
                 );
 
-                r[policy_index] = *visits as f32 / total_visits;
+                r[policy_index] = m.visits() as f32 / total_visits;
 
                 r
             })
@@ -367,7 +367,9 @@ mod tests {
     extern crate test;
 
     use super::*;
+    use super::super::value::Value;
     use itertools::Itertools;
+    use model::NodeChildMetrics;
     use test::Bencher;
 
     fn map_action_to_policy_output_idx(action: &Action) -> usize {
@@ -1380,10 +1382,11 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
+            value: Value::new([0.0, 0.0]),
             children: vec![
-                ("a7n".parse().unwrap(), 0.0, 7),
-                ("pa7nn".parse().unwrap(), 0.0, 2),
-                ("p".parse().unwrap(), 0.0, 1),
+                NodeChildMetrics::new("a7n".parse().unwrap(), 0.0, 0.0, 7),
+                NodeChildMetrics::new("pa7nn".parse().unwrap(), 0.0, 0.0, 2),
+                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 
@@ -1424,10 +1427,11 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
+            value: Value::new([0.0, 0.0]),
             children: vec![
-                ("h2s".parse().unwrap(), 0.0, 7),
-                ("ph2ss".parse().unwrap(), 0.0, 2),
-                ("p".parse().unwrap(), 0.0, 1),
+                NodeChildMetrics::new("h2s".parse().unwrap(), 0.0, 0.0, 7),
+                NodeChildMetrics::new("ph2ss".parse().unwrap(), 0.0, 0.0, 2),
+                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 

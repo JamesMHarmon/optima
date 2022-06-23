@@ -14,7 +14,7 @@ pub use options::*;
 #[cfg(feature = "all")]
 pub use play_self_one::*;
 #[cfg(feature = "all")]
-pub use self_play::*;
+pub use crate::self_play::*;
 #[cfg(feature = "all")]
 pub use self_play_persistance::*;
 

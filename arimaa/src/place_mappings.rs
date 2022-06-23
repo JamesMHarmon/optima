@@ -83,11 +83,11 @@ impl InputMap<GameState> for Mapper {
     }
 }
 
-impl PolicyMap<GameState, Action> for Mapper {
+impl PolicyMap<GameState, Action, Value> for Mapper {
     fn policy_metrics_to_expected_output(
         &self,
         _game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action>,
+        policy_metrics: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let inputs: Vec<f32> = vec![0f32; OUTPUT_SIZE];
@@ -95,10 +95,10 @@ impl PolicyMap<GameState, Action> for Mapper {
         policy_metrics
             .children
             .iter()
-            .fold(inputs, |mut r, (action, _w, visits)| {
-                let policy_index = map_action_to_policy_output_idx(action);
+            .fold(inputs, |mut r, m| {
+                let policy_index = map_action_to_policy_output_idx(m.action());
 
-                r[policy_index] = *visits as f32 / total_visits;
+                r[policy_index] = m.visits() as f32 / total_visits;
                 r
             })
     }

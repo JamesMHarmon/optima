@@ -45,7 +45,7 @@ impl CountingGameEngine {
 }
 
 #[derive(Clone)]
-pub struct Value([f32; 2]);
+pub struct Value(pub [f32; 2]);
 
 impl engine::value::Value for Value {
     fn get_value_for_player(&self, player: usize) -> f32 {
