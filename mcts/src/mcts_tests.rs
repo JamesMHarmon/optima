@@ -252,10 +252,11 @@ mod tests {
             &NodeMetrics {
                 visits: 800,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.509, 0.0, 312),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 182),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 304),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.509, 312),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 182),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 304),
                 ],
             },
         );
@@ -295,10 +296,11 @@ mod tests {
             &NodeMetrics {
                 visits: 100,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.51, 0.0, 31),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 29),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 40),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.51, 31),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 29),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 40),
                 ],
             },
         );
@@ -338,10 +340,11 @@ mod tests {
             &NodeMetrics {
                 visits: 1,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.0, 0.0, 0),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.0, 0),
                 ],
             },
         );
@@ -381,10 +384,11 @@ mod tests {
             &NodeMetrics {
                 visits: 2,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 1),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 1),
                 ],
             },
         );
@@ -424,10 +428,11 @@ mod tests {
             &NodeMetrics {
                 visits: 8000,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.956, 0.0, 5374),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.938, 0.0, 798),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.948, 0.0, 1827),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.956, 5374),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.938, 798),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.948, 1827),
                 ],
             },
         );
@@ -467,10 +472,11 @@ mod tests {
             &NodeMetrics {
                 visits: 800,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 8),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.02, 0.0, 701),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.005, 0.0, 91),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 8),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.02, 701),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.005, 91),
                 ],
             },
         );
@@ -510,10 +516,11 @@ mod tests {
             &NodeMetrics {
                 visits: 800,
                 value: Value([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.982, 0.0, 400),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.968, 0.0, 122),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.977, 0.0, 278),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.982, 400),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.968, 122),
+                    NodeChildMetrics::new(CountingAction::Stay, 0.977, 278),
                 ],
             },
         );

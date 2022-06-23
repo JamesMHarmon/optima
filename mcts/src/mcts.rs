@@ -983,6 +983,7 @@ where
         NodeMetrics {
             visits: self.visits,
             value: self.value_score.clone(),
+            moves_left: self.moves_left_score,
             children: self.children.iter().map(|e| e.into()).collect_vec(),
         }
     }
@@ -996,7 +997,6 @@ where
         NodeChildMetrics::new(
             self.action.clone(),
             div_or_zero(self.W, self.visits as f32),
-            div_or_zero(self.M, self.visits as f32),
             self.visits,
         )
     }

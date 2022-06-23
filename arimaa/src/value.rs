@@ -23,6 +23,6 @@ impl From<[f32; 2]> for Value {
 
 impl engine::value::Value for Value {
     fn get_value_for_player(&self, player: usize) -> f32 {
-        self.0 .0[player - 1]
+        self.0.0[player - 1]
     }
 }
