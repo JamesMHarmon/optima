@@ -1,7 +1,6 @@
-use std::io::{Write, Seek, SeekFrom, Read};
 use anyhow::Result;
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-
+use std::io::{Read, Seek, SeekFrom, Write};
 
 pub struct SampleFile {
     sample_len: usize,

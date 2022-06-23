@@ -2,8 +2,8 @@ use anyhow::{anyhow, Result};
 use log::info;
 use std::fs;
 
-use ::model::ModelInfo;
 use super::paths::Paths;
+use ::model::ModelInfo;
 
 pub fn get_latest_model_info(model_info: &ModelInfo) -> Result<ModelInfo> {
     let paths = Paths::from_model_info(model_info);

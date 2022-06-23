@@ -6,29 +6,27 @@ use clap::{Args, Parser, Subcommand};
 #[clap(about = "Does awesome things", long_about = None)]
 pub struct Cli {
     #[clap(subcommand)]
-    pub command: Commands
+    pub command: Commands,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
     SelfPlay(SelfPlayCommand),
     Arena(ArenaCommand),
-    Init(InitCommand)
+    Init(InitCommand),
 }
 
 #[derive(Args)]
 pub struct SelfPlayCommand {
     #[clap(short, long, default_value_t = String::from("client.conf"))]
-    pub config: String
+    pub config: String,
 }
 
 #[derive(Args)]
 pub struct ArenaCommand {
     #[clap(short, long, default_value_t = String::from("client.conf"))]
-    pub config: String
+    pub config: String,
 }
 
 #[derive(Args)]
-pub struct InitCommand {
-
-}
+pub struct InitCommand {}

@@ -36,7 +36,8 @@ impl ModelFactory {
         model_dir: PathBuf,
         model_options: TensorflowModelOptions,
         model_info: ModelInfo,
-    ) -> Result<TensorflowModel<GameState, Action, Value, Engine, Mapper, PlaceTranspositionEntry>> {
+    ) -> Result<TensorflowModel<GameState, Action, Value, Engine, Mapper, PlaceTranspositionEntry>>
+    {
         let mapper = Mapper::new();
 
         let table_size = std::env::var("PLACE_TABLE_SIZE")

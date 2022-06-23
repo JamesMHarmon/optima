@@ -28,10 +28,7 @@ impl ConfigLoader {
             .hocon()?;
 
         if !matches!(hocon, Hocon::Hash(_)) {
-            return Err(anyhow!(
-                "Top level of config {:?} must be an object",
-                path
-            ));
+            return Err(anyhow!("Top level of config {:?} must be an object", path));
         }
 
         if let Hocon::Hash(ref hash) = hocon && hash.is_empty() {
@@ -68,8 +65,7 @@ impl ConfigLoader {
             .as_string()
             .ok_or_else(|| anyhow!("Property {} not a valid string.", name))
             .and_then(|v| {
-                self
-                    .path
+                self.path
                     .parent()
                     .ok_or_else(|| anyhow!("No parent directory for config {:?}", self.path))
                     .map(|p| p.join(v))

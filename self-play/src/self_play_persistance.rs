@@ -30,7 +30,11 @@ impl SelfPlayPersistance {
     ) -> Result<()> {
         let file_path = self.generate_file_path_for_game(&model_info);
 
-        fs::create_dir_all(file_path.parent().expect("Path should always have a parent"))?;
+        fs::create_dir_all(
+            file_path
+                .parent()
+                .expect("Path should always have a parent"),
+        )?;
 
         let file = File::create(file_path)?;
         let compressor = GzEncoder::new(file, Compression::default());
@@ -73,7 +77,9 @@ impl SelfPlayPersistance {
             "{}_{}_{}.gz",
             model_info.get_run_name(),
             model_info.get_model_num(),
-            UuidB64::new().to_string().replace(|c: char| !c.is_alphanumeric(), "")
+            UuidB64::new()
+                .to_string()
+                .replace(|c: char| !c.is_alphanumeric(), "")
         ))
     }
 }

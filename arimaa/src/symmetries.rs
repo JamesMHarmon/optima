@@ -1,5 +1,5 @@
-use model::{node_metrics::NodeMetrics, NodeChildMetrics};
 use model::position_metrics::PositionMetrics;
+use model::{node_metrics::NodeMetrics, NodeChildMetrics};
 
 use super::{Action, GameState, Value};
 
@@ -25,7 +25,9 @@ pub fn get_symmetries(
         .collect()
 }
 
-fn get_symmetries_node_metrics(metrics: NodeMetrics<Action, Value>) -> Vec<NodeMetrics<Action, Value>> {
+fn get_symmetries_node_metrics(
+    metrics: NodeMetrics<Action, Value>,
+) -> Vec<NodeMetrics<Action, Value>> {
     let children_symmetry = metrics
         .children
         .iter()
@@ -312,11 +314,7 @@ mod tests {
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for (
-            original,
-            symmetrical,
-        ) in original_children.into_iter().zip(symmetrical_children)
-        {
+        for (original, symmetrical) in original_children.into_iter().zip(symmetrical_children) {
             match original.action() {
                 Action::Move(original_square, original_direction) => match symmetrical.action() {
                     Action::Move(symmetrical_square, symmetrical_direction) => {

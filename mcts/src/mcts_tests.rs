@@ -1,25 +1,25 @@
-
 #[cfg(test)]
 mod tests {
     use crate::mcts::{MCTSOptions, MCTS};
 
     use super::super::counting_game::{
-        CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState, Value
+        CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState, Value,
     };
     use assert_approx_eq::assert_approx_eq;
     use engine::GameState;
-    use model::{NodeMetrics, NodeChildMetrics};
+    use model::{NodeChildMetrics, NodeMetrics};
 
     const ERROR_DIFF: f32 = 0.02;
     const ERROR_DIFF_W: f32 = 0.01;
 
-    fn assert_metrics(left: &NodeMetrics<CountingAction, Value>, right: &NodeMetrics<CountingAction, Value>) {
+    fn assert_metrics(
+        left: &NodeMetrics<CountingAction, Value>,
+        right: &NodeMetrics<CountingAction, Value>,
+    ) {
         assert_eq!(left.visits, right.visits);
         assert_eq!(left.children.len(), right.children.len());
 
-        for (left, right) in
-            left.children.iter().zip(right.children.iter())
-        {
+        for (left, right) in left.children.iter().zip(right.children.iter()) {
             assert_eq!(left.action(), right.action());
             assert_approx_eq!(left.Q(), right.Q(), ERROR_DIFF_W);
             let max_visits = left.visits().max(right.visits());

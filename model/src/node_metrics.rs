@@ -24,11 +24,7 @@ pub struct NodeChildMetrics<A> {
 #[allow(non_snake_case)]
 impl<A> NodeChildMetrics<A> {
     pub fn new(action: A, Q: f32, visits: usize) -> Self {
-        Self {
-            action,
-            Q,
-            visits,
-        }
+        Self { action, Q, visits }
     }
 
     pub fn action(&self) -> &A {

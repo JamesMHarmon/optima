@@ -92,15 +92,12 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let inputs: Vec<f32> = vec![0f32; OUTPUT_SIZE];
 
-        policy_metrics
-            .children
-            .iter()
-            .fold(inputs, |mut r, m| {
-                let policy_index = map_action_to_policy_output_idx(m.action());
+        policy_metrics.children.iter().fold(inputs, |mut r, m| {
+            let policy_index = map_action_to_policy_output_idx(m.action());
 
-                r[policy_index] = m.visits() as f32 / total_visits;
-                r
-            })
+            r[policy_index] = m.visits() as f32 / total_visits;
+            r
+        })
     }
 
     fn policy_to_valid_actions(

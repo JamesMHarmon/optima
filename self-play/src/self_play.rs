@@ -1,4 +1,3 @@
-use std::sync::Mutex;
 use anyhow::Result;
 use crossbeam::channel::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -6,14 +5,15 @@ use log::info;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::{Instant, Duration};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
+use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use model::analytics::GameAnalyzer;
-use model::{Latest, Analyzer, ModelInfo, Load, Info};
-use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
+use model::{Analyzer, Info, Latest, Load, ModelInfo};
 
 pub fn play_self<F, M, E, T, S, A, V>(
     model_factory: &F,
@@ -29,7 +29,7 @@ where
     S: GameState + Send,
     A: Serialize + Debug + Eq + Clone + Send,
     V: Value + Serialize + Debug + Send,
-    <F as Latest>::MR: Debug + Eq + Send
+    <F as Latest>::MR: Debug + Eq + Send,
 {
     let starting_run_time = Instant::now();
     let (game_results_tx, game_results_rx) = crossbeam::channel::unbounded();
@@ -143,8 +143,7 @@ where
             .send(self_play_metric)
             .expect("Failed to send game result");
 
-        self_play_metric_stream
-        .push(play_game());
+        self_play_metric_stream.push(play_game());
     }
 
     Ok(())

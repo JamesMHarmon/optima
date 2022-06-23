@@ -1,24 +1,23 @@
-use std::{path::{PathBuf, Path}, fs::DirEntry, time::SystemTime};
 use anyhow::Result;
 use rand::prelude::*;
+use std::fs::DirEntry;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 pub struct Index {
     files: Vec<(DirEntry, SystemTime)>,
-    games_dir: PathBuf
+    games_dir: PathBuf,
 }
 
 impl Index {
     pub fn new(games_dir: PathBuf) -> Result<Self> {
         let mut files = get_game_files(games_dir.as_ref())?;
-    
+
         files.sort_by(|(_, a), (_, b)| b.cmp(a));
 
         println!("First: {:?}, Last: {:?}", files.first(), files.last());
 
-        Ok(Self {
-            files,
-            games_dir
-        })
+        Ok(Self { files, games_dir })
     }
 
     pub fn sample(&self, start_idx: usize, end_idx: usize) -> PathBuf {
@@ -32,7 +31,7 @@ impl Index {
         self.files.len()
     }
 
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item=PathBuf> + '_ {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = PathBuf> + '_ {
         self.files.iter().map(|(d, _)| d.path())
     }
 }

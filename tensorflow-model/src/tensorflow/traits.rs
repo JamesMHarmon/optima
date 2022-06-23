@@ -1,6 +1,5 @@
-
 use half::f16;
-use model::{NodeMetrics, ActionWithPolicy, GameStateAnalysis};
+use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics};
 use serde::{Deserialize, Serialize};
 
 use super::Mode;
