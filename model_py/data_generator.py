@@ -40,7 +40,10 @@ class DataGenerator(Sequence):
 
         if self._num_games <= end_idx:
             while True:
+                start = time.time()
                 self._num_games = self._replay_buffer.games()
+                end = time.time()
+                log.info('Indexing of games in {:.2f}'.format(end - start))
 
                 if not self._num_games <= end_idx:
                     break

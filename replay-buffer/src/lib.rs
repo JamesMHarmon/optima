@@ -84,7 +84,7 @@ impl ReplayBuffer {
     }
 
     fn sample<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         samples: usize,
         start_idx: usize,
@@ -142,8 +142,10 @@ impl ReplayBuffer {
         dict
     }
 
-    fn games(&self) -> usize {
-        self.index.games()
+    fn games(&mut self) -> PyResult<usize> {
+        self.re_index().map_err(|_| PyErr::new::<PyFileNotFoundError, _>("Failed to index game files."))?;
+
+        Ok(self.index.games())
     }
 
     fn avg_num_samples_per_game(&mut self, look_back: usize) -> f32 {
@@ -159,6 +161,12 @@ impl ReplayBuffer {
             .fold(0., |s, (e, i)| {
                 (e as f32 + s * (i as f32 - 1.0) as f32) / i as f32
             })
+    }
+}
+
+impl ReplayBuffer {
+    fn re_index(&mut self) -> Result<()> {
+        self.index.re_index()
     }
 }
 
@@ -286,10 +294,6 @@ impl<S> SampleLoader<S> {
 
         Ok(samples)
     }
-
-    // input 4 + 1
-    // output 70
-    // moves left 1
 
     fn metrics_path_for_cache(&self, metrics_path: impl AsRef<Path>) -> Result<PathBuf> {
         let mut components = metrics_path.as_ref().components().collect::<Vec<_>>();

@@ -11,13 +11,11 @@ pub struct Index {
 
 impl Index {
     pub fn new(games_dir: PathBuf) -> Result<Self> {
-        let mut files = get_game_files(games_dir.as_ref())?;
+        let mut _self = Self { files: vec![], games_dir };
 
-        files.sort_by(|(_, a), (_, b)| b.cmp(a));
+        _self.re_index()?;
 
-        println!("First: {:?}, Last: {:?}", files.first(), files.last());
-
-        Ok(Self { files, games_dir })
+        Ok(_self)
     }
 
     pub fn sample(&self, start_idx: usize, end_idx: usize) -> PathBuf {
@@ -29,6 +27,16 @@ impl Index {
 
     pub fn games(&self) -> usize {
         self.files.len()
+    }
+
+    pub fn re_index(&mut self) -> Result<()> {
+        let mut files = get_game_files(self.games_dir.as_ref())?;
+
+        files.sort_by(|(_, a), (_, b)| b.cmp(a));
+
+        self.files = files;
+
+        Ok(())
     }
 
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = PathBuf> + '_ {
