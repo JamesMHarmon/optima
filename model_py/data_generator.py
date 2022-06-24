@@ -34,9 +34,8 @@ class DataGenerator(Sequence):
         return self._steps
 
     def __getitem__(self, index):
-        adj_window_size = min(self._window_size, self._epoch * self._games_per_epoch * self._window_warmup)
         end_idx = int(math.floor(((self._epoch - 1) * self._games_per_epoch) + ((index + 1) / self._steps) * self._games_per_epoch))
-        start_idx = int(max(0, end_idx - adj_window_size))
+        start_idx = int(max(0, end_idx - self._curr_epochs_window_size()))
 
         if self._num_games <= end_idx:
             while True:
@@ -51,11 +50,19 @@ class DataGenerator(Sequence):
 
         sample = self._replay_buffer.sample(self._batch_size, start_idx=start_idx, end_idx=end_idx)
 
-        return (
-            self.to_tensor(sample['X'], self._shape['X']),
-            {
-                'policy_head': self.to_tensor(sample['yp'], self._shape['yp']),
-                'value_head': self.to_tensor(sample['yv'], self._shape['yv']),
-                'moves_left_head': self.to_tensor(sample['ym'], self._shape['ym'])
-            }
-        )
+        input = self.to_tensor(sample['X'], self._shape['X'])
+        targets = {
+            'policy_head': self.to_tensor(sample['yp'], self._shape['yp']),
+            'value_head': self.to_tensor(sample['yv'], self._shape['yv'])
+        }
+
+        if 'ym' in self._shape:
+            targets['moves_left_head'] = self.to_tensor(sample['ym'], self._shape['ym'])
+
+        return input, targets
+
+    def _curr_epochs_window_size(self):
+        if self._epoch == 1:
+            self._games_per_epoch
+
+        return int(min(self._window_size, self._epoch * self._games_per_epoch * self._window_warmup))

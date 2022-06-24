@@ -5,6 +5,7 @@ from data_generator import DataGenerator
 from replay_buffer import ReplayBuffer
 from tensorboard_enriched import TensorBoardEnriched
 from warmup_lr_scheduler import WarmupLearningRateScheduler
+from fit_logger import FitLogger
 from fit import Fit
 from pyhocon import ConfigFactory
 
@@ -109,6 +110,7 @@ if __name__== "__main__":
             })
 
         tensor_board = TensorBoardEnriched(log_dir=tensor_board_path, step_ratio=step_ratio)
+        fit_logger = FitLogger(log_steps=10)
 
         c4.compile(
             model,
@@ -129,7 +131,7 @@ if __name__== "__main__":
             train_size=train_ratio,
             clip_norm=max_grad_norm,
             accuracy_metrics=accuracy_metrics,
-            callbacks=[lr_schedule, tensor_board]
+            callbacks=[lr_schedule, tensor_board, fit_logger]
         ).fit()
         
         initial_step = initial_step + steps

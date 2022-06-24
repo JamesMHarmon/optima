@@ -21,8 +21,8 @@ class Fit:
         callbacks = self._callbacks
         epoch = self._initial_epoch
 
-        num_steps = self._generator.__len__()
-        num_train_steps = math.floor(num_steps * self._train_size)
+        num_steps = int(self._generator.__len__())
+        num_train_steps = int(math.floor(num_steps * self._train_size))
         num_val_steps = num_steps - num_train_steps
         starting_step = self._initial_step
         ending_step = self._initial_step + num_train_steps - 1
