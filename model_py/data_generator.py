@@ -1,4 +1,5 @@
 from tensorflow.keras.utils import Sequence
+import logging as log
 import numpy as np
 import math
 import sys
@@ -44,7 +45,7 @@ class DataGenerator(Sequence):
                 if not self._num_games <= end_idx:
                     break
 
-                print('Current number of games is {:,}, waiting for game {:,}.'.format(self._num_games, end_idx + 1))
+                log.info('Current number of games is {:,}, waiting for game {:,}.'.format(self._num_games, end_idx + 1))
                 sys.stdout.flush()
                 time.sleep(30)
 

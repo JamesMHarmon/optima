@@ -1,6 +1,7 @@
 import os
 import c4_model as c4
 import json
+import logging as log
 from data_generator import DataGenerator
 from replay_buffer import ReplayBuffer
 from tensorboard_enriched import TensorBoardEnriched
@@ -30,7 +31,7 @@ def save_summary(train_state_path, steps, epochs):
         train_state['epochs'] = epochs
         json.dump(train_state, f, indent = 4)
 
-if __name__== "__main__":
+if __name__== '__main__':
     model_dir               = '/Arimaa_runs/run-2/model_8b96f'
 
     train_state_path        = os.path.join(model_dir, './summary.json')
@@ -71,8 +72,14 @@ if __name__== "__main__":
 
     def name(epoch):
         return '{0}_{1:05d}'.format(model_name, epoch)
-    
-    print(games_dir)
+
+    log.basicConfig(
+        level=log.INFO,
+        format='%(asctime)s:%(levelname)s:%(name)s:%(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        force=True)
+
+    log.info(f'Games dir: {games_dir}')
 
     input_size = input_h * input_w * input_c
     value_size = 1
@@ -82,18 +89,17 @@ if __name__== "__main__":
 
     c4.clear()
     last_model_path = os.path.join(model_dir, name(epoch) + '.h5')
-    print("Loading model: ", last_model_path)
+    log.info(f'Loading model: {last_model_path}')
     model = c4.load(last_model_path)
 
     lr_schedule = WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=warmup_steps)
     accuracy_metrics = c4.metrics(model)
     
     buffer_cache_dir = os.path.realpath(os.path.join(model_dir, '..', 'replay_buffer_cache'))
-    print("Replay Buffer cache: ", buffer_cache_dir)
+    log.info(f'Replay Buffer cache: {buffer_cache_dir}')
     replay_buffer = ReplayBuffer(games_dir, min_visits, mode, cache_dir=buffer_cache_dir)
 
     while True:
-        print("Start Training for model", epoch)
         data_generator = DataGenerator(
             replay_buffer=replay_buffer,
             epoch=epoch,
@@ -120,7 +126,7 @@ if __name__== "__main__":
             moves_left_loss_weight=moves_left_loss_weight,
         )
         
-        print(f"Training {data_generator.__len__()} steps")
+        log.info(f'Training {data_generator.__len__()} steps')
 
         steps = Fit(
             model=model,
@@ -137,14 +143,14 @@ if __name__== "__main__":
         initial_step = initial_step + steps
 
         model_path = os.path.join(model_dir, name(epoch + 1) + '.h5')
-        print("Saving model: ", model_path)
+        log.info(f'Saving model: {model_path}')
         model.save(model_path)
 
-        print("Saving Summary")
+        log.info('Saving Summary')
         save_summary(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
 
         export_model_path = os.path.join(model_dir, 'exports', name(epoch + 1))
-        print("Exporting model: ", export_model_path)
+        log.info(f'Exporting model: {export_model_path}')
         c4.export(model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), policy_size, moves_left_size)
 
         epoch += 1
