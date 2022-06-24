@@ -30,11 +30,9 @@ impl Index {
     }
 
     pub fn re_index(&mut self) -> Result<()> {
-        let mut files = get_game_files(self.games_dir.as_ref())?;
+        self.files = get_game_files(self.games_dir.as_ref())?;
 
-        files.sort_by(|(_, a), (_, b)| b.cmp(a));
-
-        self.files = files;
+        self.files.sort_by(|(_, a), (_, b)| b.cmp(a));
 
         Ok(())
     }
