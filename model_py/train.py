@@ -1,10 +1,8 @@
 import os
 import c4_model as c4
 import logging as log
-import tempfile
-import tarfile
-from json_file import JSONFile
 from data_generator import DataGenerator
+from train_utils import copy_bundle_to_export, export_bundle, load_train_state, match_arimaa_place_model, save_train_state
 from replay_buffer import ReplayBuffer
 from tensorboard_enriched import TensorBoardEnriched
 from warmup_lr_scheduler import WarmupLearningRateScheduler
@@ -12,42 +10,6 @@ from fit_logger import FitLogger
 from fit import Fit
 from pyhocon import ConfigFactory
 
-def load_train_state(train_state_path):
-    train_state = JSONFile(train_state_path).load_or_save_defaults({ 'steps': 0, 'epochs': 0 })
-
-    initial_step = int(train_state['steps'] + 1)
-    epoch = int(train_state['epochs'] + 1)
-        
-    return initial_step, epoch
-
-def save_train_state(train_state_path, steps, epochs):
-    train_state = {}
-
-    train_state['steps'] = steps
-    train_state['epochs'] = epochs
-
-    JSONFile(train_state_path).save_merge(train_state)
-
-def export_bundle(model_dir, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size):
-    export_model_dir = os.path.join(model_dir, 'exports')
-    export_model_path = os.path.join(export_model_dir, f'{name(epoch + 1)}.tar.gz')
-    log.info(f'Exporting model: {export_model_path}')
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        tmp_export_path = os.path.join(tmpdirname, 'model')
-        c4.export(model_path, tmp_export_path, num_filters, num_blocks, (input_h, input_w, input_c), policy_size, moves_left_size)
-
-        model_info_path = os.path.join(model_dir, 'model-info.json')
-        model_options_path = os.path.join(model_dir, 'model-options.json')
-        
-        JSONFile(model_info_path).save_merge({ 'model_num': epoch + 1})
-
-        if not os.path.isdir(export_model_dir):
-            os.makedirs(export_model_dir)
-
-        with tarfile.open(export_model_path, "w:gz") as tar:
-            tar.add(tmp_export_path, arcname='model')
-            tar.add(model_info_path, arcname='model-info.json')
-            tar.add(model_options_path, arcname='model-options.json')
 
 if __name__== '__main__':
     model_dir               = '/Arimaa_runs/run-2/model_8b96f'
@@ -160,14 +122,17 @@ if __name__== '__main__':
         
         initial_step = initial_step + steps
 
-        model_path = os.path.join(model_dir, 'models', name(epoch + 1) + '.h5.gz')
+        model_name_w_num = name(epoch + 1)
+        model_path = os.path.join(model_dir, 'models', model_name_w_num + '.h5.gz')
         log.info(f'Saving model: {model_path}')
         c4.save(model, model_path)
 
         log.info('Saving Train State')
         save_train_state(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
 
-        export_bundle(model_dir, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
+        export_bundle(model_dir, model_path, model_name_w_num, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
+
+        copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)
 
         epoch += 1
 
