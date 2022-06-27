@@ -3,6 +3,9 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy as keras_categorical_crossentropy
 from tensorflow.keras.losses import mean_squared_error
+import os
+import tempfile
+from compress import compress, decompress
 import tensorflow as tf
 from model_sen import create_model
 from policy_head import get_policy_head_fn_by_output_size
@@ -22,7 +25,20 @@ def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
     return model
 
 def load(model_path):
-    return load_model(model_path, custom_objects={'crossentropy_with_policy_mask_loss': crossentropy_with_policy_mask_loss})
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        decmp_path = os.path.join(tmpdirname, 'model.h5')
+        decompress(model_path, decmp_path)
+
+        model = load_model(decmp_path, custom_objects={'crossentropy_with_policy_mask_loss': crossentropy_with_policy_mask_loss})
+
+        return model
+
+def save(model, model_path):
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp_model_path = os.path.join(tmpdirname, 'model.h5.gz')
+        model.save(tmp_model_path)
+
+        compress(tmp_model_path, model_path)
 
 def compile(model, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight):
     loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }

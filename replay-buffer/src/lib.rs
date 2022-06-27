@@ -149,15 +149,18 @@ impl ReplayBuffer {
     }
 
     fn avg_num_samples_per_game(&mut self, look_back: usize) -> f32 {
-        self.index
+        let num_samples = self.index
             .iter()
             .rev()
             .take(look_back)
+            .par_bridge()
             .filter_map(|path| {
                 let mut sampler = self.sample_loader.load_and_cache_samples(path).ok()?;
                 sampler.num_samples().ok()
             })
-            .zip(1..)
+            .collect::<Vec<_>>();
+
+        num_samples.into_iter().zip(1..)
             .fold(0., |s, (e, i)| {
                 (e as f32 + s * (i as f32 - 1.0) as f32) / i as f32
             })

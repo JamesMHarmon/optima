@@ -106,7 +106,7 @@ if __name__== '__main__':
     initial_step, epoch = load_train_state(train_state_path)
 
     c4.clear()
-    last_model_path = os.path.join(model_dir, 'models', name(epoch) + '.h5')
+    last_model_path = os.path.join(model_dir, 'models', name(epoch) + '.h5.gz')
     log.info(f'Loading model: {last_model_path}')
     model = c4.load(last_model_path)
 
@@ -160,9 +160,9 @@ if __name__== '__main__':
         
         initial_step = initial_step + steps
 
-        model_path = os.path.join(model_dir, 'models', name(epoch + 1) + '.h5')
+        model_path = os.path.join(model_dir, 'models', name(epoch + 1) + '.h5.gz')
         log.info(f'Saving model: {model_path}')
-        model.save(model_path)
+        c4.save(model, model_path)
 
         log.info('Saving Train State')
         save_train_state(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
