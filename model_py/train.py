@@ -1,7 +1,9 @@
 import os
 import c4_model as c4
-import json
 import logging as log
+import tempfile
+import tarfile
+from json_file import JSONFile
 from data_generator import DataGenerator
 from replay_buffer import ReplayBuffer
 from tensorboard_enriched import TensorBoardEnriched
@@ -10,31 +12,47 @@ from fit_logger import FitLogger
 from fit import Fit
 from pyhocon import ConfigFactory
 
-def load_summary(train_state_path):
-    if not os.path.isfile(train_state_path):
-        with open(train_state_path, 'w') as f:
-            json.dump({ 'steps': 0, 'epochs': 0 }, f, indent = 4)
+def load_train_state(train_state_path):
+    train_state = JSONFile(train_state_path).load_or_save_defaults({ 'steps': 0, 'epochs': 0 })
 
-    with open(train_state_path, 'r') as f:
-        summary = json.load(f)
-        initial_step = int(summary['steps'] + 1)
-        epoch = int(summary['epochs'] + 1)
+    initial_step = int(train_state['steps'] + 1)
+    epoch = int(train_state['epochs'] + 1)
         
     return initial_step, epoch
 
-def save_summary(train_state_path, steps, epochs):
-    with open(train_state_path, 'r') as f:
-        train_state = json.load(f)
+def save_train_state(train_state_path, steps, epochs):
+    train_state = {}
 
-    with open(train_state_path, 'w') as f:
-        train_state['steps'] = initial_step - 1 + steps
-        train_state['epochs'] = epochs
-        json.dump(train_state, f, indent = 4)
+    train_state['steps'] = steps
+    train_state['epochs'] = epochs
+
+    JSONFile(train_state_path).save_merge(train_state)
+
+def export_bundle(model_dir, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size):
+    export_model_dir = os.path.join(model_dir, 'exports')
+    export_model_path = os.path.join(export_model_dir, f'{name(epoch + 1)}.tar.gz')
+    log.info(f'Exporting model: {export_model_path}')
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp_export_path = os.path.join(tmpdirname, 'model')
+        c4.export(model_path, tmp_export_path, num_filters, num_blocks, (input_h, input_w, input_c), policy_size, moves_left_size)
+
+        model_info_path = os.path.join(model_dir, 'model-info.json')
+        model_options_path = os.path.join(model_dir, 'model-options.json')
+        
+        JSONFile(model_info_path).save_merge({ 'model_num': epoch + 1})
+
+        if not os.path.isdir(export_model_dir):
+            os.makedirs(export_model_dir)
+
+        with tarfile.open(export_model_path, "w:gz") as tar:
+            tar.add(tmp_export_path, arcname='model')
+            tar.add(model_info_path, arcname='model-info.json')
+            tar.add(model_options_path, arcname='model-options.json')
 
 if __name__== '__main__':
     model_dir               = '/Arimaa_runs/run-2/model_8b96f'
 
-    train_state_path        = os.path.join(model_dir, './summary.json')
+    train_state_path        = os.path.join(model_dir, './train-state.json')
     model_info_path         = os.path.join(model_dir, './model-options.json')
     model_info_path         = os.path.join(model_dir, './model-info.json')
     config_path             = os.path.join(model_dir, './train.conf')
@@ -85,10 +103,10 @@ if __name__== '__main__':
     value_size = 1
     train_ratio = 1.0
 
-    initial_step, epoch = load_summary(train_state_path)
+    initial_step, epoch = load_train_state(train_state_path)
 
     c4.clear()
-    last_model_path = os.path.join(model_dir, name(epoch) + '.h5')
+    last_model_path = os.path.join(model_dir, 'models', name(epoch) + '.h5')
     log.info(f'Loading model: {last_model_path}')
     model = c4.load(last_model_path)
 
@@ -142,16 +160,14 @@ if __name__== '__main__':
         
         initial_step = initial_step + steps
 
-        model_path = os.path.join(model_dir, name(epoch + 1) + '.h5')
+        model_path = os.path.join(model_dir, 'models', name(epoch + 1) + '.h5')
         log.info(f'Saving model: {model_path}')
         model.save(model_path)
 
-        log.info('Saving Summary')
-        save_summary(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
+        log.info('Saving Train State')
+        save_train_state(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
 
-        export_model_path = os.path.join(model_dir, 'exports', name(epoch + 1))
-        log.info(f'Exporting model: {export_model_path}')
-        c4.export(model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), policy_size, moves_left_size)
+        export_bundle(model_dir, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
 
         epoch += 1
 

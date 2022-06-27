@@ -14,7 +14,7 @@ class FitLogger(Callback):
 
     def on_train_batch_end(self, step, logs={}):
         if step % self._log_steps == 0:
-            log.info('Step: {:,}, LR: {:.2f}, VL: {:2f}, PL: {:2f}, ML: {:2f}'.format(
+            log.info('Step: {:,}, LR: {:.5f}, VL: {:.2f}, PL: {:.2f}, ML: {:.2f}'.format(
                 step,
                 float(tf.keras.backend.get_value(self.model.optimizer.lr)),
                 logs.get('loss/value_head loss', float('nan')),

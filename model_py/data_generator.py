@@ -50,7 +50,7 @@ class DataGenerator(Sequence):
 
                 log.info('Current number of games is {:,}, waiting for game {:,}.'.format(self._num_games, end_idx + 1))
                 sys.stdout.flush()
-                time.sleep(30)
+                time.sleep(60)
 
         sample = self._replay_buffer.sample(self._batch_size, start_idx=start_idx, end_idx=end_idx)
 
