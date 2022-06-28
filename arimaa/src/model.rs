@@ -1,11 +1,9 @@
 use std::io::Read;
 use flate2::read::GzDecoder;
-use log::warn;
-use std::fs;
+use tensorflow_model::latest;
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
-use std::time::Duration;
 use tar::Archive;
 
 use super::engine::Engine;
@@ -49,31 +47,7 @@ impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
-        let mut file;
-
-        loop {
-            file = fs::read_dir(&self.model_dir)?
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_ok_and(|f| f.is_file()))
-                .filter_map(|f| {
-                    f.metadata()
-                        .ok()
-                        .and_then(|m| m.created().ok())
-                        .map(|m| (f, m))
-                })
-                .max_by_key(|(_, m)| m.clone());
-
-            if file.is_some() {
-                break;
-            }
-
-            warn!("No models found in the directory {:?}", self.model_dir);
-
-            std::thread::sleep(Duration::from_secs(60));
-        }
-
-        Ok(ModelRef(file.unwrap().0.path()))
+        latest(&self.model_dir).map(|p| ModelRef(p))
     }
 }
 

@@ -8,10 +8,17 @@ publish = false
 [lib]
 name = "quoridor"
 
+[features]
+default = ["all"]
+all = ["mappings", "model"]
+mappings = ["tensorflow-model/traits"]
+model = ["tensorflow-model/all"]
+
 [dependencies]
 common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [] }
 
 anyhow = "1.0"
 half = "1.8"

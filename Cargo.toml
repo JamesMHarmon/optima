@@ -1,17 +1,17 @@
 [workspace]
 
 members = [
+    "client",
     "common",
     "engine",
     "model",
     "mcts",
-    "play",
+    # "play",
+    "replay-buffer",
     "self-evaluate",
-    "self-learn",
-    "self-learn-client",
     "self-play",
-    "tournament",
-    "tuner",
+    # "tournament",
+    # "tuner",
 
     "arimaa",
     "connect4",

@@ -8,12 +8,20 @@ publish = false
 [lib]
 name = "connect4"
 
+[features]
+default = ["all"]
+all = ["mappings", "model"]
+mappings = ["tensorflow-model/traits"]
+model = ["tensorflow-model/all"]
+
 [dependencies]
 common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [] }
 
 anyhow = "1.0"
+log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 half = "1.8"
