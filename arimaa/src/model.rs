@@ -1,6 +1,11 @@
+use std::io::Read;
+use flate2::read::GzDecoder;
+use log::warn;
+use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 use tar::Archive;
 
 use super::engine::Engine;
@@ -44,18 +49,31 @@ impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
-        let path = self.model_dir.join("state.json");
-        let file = File::open(&path)
-            .with_context(|| format!("Failed to find or load model latest file at: {:?}", path))?;
-        let info: serde_json::Value = serde_json::from_reader(file)?;
+        let mut file;
 
-        let latest_model_path = self.model_dir.join(
-            info["latest"]
-                .as_str()
-                .expect("Latest property not a string."),
-        );
+        loop {
+            file = fs::read_dir(&self.model_dir)?
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_ok_and(|f| f.is_file()))
+                .filter_map(|f| {
+                    f.metadata()
+                        .ok()
+                        .and_then(|m| m.created().ok())
+                        .map(|m| (f, m))
+                })
+                .max_by_key(|(_, m)| m.clone());
 
-        Ok(ModelRef(latest_model_path))
+            if file.is_some() {
+                break;
+            }
+
+            warn!("No models found in the directory {:?}", self.model_dir);
+
+            std::thread::sleep(Duration::from_secs(60));
+        }
+
+        Ok(ModelRef(file.unwrap().0.path()))
     }
 }
 
@@ -151,7 +169,14 @@ impl model::analytics::GameAnalyzer for Analyzer {
 }
 
 fn unsplit(path: &Path) -> Result<TempDir> {
-    let file = File::open(path)?;
+    let mut file: Box<dyn Read> = Box::new(File::open(path)?);
+
+    if let Some(ext) = path.extension() {
+        if ext.to_string_lossy() == "gz" {
+            file = Box::new(GzDecoder::new(file));
+        }
+    }
+
     let mut archive = Archive::new(file);
 
     let tempdir = tempdir()?;

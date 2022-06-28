@@ -6,28 +6,30 @@ use super::{Action, GameState, Value};
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Value>,
 ) -> Vec<PositionMetrics<GameState, Action, Value>> {
+    if !metrics.game_state.is_play_phase() {
+        return vec![metrics];
+    }
+
     let PositionMetrics {
         game_state,
         policy,
         score,
         moves_left,
-    } = metrics;
+    } = &metrics;
 
-    get_symmetries_game_state(game_state)
-        .into_iter()
-        .zip(get_symmetries_node_metrics(policy))
-        .map(|(game_state, policy)| PositionMetrics {
-            game_state,
-            policy,
-            score: score.clone(),
-            moves_left,
-        })
-        .collect()
+    let symmetrical_state = game_state.get_vertical_symmetry();
+
+    let symmetrical_metrics = PositionMetrics {
+        game_state: symmetrical_state,
+        policy: symmetrical_node_metrics(policy),
+        score: score.clone(),
+        moves_left: *moves_left,
+    };
+
+    vec![metrics, symmetrical_metrics]
 }
 
-fn get_symmetries_node_metrics(
-    metrics: NodeMetrics<Action, Value>,
-) -> Vec<NodeMetrics<Action, Value>> {
+fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics<Action, Value> {
     let children_symmetry = metrics
         .children
         .iter()
@@ -41,16 +43,7 @@ fn get_symmetries_node_metrics(
         children: children_symmetry,
     };
 
-    vec![metrics, metrics_symmetry]
-}
-
-fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
-    if game_state.is_play_phase() {
-        let symmetrical_state = game_state.get_vertical_symmetry();
-        return vec![game_state, symmetrical_state];
-    }
-
-    vec![game_state]
+    metrics_symmetry
 }
 
 #[cfg(test)]
@@ -58,8 +51,25 @@ mod tests {
     extern crate test;
 
     use super::*;
+    use crate::value::Value;
     use arimaa_engine::Action;
     use model::NodeChildMetrics;
+
+    fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
+        let symmetries = get_symmetries(PositionMetrics {
+            game_state,
+            policy: NodeMetrics {
+                visits: 0,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
+                children: vec![],
+            },
+            score: Value::new([0.0, 0.0]),
+            moves_left: 0,
+        });
+
+        symmetries.into_iter().map(|s| s.game_state).collect()
+    }
 
     #[test]
     fn test_game_state_symmetry_step_0() {

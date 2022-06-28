@@ -1,6 +1,7 @@
 import os
 import c4_model as c4
 import logging as log
+import os
 from data_generator import DataGenerator
 from train_utils import copy_bundle_to_export, export_bundle, load_train_state, match_arimaa_place_model, save_train_state
 from replay_buffer import ReplayBuffer
@@ -12,7 +13,7 @@ from pyhocon import ConfigFactory
 
 
 if __name__== '__main__':
-    model_dir               = '/Arimaa_runs/run-2/model_8b96f'
+    model_dir               = os.getcwd() # '/Arimaa_runs/run-2/model_8b96f'
 
     train_state_path        = os.path.join(model_dir, './train-state.json')
     model_info_path         = os.path.join(model_dir, './model-options.json')
@@ -142,4 +143,3 @@ if __name__== '__main__':
 
         epoch += 1
 
-    
