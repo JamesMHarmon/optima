@@ -22,7 +22,8 @@ if __name__== '__main__':
     
     conf = ConfigFactory.parse_file(config_path)
 
-    export_dir              = os.path.join(model_dir, conf.get_string('export_dir'))
+    export_dir              = conf.get_string('export_dir', None)
+    cache_dir               = conf.get_string('cache_dir', './replay_buffer_cache')
     games_dir               = os.path.join(model_dir, conf.get_string('games_dir'))
     model_name              = conf.get_string('model_name')
     mode                    = conf.get_string('mode')
@@ -75,7 +76,8 @@ if __name__== '__main__':
     lr_schedule = WarmupLearningRateScheduler(lr=learning_rate, warmup_steps=warmup_steps)
     accuracy_metrics = c4.metrics(model)
     
-    buffer_cache_dir = os.path.realpath(os.path.join(model_dir, '..', 'replay_buffer_cache'))
+    
+    buffer_cache_dir = os.path.realpath(os.path.join(model_dir, '..', cache_dir))
     log.info(f'Replay Buffer cache: {buffer_cache_dir}')
     replay_buffer = ReplayBuffer(games_dir, min_visits, mode, cache_dir=buffer_cache_dir)
 
@@ -132,7 +134,9 @@ if __name__== '__main__':
 
         export_bundle(model_dir, model_path, model_name_w_num, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
 
-        copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)
+        if export_dir is not None:
+            export_dir = os.path.join(model_dir, export_dir)
+            copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)
 
         epoch += 1
 

@@ -8,16 +8,16 @@ import tempfile
 from compress import compress, decompress
 import tensorflow as tf
 from model_sen import create_model
-from policy_head import get_policy_head_fn_by_output_size
+from policy_head import get_policy_head_fn_by_policy_size
 
-def create(num_filters, num_blocks, input_shape, output_size, moves_left_size):
-    policy_head = get_policy_head_fn_by_output_size(output_size)
+def create(num_filters, num_blocks, input_shape, policy_size, moves_left_size):
+    policy_head = get_policy_head_fn_by_policy_size(policy_size)
 
     model = create_model(
         num_filters,
         num_blocks,
         input_shape,
-        output_size,
+        policy_size,
         moves_left_size,
         policy_head=policy_head
     )
@@ -61,7 +61,7 @@ def metrics(model):
 
     return accuracy_metrics
 
-def export(model_path, export_model_path, num_filters, num_blocks, input_shape, output_size, moves_left_size):
+def export(model_path, export_model_path, num_filters, num_blocks, input_shape, policy_size, moves_left_size):
     model = load(model_path)
     model_weights = model.get_weights()
 
@@ -73,7 +73,7 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
 
     model_weights = [w.astype(K.floatx()) for w in model_weights]
 
-    model = create(num_filters, num_blocks, input_shape, output_size, moves_left_size)
+    model = create(num_filters, num_blocks, input_shape, policy_size, moves_left_size)
     model.set_weights(model_weights)
 
     tf.saved_model.save(model, export_model_path)

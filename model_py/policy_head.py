@@ -5,10 +5,10 @@ from model_sen import ConvBlock, Conv2D, DATA_FORMAT, l2_reg_policy, Flatten, De
 ARIMAA_PIECE_MOVES = ['N','E','S','W','NN','NE','NW','EE','ES','SS','SW','WW','NNN','NNE','NNW','NEE','NWW','EEE','EES','ESS','SSS','SSW','SWW','WWW','NNNN','NNNE','NNNW','NNEE','NNWW','NEEE','NWWW','EEEE','EEES','EESS','ESSS','SSSS','SSSW','SSWW','SWWW','WWWW']
 ARIMAA_PUSH_PULL_MOVES = ['NN','NE','NW','EN','EE','ES','SE','SS','SW','WN','WS','WW']
 
-def get_policy_head_fn_by_output_size(output_size):
-    if output_size == 2245:
+def get_policy_head_fn_by_policy_size(policy_size):
+    if policy_size == 2245:
         policy_head_fn = lambda net, num_filters: ArimaaPolicyHeadConvolutional(net, num_filters)
-    elif output_size == 209:
+    elif policy_size == 209:
         policy_head_fn = lambda net, num_filters: QuoridorPolicyHeadConvolutional(net, num_filters)
     else:
         policy_head_fn = None

@@ -47,12 +47,12 @@ def export_bundle(model_dir, model_path, model_name, epoch, num_filters, num_blo
 def copy_bundle_to_export(conf, model_dir, export_dir, model_name):
     place_dir = conf.get('arimaa_place_dir', None)
 
-    # Special override for the game of arimaa which bundles two models together.
     if place_dir is None:
         shutil.copy(
             os.path.join(model_dir, 'exports', f'{model_name}.tar.gz'),
             os.path.join(export_dir, f'{model_name}.tar.gz')
         )
+    # Special override for the game of arimaa which bundles two models together.
     else:
         match_arimaa_place_model(conf, place_dir, model_dir, export_dir, model_name)
 
@@ -63,7 +63,7 @@ def match_arimaa_place_model(conf, place_dir, model_dir, export_dir, model_name)
     list_of_place_models = glob.glob(place_exports_dir + '/*.tar.gz')
     latest_place_model = max(list_of_place_models, key=os.path.getctime)
     
-    log.info('Combining with place model: ', latest_place_model)
+    log.info(f'Combining with place model: {str(latest_place_model)}')
 
     export_model_path = os.path.join(export_dir, f'{model_name}.tar.gz')
     play_model_path = os.path.join(model_dir, 'exports', f'{model_name}.tar.gz')
