@@ -6,7 +6,7 @@ from train_utils import copy_bundle_to_export, export_bundle
 from pyhocon import ConfigFactory
 
 if __name__== '__main__':
-    model_dir               = '/Arimaa_runs/run-2/model_8b96f' # os.getcwd()
+    model_dir               = '/Arimaa_runs/run-2/model_place-3b32f' # os.getcwd()
 
     train_state_path        = os.path.join(model_dir, './train-state.json')
     model_info_path         = os.path.join(model_dir, './model-options.json')
@@ -16,7 +16,7 @@ if __name__== '__main__':
     
     conf = ConfigFactory.parse_file(config_path)
 
-    export_dir              = os.path.join(model_dir, conf.get_string('export_dir'))
+    export_dir              = conf.get_string('export_dir', None)
     games_dir               = os.path.join(model_dir, conf.get_string('games_dir'))
     game                    = conf.get_string('game')
     run_name                = conf.get_string('run_name')
@@ -75,4 +75,6 @@ if __name__== '__main__':
 
     export_bundle(model_dir, model_path, model_name_w_num, 0, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
 
-    copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)
+    if export_dir is not None:
+        export_dir = os.path.join(model_dir, export_dir)
+        copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)

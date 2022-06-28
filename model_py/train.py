@@ -82,6 +82,8 @@ if __name__== '__main__':
     replay_buffer = ReplayBuffer(games_dir, min_visits, mode, cache_dir=buffer_cache_dir)
 
     while True:
+        c4.set_f32_train()
+
         data_generator = DataGenerator(
             replay_buffer=replay_buffer,
             epoch=epoch,

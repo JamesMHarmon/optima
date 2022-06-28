@@ -35,7 +35,7 @@ def load(model_path):
 
 def save(model, model_path):
     with tempfile.TemporaryDirectory() as tmpdirname:
-        tmp_model_path = os.path.join(tmpdirname, 'model.h5.gz')
+        tmp_model_path = os.path.join(tmpdirname, 'model.h5')
         model.save(tmp_model_path)
 
         compress(tmp_model_path, model_path)
@@ -65,11 +65,7 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
     model = load(model_path)
     model_weights = model.get_weights()
 
-    dtype='float16'
-    K.clear_session()
-    K.set_floatx(dtype)
-    K.set_epsilon(1e-4)
-    K.set_learning_phase(0)
+    set_f16_infer()
 
     model_weights = [w.astype(K.floatx()) for w in model_weights]
 
@@ -77,6 +73,22 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
     model.set_weights(model_weights)
 
     tf.saved_model.save(model, export_model_path)
+
+    set_f32_train()
+
+def set_f16_infer():
+    dtype='float16'
+    K.clear_session()
+    K.set_floatx(dtype)
+    K.set_epsilon(1e-4)
+    K.set_learning_phase(0)
+
+def set_f32_train():
+    dtype='float32'
+    K.clear_session()
+    K.set_floatx(dtype)
+    K.set_epsilon(1e-7)
+    K.set_learning_phase(1)
 
 def clear():
     K.clear_session()
