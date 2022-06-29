@@ -1,6 +1,7 @@
 use anyhow::Result;
 use half::f16;
 use itertools::izip;
+use std::convert::TryInto;
 use std::path::PathBuf;
 use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
 
@@ -154,8 +155,8 @@ impl ValueMap<GameState, Value> for Mapper {
 }
 
 impl InputMap<GameState> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
-        let mut input: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
+        let mut input_vec: Vec<f16> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
 
         let GameState {
             p1_turn_to_move,
@@ -217,15 +218,15 @@ impl InputMap<GameState> for Mapper {
             vertical_wall_vec.iter(),
             horizontal_wall_vec.iter()
         ) {
-            input.push(*curr_pawn);
-            input.push(*oppo_pawn);
-            input.push(*vw);
-            input.push(*hw);
-            input.push(curr_num_walls_placed_norm);
-            input.push(oppo_num_walls_placed_norm);
+            input_vec.push(f16::from_f32(*curr_pawn));
+            input_vec.push(f16::from_f32(*oppo_pawn));
+            input_vec.push(f16::from_f32(*vw));
+            input_vec.push(f16::from_f32(*hw));
+            input_vec.push(f16::from_f32(curr_num_walls_placed_norm));
+            input_vec.push(f16::from_f32(oppo_num_walls_placed_norm));
         }
 
-        input.into_iter().map(f16::from_f32).collect()
+        input.copy_from_slice(input_vec.as_slice())
     }
 }
 
@@ -237,18 +238,16 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
         game_state.get_transposition_hash()
     }
 
-    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+    fn map_output_to_transposition_entry(
         &self,
         _game_state: &GameState,
-        policy_scores: I,
+        policy_scores: &[f16],
         value: f16,
         moves_left: f32,
     ) -> TranspositionEntry {
-        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
-
-        for (i, score) in policy_scores.enumerate() {
-            policy_metrics[i] = score;
-        }
+        let policy_metrics = policy_scores
+            .try_into()
+            .expect("Slice does not match length of array");
 
         TranspositionEntry::new(policy_metrics, value, moves_left)
     }
@@ -323,7 +322,7 @@ impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
-        latest(&self.model_dir).map(|p| ModelRef(p))
+        latest(&self.model_dir).map(ModelRef)
     }
 }
 
@@ -371,6 +370,15 @@ mod tests {
         for (a, b) in a.iter().zip(b) {
             assert_approx_eq!(*a, *b, f16::EPSILON.to_f32());
         }
+    }
+
+    fn game_state_to_input(game_state: &GameState) -> Vec<f32> {
+        let mut input = [f16::ZERO; INPUT_H * INPUT_W * INPUT_C];
+
+        let mapper = Mapper::new();
+        mapper.game_state_to_input(&game_state, &mut input, Mode::Infer);
+
+        input.iter().copied().map(f16::to_f32).collect::<Vec<_>>()
     }
 
     #[test]
@@ -509,109 +517,67 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_initial_p1() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[], 0, 0), &input)
     }
 
     #[test]
     fn test_game_state_to_input_initial_p2() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(76, 13, &[], &[], 0, 0), &input)
     }
 
     #[test]
     fn test_game_state_to_input_walls_remaining() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
         let game_state =
             game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[9, 10], 0, 1), &input)
     }
 
     #[test]
     fn test_game_state_to_input_walls_remaining_p2() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
         let game_state =
             game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('d', 9)));
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(76, 3, &[], &[79, 80], 1, 0), &input)
     }
 
     #[test]
     fn test_game_state_to_input_vertical_walls() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
         let game_state =
             game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(67, 4, &[38, 47], &[], 0, 1), &input)
     }
 
     #[test]
     fn test_game_state_to_input_vertical_walls_p2() {
-        let mapper = Mapper::new();
-
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
         let game_state =
             game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
         let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
 
-        let input = mapper
-            .game_state_to_input(&game_state, Mode::Infer)
-            .iter()
-            .copied()
-            .map(f16::to_f32)
-            .collect::<Vec<_>>();
+        let input = game_state_to_input(&game_state);
 
         assert_approximate_eq_slice(&map_to_input_vec(76, 22, &[32, 41], &[], 1, 0), &input)
     }

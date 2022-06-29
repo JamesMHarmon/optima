@@ -4,8 +4,9 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
-use log::debug;
+use log::{debug, warn};
 use parking_lot::Mutex;
+use rayon::prelude::*;
 use std::collections::BinaryHeap;
 use std::future::Future;
 use std::hash::Hash;
@@ -308,13 +309,6 @@ impl Predictor {
             moves_left_head_output,
         })
     }
-
-    fn fill_tensor<'a, T: Iterator<Item = &'a [f16]>>(tensor: &mut Tensor<f16>, inputs: T) {
-        for (i, input) in inputs.enumerate() {
-            let input_width = input.len();
-            tensor[(input_width * i)..(input_width * (i + 1))].copy_from_slice(input);
-        }
-    }
 }
 
 struct AnalysisResults {
@@ -439,16 +433,23 @@ type AnalysisToSend<A, V> = (
     Sender<GameStateAnalysis<A, V>>,
 );
 
+type StatesToInfer<S, A, V> = (
+    usize,
+    S,
+    tokio::sync::mpsc::UnboundedSender<AnalysisToSend<A, V>>,
+    tokio::sync::oneshot::Sender<GameStateAnalysis<A, V>>,
+);
+
 struct BatchingModel<E, Map, Te> {
-    _transposition_table: Arc<Option<TranspositionTable<Te>>>,
+    transposition_table: Arc<Option<TranspositionTable<Te>>>,
     _engine: Arc<E>,
-    _mapper: Arc<Map>,
+    mapper: Arc<Map>,
     _reporter: Arc<Reporter<Te>>,
 }
 
 impl<S, A, V, E, Map, Te> BatchingModel<E, Map, Te>
 where
-    S: Hash + Send + 'static,
+    S: Hash + Send + Sync + 'static,
     A: Clone + Send + 'static,
     V: Value + Send + 'static,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
@@ -475,12 +476,17 @@ where
         moves_left_size: usize,
         states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
     ) -> Self {
-        Self::create_analysis_tasks(
-            engine.clone(),
-            mapper.clone(),
+        let inner_self = Self {
+            transposition_table,
+            _reporter: reporter.clone(),
+            _engine: engine.clone(),
+            mapper,
+        };
+
+        inner_self.create_analysis_tasks(
+            engine,
+            reporter,
             model_dir,
-            transposition_table.clone(),
-            reporter.clone(),
             states_to_analyse_receiver,
             output_size,
             moves_left_size,
@@ -488,21 +494,58 @@ where
             analysis_request_threads,
         );
 
-        Self {
-            _transposition_table: transposition_table,
-            _reporter: reporter,
-            _engine: engine,
-            _mapper: mapper,
-        }
+        inner_self
+    }
+
+    fn listen_then_transpose_or_infer(
+        engine: Arc<E>,
+        mapper: Arc<Map>,
+        transposition_table: Arc<Option<TranspositionTable<Te>>>,
+        reporter: Arc<Reporter<Te>>,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+        states_to_predict_tx: UnboundedSender<StatesToInfer<S, A, V>>,
+    ) {
+        let engine = &*engine;
+        let mapper = &*mapper;
+        let transposition_table = &*transposition_table;
+        let reporter = &*reporter;
+        let states_to_predict_tx = &states_to_predict_tx;
+
+        rayon::scope_fifo(move |s| {
+            // receiver
+            //     .iter()
+            //     .par_bridge()
+            //     .for_each(|(id, state_to_analyse, unordered_tx, tx)| {
+            while let Ok((id, state_to_analyse, unordered_tx, tx)) = receiver.recv() {
+                s.spawn_fifo(move |_| {
+                    if let Some(analysis) = Self::try_immediate_analysis(
+                        &state_to_analyse,
+                        &*transposition_table,
+                        &*engine,
+                        &*mapper,
+                        &*reporter,
+                    ) {
+                        unordered_tx
+                            .send((id, analysis, tx))
+                            .unwrap_or_else(|_| debug!("Channel 1 Closed"));
+                    } else {
+                        states_to_predict_tx
+                            .send((id, state_to_analyse, unordered_tx, tx))
+                            .unwrap_or_else(|_| debug!("Channel 2 Closed"));
+                    }
+                });
+            }
+        });
+
+        warn!("Exiting listen_then_transpose_or_infer");
     }
 
     #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
+        &self,
         engine: Arc<E>,
-        mapper: Arc<Map>,
-        model_dir: PathBuf,
-        transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
+        model_dir: PathBuf,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
         output_size: usize,
         moves_left_size: usize,
@@ -511,123 +554,138 @@ where
     ) {
         let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
 
-        let transposition_table_clone = transposition_table.clone();
-        let mapper_clone = mapper.clone();
+        let transposition_table_clone = self.transposition_table.clone();
+        let mapper_clone = self.mapper.clone();
         let reporter_clone = reporter.clone();
-        tokio::task::spawn_blocking(move || {
-            while let Ok((id, state_to_analyse, unordered_tx, tx)) = receiver.recv() {
-                match Self::try_immediate_analysis(
-                    &state_to_analyse,
-                    &*transposition_table_clone,
-                    &*engine,
-                    &*mapper_clone,
-                    &*reporter_clone,
-                ) {
-                    Some(analysis) => {
-                        unordered_tx
-                            .send((id, analysis, tx))
-                            .unwrap_or_else(|_| debug!("Channel 1 Closed"));
-                    }
-                    None => {
-                        let input =
-                            mapper_clone.game_state_to_input(&state_to_analyse, Mode::Infer);
-                        states_to_predict_tx
-                            .send((id, state_to_analyse, input, unordered_tx, tx))
-                            .unwrap_or_else(|_| debug!("Channel 2 Closed"));
-                    }
-                };
-            }
+
+        std::thread::spawn(move || {
+            Self::listen_then_transpose_or_infer(
+                engine,
+                mapper_clone.clone(),
+                transposition_table_clone.clone(),
+                reporter_clone.clone(),
+                receiver,
+                states_to_predict_tx,
+            );
         });
 
         let predictor = Arc::new(Predictor::new(&model_dir));
-        let (predicted_states_tx, predicted_states_rx) = crossbeam::channel::unbounded();
+        let filling_states_to_analyze = Arc::new(std::sync::Mutex::new(()));
 
         for _ in 0..analysis_request_threads {
-            let mapper = mapper.clone();
+            let mapper = self.mapper.clone();
             let reporter = reporter.clone();
             let predictor = predictor.clone();
             let states_to_predict_rx = states_to_predict_rx.clone();
-            let predicted_states_tx = predicted_states_tx.clone();
+            let filling_states_to_analyze = filling_states_to_analyze.clone();
+            let transposition_table = self.transposition_table.clone();
 
-            tokio::task::spawn_blocking(move || {
+            std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
-                let mut tensor_pool = TensorPool::new(dimensions);
+                let input_len = dimensions.iter().product::<u64>() as usize;
+                let mut tensor_pool = TensorPool::<f16>::new(dimensions);
 
-                while let Ok(state_to_analyze) = states_to_predict_rx.recv() {
-                    let mut states_to_analyse = Vec::with_capacity(batch_size);
+                loop {
+                    // Lock when getting states to analyze so that the pulled states maintain order. Otherwise when reordering later, any missed states will need to be waited for.
+                    let lock = filling_states_to_analyze.lock().unwrap();
+                    let states_to_analyse = states_to_predict_rx.recv_up_to(batch_size);
+                    drop(lock);
 
-                    states_to_analyse.push(state_to_analyze);
-
-                    while let Ok(state_to_analyze) = states_to_predict_rx.try_recv() {
-                        states_to_analyse.push(state_to_analyze);
-
-                        if states_to_analyse.len() == batch_size {
-                            break;
-                        }
+                    // If states is empty then the channel tx has been closed.
+                    if states_to_analyse.is_empty() {
+                        return;
                     }
 
-                    let tensor = tensor_pool.get(states_to_analyse.len());
+                    let tensor = tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
 
                     reporter.set_batch_size(states_to_analyse.len());
 
-                    Predictor::fill_tensor(
-                        tensor,
-                        states_to_analyse
-                            .iter()
-                            .map(|(_, _, input, _, _)| input.as_slice()),
-                    );
+                    states_to_analyse
+                        .iter()
+                        .zip(tensor.chunks_mut(input_len))
+                        .par_bridge()
+                        .for_each(|((_, state_to_analyse, _, _), tensor_chunk)| {
+                            mapper.game_state_to_input(state_to_analyse, tensor_chunk, Mode::Infer);
+                        });
 
                     let predictions = predictor
                         .predict(tensor)
                         .expect("Expected predict to be successful");
 
-                    predicted_states_tx
-                        .send((states_to_analyse, predictions))
-                        .unwrap_or_else(|_| debug!("Failed to send value in channel."));
+                    let mapper = mapper.clone();
+                    let transposition_table = transposition_table.clone();
+
+                    Self::process_predictions(
+                        predictions,
+                        states_to_analyse,
+                        transposition_table,
+                        mapper,
+                        output_size,
+                        moves_left_size,
+                    );
                 }
             });
         }
+    }
 
-        tokio::task::spawn_blocking(move || {
-            while let Ok((analyzed_states, predictions)) = predicted_states_rx.recv() {
-                let mut policy_head_iter = predictions.policy_head_output.iter();
-                let mut value_head_iter = predictions.value_head_output.iter();
-                let mut moves_left_head_iter = predictions
+    fn process_predictions(
+        predictions: AnalysisResults,
+        states_to_analyse: Vec<StatesToInfer<S, A, V>>,
+        transposition_table: Arc<Option<TranspositionTable<Te>>>,
+        mapper: Arc<Map>,
+        output_size: usize,
+        moves_left_size: usize,
+    ) {
+        states_to_analyse
+            .into_par_iter()
+            .enumerate()
+            .for_each(|(i, (id, game_state, tx, tx2))| {
+                let policy_head =
+                    &predictions.policy_head_output[(i * output_size)..((i + 1) * output_size)];
+                let value_head_iter = predictions.value_head_output[i];
+                let moves_left_head_iter = predictions
                     .moves_left_head_output
                     .as_ref()
-                    .map(|ml| ml.iter().map(|v| v.to_f32()));
+                    .map(|ml| &ml[(i * moves_left_size)..((i + 1) * moves_left_size)]);
 
+                let mapper = &*mapper;
                 let transposition_table = &*transposition_table;
-                for (id, game_state, _, tx, tx2) in analyzed_states.into_iter() {
-                    let transposition_table_entry = mapper.map_output_to_transposition_entry(
-                        &game_state,
-                        policy_head_iter.by_ref().take(output_size).copied(),
-                        *value_head_iter
-                            .next()
-                            .expect("Expected value score to exist"),
-                        moves_left_head_iter
-                            .as_mut()
-                            .map(|iter| {
-                                moves_left_expected_value(iter.by_ref().take(moves_left_size))
-                            })
-                            .unwrap_or(0.0),
-                    );
+                let transposition_table_entry = mapper.map_output_to_transposition_entry(
+                    &game_state,
+                    policy_head,
+                    value_head_iter,
+                    moves_left_head_iter
+                        .map(|moves_left| {
+                            moves_left_expected_value(moves_left.iter().map(|v| v.to_f32()))
+                        })
+                        .unwrap_or(0.0),
+                );
 
-                    let analysis = mapper.map_transposition_entry_to_analysis(
-                        &game_state,
-                        &transposition_table_entry,
-                    );
+                let analysis = mapper
+                    .map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
 
-                    if let Some(transposition_table) = transposition_table {
-                        let transposition_key = mapper.get_transposition_key(&game_state);
-                        transposition_table.set(transposition_key, transposition_table_entry);
-                    }
+                Self::set_transposition_entry(
+                    &game_state,
+                    transposition_table,
+                    transposition_table_entry,
+                    mapper,
+                );
 
-                    tx.send((id, analysis, tx2))
-                        .unwrap_or_else(|_| debug!("Channel 4 Closed"));
-                }
-            }
-        });
+                tx.send((id, analysis, tx2))
+                    .unwrap_or_else(|_| debug!("Channel 4 Closed"));
+            });
+    }
+
+    fn set_transposition_entry(
+        game_state: &S,
+        transposition_table: &Option<TranspositionTable<Te>>,
+        transposition_table_entry: Te,
+        mapper: &Map,
+    ) {
+        if let Some(transposition_table) = transposition_table {
+            let transposition_key = mapper.get_transposition_key(game_state);
+            transposition_table.set(transposition_key, transposition_table_entry);
+        }
     }
 
     fn try_immediate_analysis(
@@ -737,9 +795,9 @@ impl CompletedAnalysisOrdered {
 
                     while let Some(val) = analyzed_states_to_tx.peek_mut() {
                         if val.id == next_id_to_tx {
-                            let state_to_tx = PeekMut::pop(val);
+                            let StateToTransmit { tx, analysis, .. } = PeekMut::pop(val);
                             next_id_to_tx += 1;
-                            if state_to_tx.tx.send(state_to_tx.analysis).is_err() {
+                            if tx.send(analysis).is_err() {
                                 debug!("Failed to send analysis 2");
                             }
                         } else {
@@ -767,7 +825,7 @@ impl<T: TensorType> TensorPool<T> {
         }
     }
 
-    fn get(&mut self, size: usize) -> &mut Tensor<T> {
+    fn get(&mut self, size: usize, fill: T) -> &mut Tensor<T> {
         let next_matching_power = (size as f64).log2().ceil() as usize + 1;
         let tensors = &mut self.tensors;
         while tensors.len() < next_matching_power {
@@ -779,7 +837,11 @@ impl<T: TensorType> TensorPool<T> {
             ]));
         }
 
-        &mut tensors[next_matching_power - 1]
+        let tensor = &mut tensors[next_matching_power - 1];
+
+        tensor[..].fill(fill);
+
+        tensor
     }
 }
 

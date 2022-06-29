@@ -1,11 +1,12 @@
 use half::f16;
 use once_cell::sync::OnceCell;
+use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
 use super::board::set_board_bits_invertable;
 use super::constants::{
-    PLAY_INPUT_C as INPUT_C, PLAY_INPUT_H as INPUT_H, PLAY_INPUT_SIZE as INPUT_SIZE,
-    PLAY_INPUT_W as INPUT_W, PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
+    PLAY_INPUT_C as INPUT_C, PLAY_INPUT_H as INPUT_H, PLAY_INPUT_W as INPUT_W,
+    PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
 };
 use super::game_state::GameState;
 use super::value::Value;
@@ -34,18 +35,14 @@ impl tensorflow_model::Dimension for Mapper {
 }
 
 impl InputMap<GameState> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
-        let mut input: Vec<f16> = vec![f16::ZERO; INPUT_SIZE];
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
+        set_board_state_squares(input, game_state);
 
-        set_board_state_squares(&mut input, game_state);
+        set_step_num_squares(input, game_state);
 
-        set_step_num_squares(&mut input, game_state);
+        set_banned_piece_squares(input, game_state);
 
-        set_banned_piece_squares(&mut input, game_state);
-
-        set_trap_squares(&mut input);
-
-        input
+        set_trap_squares(input);
     }
 }
 
@@ -153,18 +150,16 @@ impl TranspositionMap<GameState, Action, Value, PlayTranspositionEntry> for Mapp
         game_state.get_transposition_hash() ^ game_state.get_banned_piece_mask()
     }
 
-    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+    fn map_output_to_transposition_entry(
         &self,
         _game_state: &GameState,
-        policy_scores: I,
+        policy_scores: &[f16],
         value: f16,
         moves_left: f32,
     ) -> PlayTranspositionEntry {
-        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
-
-        for (i, score) in policy_scores.enumerate() {
-            policy_metrics[i] = score;
-        }
+        let policy_metrics = policy_scores
+            .try_into()
+            .expect("Slice does not match length of array");
 
         PlayTranspositionEntry::new(policy_metrics, value, moves_left)
     }
@@ -364,6 +359,7 @@ mod tests {
     extern crate test;
 
     use super::super::value::Value;
+    use super::PLAY_INPUT_SIZE as INPUT_SIZE;
     use super::*;
     use itertools::Itertools;
     use model::NodeChildMetrics;
@@ -373,6 +369,13 @@ mod tests {
         let move_map = static_sparse_piece_move_map().as_slice();
         let push_pull_map = static_sparse_push_pull_map().as_slice();
         super::map_action_to_policy_output_idx(move_map, push_pull_map, action)
+    }
+
+    fn game_state_to_input_fn(game_state: &GameState, mode: Mode) -> Vec<f16> {
+        let mapper = Mapper::new();
+        let mut input = vec![f16::ZERO; INPUT_SIZE];
+        mapper.game_state_to_input(game_state, &mut input, mode);
+        input
     }
 
     #[test]
@@ -638,7 +641,7 @@ mod tests {
         let action = "pa7nn".parse().unwrap();
         let idx = map_action_to_policy_output_idx(&action);
 
-        assert_eq!(NUM_PIECE_MOVES + 0, idx);
+        assert_eq!(NUM_PIECE_MOVES, idx);
     }
 
     #[test]
@@ -773,8 +776,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let game_state_to_input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let game_state_to_input = game_state_to_input_fn(&game_state, Mode::Train);
 
         let game_state_inverted: GameState = "
              1s
@@ -793,7 +795,7 @@ mod tests {
             .unwrap();
 
         let game_state_to_input_inverted =
-            mapper.game_state_to_input(&game_state_inverted, Mode::Train);
+            game_state_to_input_fn(&game_state_inverted, Mode::Train);
 
         assert_eq!(game_state_to_input, game_state_to_input_inverted);
     }
@@ -825,8 +827,6 @@ mod tests {
                 a b c d e f g h"
             .parse()
             .unwrap();
-
-        let mapper = Mapper::new();
 
         let assert_steps_set = |input: &Vec<f16>, first: bool, second: bool, third: bool| {
             let expected_step_channel_set =
@@ -864,27 +864,27 @@ mod tests {
             );
         };
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         assert_steps_set(&input, false, false, false);
 
         let game_state = game_state.take_action(&"a1n".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         assert_steps_set(&input, true, false, false);
 
         let game_state = game_state.take_action(&"a2n".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         assert_steps_set(&input, true, true, false);
 
         let game_state = game_state.take_action(&"a3n".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         assert_steps_set(&input, true, true, true);
 
         let game_state = game_state.take_action(&"a8s".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         assert_steps_set(&input, false, false, false);
     }
@@ -924,8 +924,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected_channel_traps = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -962,8 +961,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected_elephants: Vec<_> = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -1000,8 +998,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected: Vec<_> = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -1038,8 +1035,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected: Vec<_> = string_to_vec(
             "
                 1 0 0 0 0 0 0 0
@@ -1078,8 +1074,7 @@ mod tests {
 
         let game_state = game_state.take_action(&"a1n".parse().unwrap());
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected: Vec<_> = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -1099,6 +1094,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_game_state_to_input_as_silver() {
         let game_state: GameState = "
              1s
@@ -1116,8 +1112,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let expected: Vec<_> = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -1184,9 +1179,8 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
         let game_state = game_state.take_action(&"a8s".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         let expected: Vec<_> = string_to_vec(
             "
@@ -1207,6 +1201,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_game_state_to_input_rabbits_step_4() {
         let game_state: GameState = "
              1g
@@ -1224,8 +1219,6 @@ mod tests {
             .parse()
             .unwrap();
 
-        let mapper = Mapper::new();
-
         let expected: Vec<_> = string_to_vec(
             "
             0 0 0 0 0 0 0 0
@@ -1238,7 +1231,7 @@ mod tests {
             0 0 0 0 0 0 0 0",
         );
 
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
         let actual = get_channel_as_vec(&input, 0);
         assert_eq!(actual, expected);
 
@@ -1258,7 +1251,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         let game_state = game_state.take_action(&"d6n".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         let expected: Vec<_> = string_to_vec(
             "
@@ -1291,7 +1284,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         let game_state = game_state.take_action(&"d5n".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         let expected: Vec<_> = string_to_vec(
             "
@@ -1324,7 +1317,7 @@ mod tests {
         assert_eq!(actual, expected);
 
         let game_state = game_state.take_action(&"d6w".parse().unwrap());
-        let input = mapper.game_state_to_input(&game_state, Mode::Train);
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
 
         let expected: Vec<_> = string_to_vec(
             "
@@ -1553,7 +1546,6 @@ mod tests {
 
     #[bench]
     fn bench_game_state_to_input(b: &mut Bencher) {
-        let mapper = Mapper::new();
         let game_state: GameState = "
                 1s
                  +-----------------+
@@ -1571,12 +1563,11 @@ mod tests {
         .parse()
         .unwrap();
 
-        b.iter(|| mapper.game_state_to_input(&game_state, Mode::Train));
+        b.iter(|| game_state_to_input_fn(&game_state, Mode::Train));
     }
 
     #[bench]
     fn bench_game_state_to_input_multiple_actions(b: &mut Bencher) {
-        let mapper = Mapper::new();
         let game_state: GameState = "
                 1s
                  +-----------------+
@@ -1596,28 +1587,28 @@ mod tests {
 
         b.iter(|| {
             let game_state = game_state.take_action(&"d2n".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"e2n".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"b2n".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"f2n".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"d7s".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"e7s".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"f7s".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train);
+            game_state_to_input_fn(&game_state, Mode::Train);
 
             let game_state = game_state.take_action(&"g7s".parse().unwrap());
-            mapper.game_state_to_input(&game_state, Mode::Train)
+            game_state_to_input_fn(&game_state, Mode::Train)
         });
     }
 }

@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::path::PathBuf;
 
 use super::action::Action;
@@ -54,8 +55,9 @@ impl tensorflow_model::Dimension for Mapper {
 }
 
 impl InputMap<GameState> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
-        let mut input: Vec<f32> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
+        let mut input_vec: Vec<f16> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+
         let (curr_piece_board, opp_piece_board) = if game_state.p1_turn_to_move {
             (game_state.p1_piece_board, game_state.p2_piece_board)
         } else {
@@ -66,11 +68,11 @@ impl InputMap<GameState> for Mapper {
             .iter()
             .zip(map_board_to_arr(opp_piece_board).iter())
         {
-            input.push(*curr);
-            input.push(*opp);
+            input_vec.push(half::f16::from_f32(*curr));
+            input_vec.push(half::f16::from_f32(*opp));
         }
 
-        input.into_iter().map(f16::from_f32).collect()
+        input.copy_from_slice(input_vec.as_slice());
     }
 }
 
@@ -147,18 +149,16 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
         game_state.get_transposition_hash()
     }
 
-    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+    fn map_output_to_transposition_entry(
         &self,
         _game_state: &GameState,
-        policy_scores: I,
+        policy_scores: &[f16],
         value: f16,
         moves_left: f32,
     ) -> TranspositionEntry {
-        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
-
-        for (i, score) in policy_scores.enumerate() {
-            policy_metrics[i] = score;
-        }
+        let policy_metrics = policy_scores
+            .try_into()
+            .expect("Slice does not match length of array");
 
         TranspositionEntry::new(policy_metrics, value, moves_left)
     }
@@ -206,6 +206,6 @@ impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
-        latest(&self.model_dir).map(|p| ModelRef(p))
+        latest(&self.model_dir).map(ModelRef)
     }
 }

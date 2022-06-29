@@ -1,4 +1,5 @@
 use half::f16;
+use std::convert::TryInto;
 
 use super::board::set_placement_board_bits;
 use super::constants::PLACE_INPUT_SIZE as INPUT_SIZE;
@@ -31,8 +32,8 @@ impl tensorflow_model::Dimension for Mapper {
 }
 
 impl InputMap<GameState> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, _mode: Mode) -> Vec<f16> {
-        let mut input: Vec<f16> = vec![f16::ZERO; INPUT_SIZE];
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
+        assert_eq!(input.len(), INPUT_SIZE, "Input length to equal input size.");
 
         let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
         let piece_board = game_state.get_piece_board();
@@ -52,7 +53,7 @@ impl InputMap<GameState> for Mapper {
             let piece_bits = piece_board.get_bits_by_piece_type(*piece);
             let offset = i;
 
-            insert_input_channel_bits(&mut input, offset, piece_bits);
+            insert_input_channel_bits(input, offset, piece_bits);
 
             let num_pieces_placed = (piece_bits & player_piece_board).count_ones();
             let num_pieces_to_place = match piece {
@@ -64,12 +65,12 @@ impl InputMap<GameState> for Mapper {
             let offset = NUM_PIECE_TYPES + i;
             let num_piece_remaining =
                 f16::from_f32(num_pieces_placed as f32 / num_pieces_to_place as f32);
-            insert_input_channel_bit(&mut input, offset, num_piece_remaining);
+            insert_input_channel_bit(input, offset, num_piece_remaining);
         }
 
         let offset = NUM_PIECE_TYPES + NUM_PIECE_TYPES;
         let placement_bit = piece_board.get_placement_bit();
-        insert_input_channel_bits(&mut input, offset, placement_bit);
+        insert_input_channel_bits(input, offset, placement_bit);
 
         let offset = NUM_PIECE_TYPES + NUM_PIECE_TYPES + PLACEMENT_BIT_CHANNEL;
         let is_p1_turn_value = if is_p1_turn_to_move {
@@ -77,9 +78,7 @@ impl InputMap<GameState> for Mapper {
         } else {
             f16::ONE
         };
-        insert_input_channel_bit(&mut input, offset, is_p1_turn_value);
-
-        input
+        insert_input_channel_bit(input, offset, is_p1_turn_value);
     }
 }
 
@@ -149,18 +148,16 @@ impl TranspositionMap<GameState, Action, Value, PlaceTranspositionEntry> for Map
         game_state.get_transposition_hash()
     }
 
-    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+    fn map_output_to_transposition_entry(
         &self,
         _game_state: &GameState,
-        policy_scores: I,
+        policy_scores: &[f16],
         value: f16,
         moves_left: f32,
     ) -> PlaceTranspositionEntry {
-        let mut policy_metrics = [f16::ZERO; OUTPUT_SIZE];
-
-        for (i, score) in policy_scores.enumerate() {
-            policy_metrics[i] = score;
-        }
+        let policy_metrics = policy_scores
+            .try_into()
+            .expect("Slice does not match length of array");
 
         PlaceTranspositionEntry::new(policy_metrics, value, moves_left)
     }

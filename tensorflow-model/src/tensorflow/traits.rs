@@ -20,7 +20,7 @@ pub trait Dimension {
 }
 
 pub trait InputMap<S> {
-    fn game_state_to_input(&self, game_state: &S, mode: Mode) -> Vec<half::f16>;
+    fn game_state_to_input(&self, game_state: &S, input: &mut [f16], mode: Mode);
 }
 
 pub trait PolicyMap<S, A, V> {
@@ -44,10 +44,10 @@ pub trait ValueMap<S, V> {
 }
 
 pub trait TranspositionMap<S, A, V, Te> {
-    fn map_output_to_transposition_entry<I: Iterator<Item = f16>>(
+    fn map_output_to_transposition_entry(
         &self,
         game_state: &S,
-        policy_scores: I,
+        policy_scores: &[f16],
         value: f16,
         moves_left: f32,
     ) -> Te;

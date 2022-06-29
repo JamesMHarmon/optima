@@ -99,12 +99,13 @@ impl Sample for ArimaaSampler {
 }
 
 impl InputMap<GameState> for ArimaaSampler {
-    fn game_state_to_input(&self, game_state: &GameState, mode: Mode) -> Vec<f16> {
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         if self.is_play_mode {
-            self.play_model_mapper.game_state_to_input(game_state, mode)
+            self.play_model_mapper
+                .game_state_to_input(game_state, input, mode)
         } else {
             self.place_model_mapper
-                .game_state_to_input(game_state, mode)
+                .game_state_to_input(game_state, input, mode)
         }
     }
 }

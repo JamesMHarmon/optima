@@ -71,6 +71,7 @@ where
         let value_output = self.map_value_to_value_output(&metric.game_state, &metric.score);
         let moves_left_output =
             map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
+        let input_len = self.input_size();
 
         let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
         assert!(
@@ -79,11 +80,9 @@ where
             sum_of_policy
         );
 
-        let input = self
-            .game_state_to_input(&metric.game_state, Mode::Train)
-            .into_iter()
-            .map(f16::to_f32)
-            .collect();
+        let mut input = vec![f16::ZERO; input_len];
+        self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
+        let input = input.into_iter().map(f16::to_f32).collect();
 
         InputAndTargets {
             input,
