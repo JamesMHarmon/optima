@@ -11,7 +11,10 @@ pub struct Index {
 
 impl Index {
     pub fn new(games_dir: PathBuf) -> Result<Self> {
-        let mut _self = Self { files: vec![], games_dir };
+        let mut _self = Self {
+            files: vec![],
+            games_dir,
+        };
 
         _self.re_index()?;
 

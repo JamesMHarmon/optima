@@ -1,6 +1,6 @@
 use super::constants::{BOARD_HEIGHT, BOARD_SIZE, BOARD_WIDTH};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum BoardType {
     Pawn,
     VerticalWall,

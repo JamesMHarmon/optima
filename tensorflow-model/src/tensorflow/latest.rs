@@ -1,5 +1,7 @@
-use std::{path::{PathBuf, Path}, fs, time::Duration};
 use anyhow::Result;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use log::warn;
 
@@ -17,7 +19,7 @@ pub fn latest(model_dir: &Path) -> Result<PathBuf> {
                     .and_then(|m| m.created().ok())
                     .map(|m| (f, m))
             })
-            .max_by_key(|(_, m)| m.clone());
+            .max_by_key(|(_, m)| *m);
 
         if file.is_some() {
             break;

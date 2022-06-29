@@ -1,10 +1,10 @@
-use std::io::Read;
 use flate2::read::GzDecoder;
-use tensorflow_model::latest;
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
+use tensorflow_model::latest;
 
 use super::engine::Engine;
 use super::game_state::GameState;
@@ -47,7 +47,7 @@ impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
-        latest(&self.model_dir).map(|p| ModelRef(p))
+        latest(&self.model_dir).map(ModelRef)
     }
 }
 

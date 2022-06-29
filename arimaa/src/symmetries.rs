@@ -36,14 +36,12 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
         .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.visits()))
         .collect();
 
-    let metrics_symmetry = NodeMetrics {
+    NodeMetrics {
         visits: metrics.visits,
         value: metrics.value.clone(),
         moves_left: metrics.moves_left,
         children: children_symmetry,
-    };
-
-    metrics_symmetry
+    }
 }
 
 #[cfg(test)]

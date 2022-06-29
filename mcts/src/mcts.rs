@@ -346,6 +346,7 @@ where
         Ok(max_depth)
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     async fn traverse_tree_and_expand(
         root_index: Index,
         arena: &NodeArena<MCTSNode<A, V>>,
@@ -559,6 +560,7 @@ where
         })
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<()> {
         self.clear_focus();
 
@@ -974,30 +976,30 @@ impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
     }
 }
 
-impl<A, V> Into<NodeMetrics<A, V>> for &MCTSNode<A, V>
+impl<A, V> From<&MCTSNode<A, V>> for NodeMetrics<A, V>
 where
     A: Clone,
     V: Clone,
 {
-    fn into(self) -> NodeMetrics<A, V> {
+    fn from(val: &MCTSNode<A, V>) -> Self {
         NodeMetrics {
-            visits: self.visits,
-            value: self.value_score.clone(),
-            moves_left: self.moves_left_score,
-            children: self.children.iter().map(|e| e.into()).collect_vec(),
+            visits: val.visits,
+            value: val.value_score.clone(),
+            moves_left: val.moves_left_score,
+            children: val.children.iter().map(|e| e.into()).collect_vec(),
         }
     }
 }
 
-impl<A> Into<NodeChildMetrics<A>> for &MCTSEdge<A>
+impl<A> From<&MCTSEdge<A>> for NodeChildMetrics<A>
 where
     A: Clone,
 {
-    fn into(self) -> NodeChildMetrics<A> {
+    fn from(val: &MCTSEdge<A>) -> Self {
         NodeChildMetrics::new(
-            self.action.clone(),
-            div_or_zero(self.W, self.visits as f32),
-            self.visits,
+            val.action.clone(),
+            div_or_zero(val.W, val.visits as f32),
+            val.visits,
         )
     }
 }
