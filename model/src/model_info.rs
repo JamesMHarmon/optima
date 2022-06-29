@@ -40,6 +40,6 @@ impl ModelInfo {
     }
 
     pub fn model_name_w_num(&self) -> String {
-        format!("{}_{}", self.model_name(), self.model_num())
+        format!("{}_{:05}", self.model_name(), self.model_num())
     }
 }

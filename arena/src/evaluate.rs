@@ -31,6 +31,12 @@ pub struct GameResult<A> {
     pub scores: Vec<(ModelInfo, f32)>,
 }
 
+impl<A> GameResult<A> {
+    pub fn model_score(&self, model_info: &ModelInfo) -> f32 {
+        self.scores.iter().find(|(m, _)| m == model_info).unwrap().1
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct MatchResult {
     pub model_scores: Vec<(ModelInfo, f32)>,

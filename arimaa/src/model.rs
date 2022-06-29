@@ -1,4 +1,6 @@
 use flate2::read::GzDecoder;
+use model::Move;
+use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -23,7 +25,7 @@ use tempfile::{tempdir, TempDir};
 use tensorflow_model::{unarchive, Archive as ArchiveModel, ArchiveAnalyzer};
 use tensorflow_model::{GameAnalyzer, TensorflowModel, UnwrappedReceiver};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
 
 #[derive(Default)]
@@ -40,6 +42,26 @@ impl ModelFactory {
             play_model_factory: PlayModelFactory::new(),
             place_model_factory: PlaceModelFactory::new(),
         }
+    }
+}
+
+impl Move for ModelFactory {
+    type MR = ModelRef;
+
+    fn move_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
+        let file_name = model.0.file_name().expect("Model has no file name");
+        let file_path = path.join(file_name);
+        fs::rename(&model.0, &file_path)?;
+
+        Ok(ModelRef(file_path))
+    }
+
+    fn copy_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
+        let file_name = model.0.file_name().expect("Model has no file name");
+        let file_path = path.join(file_name);
+        fs::copy(&model.0, &file_path)?;
+
+        Ok(ModelRef(file_path))
     }
 }
 

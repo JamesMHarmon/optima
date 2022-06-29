@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +15,10 @@ pub trait Analyzer {
     fn analyzer(&self) -> Self::Analyzer;
 }
 
+pub trait Info {
+    fn info(&self) -> &ModelInfo;
+}
+
 pub trait Latest {
     type MR;
 
@@ -26,8 +32,12 @@ pub trait Load {
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M>;
 }
 
-pub trait Info {
-    fn info(&self) -> &ModelInfo;
+pub trait Move {
+    type MR;
+
+    fn move_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR>;
+
+    fn copy_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -7,7 +7,7 @@ use common::{ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use self_play::{play_self, SelfPlayPersistance};
-use std::path::PathBuf;
+use std::path::Path;
 
 fn main() -> Result<()> {
     tokio::runtime::Builder::new_multi_thread()
@@ -36,13 +36,8 @@ async fn async_main() -> Result<()> {
 
             let model_dir = config.get_relative_path("model_dir")?;
 
-            if !PathBuf::from(&games_dir).is_dir() {
-                return Err(anyhow!("Path {:?} is not a valid directory", games_dir));
-            }
-
-            if !PathBuf::from(&model_dir).is_dir() {
-                return Err(anyhow!("Path {:?} is not a valid directory", model_dir));
-            }
+            assert_dir_exists(&games_dir)?;
+            assert_dir_exists(&model_dir)?;
 
             let model_factory = arimaa::model::ModelFactory::new(model_dir);
             let engine = arimaa::Engine::new();
@@ -63,24 +58,25 @@ async fn async_main() -> Result<()> {
             let arena_options = config.load()?;
 
             let champions_dir = config.get_relative_path("champions_dir")?;
-
             let candidates_dir = config.get_relative_path("candidates_dir")?;
+            let certified_dir = config.get_relative_path("certified_dir")?;
+            let evaluated_dir = config.get_relative_path("evaluated_dir")?;
 
-            if !PathBuf::from(&champions_dir).is_dir() {
-                return Err(anyhow!("{:?} is not a valid directory", champions_dir));
-            }
+            assert_dir_exists(&champions_dir)?;
+            assert_dir_exists(&candidates_dir)?;
+            assert_dir_exists(&certified_dir)?;
+            assert_dir_exists(&evaluated_dir)?;
 
-            if !PathBuf::from(&candidates_dir).is_dir() {
-                return Err(anyhow!("{:?} is not a valid directory", candidates_dir));
-            }
-
-            let champion_factory = arimaa::model::ModelFactory::new(champions_dir);
+            let champion_factory = arimaa::model::ModelFactory::new(champions_dir.clone());
             let candidate_factory = arimaa::model::ModelFactory::new(candidates_dir);
             let engine = arimaa::Engine::new();
 
             arena::championship(
                 &champion_factory,
+                &champions_dir,
                 &candidate_factory,
+                &certified_dir,
+                &evaluated_dir,
                 &engine,
                 &"./".relative_to_cwd()?,
                 &arena_options,
@@ -90,4 +86,12 @@ async fn async_main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn assert_dir_exists<P: AsRef<Path>>(dir: P) -> Result<()> {
+    if dir.as_ref().is_dir() {
+        Ok(())
+    } else {
+        Err(anyhow!("{:?} is not a valid directory", dir.as_ref()))
+    }
 }
