@@ -13,17 +13,17 @@ pub trait Analyzer {
     fn analyzer(&self) -> Self::Analyzer;
 }
 
+pub trait Latest {
+    type MR;
+
+    fn latest(&self) -> Result<Self::MR>;
+}
+
 pub trait Load {
     type MR;
     type M;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M>;
-}
-
-pub trait Latest {
-    type MR;
-
-    fn latest(&self) -> Result<Self::MR>;
 }
 
 pub trait Info {

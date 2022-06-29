@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "arena",
     "client",
     "common",
     "engine",
@@ -8,7 +9,6 @@ members = [
     "mcts",
     # "play",
     "replay-buffer",
-    # "self-evaluate",
     "self-play",
     # "tournament",
     # "tuner",

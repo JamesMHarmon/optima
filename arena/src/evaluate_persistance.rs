@@ -6,15 +6,15 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::self_evaluate::{GameResult, MatchResult};
+use super::evaluate::{GameResult, MatchResult};
 use model::model_info::ModelInfo;
 
-pub struct SelfEvaluatePersistance {
+pub struct EvaluatePersistance {
     game_file: File,
     match_file: File,
 }
 
-impl SelfEvaluatePersistance {
+impl EvaluatePersistance {
     pub fn new(run_directory: &Path, model_infos: &[ModelInfo]) -> Result<Self> {
         let evaluations_dir = run_directory.join("evaluations");
 
@@ -59,8 +59,11 @@ impl SelfEvaluatePersistance {
 
 fn get_game_file_path(evaluations_dir: &Path, model_infos: &[ModelInfo]) -> PathBuf {
     evaluations_dir.join(format!(
-        "{model_names}.json",
-        model_names = model_infos.iter().map(|m| m.get_model_name()).join("_vs_")
+        "{}.json",
+        model_infos
+            .iter()
+            .map(|m| m.model_name_w_num())
+            .join("_vs_")
     ))
 }
 

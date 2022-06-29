@@ -135,7 +135,7 @@ impl Tournament {
                 let game_name = model_info[0].get_game_name();
                 let run_name = model_info[0].get_run_name();
 
-                let mut presistance = TournamentPersistance::new(
+                let mut persistance = TournamentPersistance::new(
                     &get_run_directory(game_name, run_name),
                     &model_info,
                 )?;
@@ -161,10 +161,10 @@ impl Tournament {
                             * 60_f32
                     );
 
-                    presistance.write_game(&game_result)?;
+                    persistance.write_game(&game_result)?;
                 }
 
-                presistance.write_model_scores(&model_scores)?;
+                persistance.write_model_scores(&model_scores)?;
 
                 Ok(())
             });

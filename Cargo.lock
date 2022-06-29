@@ -44,6 +44,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb07d2053ccdbe10e2af2995a2f116c1330396493dc1269f6a91d0ae82e19704"
 
 [[package]]
+name = "arena"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "common",
+ "connect4",
+ "crossbeam",
+ "engine",
+ "futures",
+ "itertools",
+ "log",
+ "mcts",
+ "model",
+ "permutohedron",
+ "quoridor",
+ "rand 0.8.1",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "arimaa"
 version = "0.1.0"
 dependencies = [
@@ -417,6 +439,7 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arena",
  "arimaa",
  "clap",
  "common",
@@ -1583,6 +1606,12 @@ name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
+
+[[package]]
+name = "permutohedron"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b687ff7b5da449d39e418ad391e5e08da53ec334903ddbb921db208908fc372c"
 
 [[package]]
 name = "pin-project"

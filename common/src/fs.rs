@@ -16,3 +16,5 @@ pub trait FsExt {
 }
 
 impl FsExt for String {}
+
+impl FsExt for &'static str {}

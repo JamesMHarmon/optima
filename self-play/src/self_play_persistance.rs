@@ -65,18 +65,13 @@ impl SelfPlayPersistance {
     }
 
     fn get_game_dir_for_model(&self, model_info: &ModelInfo) -> PathBuf {
-        self.game_directory.join(format!(
-            "{}_{}",
-            model_info.get_run_name(),
-            model_info.get_model_num()
-        ))
+        self.game_directory.join(model_info.model_name_w_num())
     }
 
     fn generate_file_path_for_game(&self, model_info: &ModelInfo) -> PathBuf {
         self.get_game_dir_for_model(model_info).join(format!(
-            "{}_{}_{}.gz",
-            model_info.get_run_name(),
-            model_info.get_model_num(),
+            "{}_{}.gz",
+            model_info.model_name_w_num(),
             UuidB64::new()
                 .to_string()
                 .replace(|c: char| !c.is_alphanumeric(), "")

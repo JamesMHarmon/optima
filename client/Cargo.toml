@@ -10,6 +10,7 @@ self-play = { path = "../self-play" }
 model = { path = "../model" }
 arimaa = { path = "../arimaa" }
 common = { path = "../common" }
+arena = { path = "../arena" }
 # connect4 = { path = "../connect4" }
 # quoridor = { path = "../quoridor" }
 

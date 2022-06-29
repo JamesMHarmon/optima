@@ -1,5 +1,5 @@
 [package]
-name = "self-evaluate"
+name = "arena"
 version = "0.1.0"
 authors = ["James Harmon <JamesMHarmon@gmail.com>"]
 edition = "2021"

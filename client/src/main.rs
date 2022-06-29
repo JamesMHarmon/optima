@@ -56,8 +56,35 @@ async fn async_main() -> Result<()> {
                 &self_play_options,
             )?
         }
-        Commands::Arena(_self_play_args) => {
-            todo!();
+        Commands::Arena(arena_args) => {
+            let config_path = arena_args.config.relative_to_cwd()?;
+            let config = ConfigLoader::new(config_path, "arena".to_string())?;
+
+            let arena_options = config.load()?;
+
+            let champions_dir = config.get_relative_path("champions_dir")?;
+
+            let candidates_dir = config.get_relative_path("candidates_dir")?;
+
+            if !PathBuf::from(&champions_dir).is_dir() {
+                return Err(anyhow!("{:?} is not a valid directory", champions_dir));
+            }
+
+            if !PathBuf::from(&candidates_dir).is_dir() {
+                return Err(anyhow!("{:?} is not a valid directory", candidates_dir));
+            }
+
+            let champion_factory = arimaa::model::ModelFactory::new(champions_dir);
+            let candidate_factory = arimaa::model::ModelFactory::new(candidates_dir);
+            let engine = arimaa::Engine::new();
+
+            arena::championship(
+                &champion_factory,
+                &candidate_factory,
+                &engine,
+                &"./".relative_to_cwd()?,
+                &arena_options,
+            )?
         }
         _ => {}
     }

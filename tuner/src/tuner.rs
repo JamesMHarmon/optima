@@ -158,7 +158,7 @@ impl Tuner {
                 let game_name = model_info.get_game_name();
                 let run_name = model_info.get_run_name();
 
-                let mut presistance =
+                let mut persistance =
                     TunerPersistance::new(&get_run_directory(game_name, run_name), options.name)?;
 
                 while let Ok(game_result) = game_results_rx.recv() {
@@ -182,7 +182,7 @@ impl Tuner {
                             * 60_f32
                     );
 
-                    presistance.write_game(&game_result)?;
+                    persistance.write_game(&game_result)?;
                 }
 
                 let player_scores = player_scores
@@ -192,7 +192,7 @@ impl Tuner {
                         score: *score,
                     })
                     .collect::<Vec<_>>();
-                presistance.write_player_scores(&player_scores)?;
+                persistance.write_player_scores(&player_scores)?;
 
                 Ok(())
             });
