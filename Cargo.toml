@@ -8,7 +8,7 @@ members = [
     "mcts",
     # "play",
     "replay-buffer",
-    "self-evaluate",
+    # "self-evaluate",
     "self-play",
     # "tournament",
     # "tuner",
