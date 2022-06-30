@@ -1,6 +1,7 @@
 use anyhow::Result;
 use half::f16;
 use itertools::izip;
+use log::info;
 use std::convert::TryInto;
 use std::path::PathBuf;
 use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
@@ -301,6 +302,8 @@ impl Load for ModelFactory {
         ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
+        info!("Loading model {:?}", model_ref);
+
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 
         let mapper = Mapper::new();

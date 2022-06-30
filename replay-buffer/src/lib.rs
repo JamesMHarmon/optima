@@ -3,6 +3,7 @@
 #![feature(assert_matches)]
 #![feature(test)]
 #![feature(bench_black_box)]
+#![feature(is_some_with)]
 
 use anyhow::{Context, Result};
 use engine::GameState;
@@ -27,14 +28,15 @@ use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
 mod arimaa_sampler;
+mod dir_index;
 mod index;
 mod sample;
 mod sample_file;
 
 use arimaa_sampler::ArimaaSampler as Sampler;
 
-use crate::index::Index;
-use crate::sample::Sample;
+use crate::index::*;
+use crate::sample::*;
 
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
@@ -94,12 +96,15 @@ impl ReplayBuffer {
         let sampler = &self.sample_loader.sampler;
 
         let failures = AtomicUsize::new(0);
+        let pos_sampler = &self.index.sampler(start_idx..end_idx).map_err(|_| {
+            PyErr::new::<PyFileNotFoundError, _>("Failed to index during sampling.")
+        })?;
 
         let samples: Vec<_> = (0..samples)
             .into_par_iter()
             .map(|_| {
                 loop {
-                    let sample_path = self.index.sample(start_idx, end_idx);
+                    let sample_path = pos_sampler.sample();
 
                     if let Ok(sample) = self.sample_loader.load_and_sample_metrics(&sample_path) {
                         if let Some(sample) = sample {

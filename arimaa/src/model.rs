@@ -1,4 +1,5 @@
 use flate2::read::GzDecoder;
+use log::info;
 use model::Move;
 use std::fs;
 use std::fs::File;
@@ -78,6 +79,8 @@ impl Load for ModelFactory {
     type M = Model;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
+        info!("Loading model {:?}", model_ref);
+
         let temp_dir =
             unsplit(&model_ref.0).with_context(|| format!("Failed to open {:?}", model_ref.0))?;
         let play_path = temp_dir.path().join("play.tar.gz");
@@ -85,6 +88,8 @@ impl Load for ModelFactory {
 
         let (play_model_temp_dir, play_options, play_model_info) = unarchive(play_path)?;
         let (place_model_temp_dir, place_options, place_model_info) = unarchive(place_path)?;
+
+        info!("Loading model {:?} {:?}", play_model_info, place_model_info);
 
         let play_model = self.play_model_factory.load(
             play_model_temp_dir.path().to_path_buf(),

@@ -1778,6 +1778,7 @@ dependencies = [
  "engine",
  "half",
  "itertools",
+ "log",
  "model",
  "serde",
  "serde_json",

@@ -6,7 +6,7 @@ from train_utils import copy_bundle_to_export, export_bundle
 from pyhocon import ConfigFactory
 
 if __name__== '__main__':
-    model_dir               = '/Arimaa_runs/run-2/model_place-3b32f' # os.getcwd()
+    model_dir               = os.getcwd() # '/Arimaa_runs/run-2/model_place-3b32f' # os.getcwd()
 
     train_state_path        = os.path.join(model_dir, './train-state.json')
     model_info_path         = os.path.join(model_dir, './model-options.json')
@@ -51,7 +51,7 @@ if __name__== '__main__':
     
     model_info_path = os.path.join(model_dir, 'model-info.json')
     with open(model_info_path, 'w') as f:
-        json.dump({ 'game_name': game, 'run_name': run_name, 'model_num': 1 }, f, indent = 4)
+        json.dump({ 'game_name': game, 'run_name': run_name, 'model_name': model_name, 'model_num': 1 }, f, indent = 4)
         
     model_options_path = os.path.join(model_dir, 'model-options.json')
     with open(model_options_path, 'w') as f:

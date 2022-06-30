@@ -1,18 +1,18 @@
+use crate::dir_index::*;
 use anyhow::Result;
+use log::error;
 use rand::prelude::*;
-use std::fs::DirEntry;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::{ops::Range, path::PathBuf};
 
 pub struct Index {
-    files: Vec<(DirEntry, SystemTime)>,
+    indexes: Vec<DirIndex>,
     games_dir: PathBuf,
 }
 
 impl Index {
     pub fn new(games_dir: PathBuf) -> Result<Self> {
         let mut _self = Self {
-            files: vec![],
+            indexes: vec![],
             games_dir,
         };
 
@@ -21,42 +21,77 @@ impl Index {
         Ok(_self)
     }
 
-    pub fn sample(&self, start_idx: usize, end_idx: usize) -> PathBuf {
-        let mut rng = rand::thread_rng();
-        let sample_idx = rng.gen_range(start_idx..end_idx);
-
-        self.files[sample_idx].0.path()
+    pub fn sampler(&mut self, range: Range<usize>) -> Result<Sampler<'_>> {
+        Sampler::new(range, &mut self.indexes)
     }
 
-    pub fn games(&self) -> usize {
-        self.files.len()
+    pub fn games(&mut self) -> usize {
+        self.indexes.iter().map(|indx| indx.num_games()).sum()
     }
 
     pub fn re_index(&mut self) -> Result<()> {
-        self.files = get_game_files(self.games_dir.as_ref())?;
+        let mut indexes = self
+            .games_dir
+            .read_dir()?
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|e| e.is_dir()))
+            .filter_map(|e| {
+                let index = DirIndex::new(&e);
+                if let Err(err) = &index {
+                    error!("Failed to index directory: {:?} {:?}", e.path(), err);
+                }
 
-        self.files.sort_by(|(_, a), (_, b)| b.cmp(a));
+                index.ok()
+            })
+            .collect::<Vec<_>>();
+
+        indexes.sort_by_key(|e| e.created());
+
+        self.indexes = indexes;
 
         Ok(())
     }
 
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = PathBuf> + '_ {
-        self.files.iter().map(|(d, _)| d.path())
+    pub fn iter(&mut self) -> impl DoubleEndedIterator<Item = PathBuf> + '_ {
+        self.indexes.iter_mut().flat_map(|indx| indx.iter())
     }
 }
 
-fn get_game_files(games_dir: &Path) -> Result<Vec<(DirEntry, SystemTime)>> {
-    let mut files = vec![];
+pub struct Sampler<'a> {
+    range: Range<usize>,
+    indexes: &'a Vec<DirIndex>,
+}
 
-    for entry in games_dir.read_dir()?.flatten() {
-        if entry.file_type()?.is_dir() {
-            let games_in_dir = get_game_files(&entry.path())?;
-            files.extend(games_in_dir);
-        } else {
-            let created = entry.metadata()?.created()?;
-            files.push((entry, created));
+impl<'a> Sampler<'a> {
+    pub fn new(range: Range<usize>, indexes: &'a mut Vec<DirIndex>) -> Result<Sampler> {
+        let mut index_end = 0;
+        for index in indexes.iter_mut() {
+            index_end += index.num_games();
+
+            if range.start < index_end {
+                index.expand()?;
+            }
+
+            if range.end <= index_end {
+                return Ok(Self { range, indexes });
+            }
         }
+
+        Ok(Self { range, indexes })
     }
 
-    Ok(files)
+    pub fn sample(&self) -> PathBuf {
+        let mut rng = rand::thread_rng();
+        let sample_idx = rng.gen_range(self.range.clone());
+
+        let mut counts = 0;
+        for index in self.indexes.iter() {
+            counts += index.num_games();
+            if sample_idx < counts {
+                index.sample();
+            }
+        }
+
+        panic!("Should not be reachable")
+    }
 }

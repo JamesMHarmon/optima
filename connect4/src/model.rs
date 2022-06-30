@@ -8,6 +8,7 @@ use super::engine::Engine;
 use super::engine::GameState;
 use super::value::Value;
 use engine::value::Value as ValueTrait;
+use log::info;
 use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
@@ -182,6 +183,8 @@ impl Load for ModelFactory {
         ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
+        info!("Loading model {:?}", model_ref);
+
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 
         let mapper = Mapper::new();
