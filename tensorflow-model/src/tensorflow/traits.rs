@@ -37,6 +37,7 @@ pub trait PolicyMap<S, A, V> {
     ) -> Vec<ActionWithPolicy<A>>;
 }
 
+#[allow(non_snake_case)]
 pub trait QMix<S, V> {
     fn mix_q(&self, game_state: &S, value: &V, q_mix: f32, Q: f32) -> V;
 }
