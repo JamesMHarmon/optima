@@ -123,11 +123,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
 
 impl ValueMap<GameState, Value> for Mapper {
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        let player_to_move = if game_state.is_p1_turn_to_move() {
-            1
-        } else {
-            2
-        };
+        let player_to_move = game_state.player_to_move();
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
     }

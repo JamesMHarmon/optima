@@ -11,8 +11,8 @@ use super::sample::Sample;
 pub struct ArimaaSampler {
     is_play_mode: bool,
     engine: arimaa::Engine,
-    play_model_mapper: PlayMapper,
-    place_model_mapper: PlaceMapper,
+    play_m: PlayMapper,
+    place_m: PlaceMapper,
 }
 
 impl ArimaaSampler {
@@ -30,8 +30,8 @@ impl ArimaaSampler {
         Self {
             is_play_mode,
             engine: arimaa::Engine::new(),
-            play_model_mapper: PlayMapper::new(),
-            place_model_mapper: PlaceMapper::new(),
+            play_m: PlayMapper::new(),
+            place_m: PlaceMapper::new(),
         }
     }
 }
@@ -39,9 +39,9 @@ impl ArimaaSampler {
 impl Dimension for ArimaaSampler {
     fn dimensions(&self) -> [u64; 3] {
         if self.is_play_mode {
-            self.play_model_mapper.dimensions()
+            self.play_m.dimensions()
         } else {
-            self.place_model_mapper.dimensions()
+            self.place_m.dimensions()
         }
     }
 }
@@ -101,11 +101,9 @@ impl Sample for ArimaaSampler {
 impl InputMap<GameState> for ArimaaSampler {
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         if self.is_play_mode {
-            self.play_model_mapper
-                .game_state_to_input(game_state, input, mode)
+            self.play_m.game_state_to_input(game_state, input, mode)
         } else {
-            self.place_model_mapper
-                .game_state_to_input(game_state, input, mode)
+            self.place_m.game_state_to_input(game_state, input, mode)
         }
     }
 }
@@ -117,10 +115,10 @@ impl PolicyMap<GameState, Action, Value> for ArimaaSampler {
         metric: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         if self.is_play_mode {
-            self.play_model_mapper
+            self.play_m
                 .policy_metrics_to_expected_output(game_state, metric)
         } else {
-            self.place_model_mapper
+            self.place_m
                 .policy_metrics_to_expected_output(game_state, metric)
         }
     }
@@ -133,11 +131,9 @@ impl PolicyMap<GameState, Action, Value> for ArimaaSampler {
 impl ValueMap<GameState, Value> for ArimaaSampler {
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         if self.is_play_mode {
-            self.play_model_mapper
-                .map_value_to_value_output(game_state, value)
+            self.play_m.map_value_to_value_output(game_state, value)
         } else {
-            self.place_model_mapper
-                .map_value_to_value_output(game_state, value)
+            self.place_m.map_value_to_value_output(game_state, value)
         }
     }
 

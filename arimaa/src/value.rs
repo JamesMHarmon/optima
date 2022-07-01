@@ -7,6 +7,10 @@ impl Value {
     pub fn new(value: [f32; 2]) -> Self {
         Self(arimaa_engine::Value(value))
     }
+
+    pub fn update_players_value(&mut self, value: f32, player: usize) {
+        self.0 .0[player - 1] = value
+    }
 }
 
 impl From<arimaa_engine::Value> for Value {

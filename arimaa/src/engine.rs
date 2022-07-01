@@ -25,11 +25,7 @@ impl engine::engine::GameEngine for Engine {
     }
 
     fn get_player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.is_p1_turn_to_move() {
-            1
-        } else {
-            2
-        }
+        game_state.player_to_move()
     }
 
     fn get_move_number(&self, game_state: &Self::State) -> usize {

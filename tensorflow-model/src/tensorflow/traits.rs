@@ -37,6 +37,10 @@ pub trait PolicyMap<S, A, V> {
     ) -> Vec<ActionWithPolicy<A>>;
 }
 
+pub trait QMix<S, V> {
+    fn mix_q(&self, game_state: &S, value: &V, q_mix: f32, Q: f32) -> V;
+}
+
 pub trait ValueMap<S, V> {
     fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
 

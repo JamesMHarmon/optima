@@ -57,6 +57,15 @@ impl GameState {
         self.0.is_play_phase()
     }
 
+    // Returns either 1 or 2 depending on the player to move.
+    pub fn player_to_move(&self) -> usize {
+        if self.0.is_p1_turn_to_move() {
+            1
+        } else {
+            2
+        }
+    }
+
     pub fn get_vertical_symmetry(&self) -> Self {
         Self(self.0.get_vertical_symmetry())
     }

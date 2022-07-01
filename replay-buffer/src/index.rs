@@ -1,8 +1,8 @@
 use crate::dir_index::*;
 use anyhow::Result;
-use log::error;
+use log::{error, info};
 use rand::prelude::*;
-use std::{ops::Range, path::PathBuf};
+use std::{ops::Range, path::PathBuf, time::Instant};
 
 pub struct Index {
     indexes: Vec<DirIndex>,
@@ -64,6 +64,7 @@ pub struct Sampler<'a> {
 
 impl<'a> Sampler<'a> {
     pub fn new(range: Range<usize>, indexes: &'a mut Vec<DirIndex>) -> Result<Sampler> {
+        let start = Instant::now();
         let mut index_start = 0;
         let mut index_end = 0;
         for index in indexes.iter_mut() {
@@ -78,6 +79,10 @@ impl<'a> Sampler<'a> {
             }
 
             index_start += index.num_games();
+        }
+
+        if start.elapsed().as_millis() > 1 {
+            info!("Expanded in {} milliseconds", start.elapsed().as_millis());
         }
 
         Ok(Self { range, indexes })
