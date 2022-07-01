@@ -20,7 +20,7 @@ use self_play::SelfPlayMetrics;
 use serde::{de, Serialize};
 use std::assert_matches::assert_matches;
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -258,27 +258,35 @@ impl<S> SampleLoader<S> {
         let mut buffered_samples = read_cache_file();
 
         if matches!(buffered_samples, Err(_)) {
-            let samples = self.load_samples(metrics_path)?;
-            let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
-            for metrics in samples {
-                let inputs_and_targets = self.sampler.metric_to_input_and_targets(&metrics);
-                vals.extend(inputs_and_targets.input);
-                vals.extend(inputs_and_targets.policy_output);
-                vals.push(inputs_and_targets.value_output);
-                vals.extend(inputs_and_targets.moves_left_output);
-            }
-
-            if !cache_path.exists() {
+            let res: Result<usize> = try {
                 fs::create_dir_all(&cache_path.parent().unwrap())?;
 
-                let file = File::create(cache_path)?;
+                let file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(cache_path)?;
+
+                let samples = self.load_samples(metrics_path)?;
+                let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
+                for metrics in samples {
+                    let inputs_and_targets = self.sampler.metric_to_input_and_targets(&metrics);
+                    vals.extend(inputs_and_targets.input);
+                    vals.extend(inputs_and_targets.policy_output);
+                    vals.push(inputs_and_targets.value_output);
+                    vals.extend(inputs_and_targets.moves_left_output);
+                }
+
                 let buff_writer = BufWriter::new(file);
                 SampleFile::new(self.num_values_in_sample).write(buff_writer, &vals)?;
-            } else {
-                warn!("Path exits but was not loaded {:?}", cache_path);
-            }
 
-            buffered_samples = read_cache_file();
+                buffered_samples = read_cache_file();
+
+                0
+            };
+
+            if let Err(err) = res {
+                warn!("Failed to write cache file {:?} {:?}", cache_path, err);
+            }
         }
 
         buffered_samples
