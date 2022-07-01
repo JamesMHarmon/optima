@@ -22,6 +22,7 @@ arimaa = { path = "../arimaa", default-features = false, features = ["mappings"]
 anyhow = "1.0.57"
 bytemuck = "1.9.1"
 byteorder = "1.4.3"
+env_logger = "0.9.0"
 flate2 = "1.0"
 half = "1.8"
 log = "0.4.17"

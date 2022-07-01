@@ -64,6 +64,7 @@ pub struct Sampler<'a> {
 
 impl<'a> Sampler<'a> {
     pub fn new(range: Range<usize>, indexes: &'a mut Vec<DirIndex>) -> Result<Sampler> {
+        let mut index_start = 0;
         let mut index_end = 0;
         for index in indexes.iter_mut() {
             index_end += index.num_games();
@@ -72,9 +73,11 @@ impl<'a> Sampler<'a> {
                 index.expand()?;
             }
 
-            if range.end <= index_end {
-                return Ok(Self { range, indexes });
+            if range.end < index_start {
+                break;
             }
+
+            index_start += index.num_games();
         }
 
         Ok(Self { range, indexes })
@@ -84,11 +87,11 @@ impl<'a> Sampler<'a> {
         let mut rng = rand::thread_rng();
         let sample_idx = rng.gen_range(self.range.clone());
 
-        let mut counts = 0;
+        let mut index_end = 0;
         for index in self.indexes.iter() {
-            counts += index.num_games();
-            if sample_idx < counts {
-                index.sample();
+            index_end += index.num_games();
+            if sample_idx < index_end {
+                return index.sample();
             }
         }
 

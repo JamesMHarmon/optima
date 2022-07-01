@@ -1961,6 +1961,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "engine",
+ "env_logger",
  "flate2",
  "half",
  "log",

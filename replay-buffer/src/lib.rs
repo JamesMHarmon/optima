@@ -7,6 +7,7 @@
 
 use anyhow::{Context, Result};
 use engine::GameState;
+use env_logger::Env;
 use flate2::read::GzDecoder;
 use log::warn;
 use model::PositionMetrics;
@@ -62,6 +63,8 @@ impl ReplayBuffer {
         mode: Option<String>,
         cache_dir: Option<String>,
     ) -> PyResult<Self> {
+        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
         let cache_dir = cache_dir.unwrap_or_else(|| "buffer_cache".to_string());
         let cache_dir = PathBuf::from(cache_dir);
 
@@ -96,7 +99,7 @@ impl ReplayBuffer {
         let sampler = &self.sample_loader.sampler;
 
         let failures = AtomicUsize::new(0);
-        let pos_sampler = &self.index.sampler(start_idx..end_idx).map_err(|_| {
+        let path_sampler = &self.index.sampler(start_idx..end_idx).map_err(|_| {
             PyErr::new::<PyFileNotFoundError, _>("Failed to index during sampling.")
         })?;
 
@@ -104,7 +107,7 @@ impl ReplayBuffer {
             .into_par_iter()
             .map(|_| {
                 loop {
-                    let sample_path = pos_sampler.sample();
+                    let sample_path = path_sampler.sample();
 
                     if let Ok(sample) = self.sample_loader.load_and_sample_metrics(&sample_path) {
                         if let Some(sample) = sample {

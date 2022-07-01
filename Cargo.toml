@@ -15,7 +15,7 @@ members = [
 
     "arimaa",
     "connect4",
-    "quoridor"
+    "quoridor",
 ]
 
 [profile.release]
