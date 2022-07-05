@@ -1,10 +1,12 @@
 use arimaa::{Action, GameState, Value, PLACE_INPUT_SIZE, PLACE_MOVES_LEFT_SIZE};
 use arimaa::{PlaceMapper, PlayMapper};
 use arimaa::{PLACE_OUTPUT_SIZE, PLAY_INPUT_SIZE, PLAY_MOVES_LEFT_SIZE, PLAY_OUTPUT_SIZE};
-use engine::GameEngine;
+use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::{ActionWithPolicy, NodeMetrics};
 use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
+
+use crate::q_mix::{QMix, ValueStore};
 
 use super::sample::Sample;
 
@@ -50,6 +52,7 @@ impl Sample for ArimaaSampler {
     type State = GameState;
     type Action = Action;
     type Value = Value;
+    type ValueStore = ArimaaVStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         self.engine.take_action(game_state, action)
@@ -139,5 +142,51 @@ impl ValueMap<GameState, Value> for ArimaaSampler {
 
     fn map_value_output_to_value(&self, _: &GameState, _: f32) -> Value {
         panic!("Not implemented")
+    }
+}
+
+#[allow(non_snake_case)]
+impl QMix<GameState, Value> for ArimaaSampler {
+    fn mix_q(game_state: &GameState, value: &Value, q_mix: f32, Q: f32) -> Value {
+        if q_mix == 0.0 {
+            return value.clone();
+        }
+
+        let player_to_move = game_state.player_to_move();
+        let player_value = value.get_value_for_player(player_to_move);
+
+        assert!(
+            (0.0..=1.0).contains(&player_value),
+            "player_value must be between 0.0 and 1.0"
+        );
+
+        let mixed_value = ((1.0 - q_mix) * player_value) + (q_mix * Q);
+
+        assert!(
+            (0.0..=1.0).contains(&q_mix) && (0.0..=1.0).contains(&Q),
+            "Q mix must be between 0.0 and 1.0"
+        );
+
+        let mut value = value.clone();
+
+        value.update_players_value(mixed_value, player_to_move);
+
+        value
+    }
+}
+
+#[derive(Default)]
+pub struct ArimaaVStore([Option<Value>; 2]);
+
+#[allow(non_snake_case)]
+impl ValueStore<GameState, Value> for ArimaaVStore {
+    fn get_v_for_player(&self, game_state: &GameState) -> Option<&Value> {
+        let player = game_state.player_to_move();
+        self.0[player - 1].as_ref()
+    }
+
+    fn set_v_for_player(&mut self, game_state: &GameState, V: Value) {
+        let player = game_state.player_to_move();
+        self.0[player - 1] = Some(V);
     }
 }

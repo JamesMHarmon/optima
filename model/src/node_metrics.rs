@@ -25,6 +25,10 @@ impl<A, V> NodeMetrics<A, V> {
         let act_Q = act_Q.expect("Specified action was not found").Q();
         max_Q - act_Q
     }
+
+    pub fn child_max_visits(&self) -> &NodeChildMetrics<A> {
+        self.children.iter().max_by_key(|c| c.visits).unwrap()
+    }
 }
 
 #[allow(non_snake_case)]

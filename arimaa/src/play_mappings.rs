@@ -17,7 +17,7 @@ use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
-use tensorflow_model::{InputMap, Mode, PolicyMap, QMix, TranspositionMap, ValueMap};
+use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
 
 #[derive(Default)]
 pub struct Mapper {}
@@ -121,36 +121,6 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         update_logit_policies_to_softmax(&mut valid_actions_with_policies);
 
         valid_actions_with_policies
-    }
-}
-
-#[allow(non_snake_case)]
-impl QMix<GameState, Value> for Mapper {
-    fn mix_q(&self, game_state: &GameState, value: &Value, q_mix: f32, Q: f32) -> Value {
-        if q_mix == 0.0 {
-            return value.clone();
-        }
-
-        assert!(
-            q_mix >= 0.0 && q_mix <= 1.0 && Q >= 0.0 && Q <= 1.0,
-            "Q mix must be between 0.0 and 1.0"
-        );
-
-        let player_to_move = game_state.player_to_move();
-        let player_value = value.get_value_for_player(player_to_move);
-
-        assert!(
-            player_value >= 0.0 && player_value <= 1.0,
-            "player_value must be between 0.0 and 1.0"
-        );
-
-        let mixed_value = ((1.0 - q_mix) * player_value) + (q_mix * Q);
-
-        let mut value = value.clone();
-
-        value.update_players_value(mixed_value, player_to_move);
-
-        value
     }
 }
 

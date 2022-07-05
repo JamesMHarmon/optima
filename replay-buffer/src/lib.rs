@@ -31,6 +31,7 @@ use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 mod arimaa_sampler;
 mod dir_index;
 mod index;
+mod q_mix;
 mod sample;
 mod sample_file;
 
@@ -60,6 +61,8 @@ impl ReplayBuffer {
     fn new(
         games_dir: String,
         min_visits: usize,
+        q_diff_threshold: f32,
+        q_diff_width: f32,
         mode: Option<String>,
         cache_dir: Option<String>,
     ) -> PyResult<Self> {
@@ -82,6 +85,8 @@ impl ReplayBuffer {
             sample_loader: SampleLoader {
                 cache_dir,
                 min_visits,
+                q_diff_threshold,
+                q_diff_width,
                 num_values_in_sample,
                 sampler,
             },
@@ -187,6 +192,8 @@ struct SampleLoader<S> {
     min_visits: usize,
     num_values_in_sample: usize,
     sampler: S,
+    q_diff_threshold: f32,
+    q_diff_width: f32,
 }
 
 impl<S> SampleLoader<S> {
@@ -197,7 +204,7 @@ impl<S> SampleLoader<S> {
     where
         S: Sample,
         S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize,
+        S::Action: de::DeserializeOwned + Serialize + PartialEq,
         S::Value: de::DeserializeOwned + Serialize + Clone,
     {
         let input_size = self.sampler.input_size();
@@ -235,7 +242,7 @@ impl<S> SampleLoader<S> {
     where
         S: Sample,
         S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize,
+        S::Action: de::DeserializeOwned + Serialize + PartialEq,
         S::Value: de::DeserializeOwned + Serialize + Clone,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
@@ -300,7 +307,7 @@ impl<S> SampleLoader<S> {
     where
         S: Sample,
         S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize,
+        S::Action: de::DeserializeOwned + Serialize + PartialEq,
         S::Value: de::DeserializeOwned + Serialize + Clone,
     {
         let file = std::fs::File::open(&metrics_path)
@@ -310,7 +317,12 @@ impl<S> SampleLoader<S> {
             serde_json::from_reader(file)
                 .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 
-        let samples = self.sampler.metrics_to_samples(metrics, self.min_visits);
+        let samples = self.sampler.metrics_to_samples(
+            metrics,
+            self.min_visits,
+            self.q_diff_threshold,
+            self.q_diff_width,
+        );
 
         Ok(samples)
     }

@@ -1,8 +1,10 @@
 use engine::GameState;
 use half::f16;
-use model::{NodeMetrics, PositionMetrics};
+use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
 use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
+
+use super::q_mix::{QMix, ValueStore};
 
 pub trait Sample
 where
@@ -10,19 +12,26 @@ where
     Self: PolicyMap<Self::State, Self::Action, Self::Value>,
     Self: ValueMap<Self::State, Self::Value>,
     Self: Dimension,
+    Self: QMix<Self::State, Self::Value>,
+    Self: Sized,
+    Self::ValueStore: ValueStore<Self::State, Self::Value>,
 {
     type State;
     type Action;
     type Value;
+    type ValueStore;
 
     fn metrics_to_samples(
         &self,
         metrics: SelfPlayMetrics<Self::Action, Self::Value>,
         min_visits: usize,
+        q_diff_threshold: f32,
+        q_diff_width: f32,
     ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Value>>
     where
         Self::State: GameState,
         Self::Value: Clone,
+        Self::Action: PartialEq,
     {
         let mut metrics = get_positions(
             metrics,
@@ -30,15 +39,15 @@ where
             |s, a| self.take_action(s, a),
         );
 
-        deblunder(&mut metrics);
+        deblunder::<_, _, _, Self::ValueStore, Self>(&mut metrics, q_diff_threshold, q_diff_width);
 
         filter_full_visits(&mut metrics, min_visits);
 
-        let metrics = metrics.into_iter().filter(|s| self.sample_filter(s));
+        let metrics = metrics
+            .into_iter()
+            .filter(|s| self.sample_filter(&s.metrics));
 
-        metrics
-            .flat_map(|position_metrics| self.symmetries(position_metrics))
-            .collect()
+        metrics.flat_map(|s| self.symmetries(s.metrics)).collect()
     }
 
     fn symmetries(
@@ -103,11 +112,17 @@ pub struct InputAndTargets {
     pub moves_left_output: Vec<f32>,
 }
 
+struct PositionMetricsExtended<S, A, V> {
+    metrics: PositionMetrics<S, A, V>,
+    chosen_action: A,
+    move_number: usize,
+}
+
 fn get_positions<S, A, V, FM, FA>(
     metrics: SelfPlayMetrics<A, V>,
     move_number: FM,
     take_action: FA,
-) -> Vec<PositionMetrics<S, A, V>>
+) -> Vec<PositionMetricsExtended<S, A, V>>
 where
     S: GameState,
     V: Clone,
@@ -122,39 +137,68 @@ where
         let next_game_state = take_action(&prev_game_state, &action);
         let move_number = move_number(&prev_game_state);
 
-        samples.push((
-            PositionMetrics {
+        samples.push(PositionMetricsExtended {
+            metrics: PositionMetrics {
                 game_state: prev_game_state,
                 score: score.clone(),
                 policy: metrics,
                 moves_left: 0,
             },
+            chosen_action: action,
             move_number,
-        ));
+        });
 
         prev_game_state = next_game_state;
     }
 
-    let max_move = samples.iter().map(|(_, m)| *m).max().unwrap();
+    let max_move = samples.iter().map(|m| m.move_number).max().unwrap();
 
-    for (sample, move_num) in samples.iter_mut() {
-        let moves_left = max_move - *move_num + 1;
-        sample.moves_left = moves_left;
+    for metrics in samples.iter_mut() {
+        let moves_left = max_move - metrics.move_number + 1;
+        metrics.metrics.moves_left = moves_left;
     }
-
-    let samples = samples.into_iter().map(|(s, _)| s).collect();
 
     samples
 }
 
-fn filter_full_visits<S, A, V>(metrics: &mut Vec<PositionMetrics<S, A, V>>, min_visits: usize) {
-    metrics.retain(|m| m.policy.visits >= min_visits)
+fn filter_full_visits<S, A, V>(
+    metrics: &mut Vec<PositionMetricsExtended<S, A, V>>,
+    min_visits: usize,
+) {
+    metrics.retain(|m| m.metrics.policy.visits >= min_visits)
 }
 
-fn deblunder<S, A, V>(metrics: &mut Vec<PositionMetrics<S, A, V>>) {
-    // for metric in metrics.iter_mut().rev() {
-    //     metric
-    // }
+#[allow(non_snake_case)]
+fn deblunder<S, A, V, Vs, Qm>(
+    metrics: &mut [PositionMetricsExtended<S, A, V>],
+    q_diff_threshold: f32,
+    q_diff_width: f32,
+) where
+    A: PartialEq,
+    V: Clone,
+    Vs: ValueStore<S, V>,
+    Qm: QMix<S, V>,
+{
+    let mut value_stack = ValueStack::<Vs>::new();
+
+    for metric in metrics.iter_mut().rev() {
+        let game_state = &metric.metrics.game_state;
+
+        let Q = metric.metrics.policy.child_max_visits().Q();
+        value_stack.set_if_not::<S, V, Qm>(game_state, Q);
+
+        let q_diff = metric.metrics.policy.Q_diff(&metric.chosen_action);
+        if q_diff >= q_diff_threshold {
+            let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).max(1.0);
+            value_stack.push(q_mix_amt, metric.metrics.moves_left);
+
+            value_stack.set_if_not::<S, V, Qm>(game_state, Q);
+        }
+
+        let (V, moves_left) = value_stack.latest::<_, V>(game_state);
+        metric.metrics.score = V.clone();
+        metric.metrics.moves_left = moves_left;
+    }
 }
 
 fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
@@ -167,4 +211,94 @@ fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f
     moves_left_one_hot[moves_left - 1] = 1.0;
 
     moves_left_one_hot
+}
+
+struct ValueStack<Vs> {
+    v_stores: Vec<(Vs, f32)>,
+    moves_left: Option<usize>,
+}
+
+#[allow(non_snake_case)]
+impl<Vs> ValueStack<Vs> {
+    fn new<S, V>() -> Self
+    where
+        Vs: ValueStore<S, V>,
+    {
+        Self {
+            v_stores: vec![(Vs::default(), 0.0)],
+            moves_left: None,
+        }
+    }
+
+    fn latest<S, V>(&self, game_state: &S) -> (&V, usize)
+    where
+        Vs: ValueStore<S, V>,
+    {
+        let v = self
+            .v_stores
+            .last()
+            .expect("There should always be at least one V set")
+            .0
+            .get_v_for_player(game_state)
+            .expect("V should always be set before latest is called");
+
+        (v, self.moves_left.expect("Moves left should always be set"))
+    }
+
+    fn push<S, V>(&mut self, q_mix_amt: f32, moves_left: usize)
+    where
+        Vs: ValueStore<S, V>,
+    {
+        self.v_stores.push((Vs::default(), q_mix_amt));
+        self.moves_left = Some(moves_left);
+    }
+
+    fn set_if_not<S, V, Qm>(&mut self, game_state: &S, Q: f32)
+    where
+        Vs: ValueStore<S, V>,
+        Qm: QMix<S, V>,
+    {
+        loop {
+            if let Some((_, q_mix_amt)) = self.latest_unset_v(game_state) {
+                let q_mix_amt = *q_mix_amt;
+                let latest_value = self.latest_set_v(game_state);
+                let mixed_v = Qm::mix_q(game_state, latest_value, q_mix_amt, Q);
+                self.set_v(game_state, mixed_v);
+            } else {
+                return;
+            }
+        }
+    }
+
+    fn latest_unset_v<S, V>(&mut self, game_state: &S) -> Option<&mut (Vs, f32)>
+    where
+        Vs: ValueStore<S, V>,
+    {
+        self.v_stores
+            .iter_mut()
+            .rev()
+            .take_while(|(s, _)| s.get_v_for_player(game_state).is_none())
+            .next()
+    }
+
+    fn latest_set_v<S, V>(&self, game_state: &S) -> &V
+    where
+        Vs: ValueStore<S, V>,
+    {
+        self.v_stores
+            .iter()
+            .rev()
+            .find_map(|(s, _)| s.get_v_for_player(game_state))
+            .expect("There should always be at least one V set")
+    }
+
+    fn set_v<S, V>(&mut self, game_state: &S, mixed_V: V)
+    where
+        Vs: ValueStore<S, V>,
+    {
+        self.latest_unset_v(game_state)
+            .unwrap()
+            .0
+            .set_v_for_player(game_state, mixed_V);
+    }
 }
