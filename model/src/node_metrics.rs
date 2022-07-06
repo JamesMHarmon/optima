@@ -36,17 +36,27 @@ impl<A, V> NodeMetrics<A, V> {
 pub struct NodeChildMetrics<A> {
     action: A,
     Q: f32,
+    M: f32,
     visits: usize,
 }
 
 #[allow(non_snake_case)]
 impl<A> NodeChildMetrics<A> {
-    pub fn new(action: A, Q: f32, visits: usize) -> Self {
-        Self { action, Q, visits }
+    pub fn new(action: A, Q: f32, M: f32, visits: usize) -> Self {
+        Self {
+            action,
+            Q,
+            M,
+            visits,
+        }
     }
 
     pub fn action(&self) -> &A {
         &self.action
+    }
+
+    pub fn M(&self) -> f32 {
+        self.M
     }
 
     pub fn Q(&self) -> f32 {
@@ -136,10 +146,11 @@ where
     where
         S: Serializer,
     {
-        let mut tup = serializer.serialize_tuple(3)?;
+        let mut tup = serializer.serialize_tuple(4)?;
 
         tup.serialize_element(&self.action)?;
         tup.serialize_element(&self.Q)?;
+        tup.serialize_element(&self.M)?;
         tup.serialize_element(&self.visits)?;
 
         tup.end()
@@ -175,6 +186,7 @@ where
         Ok(NodeChildMetrics {
             action: seq.next_element()?.unwrap(),
             Q: seq.next_element()?.unwrap(),
+            M: seq.next_element()?.unwrap(),
             visits: seq.next_element()?.unwrap(),
         })
     }
@@ -188,6 +200,6 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_tuple(3, NodeChildMetricsVisitor::new())
+        deserializer.deserialize_tuple(4, NodeChildMetricsVisitor::new())
     }
 }

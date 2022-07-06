@@ -52,7 +52,9 @@ impl Mapper {
             .policy
             .children
             .iter()
-            .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.visits()))
+            .map(|m| {
+                NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits())
+            })
             .collect();
 
         let symmetrical_pos = PositionMetrics {

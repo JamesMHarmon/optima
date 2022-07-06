@@ -999,6 +999,7 @@ where
         NodeChildMetrics::new(
             val.action.clone(),
             div_or_zero(val.W, val.visits as f32),
+            div_or_zero(val.M, val.visits as f32),
             val.visits,
         )
     }

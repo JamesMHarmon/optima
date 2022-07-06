@@ -1371,9 +1371,9 @@ mod tests {
             value: Value::new([0.0, 0.0]),
             moves_left: 0.0,
             children: vec![
-                NodeChildMetrics::new("a7n".parse().unwrap(), 0.0, 7),
-                NodeChildMetrics::new("pa7nn".parse().unwrap(), 0.0, 2),
-                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 1),
+                NodeChildMetrics::new("a7n".parse().unwrap(), 0.0, 0.0, 7),
+                NodeChildMetrics::new("pa7nn".parse().unwrap(), 0.0, 0.0, 2),
+                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 
@@ -1417,9 +1417,9 @@ mod tests {
             value: Value::new([0.0, 0.0]),
             moves_left: 0.0,
             children: vec![
-                NodeChildMetrics::new("h2s".parse().unwrap(), 0.0, 7),
-                NodeChildMetrics::new("ph2ss".parse().unwrap(), 0.0, 2),
-                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 1),
+                NodeChildMetrics::new("h2s".parse().unwrap(), 0.0, 0.0, 7),
+                NodeChildMetrics::new("ph2ss".parse().unwrap(), 0.0, 0.0, 2),
+                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 

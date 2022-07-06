@@ -4,6 +4,7 @@ use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
 use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 
+use super::deblunder;
 use super::q_mix::{QMix, ValueStore};
 
 pub trait Sample
@@ -39,7 +40,11 @@ where
             |s, a| self.take_action(s, a),
         );
 
-        deblunder::<_, _, _, Self::ValueStore, Self>(&mut metrics, q_diff_threshold, q_diff_width);
+        deblunder::deblunder::<_, _, _, Self::ValueStore, Self>(
+            &mut metrics,
+            q_diff_threshold,
+            q_diff_width,
+        );
 
         filter_full_visits(&mut metrics, min_visits);
 
@@ -80,7 +85,7 @@ where
     ) -> InputAndTargets {
         let policy_output =
             self.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);
-        let value_output = self.map_value_to_value_output(&metric.game_state, &metric.score);
+        let value_output = self.map_value_to_value_output(&metric.game_state, &metric.policy.value);
         let moves_left_output =
             map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
         let input_len = self.input_size();
@@ -112,10 +117,10 @@ pub struct InputAndTargets {
     pub moves_left_output: Vec<f32>,
 }
 
-struct PositionMetricsExtended<S, A, V> {
-    metrics: PositionMetrics<S, A, V>,
-    chosen_action: A,
-    move_number: usize,
+pub struct PositionMetricsExtended<S, A, V> {
+    pub metrics: PositionMetrics<S, A, V>,
+    pub chosen_action: A,
+    pub move_number: usize,
 }
 
 fn get_positions<S, A, V, FM, FA>(
@@ -168,39 +173,6 @@ fn filter_full_visits<S, A, V>(
     metrics.retain(|m| m.metrics.policy.visits >= min_visits)
 }
 
-#[allow(non_snake_case)]
-fn deblunder<S, A, V, Vs, Qm>(
-    metrics: &mut [PositionMetricsExtended<S, A, V>],
-    q_diff_threshold: f32,
-    q_diff_width: f32,
-) where
-    A: PartialEq,
-    V: Clone,
-    Vs: ValueStore<S, V>,
-    Qm: QMix<S, V>,
-{
-    let mut value_stack = ValueStack::<Vs>::new();
-
-    for metric in metrics.iter_mut().rev() {
-        let game_state = &metric.metrics.game_state;
-
-        let Q = metric.metrics.policy.child_max_visits().Q();
-        value_stack.set_if_not::<S, V, Qm>(game_state, Q);
-
-        let q_diff = metric.metrics.policy.Q_diff(&metric.chosen_action);
-        if q_diff >= q_diff_threshold {
-            let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).max(1.0);
-            value_stack.push(q_mix_amt, metric.metrics.moves_left);
-
-            value_stack.set_if_not::<S, V, Qm>(game_state, Q);
-        }
-
-        let (V, moves_left) = value_stack.latest::<_, V>(game_state);
-        metric.metrics.score = V.clone();
-        metric.metrics.moves_left = moves_left;
-    }
-}
-
 fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
     if moves_left_size == 0 {
         return vec![];
@@ -211,94 +183,4 @@ fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f
     moves_left_one_hot[moves_left - 1] = 1.0;
 
     moves_left_one_hot
-}
-
-struct ValueStack<Vs> {
-    v_stores: Vec<(Vs, f32)>,
-    moves_left: Option<usize>,
-}
-
-#[allow(non_snake_case)]
-impl<Vs> ValueStack<Vs> {
-    fn new<S, V>() -> Self
-    where
-        Vs: ValueStore<S, V>,
-    {
-        Self {
-            v_stores: vec![(Vs::default(), 0.0)],
-            moves_left: None,
-        }
-    }
-
-    fn latest<S, V>(&self, game_state: &S) -> (&V, usize)
-    where
-        Vs: ValueStore<S, V>,
-    {
-        let v = self
-            .v_stores
-            .last()
-            .expect("There should always be at least one V set")
-            .0
-            .get_v_for_player(game_state)
-            .expect("V should always be set before latest is called");
-
-        (v, self.moves_left.expect("Moves left should always be set"))
-    }
-
-    fn push<S, V>(&mut self, q_mix_amt: f32, moves_left: usize)
-    where
-        Vs: ValueStore<S, V>,
-    {
-        self.v_stores.push((Vs::default(), q_mix_amt));
-        self.moves_left = Some(moves_left);
-    }
-
-    fn set_if_not<S, V, Qm>(&mut self, game_state: &S, Q: f32)
-    where
-        Vs: ValueStore<S, V>,
-        Qm: QMix<S, V>,
-    {
-        loop {
-            if let Some((_, q_mix_amt)) = self.latest_unset_v(game_state) {
-                let q_mix_amt = *q_mix_amt;
-                let latest_value = self.latest_set_v(game_state);
-                let mixed_v = Qm::mix_q(game_state, latest_value, q_mix_amt, Q);
-                self.set_v(game_state, mixed_v);
-            } else {
-                return;
-            }
-        }
-    }
-
-    fn latest_unset_v<S, V>(&mut self, game_state: &S) -> Option<&mut (Vs, f32)>
-    where
-        Vs: ValueStore<S, V>,
-    {
-        self.v_stores
-            .iter_mut()
-            .rev()
-            .take_while(|(s, _)| s.get_v_for_player(game_state).is_none())
-            .next()
-    }
-
-    fn latest_set_v<S, V>(&self, game_state: &S) -> &V
-    where
-        Vs: ValueStore<S, V>,
-    {
-        self.v_stores
-            .iter()
-            .rev()
-            .find_map(|(s, _)| s.get_v_for_player(game_state))
-            .expect("There should always be at least one V set")
-    }
-
-    fn set_v<S, V>(&mut self, game_state: &S, mixed_V: V)
-    where
-        Vs: ValueStore<S, V>,
-    {
-        self.latest_unset_v(game_state)
-            .unwrap()
-            .0
-            .set_v_for_player(game_state, mixed_V);
-    }
 }

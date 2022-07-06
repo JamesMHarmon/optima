@@ -33,7 +33,7 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.visits()))
+        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits()))
         .collect();
 
     NodeMetrics {
@@ -286,9 +286,9 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new("c2n".parse().unwrap(), 0.0, 500),
-                    NodeChildMetrics::new("a2e".parse().unwrap(), 0.0, 250),
-                    NodeChildMetrics::new("c2w".parse().unwrap(), 0.0, 50),
+                    NodeChildMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
+                    NodeChildMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
+                    NodeChildMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,

@@ -29,6 +29,8 @@ use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
 mod arimaa_sampler;
+mod deblunder;
+mod deblunder_test;
 mod dir_index;
 mod index;
 mod q_mix;
