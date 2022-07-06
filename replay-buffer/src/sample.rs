@@ -101,6 +101,8 @@ where
         self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
         let input = input.into_iter().map(f16::to_f32).collect();
 
+        assert!((-1.0..1.0).contains(&value_output));
+
         InputAndTargets {
             input,
             policy_output,

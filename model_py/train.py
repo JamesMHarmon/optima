@@ -30,6 +30,8 @@ if __name__== '__main__':
     mode                    = conf.get_string('mode')
     
     min_visits              = conf.get_int('min_visits')
+    q_diff_threshold        = conf.get_int('q_diff_threshold')
+    q_diff_width            = conf.get_int('q_diff_width')
     games_per_epoch         = conf.get_int('games_per_epoch')
     window_size             = conf.get_int('window_size')
     avg_num_samples_per_pos = conf.get_float('avg_num_samples_per_pos')
@@ -80,7 +82,7 @@ if __name__== '__main__':
     
     buffer_cache_dir = os.path.realpath(os.path.join(model_dir, '..', cache_dir))
     log.info(f'Replay Buffer cache: {buffer_cache_dir}')
-    replay_buffer = ReplayBuffer(games_dir, min_visits, mode, cache_dir=buffer_cache_dir)
+    replay_buffer = ReplayBuffer(games_dir, min_visits, q_diff_threshold=q_diff_threshold, q_diff_width=q_diff_width, mode=mode, cache_dir=buffer_cache_dir)
 
     while True:
         c4.set_f32_train()
