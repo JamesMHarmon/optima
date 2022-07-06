@@ -12,6 +12,10 @@ pub fn deblunder<S, A, V, Vs, Qm>(
     Vs: ValueStore<S, V>,
     Qm: QMix<S, V>,
 {
+    if q_diff_threshold == 0.0 {
+        return;
+    }
+
     let max_move_num = metrics.iter().map(|m| m.move_number).max().unwrap();
     let mut value_stack = ValueStack::<Vs>::new(max_move_num);
 
@@ -25,7 +29,7 @@ pub fn deblunder<S, A, V, Vs, Qm>(
 
         let q_diff = metric.metrics.policy.Q_diff(&metric.chosen_action);
         if q_diff >= q_diff_threshold {
-            let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).max(1.0);
+            let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
             value_stack.push(
                 q_mix_amt,
@@ -86,8 +90,7 @@ impl<Vs> ValueStack<Vs> {
         Vs: ValueStore<S, V>,
         V: Clone,
     {
-        if self.v_stores.len() == 1 {
-            let v_store = &self.v_stores.last().unwrap().0;
+        if let Some((v_store, _)) = self.v_stores.first() {
             if v_store.get_v_for_player(game_state).is_none() {
                 self.set_v(game_state, V.clone());
             }
