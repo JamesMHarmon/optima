@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use engine::{GameEngine, GameState};
 use log::{error, info};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
 use serde::{de::DeserializeOwned, Serialize};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::{fmt::Debug, time::Duration};
 use tokio::runtime::Handle;
 
@@ -33,17 +34,26 @@ where
     let runtime_handle = Handle::current();
 
     crossbeam::scope(|s| {
-        let mut last_candidate = None;
+        let last_candidate = Arc::new(Mutex::new(None));
 
         loop {
             let candidate = candidates.latest();
 
             if let Ok(candidate) = candidate {
-                if last_candidate.is_none() || candidate != *last_candidate.as_ref().unwrap() {
-                    last_candidate = Some(candidate.clone());
+                let mut last_candidate_lock = last_candidate.lock().unwrap();
+                if last_candidate_lock.is_none()
+                    || candidate != *last_candidate_lock.as_ref().unwrap()
+                {
+                    *last_candidate_lock = Some(candidate.clone());
+
+                    // Shouldn't be necessary but adding as a precaution since models are failing to load.
+                    std::thread::sleep(std::time::Duration::from_secs(15));
+
+                    drop(last_candidate_lock);
 
                     let runtime_handle = runtime_handle.clone();
 
+                    let last_candidate = last_candidate.clone();
                     s.spawn(move |_| {
                         runtime_handle.block_on(async {
                             let res = championship_single(
@@ -59,7 +69,13 @@ where
                             );
 
                             if let Err(err) = res {
-                                error!("{:?}", err);
+                                error!("Failed running single match: {:?}", err);
+
+                                let mut last_candidate_lock = last_candidate.lock().unwrap();
+
+                                if Some(candidate) == *last_candidate_lock {
+                                    *last_candidate_lock = None;
+                                }
                             }
                         });
                     });
@@ -111,8 +127,14 @@ where
 
     let champion = champions.latest();
     if let Ok(champion) = champion {
-        let champion = champions.load(&champion)?;
-        let candidate = candidates.load(candidate)?;
+        let champion = champions
+            .load(&champion)
+            .with_context(|| "Failing to load current champion model")?;
+
+        let candidate = candidates
+            .load(candidate)
+            .with_context(|| "Failing to load candidate model")?;
+
         let candidate_info = candidate.info().clone();
 
         let mut persistance = EvaluatePersistance::new(
