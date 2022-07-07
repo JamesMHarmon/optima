@@ -85,7 +85,7 @@ where
     ) -> InputAndTargets {
         let policy_output =
             self.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);
-        let value_output = self.map_value_to_value_output(&metric.game_state, &metric.policy.value);
+        let value_output = self.map_value_to_value_output(&metric.game_state, &metric.score);
         let moves_left_output =
             map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
         let input_len = self.input_size();
