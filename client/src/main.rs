@@ -11,6 +11,9 @@ use self_play::{play_self, SelfPlayPersistance};
 use std::path::Path;
 
 fn main() -> Result<()> {
+    dotenv().ok();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     let mut builder = tokio::runtime::Builder::new_multi_thread();
 
     builder.enable_all();
@@ -29,9 +32,6 @@ fn main() -> Result<()> {
 }
 
 async fn async_main() -> Result<()> {
-    dotenv().ok();
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-
     let cli = Cli::parse();
 
     match &cli.command {
