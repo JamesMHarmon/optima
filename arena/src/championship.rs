@@ -37,6 +37,8 @@ where
         let last_candidate = Arc::new(Mutex::new(None));
 
         loop {
+            info!("Checking for latest candidate");
+
             let candidate = candidates.latest();
 
             if let Ok(candidate) = candidate {
