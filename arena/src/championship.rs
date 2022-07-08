@@ -46,9 +46,6 @@ where
                 {
                     *last_candidate_lock = Some(candidate.clone());
 
-                    // Shouldn't be necessary but adding as a precaution since models are failing to load.
-                    std::thread::sleep(std::time::Duration::from_secs(15));
-
                     drop(last_candidate_lock);
 
                     let runtime_handle = runtime_handle.clone();
@@ -82,8 +79,10 @@ where
                 }
             } else {
                 info!("No new candidates found");
-                std::thread::sleep(Duration::from_secs(15));
+                std::thread::sleep(Duration::from_secs(10));
             }
+
+            std::thread::sleep(Duration::from_secs(5));
         }
     })
     .map_err(|e| {
