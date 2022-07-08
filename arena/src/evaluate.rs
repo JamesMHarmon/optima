@@ -153,10 +153,14 @@ impl Arena {
             });
 
             for handle in handles {
-                handle
+                let res = handle
                     .join()?
                     .with_context(|| "Error in self_evaluate scope 1")
-                    .unwrap();
+                    .map_err(|e| anyhow!("{:?}", e));
+
+                if let Err(err) = res {
+                    error!("{:?}", err);
+                }
             }
 
             handle.join()

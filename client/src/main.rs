@@ -6,15 +6,24 @@ use cli::{Cli, Commands};
 use common::{ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
+use log::info;
 use self_play::{play_self, SelfPlayPersistance};
 use std::path::Path;
 
 fn main() -> Result<()> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async_main())?;
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+
+    builder.enable_all();
+
+    if let Ok(worker_threads) = std::env::var("TOKIO_THREADS") {
+        if let Ok(worker_threads) = worker_threads.parse() {
+            builder.worker_threads(worker_threads);
+        }
+    }
+
+    info!("{:?}", builder);
+
+    builder.build().unwrap().block_on(async_main())?;
 
     Ok(())
 }
