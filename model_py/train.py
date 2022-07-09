@@ -21,38 +21,42 @@ if __name__== '__main__':
     config_path             = os.path.join(model_dir, './train.conf')
     tensor_board_path       = os.path.join(model_dir, './tensorboard')
     
-    conf = ConfigFactory.parse_file(config_path)
+    def load_config():
+        global conf, export_dir, cache_dir, games_dir, model_name, mode, min_visits, q_diff_threshold, q_diff_width, games_per_epoch, window_size, avg_num_samples_per_pos, window_warmup, warmup_steps, max_grad_norm, batch_size, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, step_ratio, input_h, input_w, input_c, policy_size, moves_left_size, num_filters, num_blocks, min_visits
+        conf = ConfigFactory.parse_file(config_path)
 
-    export_dir              = conf.get_string('export_dir', None)
-    cache_dir               = conf.get_string('cache_dir', './replay_buffer_cache')
-    games_dir               = os.path.join(model_dir, conf.get_string('games_dir'))
-    model_name              = conf.get_string('model_name')
-    mode                    = conf.get_string('mode')
-    
-    min_visits              = conf.get_int('min_visits')
-    q_diff_threshold        = conf.get_int('q_diff_threshold')
-    q_diff_width            = conf.get_int('q_diff_width')
-    games_per_epoch         = conf.get_int('games_per_epoch')
-    window_size             = conf.get_int('window_size')
-    avg_num_samples_per_pos = conf.get_float('avg_num_samples_per_pos')
-    window_warmup           = conf.get_float('window_warmup')
-    warmup_steps            = conf.get_int('warmup_steps')
-    
-    max_grad_norm           = conf.get_float('max_grad_norm')
-    batch_size              = conf.get_float('batch_size')
-    learning_rate           = conf.get_float('learning_rate')
-    policy_loss_weight      = conf.get_float('policy_loss_weight')
-    value_loss_weight       = conf.get_float('value_loss_weight')
-    moves_left_loss_weight  = conf.get_float('moves_left_loss_weight')
-    step_ratio              = conf.get_float('step_ratio')
-    input_h                 = conf.get_int('input_h')
-    input_w                 = conf.get_int('input_w')
-    input_c                 = conf.get_int('input_c')
-    policy_size             = conf.get_int('policy_size')
-    moves_left_size         = conf.get_int('moves_left_size')
-    num_filters             = conf.get_int('num_filters')
-    num_blocks              = conf.get_int('num_blocks')
-    min_visits              = conf.get_int('min_visits')
+        export_dir              = conf.get_string('export_dir', None)
+        cache_dir               = conf.get_string('cache_dir', './replay_buffer_cache')
+        games_dir               = os.path.join(model_dir, conf.get_string('games_dir'))
+        model_name              = conf.get_string('model_name')
+        mode                    = conf.get_string('mode')
+        
+        min_visits              = conf.get_int('min_visits')
+        q_diff_threshold        = conf.get_int('q_diff_threshold')
+        q_diff_width            = conf.get_int('q_diff_width')
+        games_per_epoch         = conf.get_int('games_per_epoch')
+        window_size             = conf.get_int('window_size')
+        avg_num_samples_per_pos = conf.get_float('avg_num_samples_per_pos')
+        window_warmup           = conf.get_float('window_warmup')
+        warmup_steps            = conf.get_int('warmup_steps')
+        
+        max_grad_norm           = conf.get_float('max_grad_norm')
+        batch_size              = conf.get_float('batch_size')
+        learning_rate           = conf.get_float('learning_rate')
+        policy_loss_weight      = conf.get_float('policy_loss_weight')
+        value_loss_weight       = conf.get_float('value_loss_weight')
+        moves_left_loss_weight  = conf.get_float('moves_left_loss_weight')
+        step_ratio              = conf.get_float('step_ratio')
+        input_h                 = conf.get_int('input_h')
+        input_w                 = conf.get_int('input_w')
+        input_c                 = conf.get_int('input_c')
+        policy_size             = conf.get_int('policy_size')
+        moves_left_size         = conf.get_int('moves_left_size')
+        num_filters             = conf.get_int('num_filters')
+        num_blocks              = conf.get_int('num_blocks')
+        min_visits              = conf.get_int('min_visits')
+
+    load_config()
 
     def name(epoch):
         return '{0}_{1:05d}'.format(model_name, epoch)
@@ -86,6 +90,8 @@ if __name__== '__main__':
 
     while True:
         c4.set_f32_train()
+
+        load_config()
 
         data_generator = DataGenerator(
             replay_buffer=replay_buffer,
