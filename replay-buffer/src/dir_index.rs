@@ -55,7 +55,9 @@ impl DirIndex {
 
         // Attempt to write a cache file. It is OK if this fails.
         let _res: Result<usize> = try {
-            let cache_lock_path = cache_path.join(".lock");
+            let mut cache_lock_path = cache_path.clone();
+            cache_lock_path.set_extension("lock");
+
             OpenOptions::new()
                 .write(true)
                 .create_new(true)
