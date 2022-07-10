@@ -3,7 +3,7 @@ use log::info;
 use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::fs::{DirEntry, File};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -55,10 +55,13 @@ impl DirIndex {
 
         // Attempt to write a cache file. It is OK if this fails.
         let _res: Result<usize> = try {
-            let cache_file = OpenOptions::new()
+            let cache_lock_path = cache_path.join(".lock");
+            OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(cache_path)?;
+                .open(&cache_lock_path)?;
+
+            let cache_file = File::create(cache_path)?;
 
             serde_json::to_writer_pretty(
                 cache_file,
@@ -66,6 +69,8 @@ impl DirIndex {
                     games: entries.len(),
                 },
             )?;
+
+            fs::remove_file(cache_lock_path)?;
 
             0
         };
