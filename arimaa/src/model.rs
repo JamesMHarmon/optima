@@ -29,6 +29,12 @@ use tensorflow_model::{GameAnalyzer, TensorflowModel, UnwrappedReceiver};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
 
+impl ModelRef {
+    pub fn new(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
+
 #[derive(Default)]
 pub struct ModelFactory {
     model_dir: PathBuf,
