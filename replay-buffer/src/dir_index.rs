@@ -38,7 +38,7 @@ impl DirIndex {
 
     pub fn index(&mut self) -> Result<()> {
         // If the cache is up to date, then just set the number of games according to the cache.
-        if let Ok(cache) = self.load_cache() {
+        if let Ok(cache) = self.load_cache_current() {
             if matches!(self.files, Files::Unexpanded(_)) {
                 self.files = Files::Unexpanded(cache.games);
             }
@@ -49,33 +49,7 @@ impl DirIndex {
             return Ok(());
         }
 
-        let cache_path = self.cache_path();
-
-        let entries = self.files.expanded(&self.path)?;
-
-        // Attempt to write a cache file. It is OK if this fails.
-        let _res: Result<usize> = try {
-            let mut cache_lock_path = cache_path.clone();
-            cache_lock_path.set_extension("lock");
-
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&cache_lock_path)?;
-
-            let cache_file = File::create(cache_path)?;
-
-            serde_json::to_writer_pretty(
-                cache_file,
-                &DirCache {
-                    games: entries.len(),
-                },
-            )?;
-
-            fs::remove_file(cache_lock_path)?;
-
-            0
-        };
+        self.write_cache()?;
 
         Ok(())
     }
@@ -105,7 +79,7 @@ impl DirIndex {
         self.path.join(&sample.0)
     }
 
-    fn load_cache(&self) -> Result<DirCache> {
+    fn load_cache_current(&self) -> Result<DirCache> {
         let file = File::open(self.cache_path())?;
         if file.metadata()?.modified()? >= self.modified - Duration::from_secs(1) {
             return Ok(serde_json::from_reader(file)?);
@@ -114,8 +88,53 @@ impl DirIndex {
         Err(anyhow!("Cache does not exist or is out of date"))
     }
 
+    fn load_cache(&self) -> Result<DirCache> {
+        let file = File::open(self.cache_path())?;
+
+        Ok(serde_json::from_reader(file)?)
+    }
+
     fn cache_path(&self) -> PathBuf {
         self.path.join("cache.json")
+    }
+
+    fn write_cache(&mut self) -> Result<()> {
+        let cache_path = self.cache_path();
+
+        let entries = self.files.expanded(&self.path)?;
+        let num_files = entries.len();
+
+        // Attempt to write a cache file. It is OK if this fails.
+        let _res: Result<usize> = try {
+            let mut cache_lock_path = cache_path.clone();
+            cache_lock_path.set_extension("lock");
+
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&cache_lock_path)?;
+
+            let num_cache_entries = self.load_cache().map(|d| d.games).unwrap_or(0);
+
+            let cache_file = File::create(cache_path)?;
+
+            if num_cache_entries > num_files {
+                info!("Cache file is mtime is out of date but has more vals than in directory. Updating cache entry {:?}", self.cache_path());
+            }
+
+            serde_json::to_writer_pretty(
+                cache_file,
+                &DirCache {
+                    games: num_files.max(num_cache_entries),
+                },
+            )?;
+
+            fs::remove_file(cache_lock_path)?;
+
+            0
+        };
+
+        Ok(())
     }
 }
 
