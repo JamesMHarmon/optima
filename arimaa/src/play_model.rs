@@ -58,7 +58,7 @@ impl ModelFactory {
                 v.parse::<usize>()
                     .expect("PLAY_TABLE_SIZE must be a valid number")
             })
-            .unwrap_or(2200);
+            .unwrap_or(0);
 
         tensorflow_model::TensorflowModel::load(
             model_dir,
