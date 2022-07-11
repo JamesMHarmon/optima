@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use log::info;
 use serde::Serialize;
 use std::fs::File;
 use std::io::Write;
@@ -96,9 +97,9 @@ pub fn unarchive<P: AsRef<Path>>(
     let mut model_options: Option<TensorflowModelOptions> = None;
     let mut model_info: Option<ModelInfo> = None;
     let temp_dir = tempdir()?;
-    println!(
+    info!(
         "Creating a temporary path to load the model: {:?}",
-        temp_dir.path()
+        temp_dir.path(),
     );
 
     for file in archive.entries()? {

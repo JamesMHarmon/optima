@@ -258,7 +258,7 @@ impl<S> SampleLoader<S> {
             };
 
             if matches!(res, Err(_)) {
-                println!("Failed to read {:?}", cache_path);
+                warn!("Failed to read {:?}", cache_path);
             }
 
             res

@@ -4,7 +4,7 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
-use log::{debug, warn};
+use log::debug;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::collections::BinaryHeap;
@@ -537,7 +537,7 @@ where
             }
         });
 
-        warn!("Exiting listen_then_transpose_or_infer");
+        debug!("Exiting listen_then_transpose_or_infer");
     }
 
     #[allow(clippy::too_many_arguments)]
