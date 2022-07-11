@@ -2,11 +2,13 @@
 name = "common"
 version = "0.1.0"
 authors = ["James Harmon <JamesMHarmon@gmail.com>"]
-edition = "2018"
+edition = "2021"
 publish = false
 
 [lib]
 name = "common"
 
 [dependencies]
+anyhow = "1.0"
 assert_approx_eq = "1.1"
+hocon = "0.9"

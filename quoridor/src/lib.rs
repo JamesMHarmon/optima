@@ -10,5 +10,7 @@ mod zobrist_values;
 pub mod action;
 pub mod constants;
 pub mod engine;
-pub mod model;
 pub mod value;
+
+#[cfg(feature = "model")]
+pub mod model;

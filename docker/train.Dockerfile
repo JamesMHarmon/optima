@@ -1,9 +1,7 @@
-FROM tensorflow/tensorflow:2.8.0-gpu
+FROM tensorflow/tensorflow:2.9.1-gpu-jupyter
 
 WORKDIR /usr/local/bin
 
-RUN pip3 install keras sklearn pandas
+RUN pip3 install keras sklearn pandas pyhocon
 
-COPY c4_model.py model_sen.py train_model.py  warmup_lr_scheduler.py tensorboard_enriched.py fit.py split_file_data_generator.py metric.py policy_head.py ./
-
-CMD ["python3", "./train_model.py"]
+COPY model_py /tf

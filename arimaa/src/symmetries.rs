@@ -1,52 +1,47 @@
-use model::node_metrics::NodeMetrics;
 use model::position_metrics::PositionMetrics;
+use model::{node_metrics::NodeMetrics, NodeChildMetrics};
 
 use super::{Action, GameState, Value};
 
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Value>,
 ) -> Vec<PositionMetrics<GameState, Action, Value>> {
+    if !metrics.game_state.is_play_phase() {
+        return vec![metrics];
+    }
+
     let PositionMetrics {
         game_state,
         policy,
         score,
         moves_left,
-    } = metrics;
+    } = &metrics;
 
-    get_symmetries_game_state(game_state)
-        .into_iter()
-        .zip(get_symmetries_node_metrics(policy))
-        .map(|(game_state, policy)| PositionMetrics {
-            game_state,
-            policy,
-            score: score.clone(),
-            moves_left,
-        })
-        .collect()
+    let symmetrical_state = game_state.get_vertical_symmetry();
+
+    let symmetrical_metrics = PositionMetrics {
+        game_state: symmetrical_state,
+        policy: symmetrical_node_metrics(policy),
+        score: score.clone(),
+        moves_left: *moves_left,
+    };
+
+    vec![metrics, symmetrical_metrics]
 }
 
-fn get_symmetries_node_metrics(metrics: NodeMetrics<Action>) -> Vec<NodeMetrics<Action>> {
+fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics<Action, Value> {
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|(a, w, visits)| (a.invert_horizontal(), *w, *visits))
+        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits()))
         .collect();
 
-    let metrics_symmetry = NodeMetrics {
+    NodeMetrics {
         visits: metrics.visits,
+        value: metrics.value.clone(),
+        moves_left: metrics.moves_left,
         children: children_symmetry,
-    };
-
-    vec![metrics, metrics_symmetry]
-}
-
-fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
-    if game_state.is_play_phase() {
-        let symmetrical_state = game_state.get_vertical_symmetry();
-        return vec![game_state, symmetrical_state];
     }
-
-    vec![game_state]
 }
 
 #[cfg(test)]
@@ -54,7 +49,25 @@ mod tests {
     extern crate test;
 
     use super::*;
+    use crate::value::Value;
     use arimaa_engine::Action;
+    use model::NodeChildMetrics;
+
+    fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
+        let symmetries = get_symmetries(PositionMetrics {
+            game_state,
+            policy: NodeMetrics {
+                visits: 0,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
+                children: vec![],
+            },
+            score: Value::new([0.0, 0.0]),
+            moves_left: 0,
+        });
+
+        symmetries.into_iter().map(|s| s.game_state).collect()
+    }
 
     #[test]
     fn test_game_state_symmetry_step_0() {
@@ -270,10 +283,12 @@ mod tests {
             game_state,
             policy: NodeMetrics {
                 visits: 800,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
                 children: vec![
-                    ("c2n".parse().unwrap(), 0.0, 500),
-                    ("a2e".parse().unwrap(), 0.0, 250),
-                    ("c2w".parse().unwrap(), 0.0, 50),
+                    NodeChildMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
+                    NodeChildMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
+                    NodeChildMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,
@@ -286,6 +301,7 @@ mod tests {
                 NodeMetrics {
                     visits: symmetrical_visits,
                     children: symmetrical_children,
+                    ..
                 },
             ..
         } = symmetries.pop().unwrap();
@@ -297,6 +313,7 @@ mod tests {
                 NodeMetrics {
                     visits: original_visits,
                     children: original_children,
+                    ..
                 },
             ..
         } = symmetries.pop().unwrap();
@@ -305,17 +322,13 @@ mod tests {
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for (
-            (original_action, original_w, original_visits),
-            (symmetrical_action, symmetrical_w, symmetrical_visits),
-        ) in original_children.into_iter().zip(symmetrical_children)
-        {
-            match original_action {
-                Action::Move(original_square, original_direction) => match symmetrical_action {
+        for (original, symmetrical) in original_children.into_iter().zip(symmetrical_children) {
+            match original.action() {
+                Action::Move(original_square, original_direction) => match symmetrical.action() {
                     Action::Move(symmetrical_square, symmetrical_direction) => {
-                        assert_eq!(original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(*original_square, symmetrical_square.invert_horizontal());
                         assert_eq!(
-                            original_direction,
+                            *original_direction,
                             symmetrical_direction.invert_horizontal()
                         );
                     }
@@ -324,8 +337,8 @@ mod tests {
                 _ => panic!(),
             }
 
-            assert_eq!(original_visits, symmetrical_visits);
-            assert_eq!(original_w, symmetrical_w);
+            assert_eq!(original.visits(), symmetrical.visits());
+            assert_eq!(original.Q(), symmetrical.Q());
         }
 
         assert_eq!(

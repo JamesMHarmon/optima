@@ -1,35 +1,43 @@
+use std::path::Path;
+
 use anyhow::Result;
-use engine::game_state::GameState;
 use serde::{Deserialize, Serialize};
 
 use super::analytics::GameAnalyzer;
 use super::model_info::ModelInfo;
-use super::position_metrics::PositionMetrics;
-use engine::value::Value;
 
-pub trait Model {
-    type State: GameState;
+pub trait Analyzer {
+    type State;
     type Action;
-    type Value: Value;
+    type Value;
     type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>;
 
-    fn get_model_info(&self) -> &ModelInfo;
-    fn train<I: Iterator<Item = PositionMetrics<Self::State, Self::Action, Self::Value>>>(
-        &self,
-        target_model_info: &ModelInfo,
-        sample_metrics: I,
-        options: &TrainOptions,
-    ) -> Result<()>;
-    fn get_game_state_analyzer(&self) -> Self::Analyzer;
+    fn analyzer(&self) -> Self::Analyzer;
 }
 
-pub trait ModelFactory {
-    type M: Model;
-    type O;
+pub trait Info {
+    fn info(&self) -> &ModelInfo;
+}
 
-    fn create(&self, model_info: &ModelInfo, model_options: &Self::O) -> Self::M;
-    fn get(&self, model_info: &ModelInfo) -> Self::M;
-    fn get_latest(&self, model_info: &ModelInfo) -> Result<ModelInfo>;
+pub trait Latest {
+    type MR;
+
+    fn latest(&self) -> Result<Self::MR>;
+}
+
+pub trait Load {
+    type MR;
+    type M;
+
+    fn load(&self, model_ref: &Self::MR) -> Result<Self::M>;
+}
+
+pub trait Move {
+    type MR;
+
+    fn move_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR>;
+
+    fn copy_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]

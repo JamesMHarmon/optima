@@ -1,0 +1,25 @@
+[package]
+name = "client"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+self-play = { path = "../self-play" }
+model = { path = "../model" }
+arimaa = { path = "../arimaa" }
+common = { path = "../common" }
+arena = { path = "../arena" }
+# connect4 = { path = "../connect4" }
+# quoridor = { path = "../quoridor" }
+
+anyhow = "1.0"
+dotenv = "0.15.0"
+log = "0.4"
+env_logger = "0.9"
+rand = "0.8"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "=3.1.18", features = ["derive"] }
+tokio = { version = "1.18", features = ["parking_lot", "macros", "rt-multi-thread"] }

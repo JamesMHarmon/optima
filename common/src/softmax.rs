@@ -1,6 +1,6 @@
 // (exp(p-max_p))^(1/T) = exp((p-max_p)/T).
 pub fn softmax(logits: &[f32], temperature: f32) -> Vec<f32> {
-    let max_p = logits.iter().cloned().fold(std::f32::MIN, f32::max);
+    let max_p = logits.iter().cloned().fold(f32::MIN, f32::max);
     let softmaxed = logits
         .iter()
         .map(|&p| ((p - max_p) / temperature).exp())

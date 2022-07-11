@@ -56,9 +56,7 @@ AZG
 
 ## TODO
 
-* Masking of the policy head.
-* Update Models to support PyTorch.
-* Add LogitQ as defined by Lc0.
+* Update MCTS to search invalid repetition moves during self learn to prevent bias in moves that should be valid. Filter these moves out during the choose action step.
 
 ## FAQ
 
