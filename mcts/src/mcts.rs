@@ -1016,6 +1016,7 @@ struct NodeUpdateInfo {
 pub struct MCTSEdge<A> {
     action: A,
     W: f32,
+    /// M is the expected length of the game. Needs to be divided by visits. THIS IS NOT MOVES LEFT!
     M: f32,
     visits: usize,
     policy_score: f32,

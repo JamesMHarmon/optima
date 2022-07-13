@@ -142,15 +142,15 @@ where
 {
     let (analysis, score) = metrics.into_inner();
 
-    let mut prev_game_state = S::initial();
+    let mut pre_action_game_state = S::initial();
     let mut samples = vec![];
     for (action, metrics) in analysis {
-        let next_game_state = take_action(&prev_game_state, &action);
-        let move_number = move_number(&prev_game_state);
+        let post_action_game_state = take_action(&pre_action_game_state, &action);
+        let move_number = move_number(&pre_action_game_state);
 
         samples.push(PositionMetricsExtended {
             metrics: PositionMetrics {
-                game_state: prev_game_state,
+                game_state: pre_action_game_state,
                 score: score.clone(),
                 policy: metrics,
                 moves_left: 0,
@@ -159,7 +159,7 @@ where
             move_number,
         });
 
-        prev_game_state = next_game_state;
+        pre_action_game_state = post_action_game_state;
     }
 
     let max_move = samples.iter().map(|m| m.move_number).max().unwrap();

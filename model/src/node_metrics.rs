@@ -7,15 +7,19 @@ use std::marker::PhantomData;
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A, V> {
+    /// The total number of visits of the node. Should be children.visits.sum() + 1.
     pub visits: usize,
+    /// The value of the position for the specific game_state of the node as predicted by the neural network
     pub value: V,
+    /// The number of moves left for the specific game_state of the node as predicted by the neural network
     pub moves_left: f32,
+    /// The valid actions of the current game_state of the node.
     pub children: Vec<NodeChildMetrics<A>>,
 }
 
 #[allow(non_snake_case)]
 impl<A, V> NodeMetrics<A, V> {
-    // Difference between the Q of the specified action and the child with the highest Q.
+    /// Difference between the Q of the specified action and the child with the highest Q.
     pub fn Q_diff(&self, action: &A) -> f32
     where
         A: PartialEq,
@@ -34,9 +38,13 @@ impl<A, V> NodeMetrics<A, V> {
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
 pub struct NodeChildMetrics<A> {
+    /// The action that this edge represents.
     action: A,
+    /// The Q score of the edge. This is an average of Q back propagated by the descendant nodes. Range is 0.0..=1.0. Q is from the perspective of the player to move of the parent node of this edge.
     Q: f32,
+    /// The M score of the edge. This is an average of M back propagated by the descendant nodes.
     M: f32,
+    /// The number of visits for the child node of this specific edge.
     visits: usize,
 }
 

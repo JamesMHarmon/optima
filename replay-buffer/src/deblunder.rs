@@ -25,16 +25,16 @@ pub fn deblunder<S, A, V, Vs, Qm>(
         value_stack.set_initial(game_state, &metric.metrics.score);
 
         let max_visits_child = metric.metrics.policy.child_max_visits();
+
         value_stack.set_if_not::<S, V, Qm>(game_state, max_visits_child.Q());
 
         let q_diff = metric.metrics.policy.Q_diff(&metric.chosen_action);
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
-            value_stack.push(
-                q_mix_amt,
-                metric.move_number + max_visits_child.M().round() as usize,
-            );
+            let expected_num_moves = max_visits_child.M().round() as usize;
+
+            value_stack.push(q_mix_amt, expected_num_moves);
 
             value_stack.set_if_not::<S, V, Qm>(game_state, max_visits_child.Q());
         }
@@ -103,7 +103,7 @@ impl<Vs> ValueStack<Vs> {
         Qm: QMix<S, V>,
     {
         loop {
-            if let Some((_, q_mix_amt)) = self.latest_unset_v(game_state) {
+            if let Some((_, q_mix_amt)) = self.earliest_unset_v(game_state) {
                 let q_mix_amt = *q_mix_amt;
                 let latest_value = self
                     .latest_set_v(game_state)
@@ -116,7 +116,7 @@ impl<Vs> ValueStack<Vs> {
         }
     }
 
-    fn latest_unset_v<S, V>(&mut self, game_state: &S) -> Option<&mut (Vs, f32)>
+    fn earliest_unset_v<S, V>(&mut self, game_state: &S) -> Option<&mut (Vs, f32)>
     where
         Vs: ValueStore<S, V>,
     {
@@ -124,7 +124,7 @@ impl<Vs> ValueStack<Vs> {
             .iter_mut()
             .rev()
             .take_while(|(s, _)| s.get_v_for_player(game_state).is_none())
-            .next()
+            .last()
     }
 
     fn latest_set_v<S, V>(&self, game_state: &S) -> Option<&V>
@@ -141,7 +141,7 @@ impl<Vs> ValueStack<Vs> {
     where
         Vs: ValueStore<S, V>,
     {
-        self.latest_unset_v(game_state)
+        self.earliest_unset_v(game_state)
             .unwrap()
             .0
             .set_v_for_player(game_state, mixed_V);

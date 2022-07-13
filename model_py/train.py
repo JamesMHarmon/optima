@@ -32,8 +32,8 @@ if __name__== '__main__':
         mode                    = conf.get_string('mode')
         
         min_visits              = conf.get_int('min_visits')
-        q_diff_threshold        = conf.get_int('q_diff_threshold')
-        q_diff_width            = conf.get_int('q_diff_width')
+        q_diff_threshold        = conf.get_float('q_diff_threshold')
+        q_diff_width            = conf.get_float('q_diff_width')
         games_per_epoch         = conf.get_int('games_per_epoch')
         window_size             = conf.get_int('window_size')
         avg_num_samples_per_pos = conf.get_float('avg_num_samples_per_pos')
