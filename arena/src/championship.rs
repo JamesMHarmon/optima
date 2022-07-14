@@ -74,11 +74,11 @@ where
 
                             if let Err(err) = res {
                                 error!("Failed running single match: {:?}", err);
-
-                                let mut eval_candidates_lock = eval_candidates.lock().unwrap();
-
-                                eval_candidates_lock.retain(|c| c != &candidate);
                             }
+
+                            let mut eval_candidates_lock = eval_candidates.lock().unwrap();
+
+                            eval_candidates_lock.retain(|c| c != &candidate);
                         });
                     });
                 }
