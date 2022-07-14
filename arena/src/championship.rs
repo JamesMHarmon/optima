@@ -34,7 +34,7 @@ where
     let runtime_handle = Handle::current();
 
     crossbeam::scope(|s| {
-        let last_candidate = Arc::new(Mutex::new(None));
+        let eval_candidates = Arc::new(Mutex::new(vec![]));
 
         loop {
             info!("Checking for latest candidate");
@@ -42,17 +42,15 @@ where
             let candidate = candidates.latest();
 
             if let Ok(candidate) = candidate {
-                let mut last_candidate_lock = last_candidate.lock().unwrap();
-                if last_candidate_lock.is_none()
-                    || candidate != *last_candidate_lock.as_ref().unwrap()
-                {
-                    *last_candidate_lock = Some(candidate.clone());
+                let mut eval_candidates_lock = eval_candidates.lock().unwrap();
+                if !eval_candidates_lock.contains(&candidate) {
+                    eval_candidates_lock.push(candidate.clone());
 
-                    drop(last_candidate_lock);
+                    drop(eval_candidates_lock);
 
                     let runtime_handle = runtime_handle.clone();
 
-                    let last_candidate = last_candidate.clone();
+                    let eval_candidates = eval_candidates.clone();
                     s.spawn(move |_| {
                         runtime_handle.block_on(async {
                             let res = championship_single(
@@ -70,11 +68,9 @@ where
                             if let Err(err) = res {
                                 error!("Failed running single match: {:?}", err);
 
-                                let mut last_candidate_lock = last_candidate.lock().unwrap();
+                                let mut eval_candidates_lock = eval_candidates.lock().unwrap();
 
-                                if Some(candidate) == *last_candidate_lock {
-                                    *last_candidate_lock = None;
-                                }
+                                eval_candidates_lock.retain(|c| c != &candidate);
                             }
                         });
                     });
