@@ -19,15 +19,15 @@ pub struct NodeMetrics<A, V> {
 
 #[allow(non_snake_case)]
 impl<A, V> NodeMetrics<A, V> {
-    /// Difference between the Q of the specified action and the child with the highest Q.
+    /// Difference between the Q of the specified action and the child that would be played with no temp.
     pub fn Q_diff(&self, action: &A) -> f32
     where
         A: PartialEq,
     {
-        let max_Q = self.children.iter().map(|c| c.Q()).fold(f32::MIN, f32::max);
-        let act_Q = self.children.iter().find(|c| c.action() == action);
-        let act_Q = act_Q.expect("Specified action was not found").Q();
-        max_Q - act_Q
+        let max_visits_Q = self.child_max_visits().Q();
+        let chosen_Q = self.children.iter().find(|c| c.action() == action);
+        let chosen_Q = chosen_Q.expect("Specified action was not found").Q();
+        max_visits_Q - chosen_Q
     }
 
     pub fn child_max_visits(&self) -> &NodeChildMetrics<A> {
