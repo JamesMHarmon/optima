@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use engine::{GameEngine, GameState};
-use log::{error, info};
+use log::{error, info, warn};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
 use serde::{de::DeserializeOwned, Serialize};
 use std::path::Path;
@@ -44,6 +44,13 @@ where
             if let Ok(candidate) = candidate {
                 let mut eval_candidates_lock = eval_candidates.lock().unwrap();
                 if !eval_candidates_lock.contains(&candidate) {
+
+                    if eval_candidates_lock.len() >= 4 {
+                        warn!("4 simultanious games are already in progress. Waiting for completion first.");
+                        std::thread::sleep(Duration::from_secs(15));
+                        continue;
+                    }
+
                     eval_candidates_lock.push(candidate.clone());
 
                     drop(eval_candidates_lock);
