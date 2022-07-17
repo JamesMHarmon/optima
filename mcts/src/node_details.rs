@@ -37,7 +37,6 @@ impl<A: Debug + Display> Debug for NodeDetails<A> {
 pub struct PUCT {
     pub Nsa: usize,
     pub Qsa: f32,
-    pub logitQ: f32,
     pub Psa: f32,
     pub Usa: f32,
     pub Msa: f32,
@@ -109,7 +108,6 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 2,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
@@ -122,7 +120,6 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 2.0,
-            logitQ: 1.0,
             Psa: 2.0,
             Usa: 2.0,
             Msa: 2.0,
@@ -142,7 +139,6 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 2.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
@@ -155,7 +151,6 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 2.0,
             Psa: 2.0,
             Usa: 2.0,
             Msa: 2.0,
@@ -175,7 +170,6 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 2.0,
             Usa: 1.0,
             Msa: 1.0,
@@ -188,7 +182,6 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
             Msa: 2.0,
@@ -208,7 +201,6 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 2.0,
             Msa: 1.0,
@@ -221,7 +213,6 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
@@ -241,7 +232,6 @@ mod tests {
         let puct_greater = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,
@@ -254,7 +244,6 @@ mod tests {
         let puct_less = PUCT {
             Nsa: 1,
             Qsa: 1.0,
-            logitQ: 1.0,
             Psa: 1.0,
             Usa: 1.0,
             Msa: 1.0,

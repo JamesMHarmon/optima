@@ -17,7 +17,6 @@ pub struct PlayOptions {
     pub parallelism: usize,
     pub fpu: f32,
     pub fpu_root: f32,
-    pub logit_q: bool,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
     pub cpuct_root_scaling: f32,
@@ -61,7 +60,6 @@ impl Play {
                     None,
                     options.fpu,
                     options.fpu_root,
-                    options.logit_q,
                     |_, Nsb, is_root| {
                         (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
                             * if is_root { cpuct_root_scaling } else { 1.0 }

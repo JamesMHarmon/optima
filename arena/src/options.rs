@@ -49,7 +49,6 @@ pub struct PlayOptions {
     pub parallelism: usize,
     pub fpu: f32,
     pub fpu_root: f32,
-    pub logit_q: bool,
     pub cpuct_base: f32,
     pub cpuct_init: f32,
     pub cpuct_root_scaling: f32,
@@ -86,7 +85,6 @@ impl Config for PlayOptions {
                 .get("fpu_root")
                 .and_then(|v| v.as_f32())
                 .unwrap_or(1.0),
-            logit_q: false,
             cpuct_base: config
                 .get("cpuct_base")
                 .and_then(|v| v.as_f32())

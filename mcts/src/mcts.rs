@@ -45,7 +45,6 @@ where
     dirichlet: Option<DirichletOptions>,
     fpu: f32,
     fpu_root: f32,
-    logit_q: bool,
     cpuct: C,
     temperature: T,
     temperature_visit_offset: f32,
@@ -67,7 +66,6 @@ where
         dirichlet: Option<DirichletOptions>,
         fpu: f32,
         fpu_root: f32,
-        logit_q: bool,
         cpuct: C,
         temperature: T,
         temperature_visit_offset: f32,
@@ -80,7 +78,6 @@ where
             dirichlet,
             fpu,
             fpu_root,
-            logit_q,
             cpuct,
             temperature,
             temperature_visit_offset,
@@ -674,10 +671,9 @@ where
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let Msa = Self::get_Msa(child, game_length_baseline, options);
 
-            let PUCT = Msa + logitQ + Usa;
+            let PUCT = Msa + Qsa + Usa;
 
             if PUCT > best_puct {
                 best_puct = PUCT;
@@ -744,7 +740,6 @@ where
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let logitQ = if options.logit_q { logit(Qsa) } else { Qsa };
             let moves_left = node.map_or(0.0, |n| n.moves_left_score);
             let Msa = Self::get_Msa(child, game_length_baseline, options);
             let game_length = if Nsa == 0 {
@@ -753,7 +748,7 @@ where
                 child.M / Nsa as f32
             };
 
-            let PUCT = logitQ + Usa;
+            let PUCT = Qsa + Usa;
             pucts.push(PUCT {
                 Psa,
                 Nsa,
@@ -761,7 +756,6 @@ where
                 cpuct,
                 Usa,
                 Qsa,
-                logitQ,
                 moves_left,
                 game_length,
                 PUCT,

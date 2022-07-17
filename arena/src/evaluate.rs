@@ -262,7 +262,6 @@ impl Arena {
                         None,
                         options.play_options.fpu,
                         options.play_options.fpu_root,
-                        options.play_options.logit_q,
                         |_, Nsb, is_root| {
                             (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
                                 * if is_root { cpuct_root_scaling } else { 1.0 }
