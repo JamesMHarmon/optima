@@ -918,16 +918,6 @@ where
     }
 }
 
-fn logit(val: f32) -> f32 {
-    if val <= 0.0 {
-        -3.9855964
-    } else if val >= 1.0 {
-        3.9855964
-    } else {
-        (val / (1.0 - val)).ln() / 4.0
-    }
-}
-
 enum GameLengthBaseline {
     MinimizeGameLength(f32),
     MaximizeGameLength(f32),
