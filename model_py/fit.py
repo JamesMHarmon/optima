@@ -111,6 +111,8 @@ class Fit:
             'info/batch_size': self._batch_size,
             'norm/clip_norm_value': self._clip_norm
         }
+
+        logs[f'info/weight/model_loss'] = self._model.compiled_loss._loss_weights['model_loss']
         
         for name in self._model.output_names:
             logs[f'info/weight/{name}'] = self._model.compiled_loss._loss_weights[name]
