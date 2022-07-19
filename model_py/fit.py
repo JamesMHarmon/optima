@@ -69,6 +69,9 @@ class Fit:
             total_loss = sum(model.losses)
             logs['loss/model loss'] = total_loss
 
+            model_loss_weight = model.compiled_loss._loss_weights['model_loss']
+            total_loss *= model_loss_weight
+
             for name, prediction in zip(model.output_names, predictions):
                 loss_fn = model.loss[name]
                 target = targets[name]

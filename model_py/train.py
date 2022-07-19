@@ -22,7 +22,7 @@ if __name__== '__main__':
     tensor_board_path       = os.path.join(model_dir, './tensorboard')
     
     def load_config():
-        global conf, export_dir, cache_dir, games_dir, model_name, mode, min_visits, q_diff_threshold, q_diff_width, games_per_epoch, window_size, avg_num_samples_per_pos, window_warmup, warmup_steps, max_grad_norm, batch_size, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight, step_ratio, input_h, input_w, input_c, policy_size, moves_left_size, num_filters, num_blocks, min_visits
+        global conf, export_dir, cache_dir, games_dir, model_name, mode, min_visits, q_diff_threshold, q_diff_width, games_per_epoch, window_size, avg_num_samples_per_pos, window_warmup, warmup_steps, max_grad_norm, batch_size, learning_rate, model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight, step_ratio, input_h, input_w, input_c, policy_size, moves_left_size, num_filters, num_blocks, min_visits
         conf = ConfigFactory.parse_file(config_path)
 
         export_dir              = conf.get_string('export_dir', None)
@@ -43,6 +43,7 @@ if __name__== '__main__':
         max_grad_norm           = conf.get_float('max_grad_norm')
         batch_size              = conf.get_float('batch_size')
         learning_rate           = conf.get_float('learning_rate')
+        model_loss_weight       = conf.get_float('model_loss_weight')
         policy_loss_weight      = conf.get_float('policy_loss_weight')
         value_loss_weight       = conf.get_float('value_loss_weight')
         moves_left_loss_weight  = conf.get_float('moves_left_loss_weight')
@@ -114,6 +115,7 @@ if __name__== '__main__':
         c4.compile(
             model,
             learning_rate=learning_rate,
+            model_loss_weight=model_loss_weight,
             policy_loss_weight=policy_loss_weight,
             value_loss_weight=value_loss_weight,
             moves_left_loss_weight=moves_left_loss_weight,

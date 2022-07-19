@@ -40,9 +40,9 @@ def save(model, model_path):
 
         compress(tmp_model_path, model_path)
 
-def compile(model, learning_rate, policy_loss_weight, value_loss_weight, moves_left_loss_weight):
+def compile(model, learning_rate, model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight):
     loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }
-    loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight }
+    loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "model_loss": model_loss_weight }
 
     if any("moves_left" in output.name for output in model.outputs):
         loss_funcs['moves_left_head'] = keras_categorical_crossentropy
