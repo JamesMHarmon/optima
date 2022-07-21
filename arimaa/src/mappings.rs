@@ -4,17 +4,13 @@ use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
 use super::board::set_board_bits_invertable;
-use super::constants::{
-    PLAY_INPUT_C as INPUT_C, PLAY_INPUT_H as INPUT_H, PLAY_INPUT_W as INPUT_W,
-    PLAY_OUTPUT_SIZE as OUTPUT_SIZE, *,
-};
+use super::constants::*;
 use super::game_state::GameState;
 use super::value::Value;
-use super::PlayTranspositionEntry;
+use super::TranspositionEntry;
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;
-use model::analytics::ActionWithPolicy;
-use model::analytics::GameStateAnalysis;
+use model::analytics::{ActionWithPolicy, GameStateAnalysis};
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
 use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
@@ -141,7 +137,7 @@ impl ValueMap<GameState, Value> for Mapper {
         }
     }
 }
-impl TranspositionMap<GameState, Action, Value, PlayTranspositionEntry> for Mapper {
+impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
         game_state.get_transposition_hash() ^ game_state.get_banned_piece_mask()
     }
@@ -152,18 +148,18 @@ impl TranspositionMap<GameState, Action, Value, PlayTranspositionEntry> for Mapp
         policy_scores: &[f16],
         value: f16,
         moves_left: f32,
-    ) -> PlayTranspositionEntry {
+    ) -> TranspositionEntry {
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        PlayTranspositionEntry::new(policy_metrics, value, moves_left)
+        TranspositionEntry::new(policy_metrics, value, moves_left)
     }
 
     fn map_transposition_entry_to_analysis(
         &self,
         game_state: &GameState,
-        transposition_entry: &PlayTranspositionEntry,
+        transposition_entry: &TranspositionEntry,
     ) -> GameStateAnalysis<Action, Value> {
         GameStateAnalysis::new(
             self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
@@ -221,7 +217,7 @@ fn set_step_num_squares(input: &mut [f16], game_state: &GameState) {
 
 fn set_all_bits_for_channel(input: &mut [f16], channel_idx: usize) {
     for board_idx in 0..BOARD_SIZE {
-        let input_idx = board_idx * PLAY_INPUT_C + channel_idx;
+        let input_idx = board_idx * INPUT_C + channel_idx;
         input[input_idx] = f16::ONE;
     }
 }
@@ -355,7 +351,6 @@ mod tests {
     extern crate test;
 
     use super::super::value::Value;
-    use super::PLAY_INPUT_SIZE as INPUT_SIZE;
     use super::*;
     use itertools::Itertools;
     use model::NodeChildMetrics;

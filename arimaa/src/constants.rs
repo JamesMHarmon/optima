@@ -9,23 +9,12 @@ pub const BANNED_PIECES_CHANNEL_IDX: usize = STEP_NUM_CHANNEL_IDX + STEP_NUM_CHA
 pub const BANNED_PIECES_NUM_CHANNELS: usize = 1;
 pub const TRAP_NUM_CHANNELS: usize = 1;
 pub const TRAP_CHANNEL_IDX: usize = BANNED_PIECES_CHANNEL_IDX + BANNED_PIECES_NUM_CHANNELS;
-pub const PLAY_INPUT_H: usize = BOARD_HEIGHT;
-pub const PLAY_INPUT_W: usize = BOARD_WIDTH;
-pub const PLAY_INPUT_C: usize =
+pub const INPUT_H: usize = BOARD_HEIGHT;
+pub const INPUT_W: usize = BOARD_WIDTH;
+pub const INPUT_C: usize =
     BOARD_PIECES_NUM_CHANNELS + STEP_NUM_CHANNELS + BANNED_PIECES_NUM_CHANNELS + TRAP_NUM_CHANNELS;
-pub const PLAY_INPUT_SIZE: usize = BOARD_SIZE * PLAY_INPUT_C;
-pub const PLAY_MOVES_LEFT_SIZE: usize = 128;
-
-pub const PLACEMENT_BIT_CHANNEL: usize = 1;
-pub const PLAYER_CHANNEL: usize = 1;
-pub const PLACE_INPUT_H: usize = 4;
-pub const PLACE_INPUT_W: usize = BOARD_WIDTH;
-pub const PLACE_INPUT_C: usize =
-    NUM_PIECE_TYPES + NUM_PIECE_TYPES + PLACEMENT_BIT_CHANNEL + PLAYER_CHANNEL;
-pub const PLACE_INPUT_SIZE: usize = PLACE_BOARD_SIZE * PLACE_INPUT_C;
-pub const PLACE_BOARD_SIZE: usize = PLACE_INPUT_W * PLACE_INPUT_H;
-pub const PLACE_OUTPUT_SIZE: usize = NUM_PIECE_TYPES;
-pub const PLACE_MOVES_LEFT_SIZE: usize = 0;
+pub const INPUT_SIZE: usize = BOARD_SIZE * INPUT_C;
+pub const MOVES_LEFT_SIZE: usize = 128;
 
 pub const NUM_PIECE_MOVES: usize =
     // Single direction moves
@@ -55,4 +44,4 @@ pub const NUM_PUSH_PULL_MOVES: usize =
 
 pub const PASS_MOVES: usize = 1;
 
-pub const PLAY_OUTPUT_SIZE: usize = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES;
+pub const OUTPUT_SIZE: usize = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES;

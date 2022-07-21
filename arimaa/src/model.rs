@@ -1,194 +1,57 @@
-use flate2::read::GzDecoder;
-use log::info;
-use model::Move;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::path::PathBuf;
-use tar::Archive;
-use tensorflow_model::latest;
+use arimaa_engine::Action;
+use model::ModelInfo;
+use tensorflow_model::Archive as ArchiveModel;
+use tensorflow_model::{GameAnalyzer, TensorflowModel};
 
 use super::engine::Engine;
 use super::game_state::GameState;
-use super::place_mappings::Mapper as PlaceMapper;
-use super::place_model::ModelFactory as PlaceModelFactory;
-use super::play_mappings::Mapper as PlayMapper;
-use super::play_model::ModelFactory as PlayModelFactory;
+use super::mappings::Mapper;
 use super::value::Value;
-use super::{PlaceTranspositionEntry, PlayTranspositionEntry};
+use super::TranspositionEntry;
 
-use anyhow::{Context, Result};
-use arimaa_engine::Action;
-use futures::future::Either;
-use model::{GameStateAnalysis, Latest, Load, ModelInfo};
-use tempfile::{tempdir, TempDir};
-use tensorflow_model::{unarchive, Archive as ArchiveModel, ArchiveAnalyzer};
-use tensorflow_model::{GameAnalyzer, TensorflowModel, UnwrappedReceiver};
+/*
+    Layers:
+    In:
+    6 curr piece boards
+    6 opp piece boards
+    3 current step
+    1 banned pieces board
+    1 phase (play or setup)
+    1 trap squares
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ModelRef(PathBuf);
+    Out:
+    40 directional boards (subtract irrelevant squares)
+    12 push pull boards
+    1 pass bit
+    1 setup squares (16 logits)
+*/
+pub struct Model(
+    ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>,
+);
 
-impl ModelRef {
-    pub fn new(path: PathBuf) -> Self {
-        Self(path)
+impl Model {
+    pub fn new(
+        model: ArchiveModel<
+            TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>,
+        >,
+    ) -> Self {
+        Self(model)
     }
-}
-
-#[derive(Default)]
-pub struct ModelFactory {
-    model_dir: PathBuf,
-    play_model_factory: PlayModelFactory,
-    place_model_factory: PlaceModelFactory,
-}
-
-impl ModelFactory {
-    pub fn new(model_dir: PathBuf) -> Self {
-        ModelFactory {
-            model_dir,
-            play_model_factory: PlayModelFactory::new(),
-            place_model_factory: PlaceModelFactory::new(),
-        }
-    }
-}
-
-impl Move for ModelFactory {
-    type MR = ModelRef;
-
-    fn move_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
-        let file_name = model.0.file_name().expect("Model has no file name");
-        let file_path = path.join(file_name);
-        fs::rename(&model.0, &file_path)?;
-
-        Ok(ModelRef(file_path))
-    }
-
-    fn copy_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
-        let file_name = model.0.file_name().expect("Model has no file name");
-        let file_path = path.join(file_name);
-        fs::copy(&model.0, &file_path)?;
-
-        Ok(ModelRef(file_path))
-    }
-}
-
-impl Latest for ModelFactory {
-    type MR = ModelRef;
-
-    fn latest(&self) -> Result<Self::MR> {
-        latest(&self.model_dir).map(ModelRef)
-    }
-}
-
-impl Load for ModelFactory {
-    type MR = ModelRef;
-    type M = Model;
-
-    fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
-        info!("Loading model {:?}", model_ref);
-
-        let temp_dir =
-            unsplit(&model_ref.0).with_context(|| format!("Failed to open {:?}", model_ref.0))?;
-        let play_path = temp_dir.path().join("play.tar.gz");
-        let place_path = temp_dir.path().join("place.tar.gz");
-
-        let (play_model_temp_dir, play_options, play_model_info) = unarchive(play_path)?;
-        let (place_model_temp_dir, place_options, place_model_info) = unarchive(place_path)?;
-
-        info!("Loading model {:?} {:?}", play_model_info, place_model_info);
-
-        let play_model = self.play_model_factory.load(
-            play_model_temp_dir.path().to_path_buf(),
-            play_options,
-            play_model_info,
-        )?;
-        let place_model = self.place_model_factory.load(
-            place_model_temp_dir.path().to_path_buf(),
-            place_options,
-            place_model_info,
-        )?;
-
-        let play_model = ArchiveModel::new(play_model, play_model_temp_dir);
-        let place_model = ArchiveModel::new(place_model, place_model_temp_dir);
-
-        Ok(Model {
-            play_model,
-            place_model,
-        })
-    }
-}
-
-pub struct Model {
-    play_model: ArchiveModel<
-        TensorflowModel<GameState, Action, Value, Engine, PlayMapper, PlayTranspositionEntry>,
-    >,
-    place_model: ArchiveModel<
-        TensorflowModel<GameState, Action, Value, Engine, PlaceMapper, PlaceTranspositionEntry>,
-    >,
 }
 
 impl model::Analyzer for Model {
     type State = GameState;
     type Action = Action;
     type Value = Value;
-    type Analyzer = Analyzer;
+    type Analyzer = GameAnalyzer<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
 
-    fn analyzer(&self) -> <Self as model::Analyzer>::Analyzer {
-        Analyzer {
-            play_analyzer: self.play_model.analyzer(),
-            place_analyzer: self.place_model.analyzer(),
-        }
+    fn analyzer(&self) -> Self::Analyzer {
+        self.0.inner().analyzer()
     }
 }
 
 impl model::Info for Model {
     fn info(&self) -> &ModelInfo {
-        self.play_model.inner().info()
+        self.0.inner().info()
     }
-}
-
-pub struct Analyzer {
-    play_analyzer: ArchiveAnalyzer<
-        GameAnalyzer<GameState, Action, Value, Engine, PlayMapper, PlayTranspositionEntry>,
-    >,
-    place_analyzer: ArchiveAnalyzer<
-        GameAnalyzer<GameState, Action, Value, Engine, PlaceMapper, PlaceTranspositionEntry>,
-    >,
-}
-
-#[allow(clippy::type_complexity)]
-impl model::analytics::GameAnalyzer for Analyzer {
-    type Future = Either<
-        UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Value>>,
-        UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Value>>,
-    >;
-    type Action = Action;
-    type State = GameState;
-    type Value = Value;
-
-    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
-        if game_state.is_play_phase() {
-            Either::Left(self.play_analyzer.get_state_analysis(game_state))
-        } else {
-            Either::Right(self.place_analyzer.get_state_analysis(game_state))
-        }
-    }
-}
-
-fn unsplit(path: &Path) -> Result<TempDir> {
-    let mut file: Box<dyn Read> = Box::new(File::open(path)?);
-
-    if let Some(ext) = path.extension() {
-        if ext.to_string_lossy() == "gz" {
-            file = Box::new(GzDecoder::new(file));
-        }
-    }
-
-    let mut archive = Archive::new(file);
-
-    let tempdir = tempdir()?;
-
-    archive.unpack(tempdir.path())?;
-
-    Ok(tempdir)
 }
