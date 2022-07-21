@@ -15,6 +15,22 @@ use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
 use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
 
+/*
+    Layers:
+    In:
+    6 curr piece boards
+    6 opp piece boards
+    3 current step
+    1 banned pieces board
+    1 phase (play or setup)
+    1 trap squares
+
+    Out:
+    40 directional boards (subtract irrelevant squares)
+    12 push pull boards
+    1 pass bit
+    1 setup squares (16 logits)
+*/
 #[derive(Default)]
 pub struct Mapper {}
 

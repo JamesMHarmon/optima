@@ -9,22 +9,6 @@ use super::mappings::Mapper;
 use super::value::Value;
 use super::TranspositionEntry;
 
-/*
-    Layers:
-    In:
-    6 curr piece boards
-    6 opp piece boards
-    3 current step
-    1 banned pieces board
-    1 phase (play or setup)
-    1 trap squares
-
-    Out:
-    40 directional boards (subtract irrelevant squares)
-    12 push pull boards
-    1 pass bit
-    1 setup squares (16 logits)
-*/
 pub struct Model(
     ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>,
 );
