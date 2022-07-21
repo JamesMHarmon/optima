@@ -44,30 +44,10 @@ def export_bundle(model_dir, model_path, model_name, epoch, num_filters, num_blo
             tar.add(model_info_path, arcname='model-info.json')
             tar.add(model_options_path, arcname='model-options.json')
 
-def copy_bundle_to_export(conf, model_dir, export_dir, model_name):
-    place_dir = conf.get('arimaa_place_dir', None)
+def copy_bundle_to_export(model_dir, export_dir, model_name):
+    shutil.copy(
+        os.path.join(model_dir, 'exports', f'{model_name}.tar.gz'),
+        os.path.join(export_dir, f'{model_name}.tar.gz')
+    )
 
-    if place_dir is None:
-        shutil.copy(
-            os.path.join(model_dir, 'exports', f'{model_name}.tar.gz'),
-            os.path.join(export_dir, f'{model_name}.tar.gz')
-        )
-    # Special override for the game of arimaa which bundles two models together.
-    else:
-        match_arimaa_place_model(conf, place_dir, model_dir, export_dir, model_name)
-
-def match_arimaa_place_model(conf, place_dir, model_dir, export_dir, model_name):
-    place_dir = conf.get('arimaa_place_dir')
-
-    place_exports_dir = str(os.path.abspath(os.path.join(model_dir, place_dir, 'exports')))
-    list_of_place_models = glob.glob(place_exports_dir + '/*.tar.gz')
-    latest_place_model = max(list_of_place_models, key=os.path.getctime)
-    
-    log.info(f'Combining with place model: {str(latest_place_model)}')
-
-    export_model_path = os.path.join(export_dir, f'{model_name}.tar.gz')
-    play_model_path = os.path.join(model_dir, 'exports', f'{model_name}.tar.gz')
-    with tarfile.open(export_model_path, "w:gz") as tar:
-        tar.add(play_model_path, arcname='play.tar.gz')
-        tar.add(latest_place_model, arcname='place.tar.gz')
 

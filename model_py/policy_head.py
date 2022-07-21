@@ -6,7 +6,7 @@ ARIMAA_PIECE_MOVES = ['N','E','S','W','NN','NE','NW','EE','ES','SS','SW','WW','N
 ARIMAA_PUSH_PULL_MOVES = ['NN','NE','NW','EN','EE','ES','SE','SS','SW','WN','WS','WW']
 
 def get_policy_head_fn_by_policy_size(policy_size):
-    if policy_size == 2245:
+    if policy_size == 2261:
         policy_head_fn = lambda net, num_filters: ArimaaPolicyHeadConvolutional(net, num_filters)
     elif policy_size == 209:
         policy_head_fn = lambda net, num_filters: QuoridorPolicyHeadConvolutional(net, num_filters)
@@ -31,6 +31,12 @@ def ArimaaPolicyHeadConvolutional(x, filters):
         crop_dir = dir[0] + dir[1].translate(str.maketrans('NESW', 'SWNE'))
         return create_move_out(crop_dir=crop_dir, name='policy_head/push_pull/' + dir)
 
+    def create_setup():
+        name = 'policy_head/setup'
+        setup_conv = Conv2D(1, kernel_size=3, use_bias=True, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name=name)(conv_block)
+        setup_cropped = Cropping2D(((6, 0), (0, 0)), data_format=DATA_FORMAT, name=name + '/cropping_2d')(setup_conv)
+        return Flatten()(setup_cropped)
+
     piece_move_outs = [create_piece_move_out(dir) for dir in ARIMAA_PIECE_MOVES]
     push_pull_outs = [create_push_pull_out(dir) for dir in ARIMAA_PUSH_PULL_MOVES]
 
@@ -38,7 +44,9 @@ def ArimaaPolicyHeadConvolutional(x, filters):
     pass_out = Flatten()(pass_out)
     pass_out = Dense(1, activation=None, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name='policy_head/pass/2')(pass_out)
 
-    out = Concatenate(name='policy_head')(piece_move_outs + push_pull_outs + [pass_out])
+    setup_out = create_setup()
+
+    out = Concatenate(name='policy_head')(piece_move_outs + push_pull_outs + [pass_out] + [setup_out])
 
     return out
 

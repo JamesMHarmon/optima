@@ -77,4 +77,4 @@ if __name__== '__main__':
 
     if export_dir is not None:
         export_dir = os.path.join(model_dir, export_dir)
-        copy_bundle_to_export(conf, model_dir, export_dir, model_name_w_num)
+        copy_bundle_to_export(model_dir, export_dir, model_name_w_num)
