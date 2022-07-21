@@ -48,7 +48,7 @@ async fn async_main() -> Result<()> {
             assert_dir_exists(&games_dir)?;
             assert_dir_exists(&model_dir)?;
 
-            let model_factory = arimaa::model::ModelFactory::new(model_dir);
+            let model_factory = arimaa::ModelFactory::new(model_dir);
             let engine = arimaa::Engine::new();
 
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
@@ -76,8 +76,8 @@ async fn async_main() -> Result<()> {
             assert_dir_exists(&certified_dir)?;
             assert_dir_exists(&evaluated_dir)?;
 
-            let champion_factory = arimaa::model::ModelFactory::new(champions_dir.clone());
-            let candidate_factory = arimaa::model::ModelFactory::new(candidates_dir);
+            let champion_factory = arimaa::ModelFactory::new(champions_dir.clone());
+            let candidate_factory = arimaa::ModelFactory::new(candidates_dir);
             let engine = arimaa::Engine::new();
 
             arena::championship(

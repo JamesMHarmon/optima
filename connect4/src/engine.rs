@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn test_new_state_is_correct() {
         let state: GameState = game_state::GameState::initial();
-        assert_eq!(state.p1_turn_to_move, true);
+        assert!(state.p1_turn_to_move);
         assert_eq!(state.p1_piece_board, 0);
         assert_eq!(state.p2_piece_board, 0);
     }
@@ -244,9 +244,9 @@ mod tests {
     fn test_drop_piece_switches_player() {
         let mut state: GameState = game_state::GameState::initial();
         state = state.drop_piece(1);
-        assert_eq!(state.p1_turn_to_move, false);
+        assert!(!state.p1_turn_to_move);
         state = state.drop_piece(1);
-        assert_eq!(state.p1_turn_to_move, true);
+        assert!(state.p1_turn_to_move);
     }
 
     #[test]

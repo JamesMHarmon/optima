@@ -54,6 +54,8 @@ impl InputMap<GameState> for Mapper {
 
         set_banned_piece_squares(input, game_state);
 
+        set_phase_squares(input, game_state);
+
         set_trap_squares(input);
     }
 }
@@ -153,6 +155,7 @@ impl ValueMap<GameState, Value> for Mapper {
         }
     }
 }
+
 impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
         game_state.get_transposition_hash() ^ game_state.get_banned_piece_mask()
@@ -231,6 +234,12 @@ fn set_step_num_squares(input: &mut [f16], game_state: &GameState) {
     }
 }
 
+fn set_phase_squares(input: &mut [f16], game_state: &GameState) {
+    if !game_state.is_play_phase() {
+        set_all_bits_for_channel(input, PHASE_CHANNEL_IDX);
+    }
+}
+
 fn set_all_bits_for_channel(input: &mut [f16], channel_idx: usize) {
     for board_idx in 0..BOARD_SIZE {
         let input_idx = board_idx * INPUT_C + channel_idx;
@@ -259,7 +268,10 @@ fn map_action_to_policy_output_idx(
                 + push_pull_map[map_square_push_pull_to_sparse_idx(square, dir)] as usize
         }
         Action::Pass => NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES,
-        _ => panic!("Action not expected"),
+        Action::Place(square) => {
+            let idx = square.get_index() - (64 - PLACE_MOVES);
+            NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES + idx
+        }
     }
 }
 
@@ -368,6 +380,8 @@ mod tests {
 
     use super::super::value::Value;
     use super::*;
+    use arimaa_engine::take_actions;
+    use engine::GameState as GameStateTrait;
     use itertools::Itertools;
     use model::NodeChildMetrics;
     use test::Bencher;
@@ -763,6 +777,38 @@ mod tests {
         let idx = map_action_to_policy_output_idx(&action);
 
         assert_eq!(NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_policy_output_idx_place_a2() {
+        let action = "a2".parse().unwrap();
+        let idx = map_action_to_policy_output_idx(&action);
+
+        assert_eq!(NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_policy_output_idx_place_h2() {
+        let action = "h2".parse().unwrap();
+        let idx = map_action_to_policy_output_idx(&action);
+
+        assert_eq!(NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES + 7, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_policy_output_idx_place_a1() {
+        let action = "a1".parse().unwrap();
+        let idx = map_action_to_policy_output_idx(&action);
+
+        assert_eq!(NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES + 8, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_policy_output_idx_place_h1() {
+        let action = "h1".parse().unwrap();
+        let idx = map_action_to_policy_output_idx(&action);
+
+        assert_eq!(NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES + PASS_MOVES + 15, idx);
     }
 
     #[test]
@@ -1360,6 +1406,84 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
+    fn test_game_state_to_input_phase_plane_filled_for_setup() {
+        let game_state = GameState::initial();
+
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1",
+        );
+
+        let actual = get_channel_as_vec(&input, PHASE_CHANNEL_IDX);
+        assert_eq!(actual, expected);
+
+        assert_eq!(count_set_bits(&input), 0 + 0 + 0 + 4 + 64); // pieces, step, banned pieces, traps, phase
+    }
+
+    #[test]
+    #[allow(clippy::identity_op)]
+    fn test_game_state_to_input_phase_plane_full_last_setup_move() {
+        let game_state = GameState::initial();
+        let game_state =
+            take_actions!(game_state => a1, b1, c1, d1, e1, f1, g1, h1, a7, b7, c7, d7, e7, f7, g7);
+
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1
+            1 1 1 1 1 1 1 1",
+        );
+
+        let actual = get_channel_as_vec(&input, PHASE_CHANNEL_IDX);
+        assert_eq!(actual, expected);
+
+        assert_eq!(count_set_bits(&input), 23 + 0 + 0 + 4 + 64); // pieces, step, banned pieces, traps, phase
+    }
+
+    #[test]
+    #[allow(clippy::identity_op)]
+    fn test_game_state_to_input_phase_plane_empty_for_play() {
+        let game_state = GameState::initial();
+        let game_state = take_actions!(game_state => a1, b1, c1, d1, e1, f1, g1, h1, a7, b7, c7, d7, e7, f7, g7, h7);
+
+        let input = game_state_to_input_fn(&game_state, Mode::Train);
+
+        let expected: Vec<_> = string_to_vec(
+            "
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0
+            0 0 0 0 0 0 0 0",
+        );
+
+        let actual = get_channel_as_vec(&input, PHASE_CHANNEL_IDX);
+        assert_eq!(actual, expected);
+
+        assert_eq!(count_set_bits(&input), 32 + 0 + 0 + 4 + 0); // pieces, step, banned pieces, traps, phase
+    }
+
+    #[test]
     fn test_policy_metrics_to_expected_output() {
         let game_state: GameState = "
             1g
@@ -1389,7 +1513,7 @@ mod tests {
         };
 
         let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
-        let pass_idx = OUTPUT_SIZE - 1;
+        let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;
         assert_eq!(output.len(), OUTPUT_SIZE);
         assert_eq!(
             output[0], 0.7,
@@ -1435,7 +1559,7 @@ mod tests {
         };
 
         let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
-        let pass_idx = OUTPUT_SIZE - 1;
+        let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;
         assert_eq!(output.len(), OUTPUT_SIZE);
         assert_eq!(
             output[0], 0.7,
@@ -1549,6 +1673,48 @@ mod tests {
         assert_eq!(output[1].policy_score, 0.17299303);
         assert_eq!(output[11].policy_score, 0.07518246);
         assert_eq!(output.len(), 12);
+    }
+
+    #[test]
+    fn test_policy_to_valid_actions_setup() {
+        let game_state = GameState::initial();
+
+        let game_state = take_actions!(game_state => a2);
+
+        let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
+
+        policy_scores[map_action_to_policy_output_idx(&"c2".parse::<Action>().unwrap())] =
+            f16::from_f32(1.0);
+        let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
+
+        assert_eq!(output[0].action, "b2".parse().unwrap());
+        assert_eq!(output[0].policy_score, 0.06134603);
+        assert_eq!(output[1].action, "c2".parse().unwrap());
+        assert_eq!(output[1].policy_score, 0.14115575);
+        assert_eq!(output[14].action, "h1".parse().unwrap());
+        assert_eq!(output[14].policy_score, 0.06134603);
+        assert_eq!(output.len(), 15);
+    }
+
+    #[test]
+    fn test_policy_to_valid_actions_setup_silver() {
+        let game_state = GameState::initial();
+
+        let game_state = take_actions!(game_state => a2, b1, c1, d2, e2, f1, g1, h2);
+
+        let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
+
+        policy_scores[map_action_to_policy_output_idx(&"b8".parse::<Action>().unwrap().invert())] =
+            f16::from_f32(1.0);
+        let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
+
+        assert_eq!(output[0].action, "a8".parse().unwrap());
+        assert_eq!(output[0].policy_score, 0.057800222);
+        assert_eq!(output[1].action, "b8".parse().unwrap());
+        assert_eq!(output[1].policy_score, 0.13299692);
+        assert_eq!(output[15].action, "h7".parse().unwrap());
+        assert_eq!(output[15].policy_score, 0.057800222);
+        assert_eq!(output.len(), 16);
     }
 
     #[bench]

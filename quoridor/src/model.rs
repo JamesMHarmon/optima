@@ -381,7 +381,7 @@ mod tests {
         let mut input = [f16::ZERO; INPUT_H * INPUT_W * INPUT_C];
 
         let mapper = Mapper::new();
-        mapper.game_state_to_input(&game_state, &mut input, Mode::Infer);
+        mapper.game_state_to_input(game_state, &mut input, Mode::Infer);
 
         input.iter().copied().map(f16::to_f32).collect::<Vec<_>>()
     }

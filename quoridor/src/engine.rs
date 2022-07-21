@@ -856,7 +856,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -872,7 +872,7 @@ mod tests {
         let excludes_actions = vec![Action::PlaceHorizontalWall(Coordinate::new('e', 5))];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -895,7 +895,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -918,7 +918,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -946,7 +946,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -979,7 +979,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -1022,7 +1022,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -1038,7 +1038,7 @@ mod tests {
         let excludes_actions = vec![Action::PlaceVerticalWall(Coordinate::new('e', 5))];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert_eq!(intersects, false);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
