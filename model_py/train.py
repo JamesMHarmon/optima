@@ -3,7 +3,7 @@ import c4_model as c4
 import logging as log
 import os
 from data_generator import DataGenerator
-from train_utils import copy_bundle_to_export, export_bundle, load_train_state, match_arimaa_place_model, save_train_state
+from train_utils import copy_bundle_to_export, export_bundle, load_train_state, save_train_state
 from replay_buffer import ReplayBuffer
 from tensorboard_enriched import TensorBoardEnriched
 from warmup_lr_scheduler import WarmupLearningRateScheduler
