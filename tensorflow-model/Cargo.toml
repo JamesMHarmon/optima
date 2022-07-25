@@ -10,6 +10,11 @@ default = ["all"]
 all = ["dep:tensorflow"]
 traits = []
 
+[dev-dependencies]
+criterion = "0.3"
+arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
+arimaa = { path = "../arimaa" }
+
 [dependencies]
 common = { path = "../common" }
 engine = { path = "../engine" }
@@ -32,3 +37,7 @@ tar = { version = "0.4.38" }
 tempfile = { version = "3.3.0" }
 tensorflow = { version = "0.18", features = ["tensorflow_gpu"], optional = true }
 tokio = { version = "1.18", features = ["parking_lot", "sync", "rt", "rt-multi-thread", "time"] }
+
+[[bench]]
+name = "benchmark"
+harness = false

@@ -173,12 +173,12 @@ impl<S, A, V, E, Map, Te> Info for TensorflowModel<S, A, V, E, Map, Te> {
     }
 }
 
-struct Predictor {
-    session: SessionAndOps,
+pub struct Predictor {
+    pub session: SessionAndOps,
 }
 
 impl Predictor {
-    fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> Self {
         let mut graph = Graph::new();
 
         let model = SavedModelBundle::load(&SessionOptions::new(), &["serve"], &mut graph, path)
@@ -317,17 +317,17 @@ struct AnalysisResults {
     moves_left_head_output: Option<Tensor<f16>>,
 }
 
-struct SessionAndOps {
-    session: Session,
-    op_input: OperationWithIndex,
-    op_value_head: OperationWithIndex,
-    op_policy_head: OperationWithIndex,
-    op_moves_left_head: Option<OperationWithIndex>,
+pub struct SessionAndOps {
+    pub session: Session,
+    pub op_input: OperationWithIndex,
+    pub op_value_head: OperationWithIndex,
+    pub op_policy_head: OperationWithIndex,
+    pub op_moves_left_head: Option<OperationWithIndex>,
 }
 
-struct OperationWithIndex {
-    operation: Operation,
-    index: c_int,
+pub struct OperationWithIndex {
+    pub operation: Operation,
+    pub index: c_int,
 }
 
 type BatchingModelAndSender<S, A, V, E, Map, Te> = (

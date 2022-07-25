@@ -25,3 +25,11 @@ debug-assertions = false
 overflow-checks = false
 lto = true
 codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = true
+codegen-units = 1
