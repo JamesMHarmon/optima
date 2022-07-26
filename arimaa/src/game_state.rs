@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fmt::{self, Display};
 use std::{ops::Deref, str::FromStr};
 
-use arimaa_engine::{Action, GameState as ArimaaGameState, PieceBoard, Value};
+use arimaa_engine::{Action, GameState as ArimaaGameState, Piece, PieceBoard, Value};
 
 #[derive(Hash, Debug, Clone)]
 pub struct GameState(ArimaaGameState);
@@ -68,6 +68,10 @@ impl GameState {
 
     pub fn get_vertical_symmetry(&self) -> Self {
         Self(self.0.get_vertical_symmetry())
+    }
+
+    pub fn piece_to_place(&self) -> Piece {
+        self.0.piece_to_place()
     }
 }
 

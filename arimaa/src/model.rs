@@ -9,6 +9,8 @@ use super::mappings::Mapper;
 use super::value::Value;
 use super::TranspositionEntry;
 
+pub type Analyzer = GameAnalyzer<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
+
 pub struct Model(
     ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>,
 );
@@ -27,7 +29,7 @@ impl model::Analyzer for Model {
     type State = GameState;
     type Action = Action;
     type Value = Value;
-    type Analyzer = GameAnalyzer<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
+    type Analyzer = Analyzer;
 
     fn analyzer(&self) -> Self::Analyzer {
         self.0.inner().analyzer()
