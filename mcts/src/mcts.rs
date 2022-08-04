@@ -742,6 +742,7 @@ where
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let moves_left = node.map_or(0.0, |n| n.moves_left_score);
             let Msa = Self::get_Msa(child, game_length_baseline, options);
+            let M = div_or_zero(child.M, child.visits as f32);
             let game_length = if Nsa == 0 {
                 child.M
             } else {
@@ -756,6 +757,7 @@ where
                 cpuct,
                 Usa,
                 Qsa,
+                M,
                 moves_left,
                 game_length,
                 PUCT,
