@@ -817,6 +817,8 @@ struct TensorPool<T: TensorType> {
     dimensions: [u64; 3],
 }
 
+const BATCH_SIZE_INCR: usize = 32;
+
 impl<T: TensorType> TensorPool<T> {
     fn new(dimensions: [u64; 3]) -> Self {
         Self {
@@ -826,18 +828,18 @@ impl<T: TensorType> TensorPool<T> {
     }
 
     fn get(&mut self, size: usize, fill: T) -> &mut Tensor<T> {
-        let next_matching_power = (size as f64).log2().ceil() as usize + 1;
+        let idx = (size - 1) / BATCH_SIZE_INCR;
         let tensors = &mut self.tensors;
-        while tensors.len() < next_matching_power {
+        while tensors.len() <= idx {
             tensors.push(Tensor::new(&[
-                2u32.pow(tensors.len() as u32) as u64,
+                ((tensors.len() + 1) * BATCH_SIZE_INCR) as u64,
                 self.dimensions[0],
                 self.dimensions[1],
                 self.dimensions[2],
             ]));
         }
 
-        let tensor = &mut tensors[next_matching_power - 1];
+        let tensor = &mut tensors[idx];
 
         tensor[..].fill(fill);
 
