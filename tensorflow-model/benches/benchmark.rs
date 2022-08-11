@@ -30,7 +30,7 @@ fn bench_tensorflow_infer(c: &mut Criterion) {
     .parse()
     .unwrap();
 
-    let valid_actions = game_state.valid_actions();
+    // let valid_actions = game_state.valid_actions();
 
     let predictor = Predictor::new(Path::new(
         "/home/james/arimaa-client/Arimaa_runs/run-1/5b64f_00100",
