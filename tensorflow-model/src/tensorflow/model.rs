@@ -4,7 +4,7 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
 use half::f16;
-use log::debug;
+use log::{debug, info};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::collections::BinaryHeap;
@@ -81,6 +81,11 @@ where
         if std::env::var("TF_CPP_MIN_LOG_LEVEL").is_err() {
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
         }
+
+        info!(
+            "Loading model {:?}. Batch Size: {:?}",
+            model_info, batch_size
+        );
 
         let mapper = Arc::new(mapper);
         let engine = Arc::new(engine);
