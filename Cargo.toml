@@ -7,11 +7,8 @@ members = [
     "engine",
     "model",
     "mcts",
-    # "play",
     "replay-buffer",
     "self-play",
-    # "tournament",
-    # "tuner",
 
     "arimaa",
     "connect4",
