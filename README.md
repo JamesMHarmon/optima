@@ -57,6 +57,8 @@ Optima can play a variety of games as well as allows support for implementing ad
 
 ### Arimaa
 
+http://arimaa.com/arimaa/mwiki/index.php/List_of_bots
+
 ### Quoridor
 
 ### Connect4
