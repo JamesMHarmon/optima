@@ -1,6 +1,6 @@
 # Optima
 
-Optima is a system that uses model-based reinforcement learning to train an agent to master an environment. It starts by exploring the environment taking random actions and learning from the outcomes. Then, it trains a deep neural network on its experience and uses its newly gained insights to explore the environment again, performing better each time. This process is repeated until Optima masters the environment. To demonstrate its ability to master its environment, this repository includes some abstract strategy board games like Arimaa, Tak, and Quoridor. Optima is based on DeepMind's Alpha Zero with novel improvements from projects like Leela Zero, Lc0, and KataGo.
+Optima is a system that uses model-based reinforcement learning to train an agent to master an environment. It starts by exploring the environment taking random actions and learning from the outcomes. Then, it trains a deep neural network on its experience and uses its newly gained insights to explore the environment again, performing better each time. This process is repeated until Optima masters the environment. To demonstrate its ability to master its environment, this repository includes some abstract strategy board games like [Arimaa][Arimaa], [Tak][Tak], and [Quoridor][Quoridor]. Optima is based on DeepMind's [AlphaZero][AlphaZero] with [novel improvements][novel improvements] from projects like [KataGo][KataGo], and [Lc0][Lc0].
 
 ![Reinforcement Loop](./assets/reinforcement-loop.png)
 
@@ -33,15 +33,14 @@ Optima is a system that uses model-based reinforcement learning to train an agen
 
 Optima is designed with performance as a first class concern. Deep Learning and especially Reinforcement Learning are known to be extremely computationally expensive. Some have estimated a single training run of Alpha Zero could require 500k GPU Hours costing millions of dollars in compute. Other similar open source projects may require around 20k GPU hours per run. Optima has mastered these games in less than 5k GPU hours. For example, achieving perfect play on a test-bed like Connect4 is done on a single consumer grade RTX 2080 TI GPU in under an hour.
 
-This performance is achieved through a variety of mechanisms. The first being that Optima supports multi-agent, this allows small networks that can act as weak learners which learn faster and are much less costly to infer than their strong learner counter parts. Large nets acting as strong learners will not be selected until their strength has justified their inference cost. Second, improvements introduced by KataGo for reducing the number of inferences per game have been implemented. By reducing the cost per game, the agents can play many more games to gain experience. There may be some further reduction through Gumbel Zero methodologies.
+This performance is achieved through a variety of mechanisms. The first being that Optima supports pools of agents, this allows small networks that can act as weak learners which learn faster and are less costly to infer than their strong learner counter parts. Large nets acting as strong learners will not be selected until their strength has justified their inference cost. Second, improvements introduced by [KataGo][KataGo] for reducing the number of inferences per game have been implemented. By reducing the cost per game, the agents can play many more games to gain experience. There may be some further reduction through Gumbel Zero methodologies.
 
 ## Setup and Play
 
-Optima includes some pre-trained networks that allow for immediate play. To learn from scratch, reference the section [Self-Learn].
+Optima includes some pre-trained networks that allow for immediate play. To learn from scratch, reference the [Self-Learn](#self-learn) section.
 
 It is recommended to try running the CPU version initially due to the relative ease of setup. The GPU version requires some additional dependencies.
 
-### CPU
 
 ```bash
 # clone the repo
@@ -51,29 +50,23 @@ git clone optima
 cd ./optima && cargo build --release
 
 # Run the client
-./target/release/self-learn-client play game -g <C4|Quoridor|Arimaa> -r run-1
+./target/release/client play game -g <C4|Quoridor|Arimaa>
 ```
-
-### GPU
-
-* Change train.Dockerfile to use cpu
-* change flag when running docker to not use environment = nvidia.
 
 ## Games
 
 Optima can play a variety of games as well as allows support for implementing additional games beyond what is listed below.
 
-### Arimaa
+* **Arimaa** - Optima powers [bot_rusty_zero][bot_rusty_zero], the [top rated][top rated] bot in [Arimaa][Arimaa]. To play against rusty, you can send commands in the bot-io channel of the [Arimaa Discord][Arimaa Discord]
 
-http://arimaa.com/arimaa/mwiki/index.php/List_of_bots
+* **Quoridor** - A super human level bot for the game of [Quoridor][Quoridor] is included in this repo.
+* **Tak** - [Tak][Tak] introduces challenges of varying board size and a large and complex action space. This implementation is currently in progress.
 
-### Quoridor
-
-### Connect4
+* **Connect4** - Connect4 is a solved game which Optima can achieve perfect play in about an hours time. This allows for an excellent test and verification environment.
 
 ## Self-Learn
 
-Optima
+Setting up a self-learn run is fairly straightforward, a quick tutorial will be created soon. If you would like to setup your own self-learning run, please contact me and i'll walk you through it to get started.
 
 ## Use
 
@@ -89,8 +82,24 @@ For commonly asked questions and troubleshooting help, please see the [FAQ](./FA
 
 ## References
 
-* https://github.com/tensorflow/rust
-* https://www.groundai.com/project/hyper-parameter-sweep-on-alphazero-general/1
-* https://medium.com/oracledevs/lessons-from-alpha-zero-part-6-hyperparameter-tuning-b1cfcbe4ca9a
-* https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
-* http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html
+* [KataGo][KataGo]
+* [Lc0][Lc0]
+* [AlphaZero pseudocode][AlphaZero pseudocode]
+* [AlphaZero paper][AlphaZero paper]
+* [Tensorflow Rust][Tensorflow Rust]
+* [Hyperparameter Tuning][Hyperparameter Tuning]
+
+[AlphaZero]: https://www.deepmind.com/blog/alphazero-shedding-new-light-on-chess-shogi-and-go
+[AlphaZero paper]: http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html
+[AlphaZero pseudocode]: https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
+[Arimaa]: http://Arimaa
+[Arimaa Discord]: https://discord.com/invite/XTAcDjR
+[bot_rusty_zero]: http://arimaa.com/arimaa/mwiki/index.php/List_of_bots
+[Hyperparameter Tuning]: https://medium.com/oracledevs/lessons-from-alpha-zero-part-6-hyperparameter-tuning-b1cfcbe4ca9a
+[KataGo]: https://github.com/lightvector/KataGo
+[Lc0]: https://lczero.org/
+[novel improvements]: https://arxiv.org/abs/1902.10565
+[Quoridor]: https://boardgamegeek.com/boardgame/624/quoridor
+[Tensorflow Rust]: https://github.com/tensorflow/rust
+[Tak]: https://ustak.org/
+[top rated]: http://arimaa.com/arimaa/gameroom/topRatedBots.cgi?r=1
