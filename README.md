@@ -29,6 +29,8 @@ Optima is a system that uses model-based reinforcement learning to train an agen
 
 * **Ancillary Heads** - While Alpha Zero incorporated a single network with two output heads, policy and value, Optima has introduced additional outputs as well as improvements. First, the policy head is shortened with its dense layers removed, this allows the policy to work directly with the logits from the convolutional layers. This means that the policy head is more general and spatially aware as all outputs, regardless of location, utilize the same weights. Second, additional heads like the moves left head allow the agent to predict how many more actions are needed until the end of the episode. This allows the agent to steer the games towards a quick and decisive win as opposed to needlessly drawing the game out.
 
+* **Policy Softmax Temp** - Adds temperature to the policy to which acts as a regularization affect and prevents the natural feedback loop which will sharpen a random policy.
+
 ## Performance
 
 Optima is designed with performance as a first class concern. Deep Learning and especially Reinforcement Learning are known to be extremely computationally expensive. Some have estimated a single training run of Alpha Zero could require 500k GPU Hours costing millions of dollars in compute. Other similar open source projects may require around 20k GPU hours per run. Optima has mastered these games in less than 5k GPU hours. For example, achieving perfect play on a test-bed like Connect4 is done on a single consumer grade RTX 2080 TI GPU in under an hour.
@@ -70,7 +72,9 @@ Setting up a self-learn run is fairly straightforward, a quick tutorial will be 
 
 ## Use
 
-Please note that it is **NOT** recommended to use Optima. Optima is created for personal use and is not well supported. This repository is made open source for visibility and collaboration as well as for my own learnings. There are no plans or guarantees to maintain this in the future. There are much better libs available which are more feature rich, more robust and well tested, better maintained and have communities of support around them. Please use one of those.
+Please note that it is **NOT** recommended to use Optima. Optima is created for personal use and is not well supported. This repository is made open source for visibility and collaboration as well as for my own learnings. There are no plans or guarantees to maintain this in the future. There are much better libs available which are more feature rich, more robust and well tested, better maintained and have communities of support around them.
+
+As an alternative, check out [KZero][KZero] by Karel Peeters which I fully endorse!
 
 ## Install
 
@@ -80,24 +84,39 @@ Please note that it is **NOT** recommended to use Optima. Optima is created for 
 
 For commonly asked questions and troubleshooting help, please see the [FAQ](./FAQ.md)
 
+## Acknowledgements
+
+I want to give a huge thanks to the amazing people and resources that helped me along the way.
+
+* [David Wu][David Wu], for his overly well thought out responses, insights and feedback which was absolutely invaluable.
+* [Arimaa Community][Arimaa Discord], for their friendliness and enthusiasm which drove a lot of motivation to complete this project.
+* [DeepMind][DeepMind], for creating AlphaZero which was the impetus for me to dive deep and better understand RL w/ planning.
+* [Lc0 Community][Lc0 Community], for being a fountain of knowledge.
+
 ## References
 
 * [KataGo][KataGo]
 * [Lc0][Lc0]
+* [AlphaZero Cheat Sheet][AlphaZero Cheat Sheet]
 * [AlphaZero pseudocode][AlphaZero pseudocode]
 * [AlphaZero paper][AlphaZero paper]
 * [Tensorflow Rust][Tensorflow Rust]
 * [Hyperparameter Tuning][Hyperparameter Tuning]
 
 [AlphaZero]: https://www.deepmind.com/blog/alphazero-shedding-new-light-on-chess-shogi-and-go
+[AlphaZero Cheat Sheet]: https://adspassets.blob.core.windows.net/website/content/alpha_go_zero_cheat_sheet.png
 [AlphaZero paper]: http://blog.lczero.org/2018/12/alphazero-paper-and-lc0-v0191.html
 [AlphaZero pseudocode]: https://gist.github.com/erenon/cb42f6656e5e04e854e6f44a7ac54023
-[Arimaa]: http://Arimaa
+[Arimaa]: http://arimaa.com
 [Arimaa Discord]: https://discord.com/invite/XTAcDjR
 [bot_rusty_zero]: http://arimaa.com/arimaa/mwiki/index.php/List_of_bots
+[David Wu]: https://github.com/lightvector
+[DeepMind]: https://www.deepmind.com/
 [Hyperparameter Tuning]: https://medium.com/oracledevs/lessons-from-alpha-zero-part-6-hyperparameter-tuning-b1cfcbe4ca9a
 [KataGo]: https://github.com/lightvector/KataGo
+[KZero]: https://github.com/KarelPeeters/kZero
 [Lc0]: https://lczero.org/
+[Lc0 Community]: https://lczero.org/about/community/
 [novel improvements]: https://arxiv.org/abs/1902.10565
 [Quoridor]: https://boardgamegeek.com/boardgame/624/quoridor
 [Tensorflow Rust]: https://github.com/tensorflow/rust
