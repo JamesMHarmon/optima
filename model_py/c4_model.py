@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
@@ -7,18 +8,21 @@ import os
 import tempfile
 from compress import compress, decompress
 import tensorflow as tf
-from model_sen import create_model
+from model_sen import create_model, ModelDimensions
 from policy_head import get_policy_head_fn_by_policy_size
 
-def create(num_filters, num_blocks, input_shape, policy_size, moves_left_size):
-    policy_head = get_policy_head_fn_by_policy_size(policy_size)
+@dataclass()
+class LossWeights:
+    model_loss_weight: int
+    policy_loss_weight: int
+    value_loss_weight: int
+    moves_left_loss_weight: int
+
+def create(model_dims: ModelDimensions):
+    policy_head = get_policy_head_fn_by_policy_size(model_dims.policy_size)
 
     model = create_model(
-        num_filters,
-        num_blocks,
-        input_shape,
-        policy_size,
-        moves_left_size,
+        model_dims=model_dims,
         policy_head=policy_head
     )
     
@@ -40,7 +44,8 @@ def save(model, model_path):
 
         compress(tmp_model_path, model_path)
 
-def compile(model, learning_rate, model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight):
+def compile(model, learning_rate, loss_weights: LossWeights):
+    model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight = loss_weights["model_loss_weight", "policy_loss_weight", "value_loss_weight", "moves_left_loss_weight"]
     loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "model_loss": model_loss_weight }
 
@@ -61,7 +66,7 @@ def metrics(model):
 
     return accuracy_metrics
 
-def export(model_path, export_model_path, num_filters, num_blocks, input_shape, policy_size, moves_left_size):
+def export(model_path, export_model_path, model_dims: ModelDimensions):
     model = load(model_path)
     model_weights = model.get_weights()
 
@@ -69,7 +74,7 @@ def export(model_path, export_model_path, num_filters, num_blocks, input_shape, 
 
     model_weights = [w.astype(K.floatx()) for w in model_weights]
 
-    model = create(num_filters, num_blocks, input_shape, policy_size, moves_left_size)
+    model = create(model_dims)
     model.set_weights(model_weights)
 
     tf.saved_model.save(model, export_model_path)

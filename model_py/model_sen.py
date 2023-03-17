@@ -1,9 +1,24 @@
+from dataclasses import dataclass
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Reshape, ReLU, Input, GlobalAveragePooling2D, add, multiply
 from tensorflow.keras import regularizers
 from tensorflow.keras import layers as keras_layers
 
 DATA_FORMAT = 'channels_last'
+
+@dataclass()
+class InputDimensions:
+    input_h: int
+    input_w: int
+    input_c: int
+
+@dataclass()
+class ModelDimensions:
+    num_filters: int
+    num_blocks: int
+    policy_size: int
+    moves_left_size: int
+    input_dims: InputDimensions
 
 def l2_reg():
     return regularizers.l2(1e-5)
@@ -103,7 +118,9 @@ def MovesLeftHead(x, filters, moves_left_size):
     out = Dense(moves_left_size, name='', full_name='moves_left_head', activation='softmax')(out)
     return out
 
-def create_model(num_filters, num_blocks, input_shape, output_size, moves_left_size, policy_head=None):
+def create_model(model_dims: ModelDimensions, policy_head=None):
+    num_filters, num_blocks, input_dims, output_size, moves_left_size = model_dims['num_filters', 'num_blocks', 'input_dims', 'output_size', 'moves_left_size']
+    input_shape = (input_dims.input_h, input_dims.input_w, input_dims.input_c)
     state_input = Input(shape=input_shape)
     net = ConvBlock(filters=num_filters, kernel_size=3, batch_scale=True, name='input')(state_input)
 

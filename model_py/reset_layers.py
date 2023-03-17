@@ -1,13 +1,28 @@
 import c4_model as c4
 import numpy as np
+from model_sen import InputDimensions, ModelDimensions 
 from keras.utils.layer_utils import count_params
 
 layers_to_reset = ['block_7', 'policy_head', 'value_head', 'moves_left_head']
 layers_not_reset = []
 layers_reset = []
 
+input_h = None
+input_w = None
+input_c = None
+num_filters = None
+num_blocks = None
+output_size = None
+moves_left_size = None
+source_model_path = None
+
+target_model_path = None
+export_model_path = None
+
 c4.clear()
-blank_model = c4.create(num_filters, num_blocks, (input_h, input_w, input_c), output_size, moves_left_size)
+input_dims = InputDimensions(input_h, input_w, input_c)
+model_dims = ModelDimensions(num_filters, num_blocks, output_size, moves_left_size, input_dims)
+blank_model = c4.create(model_dims)
 old_model = c4.load(source_model_path)
 
 def save_weights_to_readable_file(model, file_name):
@@ -53,5 +68,5 @@ print("SKIPPED LAYERS:", layers_not_reset)
 
 old_model.save(target_model_path)
 
-c4.export(target_model_path, export_model_path, num_filters, num_blocks, (input_h, input_w, input_c), output_size, moves_left_size)
+c4.export(target_model_path, export_model_path, model_dims)
 

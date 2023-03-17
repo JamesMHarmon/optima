@@ -6,6 +6,7 @@ import os
 import tempfile
 import tarfile
 from json_file import JSONFile
+from model_sen import ModelDimensions
 
 def load_train_state(train_state_path):
     train_state = JSONFile(train_state_path).load_or_save_defaults({ 'steps': 0, 'epochs': 0 })
@@ -23,13 +24,13 @@ def save_train_state(train_state_path, steps, epochs):
 
     JSONFile(train_state_path).save_merge(train_state)
 
-def export_bundle(model_dir, model_path, model_name, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size):
+def export_bundle(model_dir, model_path, model_name: str, epoch: int, model_dims: ModelDimensions):
     export_model_dir = os.path.join(model_dir, 'exports')
     export_model_path = os.path.join(export_model_dir, f'{model_name}.tar.gz')
     log.info(f'Exporting model: {export_model_path}')
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmp_export_path = os.path.join(tmpdirname, 'model')
-        c4.export(model_path, tmp_export_path, num_filters, num_blocks, (input_h, input_w, input_c), policy_size, moves_left_size)
+        c4.export(model_path, tmp_export_path, model_dims)
 
         model_info_path = os.path.join(model_dir, 'model-info.json')
         model_options_path = os.path.join(model_dir, 'model-options.json')

@@ -2,6 +2,8 @@ import os
 import c4_model as c4
 import logging as log
 import os
+from model_sen import InputDimensions, ModelDimensions
+from c4_model import LossWeights
 from data_generator import DataGenerator
 from train_utils import copy_bundle_to_export, export_bundle, load_train_state, save_train_state
 from replay_buffer import ReplayBuffer
@@ -112,13 +114,17 @@ if __name__== '__main__':
         tensor_board = TensorBoardEnriched(log_dir=tensor_board_path, step_ratio=step_ratio)
         fit_logger = FitLogger(log_steps=10)
 
-        c4.compile(
-            model,
-            learning_rate=learning_rate,
+        loss_weights = LossWeights(
             model_loss_weight=model_loss_weight,
             policy_loss_weight=policy_loss_weight,
             value_loss_weight=value_loss_weight,
             moves_left_loss_weight=moves_left_loss_weight,
+        )
+
+        c4.compile(
+            model,
+            learning_rate=learning_rate,
+            loss_weights=loss_weights
         )
         
         log.info(f'Training {data_generator.__len__()} steps')
@@ -145,7 +151,9 @@ if __name__== '__main__':
         log.info('Saving Train State')
         save_train_state(train_state_path=train_state_path, steps=initial_step, epochs=epoch)
 
-        export_bundle(model_dir, model_path, model_name_w_num, epoch, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
+        input_dims = InputDimensions(input_h, input_w, input_c)
+        model_dims = ModelDimensions(num_filters, num_blocks, policy_size, moves_left_size, input_dims)
+        export_bundle(model_dir, model_path, model_name_w_num, epoch)
 
         if export_dir is not None:
             export_dir = os.path.join(model_dir, export_dir)

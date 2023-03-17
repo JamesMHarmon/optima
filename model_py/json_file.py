@@ -4,7 +4,7 @@ import os
 class JSONFile:
     def __init__(self, path):
         self._path = path
-        
+
     def load_or_save_defaults(self, default):
         path = self._path
 
@@ -20,7 +20,7 @@ class JSONFile:
     def load(self):
         with open(self._path, 'r') as f:
             summary = json.load(f)
-            
+
         return summary
 
     def save_merge(self, merge):
@@ -29,8 +29,6 @@ class JSONFile:
         with open(path, 'r') as f:
             data = json.load(f)
 
-        print('data', data)    
-        
         with open(path, 'w') as f:
             for key, val in merge.items():
                 data[key] = val

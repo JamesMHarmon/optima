@@ -2,11 +2,12 @@ import os
 import c4_model as c4
 import json
 import logging as log
+from model_sen import InputDimensions, ModelDimensions
 from train_utils import copy_bundle_to_export, export_bundle
 from pyhocon import ConfigFactory
 
 if __name__== '__main__':
-    model_dir               = os.getcwd() # '/Arimaa_runs/run-2/model_place-3b32f' # os.getcwd()
+    model_dir               = os.getcwd()
 
     train_state_path        = os.path.join(model_dir, './train-state.json')
     model_info_path         = os.path.join(model_dir, './model-options.json')
@@ -42,12 +43,9 @@ if __name__== '__main__':
 
     log.info(f'Games dir: {games_dir}')
 
-    input_size = input_h * input_w * input_c
-    input_shape = (input_h, input_w, input_c)
-    value_size = 1
-    train_ratio = 1.0
-    
-    model = c4.create(num_filters, num_blocks, input_shape, policy_size, moves_left_size)
+    input_dims = InputDimensions(input_h, input_w, input_c)
+    model_dims = ModelDimensions(num_filters, num_blocks, policy_size, moves_left_size, input_dims)
+    model = c4.create(model_dims)
     
     model_info_path = os.path.join(model_dir, 'model-info.json')
     with open(model_info_path, 'w') as f:
@@ -73,7 +71,7 @@ if __name__== '__main__':
     log.info(f'Saving model: {model_path}')
     c4.save(model, model_path)
 
-    export_bundle(model_dir, model_path, model_name_w_num, 0, num_filters, num_blocks, input_h, input_w, input_c, policy_size, moves_left_size)
+    export_bundle(model_dir, model_path, model_name_w_num, 0, model_dims)
 
     if export_dir is not None:
         export_dir = os.path.join(model_dir, export_dir)
