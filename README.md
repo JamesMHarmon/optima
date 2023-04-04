@@ -86,7 +86,7 @@ For commonly asked questions and troubleshooting help, please see the [FAQ](./FA
 
 ## Acknowledgements
 
-I want to give a huge thanks to the amazing people and resources that helped me along the way.
+Huge thanks to the following amazing people and communities that helped me along the way.
 
 * [David Wu][David Wu], for his overly well thought out responses, insights and feedback which was absolutely invaluable.
 * [Arimaa Community][Arimaa Discord], for their friendliness and enthusiasm which drove a lot of motivation to complete this project.
