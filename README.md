@@ -102,6 +102,7 @@ Huge thanks to the following amazing people and communities that helped me along
 * [AlphaZero paper][AlphaZero paper]
 * [Tensorflow Rust][Tensorflow Rust]
 * [Hyperparameter Tuning][Hyperparameter Tuning]
+* [DAG][DAG]
 
 [AlphaZero]: https://www.deepmind.com/blog/alphazero-shedding-new-light-on-chess-shogi-and-go
 [AlphaZero Cheat Sheet]: https://adspassets.blob.core.windows.net/website/content/alpha_go_zero_cheat_sheet.png
@@ -122,3 +123,4 @@ Huge thanks to the following amazing people and communities that helped me along
 [Tensorflow Rust]: https://github.com/tensorflow/rust
 [Tak]: https://ustak.org/
 [top rated]: http://arimaa.com/arimaa/gameroom/topRatedBots.cgi?r=1
+[DAG]: https://discordapp.com/channels/425419482568196106/425419483016855563/1111102673069027338
