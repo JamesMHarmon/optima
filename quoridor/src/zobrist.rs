@@ -1,7 +1,7 @@
 use common::bits::single_bit_index;
 
-use super::engine::GameState;
 use super::zobrist_values::*;
+use super::GameState;
 use crate::constants::BOARD_SIZE;
 use crate::constants::NUM_WALLS_PER_PLAYER;
 use crate::constants::PAWN_BOARD_SIZE;

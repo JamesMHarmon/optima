@@ -8,11 +8,11 @@ publish = false
 [dependencies]
 self-play = { path = "../self-play" }
 model = { path = "../model" }
-arimaa = { path = "../arimaa" }
+# arimaa = { path = "../arimaa" }
 common = { path = "../common" }
 arena = { path = "../arena" }
 # connect4 = { path = "../connect4" }
-# quoridor = { path = "../quoridor" }
+quoridor = { path = "../quoridor" }
 
 anyhow = "1.0"
 dotenv = "0.15.0"

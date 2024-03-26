@@ -76,8 +76,7 @@ fn map_board_idx_to_vec_idx(board_idx: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::super::action::{Action, Coordinate};
-    use super::super::engine::GameState;
+    use super::super::{Action, Coordinate, GameState};
     use super::*;
     use common::bits::single_bit_index;
     use engine::game_state::GameState as GameStateTrait;

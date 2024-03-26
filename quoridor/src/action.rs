@@ -21,7 +21,7 @@ impl Coordinate {
     pub fn from_bit_board(board: u128) -> Self {
         let index = single_bit_index(board);
         let column = BOARD_WIDTH - (index % BOARD_WIDTH);
-        let row = ((index / BOARD_WIDTH) as usize) + 1;
+        let row = (index / BOARD_WIDTH) + 1;
 
         let column = (ASCII_LETTER_A + column as u8 - 1) as char;
 
