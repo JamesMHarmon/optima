@@ -11,14 +11,43 @@ name = "arimaa"
 [features]
 default = ["all"]
 all = ["mappings", "model"]
-mappings = ["tensorflow-model/traits", "dep:anyhow", "dep:half", "dep:once_cell", "dep:serde", "dep:tinyvec"]
-model = ["tensorflow-model/all", "dep:anyhow", "dep:half", "dep:serde", "dep:serde_json", "dep:itertools", "dep:regex", "dep:futures", "dep:log", "dep:once_cell", "dep:tar", "dep:tempfile", "dep:tinyvec"]
+mappings = [
+    "tensorflow-model/traits",
+    "dep:anyhow",
+    "dep:half",
+    "dep:once_cell",
+    "dep:serde",
+    "dep:tinyvec",
+]
+model = [
+    "tensorflow-model/all",
+    "dep:anyhow",
+    "dep:half",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:itertools",
+    "dep:regex",
+    "dep:futures",
+    "dep:log",
+    "dep:once_cell",
+    "dep:tar",
+    "dep:tempfile",
+    "dep:tinyvec",
+]
+
+[dev-dependencies]
+criterion = "0.5"
+
+# [[bench]]
+# name = "my_benchmark"
+# harness = false
 
 [dependencies]
 common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
-tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [] }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
+] }
 arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
 
 anyhow = { version = "1.0", optional = true }

@@ -1,4 +1,3 @@
-#![feature(is_some_with, test)]
 #![allow(clippy::inconsistent_digit_grouping)]
 #![allow(clippy::unusual_byte_groupings)]
 

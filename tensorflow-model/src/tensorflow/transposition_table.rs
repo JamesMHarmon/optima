@@ -61,7 +61,7 @@ impl<Te> TranspositionTable<Te> {
 
         let mut row = self.table[idx as usize].lock();
 
-        let prev = row.replace(TranspositionEntry {
+        let prev = row.replace(TranspositionTableEntry {
             full_key: tranposition_key,
             tranposition,
         });
@@ -84,9 +84,9 @@ fn get_key_mask(power: usize) -> u64 {
     (1 << power) - 1
 }
 
-type TranspositionRow<Te> = Mutex<Option<TranspositionEntry<Te>>>;
+type TranspositionRow<Te> = Mutex<Option<TranspositionTableEntry<Te>>>;
 
-pub struct TranspositionEntry<Te> {
+pub struct TranspositionTableEntry<Te> {
     full_key: u64,
     tranposition: Te,
 }

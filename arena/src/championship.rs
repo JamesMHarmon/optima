@@ -94,7 +94,7 @@ where
         error!("{:?}", e);
         anyhow!("Failed in scope 1")
     })
-    .flatten()?;
+    .and_then(|r| r)?;
 
     Ok(())
 }
@@ -152,52 +152,46 @@ where
             candidate.info().model_name_w_num()
         );
 
-        crossbeam::scope(|s| try {
+        crossbeam::scope(|s| {
             let (tx, rx) = crossbeam::channel::unbounded();
 
-            s.spawn(move |_| {
-                let res: Result<usize> = try {
-                    let mut candidate_score = 0.0f32;
-                    let mut has_certified = false;
-                    let mut has_championed = false;
-                    while let Ok(eval) = rx.recv() {
-                        match eval {
-                            EvalResult::GameResult(game_result) => {
-                                candidate_score += game_result.model_score(&candidate_info);
-                                if !has_certified
-                                    && candidate_score >= options.certification_threshold
-                                {
-                                    has_certified = true;
-                                    promote_candidate_to_certified()?;
-                                }
-
-                                if !has_championed && candidate_score >= options.champion_threshold
-                                {
-                                    has_championed = true;
-                                    promote_candidate_to_champion()?;
-                                }
-
-                                persistance.write_game(&game_result)?;
+            s.spawn(move |_| -> Result<()> {
+                let mut candidate_score = 0.0f32;
+                let mut has_certified = false;
+                let mut has_championed = false;
+                while let Ok(eval) = rx.recv() {
+                    match eval {
+                        EvalResult::GameResult(game_result) => {
+                            candidate_score += game_result.model_score(&candidate_info);
+                            if !has_certified && candidate_score >= options.certification_threshold
+                            {
+                                has_certified = true;
+                                promote_candidate_to_certified()?;
                             }
-                            EvalResult::MatchResult(match_result) => {
-                                persistance.write_match(&match_result)?;
+
+                            if !has_championed && candidate_score >= options.champion_threshold {
+                                has_championed = true;
+                                promote_candidate_to_champion()?;
                             }
+
+                            persistance.write_game(&game_result)?
+                        }
+                        EvalResult::MatchResult(match_result) => {
+                            persistance.write_match(&match_result)?
                         }
                     }
+                }
 
-                    0
-                };
-
-                res
+                Ok(())
             });
 
-            super::evaluate::Arena::evaluate(&[champion, candidate], engine, tx, options)?;
+            super::evaluate::Arena::evaluate(&[champion, candidate], engine, tx, options)
         })
         .map_err(|e| {
             error!("{:?}", e);
             anyhow!("Failed in scope 1")
         })
-        .flatten()?;
+        .and_then(|v| v)?;
     } else {
         info!("No champion found. Automatically promoting {:?}", &champion);
         promote_candidate_to_certified()?;

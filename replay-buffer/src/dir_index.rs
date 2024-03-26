@@ -105,7 +105,7 @@ impl DirIndex {
         let num_files = entries.len();
 
         // Attempt to write a cache file. It is OK if this fails.
-        let _res: Result<usize> = try {
+        let _res: Result<usize> = (|| {
             let mut cache_lock_path = cache_path.clone();
             cache_lock_path.set_extension("lock");
 
@@ -131,8 +131,8 @@ impl DirIndex {
 
             fs::remove_file(cache_lock_path)?;
 
-            0
-        };
+            Ok(0)
+        })();
 
         Ok(())
     }

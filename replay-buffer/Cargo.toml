@@ -15,15 +15,21 @@ crate-type = ["cdylib"]
 [dependencies]
 engine = { path = "../engine" }
 model = { path = "../model" }
-tensorflow-model = { path = "../tensorflow-model", default-features = false, features = ["traits"] }
-self-play = { path = "../self-play", default-features = false, features = ["traits"] }
-arimaa = { path = "../arimaa", default-features = false, features = ["mappings"] }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
+    "traits",
+] }
+self-play = { path = "../self-play", default-features = false, features = [
+    "traits",
+] }
+arimaa = { path = "../arimaa", default-features = false, features = [
+    "mappings",
+] }
 
 anyhow = "1.0.57"
 approx = "0.5.1"
 bytemuck = "1.9.1"
 byteorder = "1.4.3"
-env_logger = "0.9.0"
+env_logger = "0.11.0"
 flate2 = "1.0"
 half = "1.8"
 log = "0.4.17"

@@ -1,5 +1,3 @@
-#![feature(is_some_with)]
-
 #[cfg(feature = "all")]
 pub mod options;
 #[cfg(feature = "all")]

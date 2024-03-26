@@ -30,8 +30,10 @@ impl ConfigLoader {
             return Err(anyhow!("Top level of config {:?} must be an object", path));
         }
 
-        if let Hocon::Hash(ref hash) = hocon && hash.is_empty() {
-            return Err(anyhow!("Configurations not found in file {:?}", path));
+        if let Hocon::Hash(ref hash) = hocon {
+            if hash.is_empty() {
+                return Err(anyhow!("Configurations not found in file {:?}", path));
+            }
         }
 
         Ok(Self {

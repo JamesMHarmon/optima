@@ -113,8 +113,6 @@ impl<R> SampleFileReader<R> {
 
 #[cfg(test)]
 mod test {
-    extern crate test;
-
     use rand::{prelude::SliceRandom, Rng};
     use std::{
         fs::File,
@@ -160,21 +158,21 @@ mod test {
         drop(file_cleanup);
     }
 
-    #[bench]
-    fn bench_read_sample(b: &mut test::Bencher) {
-        with_random_file_data(move |_file, _data, sample_len| {
-            b.iter(|| {
-                let file = File::open("./test_cust_file").unwrap();
-                let mut file = BufReader::new(file);
-                let res = SampleFile::new(sample_len)
-                    .read(&mut file)
-                    .read_sample(1)
-                    .unwrap();
+    // #[bench]
+    // fn bench_read_sample(b: &mut test::Bencher) {
+    //     with_random_file_data(move |_file, _data, sample_len| {
+    //         b.iter(|| {
+    //             let file = File::open("./test_cust_file").unwrap();
+    //             let mut file = BufReader::new(file);
+    //             let res = SampleFile::new(sample_len)
+    //                 .read(&mut file)
+    //                 .read_sample(1)
+    //                 .unwrap();
 
-                std::hint::black_box(res);
-            });
-        });
-    }
+    //             std::hint::black_box(res);
+    //         });
+    //     });
+    // }
 
     #[test]
     fn file_load_has_correct_data_test() {

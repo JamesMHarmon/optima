@@ -42,8 +42,6 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
 
 #[cfg(test)]
 mod tests {
-    extern crate test;
-
     use super::*;
     use crate::value::Value;
     use arimaa_engine::{take_actions, Action};

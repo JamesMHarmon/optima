@@ -167,12 +167,12 @@ impl Arena {
         });
 
         match_result
-            .flatten()
+            .and_then(|v| v)
             .map_err(|e| {
                 error!("{:?}", e);
                 anyhow!("Error in self_evaluate scope 2")
             })
-            .flatten()
+            .and_then(|v| v)
             .map_err(|e| {
                 error!("{:?}", e);
                 anyhow!("Error in self_evaluate scope 3")

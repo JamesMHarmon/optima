@@ -376,15 +376,12 @@ fn static_sparse_push_pull_map() -> &'static Vec<u16> {
 #[allow(clippy::float_cmp)]
 #[cfg(test)]
 mod tests {
-    extern crate test;
-
     use super::super::value::Value;
     use super::*;
     use arimaa_engine::take_actions;
     use engine::GameState as GameStateTrait;
     use itertools::Itertools;
     use model::NodeChildMetrics;
-    use test::Bencher;
 
     fn map_action_to_policy_output_idx(action: &Action) -> usize {
         let move_map = static_sparse_piece_move_map().as_slice();
@@ -1717,71 +1714,71 @@ mod tests {
         assert_eq!(output.len(), 16);
     }
 
-    #[bench]
-    fn bench_game_state_to_input(b: &mut Bencher) {
-        let game_state: GameState = "
-                1s
-                 +-----------------+
-                8| h c d m r d c h |
-                7| r r r r e r r r |
-                6|     x     x     |
-                5|                 |
-                4|                 |
-                3|     x     x     |
-                2| R R R R E R R R |
-                1| H C D M R D C H |
-                 +-----------------+
-                   a b c d e f g h
-            "
-        .parse()
-        .unwrap();
+    // #[bench]
+    // fn bench_game_state_to_input(b: &mut Bencher) {
+    //     let game_state: GameState = "
+    //             1s
+    //              +-----------------+
+    //             8| h c d m r d c h |
+    //             7| r r r r e r r r |
+    //             6|     x     x     |
+    //             5|                 |
+    //             4|                 |
+    //             3|     x     x     |
+    //             2| R R R R E R R R |
+    //             1| H C D M R D C H |
+    //              +-----------------+
+    //                a b c d e f g h
+    //         "
+    //     .parse()
+    //     .unwrap();
 
-        b.iter(|| game_state_to_input_fn(&game_state, Mode::Train));
-    }
+    //     b.iter(|| game_state_to_input_fn(&game_state, Mode::Train));
+    // }
 
-    #[bench]
-    fn bench_game_state_to_input_multiple_actions(b: &mut Bencher) {
-        let game_state: GameState = "
-                1s
-                 +-----------------+
-                8| h c d m r d c h |
-                7| r r r r e r r r |
-                6|     x     x     |
-                5|                 |
-                4|                 |
-                3|     x     x     |
-                2| R R R R E R R R |
-                1| H C D M R D C H |
-                 +-----------------+
-                   a b c d e f g h
-            "
-        .parse()
-        .unwrap();
+    // #[bench]
+    // fn bench_game_state_to_input_multiple_actions(b: &mut Bencher) {
+    //     let game_state: GameState = "
+    //             1s
+    //              +-----------------+
+    //             8| h c d m r d c h |
+    //             7| r r r r e r r r |
+    //             6|     x     x     |
+    //             5|                 |
+    //             4|                 |
+    //             3|     x     x     |
+    //             2| R R R R E R R R |
+    //             1| H C D M R D C H |
+    //              +-----------------+
+    //                a b c d e f g h
+    //         "
+    //     .parse()
+    //     .unwrap();
 
-        b.iter(|| {
-            let game_state = game_state.take_action(&"d2n".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //     b.iter(|| {
+    //         let game_state = game_state.take_action(&"d2n".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"e2n".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"e2n".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"b2n".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"b2n".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"f2n".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"f2n".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"d7s".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"d7s".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"e7s".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"e7s".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"f7s".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train);
+    //         let game_state = game_state.take_action(&"f7s".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train);
 
-            let game_state = game_state.take_action(&"g7s".parse().unwrap());
-            game_state_to_input_fn(&game_state, Mode::Train)
-        });
-    }
+    //         let game_state = game_state.take_action(&"g7s".parse().unwrap());
+    //         game_state_to_input_fn(&game_state, Mode::Train)
+    //     });
+    // }
 }

@@ -1,10 +1,3 @@
-#![feature(try_blocks)]
-#![feature(let_chains)]
-#![feature(assert_matches)]
-#![feature(test)]
-#![feature(bench_black_box)]
-#![feature(is_some_with)]
-
 use anyhow::{Context, Result};
 use engine::GameState;
 use env_logger::Env;
@@ -18,7 +11,6 @@ use sample::InputAndTargets;
 use sample_file::{SampleFile, SampleFileReader};
 use self_play::SelfPlayMetrics;
 use serde::{de, Serialize};
-use std::assert_matches::assert_matches;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
@@ -232,7 +224,7 @@ impl<S> SampleLoader<S> {
             moves_left_output: vals.by_ref().take(moves_left_size).collect(),
         };
 
-        assert_matches!(vals.next(), None, "No more vals should be left");
+        assert!(matches!(vals.next(), None), "No more vals should be left");
 
         Ok(Some(inputs_and_targets))
     }
@@ -252,22 +244,18 @@ impl<S> SampleLoader<S> {
         let read_cache_file = move || -> Result<SampleFileReader<BufReader<File>>> {
             let file = File::open(cache_path)?;
 
-            let res = try {
+            let res = {
                 let buff_reader = BufReader::new(file);
                 SampleFile::new(self.num_values_in_sample).read(buff_reader)
             };
 
-            if matches!(res, Err(_)) {
-                warn!("Failed to read {:?}", cache_path);
-            }
-
-            res
+            Ok(res)
         };
 
         let mut buffered_samples = read_cache_file();
 
         if matches!(buffered_samples, Err(_)) {
-            let res: Result<usize> = try {
+            let res: Result<usize> = (|| {
                 fs::create_dir_all(&cache_path.parent().unwrap())?;
 
                 let file = OpenOptions::new()
@@ -290,8 +278,8 @@ impl<S> SampleLoader<S> {
 
                 buffered_samples = read_cache_file();
 
-                0
-            };
+                Ok(0)
+            })();
 
             if let Err(err) = res {
                 warn!("Failed to write cache file {:?} {:?}", cache_path, err);

@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 pub mod bits;
 pub mod config;
 pub mod fs;

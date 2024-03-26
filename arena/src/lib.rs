@@ -1,5 +1,3 @@
-#![feature(result_flattening, try_blocks)]
-
 pub mod evaluate;
 
 mod championship;

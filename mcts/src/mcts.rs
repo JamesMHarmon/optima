@@ -292,7 +292,7 @@ where
                 Ok(nodes)
             })
             .ok_or_else(|| anyhow!("Focused action was not found"))
-            .flatten()
+            .and_then(|v| v)
     }
 
     pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
@@ -484,7 +484,7 @@ where
             // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
             let score = value_score.get_value_for_player(*parent_node_player_to_move);
 
-            let mut node_to_update = &mut node_to_update_parent.children[*node_child_index];
+            let node_to_update = &mut node_to_update_parent.children[*node_child_index];
             node_to_update.W += score;
             node_to_update.M += value_node_game_length;
         }
