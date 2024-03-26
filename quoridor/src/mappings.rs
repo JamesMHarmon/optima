@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_a1() {
-        let coord = Coordinate::new('a', 1);
+        let coord = "a1".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_nine_by_nine(&coord);
 
         assert_eq!(72, idx);
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_a9() {
-        let coord = Coordinate::new('a', 9);
+        let coord = "a9".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_nine_by_nine(&coord);
 
         assert_eq!(0, idx);
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_i1() {
-        let coord = Coordinate::new('i', 1);
+        let coord = "i1".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_nine_by_nine(&coord);
 
         assert_eq!(80, idx);
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_i9() {
-        let coord = Coordinate::new('i', 9);
+        let coord = "i9".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_nine_by_nine(&coord);
 
         assert_eq!(8, idx);
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_nine_by_nine_e5() {
-        let coord = Coordinate::new('e', 5);
+        let coord = "e5".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_nine_by_nine(&coord);
 
         assert_eq!(40, idx);
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_eight_by_eight_a1() {
-        let coord = Coordinate::new('a', 1);
+        let coord = "a1".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_eight_by_eight(&coord);
 
         assert_eq!(56, idx);
@@ -382,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_eight_by_eight_a8() {
-        let coord = Coordinate::new('a', 8);
+        let coord = "a8".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_eight_by_eight(&coord);
 
         assert_eq!(0, idx);
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_eight_by_eight_h1() {
-        let coord = Coordinate::new('h', 1);
+        let coord = "h1".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_eight_by_eight(&coord);
 
         assert_eq!(63, idx);
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_eight_by_eight_h8() {
-        let coord = Coordinate::new('h', 8);
+        let coord = "h8".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_eight_by_eight(&coord);
 
         assert_eq!(7, idx);
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_map_coord_to_input_idx_eight_by_eight_e5() {
-        let coord = Coordinate::new('e', 5);
+        let coord = "e5".parse::<Coordinate>().unwrap();
         let idx = map_coord_to_input_idx_eight_by_eight(&coord);
 
         assert_eq!(28, idx);
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_pawn_a9() {
-        let coord = Coordinate::new('a', 9);
+        let coord = "a9".parse::<Coordinate>().unwrap();
         let action = Action::MovePawn(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_pawn_i1() {
-        let coord = Coordinate::new('i', 1);
+        let coord = "i1".parse::<Coordinate>().unwrap();
         let action = Action::MovePawn(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_vertical_wall_a8() {
-        let coord = Coordinate::new('a', 8);
+        let coord = "a8".parse::<Coordinate>().unwrap();
         let action = Action::PlaceVerticalWall(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_vertical_wall_h1() {
-        let coord = Coordinate::new('h', 1);
+        let coord = "h1".parse::<Coordinate>().unwrap();
         let action = Action::PlaceVerticalWall(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_horizontal_wall_a8() {
-        let coord = Coordinate::new('a', 8);
+        let coord = "a8".parse::<Coordinate>().unwrap();
         let action = Action::PlaceHorizontalWall(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_input_idx_horizontal_wall_h1() {
-        let coord = Coordinate::new('h', 1);
+        let coord = "h1".parse::<Coordinate>().unwrap();
         let action = Action::PlaceHorizontalWall(coord);
         let idx = map_action_to_input_idx(&action);
 
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn test_game_state_to_input_initial_p2() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -488,8 +488,7 @@ mod tests {
     #[test]
     fn test_game_state_to_input_walls_remaining() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
+        let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -499,9 +498,8 @@ mod tests {
     #[test]
     fn test_game_state_to_input_walls_remaining_p2() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('h', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('d', 9)));
+        let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"d9".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -511,9 +509,8 @@ mod tests {
     #[test]
     fn test_game_state_to_input_vertical_walls() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c4v".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -523,10 +520,9 @@ mod tests {
     #[test]
     fn test_game_state_to_input_vertical_walls_p2() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c4v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 

@@ -75,6 +75,21 @@ impl Coordinate {
     }
 }
 
+impl FromStr for Coordinate {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let chars: Vec<char> = s.chars().collect();
+        let row = chars[0];
+        // @TODO: Update to take multiple digits
+        let col = chars[1]
+            .to_digit(10)
+            .ok_or_else(|| anyhow!("Invalid value"))?;
+        let coordinate = Coordinate::new(row, col as usize);
+        Ok(coordinate)
+    }
+}
+
 impl Serialize for Action {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -177,15 +192,9 @@ impl FromStr for Action {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let chars: Vec<char> = s.chars().collect();
-        let row = chars[0];
-        // @TODO: Update to take multiple digits
-        let col = chars[1]
-            .to_digit(10)
-            .ok_or_else(|| anyhow!("Invalid value"))?;
-        let coordinate = Coordinate::new(row, col as usize);
+        let coordinate = s[..2].parse()?;
 
-        match chars.get(2) {
+        match s.chars().nth(2) {
             None => Ok(Action::MovePawn(coordinate)),
             Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
             Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
@@ -212,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_as_bit_board_a1() {
-        let bit = Coordinate::new('a', 1).as_bit_board();
+        let bit = "a1".parse::<Coordinate>().unwrap().as_bit_board();
         let col = 1;
         let row = 1;
 
@@ -221,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_as_bit_board_a9() {
-        let bit = Coordinate::new('a', 9).as_bit_board();
+        let bit = "a9".parse::<Coordinate>().unwrap().as_bit_board();
         let col = 1;
         let row = 9;
 
@@ -230,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_as_bit_board_i1() {
-        let bit = Coordinate::new('i', 1).as_bit_board();
+        let bit = "i1".parse::<Coordinate>().unwrap().as_bit_board();
         let col = 9;
         let row = 1;
 
@@ -239,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_as_bit_board_i9() {
-        let bit = Coordinate::new('i', 9).as_bit_board();
+        let bit = "i9".parse::<Coordinate>().unwrap().as_bit_board();
         let col = 9;
         let row = 9;
 
@@ -248,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_as_bit_board_e5() {
-        let bit = Coordinate::new('e', 5).as_bit_board();
+        let bit = "e5".parse::<Coordinate>().unwrap().as_bit_board();
         let col = 5;
         let row = 5;
 
@@ -263,7 +272,7 @@ mod tests {
 
         let coordinate = Coordinate::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('a', 1), coordinate);
+        assert_eq!("a1".parse::<Coordinate>().unwrap(), coordinate);
     }
 
     #[test]
@@ -274,7 +283,7 @@ mod tests {
 
         let coordinate = Coordinate::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('a', 9), coordinate);
+        assert_eq!("a9".parse::<Coordinate>().unwrap(), coordinate);
     }
 
     #[test]
@@ -285,7 +294,7 @@ mod tests {
 
         let coordinate = Coordinate::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('i', 1), coordinate);
+        assert_eq!("i1".parse::<Coordinate>().unwrap(), coordinate);
     }
 
     #[test]
@@ -296,7 +305,7 @@ mod tests {
 
         let coordinate = Coordinate::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('i', 9), coordinate);
+        assert_eq!("i9".parse::<Coordinate>().unwrap(), coordinate);
     }
 
     #[test]
@@ -307,7 +316,7 @@ mod tests {
 
         let coordinate = Coordinate::from_bit_board(bit_board);
 
-        assert_eq!(Coordinate::new('e', 5), coordinate);
+        assert_eq!("e5".parse::<Coordinate>().unwrap(), coordinate);
     }
 
     #[test]
@@ -326,78 +335,78 @@ mod tests {
 
     #[test]
     fn test_invert_coordinate_a1() {
-        let coord = Coordinate::new('a', 1);
-        let expected = Coordinate::new('i', 9);
+        let coord = "a1".parse::<Coordinate>().unwrap();
+        let expected = "i9".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(false), expected);
     }
 
     #[test]
     fn test_invert_coordinate_i9() {
-        let coord = Coordinate::new('i', 9);
-        let expected = Coordinate::new('a', 1);
+        let coord = "i9".parse::<Coordinate>().unwrap();
+        let expected = "a1".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(false), expected);
     }
 
     #[test]
     fn test_invert_coordinate_e5() {
-        let coord = Coordinate::new('e', 5);
-        let expected = Coordinate::new('e', 5);
+        let coord = "e5".parse::<Coordinate>().unwrap();
+        let expected = "e5".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(false), expected);
     }
 
     #[test]
     fn test_invert_coordinate_d3() {
-        let coord = Coordinate::new('d', 3);
-        let expected = Coordinate::new('f', 7);
+        let coord = "d3".parse::<Coordinate>().unwrap();
+        let expected = "f7".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(false), expected);
     }
 
     #[test]
     fn test_invert_coordinate_double_invert() {
-        let coord = Coordinate::new('d', 3);
+        let coord = "d3".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(false).invert(false), coord);
     }
 
     #[test]
     fn test_invert_coordinate_shift_a1() {
-        let coord = Coordinate::new('a', 1);
-        let expected = Coordinate::new('h', 8);
+        let coord = "a1".parse::<Coordinate>().unwrap();
+        let expected = "h8".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(true), expected);
     }
 
     #[test]
     fn test_invert_coordinate_shift_h8() {
-        let coord = Coordinate::new('h', 8);
-        let expected = Coordinate::new('a', 1);
+        let coord = "h8".parse::<Coordinate>().unwrap();
+        let expected = "a1".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(true), expected);
     }
 
     #[test]
     fn test_invert_coordinate_shift_e5() {
-        let coord = Coordinate::new('e', 5);
-        let expected = Coordinate::new('d', 4);
+        let coord = "e5".parse::<Coordinate>().unwrap();
+        let expected = "d4".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(true), expected);
     }
 
     #[test]
     fn test_invert_coordinate_shift_d3() {
-        let coord = Coordinate::new('d', 3);
-        let expected = Coordinate::new('e', 6);
+        let coord = "d3".parse::<Coordinate>().unwrap();
+        let expected = "e6".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(true), expected);
     }
 
     #[test]
     fn test_invert_coordinate_shift_double_invert() {
-        let coord = Coordinate::new('d', 3);
+        let coord = "d3".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.invert(true).invert(true), coord);
     }
@@ -410,7 +419,7 @@ mod test {
 
     #[test]
     fn test_action_pawn_move_ser_json() {
-        let action = Action::MovePawn(Coordinate::new('a', 1));
+        let action = "a1".parse::<Action>().unwrap();
         let serialized_action_as_json = json!(action);
 
         assert_eq!(serialized_action_as_json, "a1");
@@ -418,7 +427,7 @@ mod test {
 
     #[test]
     fn test_action_vertical_wall_ser_json() {
-        let action = Action::PlaceVerticalWall(Coordinate::new('a', 1));
+        let action = "a1v".parse::<Action>().unwrap();
         let serialized_action_as_json = json!(action);
 
         assert_eq!(serialized_action_as_json, "a1v");
@@ -426,7 +435,7 @@ mod test {
 
     #[test]
     fn test_action_horizontal_wall_ser_json() {
-        let action = Action::PlaceHorizontalWall(Coordinate::new('a', 1));
+        let action = "a1h".parse::<Action>().unwrap();
         let serialized_action_as_json = json!(action);
 
         assert_eq!(serialized_action_as_json, "a1h");
@@ -438,7 +447,7 @@ mod test {
 
         assert_eq!(
             serde_json::from_str::<Action>(json).unwrap(),
-            Action::MovePawn(Coordinate::new('i', 9)),
+            "i9".parse::<Action>().unwrap(),
         );
     }
 
@@ -448,7 +457,7 @@ mod test {
 
         assert_eq!(
             serde_json::from_str::<Action>(json).unwrap(),
-            Action::PlaceHorizontalWall(Coordinate::new('b', 6)),
+            "b6h".parse::<Action>().unwrap(),
         );
     }
 
@@ -458,7 +467,7 @@ mod test {
 
         assert_eq!(
             serde_json::from_str::<Action>(json).unwrap(),
-            Action::PlaceVerticalWall(Coordinate::new('d', 1)),
+            "d1v".parse::<Action>().unwrap(),
         );
     }
 }

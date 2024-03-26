@@ -626,9 +626,9 @@ mod tests {
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('f', 1)),
-                Action::MovePawn(Coordinate::new('d', 1)),
-                Action::MovePawn(Coordinate::new('e', 2))
+                "f1".parse::<Action>().unwrap(),
+                "d1".parse::<Action>().unwrap(),
+                "e2".parse::<Action>().unwrap()
             )
         );
     }
@@ -636,15 +636,15 @@ mod tests {
     #[test]
     fn test_get_valid_pawn_move_actions_p2() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 1)));
+        let game_state = game_state.take_action(&"f1".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('e', 8)),
-                Action::MovePawn(Coordinate::new('f', 9)),
-                Action::MovePawn(Coordinate::new('d', 9))
+                "e8".parse::<Action>().unwrap(),
+                "f9".parse::<Action>().unwrap(),
+                "d9".parse::<Action>().unwrap()
             )
         );
     }
@@ -652,34 +652,27 @@ mod tests {
     #[test]
     fn test_get_valid_pawn_move_actions_vertical_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
+        let game_state = game_state.take_action(&"d1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
-        assert_eq!(
-            valid_actions,
-            vec!(Action::MovePawn(Coordinate::new('e', 2)))
-        );
+        assert_eq!(valid_actions, vec!("e2".parse::<Action>().unwrap()));
     }
 
     #[test]
     fn test_get_valid_pawn_move_actions_vertical_wall_top() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('d', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"d1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('e', 1)),
-                Action::MovePawn(Coordinate::new('e', 3))
+                "e1".parse::<Action>().unwrap(),
+                "e3".parse::<Action>().unwrap()
             )
         );
     }
@@ -687,39 +680,37 @@ mod tests {
     #[test]
     fn test_get_valid_pawn_move_actions_horizontal_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d', 8)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 1)));
+        let game_state = game_state.take_action(&"d8h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('f', 1)),
-                Action::MovePawn(Coordinate::new('d', 1))
+                "f1".parse::<Action>().unwrap(),
+                "d1".parse::<Action>().unwrap()
             )
         );
 
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 1)));
+        let game_state = game_state.take_action(&"f1".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('f', 9)),
-                Action::MovePawn(Coordinate::new('d', 9))
+                "f9".parse::<Action>().unwrap(),
+                "d9".parse::<Action>().unwrap()
             )
         );
 
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('g', 1)),
-                Action::MovePawn(Coordinate::new('e', 1))
+                "g1".parse::<Action>().unwrap(),
+                "e1".parse::<Action>().unwrap()
             )
         );
     }
@@ -727,53 +718,50 @@ mod tests {
     #[test]
     fn test_get_valid_pawn_move_actions_blocked() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 8)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 6)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 5)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
 
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('e', 4)),
-                Action::MovePawn(Coordinate::new('f', 6)),
-                Action::MovePawn(Coordinate::new('d', 6)),
-                Action::MovePawn(Coordinate::new('e', 7))
+                "e4".parse::<Action>().unwrap(),
+                "f6".parse::<Action>().unwrap(),
+                "d6".parse::<Action>().unwrap(),
+                "e7".parse::<Action>().unwrap()
             )
         );
 
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 4)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a', 1)));
+        let game_state = game_state.take_action(&"e4h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('f', 5)),
-                Action::MovePawn(Coordinate::new('d', 5)),
-                Action::MovePawn(Coordinate::new('f', 6)),
-                Action::MovePawn(Coordinate::new('d', 6)),
-                Action::MovePawn(Coordinate::new('e', 7))
+                "f5".parse::<Action>().unwrap(),
+                "d5".parse::<Action>().unwrap(),
+                "f6".parse::<Action>().unwrap(),
+                "d6".parse::<Action>().unwrap(),
+                "e7".parse::<Action>().unwrap()
             )
         );
 
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 6)));
+        let game_state = game_state.take_action(&"e6h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
             vec!(
-                Action::MovePawn(Coordinate::new('f', 5)),
-                Action::MovePawn(Coordinate::new('d', 5)),
-                Action::MovePawn(Coordinate::new('f', 6)),
-                Action::MovePawn(Coordinate::new('d', 6))
+                "f5".parse::<Action>().unwrap(),
+                "d5".parse::<Action>().unwrap(),
+                "f6".parse::<Action>().unwrap(),
+                "d6".parse::<Action>().unwrap()
             )
         );
     }
@@ -804,16 +792,15 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_on_horizontal_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('d', 1)));
+        let game_state = game_state.take_action(&"d1h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
+            "c1h".parse::<Action>().unwrap(),
+            "d1h".parse::<Action>().unwrap(),
+            "e1h".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -824,13 +811,12 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_on_vertical_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 5)));
+        let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
-        let excludes_actions = vec![Action::PlaceHorizontalWall(Coordinate::new('e', 5))];
+        let excludes_actions = vec!["e5h".parse::<Action>().unwrap()];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
         assert!(!intersects);
@@ -840,19 +826,17 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
+        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
+            "c1h".parse::<Action>().unwrap(),
+            "e1h".parse::<Action>().unwrap(),
+            "d1h".parse::<Action>().unwrap(),
+            "d2h".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -863,19 +847,17 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_other_player() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
+        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
+            "c1h".parse::<Action>().unwrap(),
+            "e1h".parse::<Action>().unwrap(),
+            "d2h".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -886,24 +868,21 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_vert_horz() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('c', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c', 2)));
+        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceHorizontalWall(Coordinate::new('c', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
+            "c1h".parse::<Action>().unwrap(),
+            "e1h".parse::<Action>().unwrap(),
+            "d2h".parse::<Action>().unwrap(),
+            "b2h".parse::<Action>().unwrap(),
+            "c2h".parse::<Action>().unwrap(),
+            "d2h".parse::<Action>().unwrap(),
+            "e2h".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -914,29 +893,25 @@ mod tests {
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_edge() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 1)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 2)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c', 2)));
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('b', 3)));
+        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"b3v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceHorizontalWall(Coordinate::new('a', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('a', 3)),
-            Action::PlaceHorizontalWall(Coordinate::new('a', 4)),
-            Action::PlaceHorizontalWall(Coordinate::new('b', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('b', 3)),
-            Action::PlaceHorizontalWall(Coordinate::new('c', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('d', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 2)),
-            Action::PlaceHorizontalWall(Coordinate::new('e', 1)),
-            Action::PlaceHorizontalWall(Coordinate::new('f', 2)),
+            "a2h".parse::<Action>().unwrap(),
+            "a3h".parse::<Action>().unwrap(),
+            "a4h".parse::<Action>().unwrap(),
+            "b2h".parse::<Action>().unwrap(),
+            "b3h".parse::<Action>().unwrap(),
+            "c2h".parse::<Action>().unwrap(),
+            "d2h".parse::<Action>().unwrap(),
+            "e2h".parse::<Action>().unwrap(),
+            "e1h".parse::<Action>().unwrap(),
+            "f2h".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -970,16 +945,15 @@ mod tests {
     #[test]
     fn test_get_valid_vertical_wall_actions_on_vertical_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceVerticalWall(Coordinate::new('e', 5)));
+        let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_vertical_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
-            Action::PlaceVerticalWall(Coordinate::new('e', 4)),
-            Action::PlaceVerticalWall(Coordinate::new('e', 5)),
-            Action::PlaceVerticalWall(Coordinate::new('e', 6)),
+            "e4v".parse::<Action>().unwrap(),
+            "e5v".parse::<Action>().unwrap(),
+            "e6v".parse::<Action>().unwrap(),
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -990,13 +964,12 @@ mod tests {
     #[test]
     fn test_get_valid_vertical_wall_actions_on_horizontal_wall() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 5)));
+        let game_state = game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_vertical_wall_actions()
             .collect::<Vec<_>>();
-        let excludes_actions = vec![Action::PlaceVerticalWall(Coordinate::new('e', 5))];
+        let excludes_actions = vec!["e5v".parse::<Action>().unwrap()];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
         assert!(!intersects);
@@ -1006,41 +979,31 @@ mod tests {
     #[test]
     fn test_get_valid_wall_actions_on_all_walls_placed() {
         let game_state = GameState::initial();
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g', 1)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('g', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('a', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('f', 9)));
+        let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c1h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e1h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"g1h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"a2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"g2h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"a3h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
 
         // 9 walls placed
         let valid_actions = game_state.get_valid_horizontal_wall_actions();
         assert_eq!(valid_actions.count(), 46);
 
-        let game_state =
-            game_state.take_action(&Action::PlaceHorizontalWall(Coordinate::new('c', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
+        let game_state = game_state.take_action(&"c3h".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
 
         // 10 walls placed so we shouldn't be able to place anymore, horizontal or vertical
         let valid_horizontal_actions = game_state.get_valid_horizontal_wall_actions();
@@ -1053,24 +1016,24 @@ mod tests {
     #[test]
     fn test_is_terminal_p2() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 8)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 6)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 5)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 6)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 8)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, None);
 
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 1)));
+        let game_state = game_state.take_action(&"e1".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, Some(Value([0.0, 1.0])));
@@ -1079,25 +1042,25 @@ mod tests {
     #[test]
     fn test_is_terminal_p1() {
         let game_state = GameState::initial();
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 8)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 6)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 5)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 4)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 6)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 7)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 2)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 8)));
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, None);
 
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 3)));
-        let game_state = game_state.take_action(&Action::MovePawn(Coordinate::new('e', 9)));
+        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, Some(Value([1.0, 0.0])));

@@ -10,11 +10,6 @@ pub struct CountingGameState {
 }
 
 impl CountingGameState {
-    #[cfg(test)]
-    pub fn from_starting_count(p1_turn: bool, count: usize) -> Self {
-        Self { p1_turn, count }
-    }
-
     pub fn is_terminal_state(&self) -> Option<Value> {
         if self.count == 100 {
             Some(Value([1.0, 0.0]))
