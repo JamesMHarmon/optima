@@ -65,7 +65,7 @@ impl<'de> Visitor<'de> for ActionVisitor {
     where
         E: Error,
     {
-        Ok(Action::DropPiece(v as u64))
+        Ok(Action::DropPiece(v))
     }
 }
 

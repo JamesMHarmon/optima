@@ -11,7 +11,7 @@ pub trait FsExt {
     {
         let cwd_dir = std::env::current_dir()?;
 
-        Ok(cwd_dir.join(&self))
+        Ok(cwd_dir.join(self))
     }
 }
 

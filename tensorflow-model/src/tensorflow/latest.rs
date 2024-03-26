@@ -15,7 +15,6 @@ pub fn latest(model_dir: &Path) -> Result<PathBuf> {
         Fixed::from(Duration::from_secs(seconds_between_retries)).take(num_retries),
         || {
             let file = fs::read_dir(model_dir)?
-                .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_ok_and(|f| f.is_file()))
                 .filter_map(|f| {

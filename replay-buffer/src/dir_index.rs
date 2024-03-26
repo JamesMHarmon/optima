@@ -167,7 +167,6 @@ impl Files {
 
         let mut entries = path
             .read_dir()?
-            .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_ok_and(|f| f.is_file()))
             .filter(|e| {

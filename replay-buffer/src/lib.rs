@@ -169,9 +169,10 @@ impl ReplayBuffer {
             })
             .collect::<Vec<_>>();
 
-        num_samples.into_iter().zip(1..).fold(0., |s, (e, i)| {
-            (e as f32 + s * (i as f32 - 1.0) as f32) / i as f32
-        })
+        num_samples
+            .into_iter()
+            .zip(1..)
+            .fold(0., |s, (e, i)| (e as f32 + s * (i as f32 - 1.0)) / i as f32)
     }
 }
 
@@ -224,7 +225,7 @@ impl<S> SampleLoader<S> {
             moves_left_output: vals.by_ref().take(moves_left_size).collect(),
         };
 
-        assert!(matches!(vals.next(), None), "No more vals should be left");
+        assert!(vals.next().is_none(), "No more vals should be left");
 
         Ok(Some(inputs_and_targets))
     }
@@ -254,9 +255,9 @@ impl<S> SampleLoader<S> {
 
         let mut buffered_samples = read_cache_file();
 
-        if matches!(buffered_samples, Err(_)) {
+        if buffered_samples.is_err() {
             let res: Result<usize> = (|| {
-                fs::create_dir_all(&cache_path.parent().unwrap())?;
+                fs::create_dir_all(cache_path.parent().unwrap())?;
 
                 let file = OpenOptions::new()
                     .write(true)

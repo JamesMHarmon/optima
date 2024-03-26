@@ -114,7 +114,7 @@ pub fn unarchive<P: AsRef<Path>>(
         } else if path.starts_with(model_prefix) {
             let dest = path.strip_prefix("model/")?;
 
-            let dest = temp_dir.path().join(&dest);
+            let dest = temp_dir.path().join(dest);
             file.unpack(&dest)?;
         }
     }

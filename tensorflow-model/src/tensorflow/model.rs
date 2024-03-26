@@ -186,7 +186,7 @@ impl Predictor {
     pub fn new(path: &Path) -> Self {
         let mut graph = Graph::new();
 
-        let model = SavedModelBundle::load(&SessionOptions::new(), &["serve"], &mut graph, path)
+        let model = SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
             .expect("Expected to be able to load model");
 
         let signature = model
@@ -525,10 +525,10 @@ where
                 s.spawn_fifo(move |_| {
                     if let Some(analysis) = Self::try_immediate_analysis(
                         &state_to_analyse,
-                        &*transposition_table,
-                        &*engine,
-                        &*mapper,
-                        &*reporter,
+                        transposition_table,
+                        engine,
+                        mapper,
+                        reporter,
                     ) {
                         unordered_tx
                             .send((id, analysis, tx))
@@ -706,7 +706,7 @@ where
             return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
         }
 
-        if let Some(transposition_table) = &*transposition_table {
+        if let Some(transposition_table) = transposition_table {
             if let Some(transposition_entry) =
                 transposition_table.get(mapper.get_transposition_key(game_state))
             {

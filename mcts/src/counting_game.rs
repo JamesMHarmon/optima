@@ -138,7 +138,7 @@ impl GameAnalyzer for CountingAnalyzer {
                     policy_score: 0.4,
                 },
             ],
-            value_score: Value([(count as f32) / 100.0, (100.0 - count as f32) / 100.0]),
+            value_score: Value([count / 100.0, (100.0 - count) / 100.0]),
             moves_left: 0.0,
         })
     }
