@@ -32,16 +32,18 @@ pub fn deblunder<S, A, V, Vs, Qm>(
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
-            let expected_num_moves = max_visits_child.M().round() as usize;
+            let expected_num_moves_left = max_visits_child.M().round() as usize;
+            let expect_total_num_moves = metric.move_number + expected_num_moves_left;
 
-            value_stack.push(q_mix_amt, expected_num_moves);
+            value_stack.push(q_mix_amt, expect_total_num_moves);
 
             value_stack.set_if_not::<S, V, Qm>(game_state, max_visits_child.Q());
         }
 
         let (V, total_moves) = value_stack.latest::<_, V>(game_state);
         metric.metrics.score = V.clone();
-        metric.metrics.moves_left = (total_moves - metric.move_number + 1).max(1);
+        metric.metrics.moves_left =
+            (total_moves as isize + 1 - metric.move_number as isize).max(1) as usize;
     }
 }
 

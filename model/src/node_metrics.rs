@@ -43,6 +43,7 @@ pub struct NodeChildMetrics<A> {
     /// The Q score of the edge. This is an average of Q back propagated by the descendant nodes. Range is 0.0..=1.0. Q is from the perspective of the player to move of the parent node of this edge.
     Q: f32,
     /// The M score of the edge. This is an average of M back propagated by the descendant nodes.
+    /// The number of moves left for the specific game_state of the node as predicted by the neural network
     M: f32,
     /// The number of visits for the child node of this specific edge.
     visits: usize,
@@ -63,6 +64,8 @@ impl<A> NodeChildMetrics<A> {
         &self.action
     }
 
+    /// The M score of the edge. This is an average of M back propagated by the descendant nodes.
+    /// The number of moves left for the specific game_state of the node as predicted by the neural network
     pub fn M(&self) -> f32 {
         self.M
     }
