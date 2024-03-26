@@ -886,7 +886,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert!(intersects);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -915,7 +915,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert!(intersects);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
@@ -957,7 +957,7 @@ mod tests {
         ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
-        assert!(intersects);
+        assert!(!intersects);
         assert_eq!(valid_actions.len(), 64 - excludes_actions.len());
     }
 
