@@ -14,13 +14,13 @@ common = { path = "../common" }
 model = { path = "../model" }
 
 anyhow = "1.0"
-itertools = "0.10"
+itertools = "0.12"
 rand = "0.8"
 rand_distr = "0.4"
-tokio = { version = "1.18", features = ["parking_lot", "macros"] }
-async-std = "1.6"
+tokio = { version = "1.36", features = ["parking_lot", "macros"] }
+async-std = "1.12"
 futures = "0.3"
 generational-arena = "0.2"
 assert_approx_eq = "1.1"
 log = "0.4"
-futures-intrusive = "0.4"
+futures-intrusive = "0.5"
