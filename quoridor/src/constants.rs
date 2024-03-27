@@ -1,5 +1,3 @@
-pub const TRANSPOSITION_TABLE_CACHE_SIZE: usize = 8_000;
-
 pub const MAX_NUMBER_OF_MOVES: usize = 200;
 pub const BOARD_WIDTH: usize = 9;
 pub const BOARD_HEIGHT: usize = 9;

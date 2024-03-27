@@ -3,12 +3,11 @@ use std::path::PathBuf;
 
 use super::action::Action;
 use super::board::map_board_to_arr;
-use super::constants::{INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE, TRANSPOSITION_TABLE_CACHE_SIZE};
+use super::constants::{INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::value::Value;
 use engine::value::Value as ValueTrait;
-use log::info;
 use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
@@ -183,7 +182,12 @@ impl Load for ModelFactory {
         ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
-        info!("Loading model {:?}", model_ref);
+        let table_size = std::env::var("TABLE_SIZE")
+            .map(|v| {
+                v.parse::<usize>()
+                    .expect("TABLE_SIZE must be a valid number")
+            })
+            .unwrap_or(0);
 
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 
@@ -195,7 +199,7 @@ impl Load for ModelFactory {
             model_info,
             Engine::new(),
             mapper,
-            TRANSPOSITION_TABLE_CACHE_SIZE,
+            table_size,
         )?;
 
         Ok(ArchiveModel::new(model, model_temp_dir))

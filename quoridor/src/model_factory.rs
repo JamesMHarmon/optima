@@ -1,9 +1,7 @@
 use anyhow::Result;
-use log::info;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::constants::TRANSPOSITION_TABLE_CACHE_SIZE;
 use super::engine::Engine;
 use super::mappings::Mapper;
 use super::Model;
@@ -44,7 +42,12 @@ impl Load for ModelFactory {
     type M = Model;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
-        info!("Loading model {:?}", model_ref);
+        let table_size = std::env::var("TABLE_SIZE")
+            .map(|v| {
+                v.parse::<usize>()
+                    .expect("TABLE_SIZE must be a valid number")
+            })
+            .unwrap_or(0);
 
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 
@@ -54,7 +57,7 @@ impl Load for ModelFactory {
             model_info,
             Engine::new(),
             Mapper::new(),
-            TRANSPOSITION_TABLE_CACHE_SIZE,
+            table_size,
         )?;
 
         let archive_model = ArchiveModel::new(tensorflow_model, model_temp_dir);
