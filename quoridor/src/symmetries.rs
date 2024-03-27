@@ -29,7 +29,7 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits()))
+        .map(|m| NodeChildMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
         .collect();
 
     NodeMetrics {
@@ -37,5 +37,240 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
         value: metrics.value.clone(),
         moves_left: metrics.moves_left,
         children: children_symmetry,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::value::Value;
+    use engine::GameState as GameStateTrait;
+
+    fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
+        let symmetries = get_symmetries(PositionMetrics {
+            game_state,
+            policy: NodeMetrics {
+                visits: 0,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
+                children: vec![],
+            },
+            score: Value::new([0.0, 0.0]),
+            moves_left: 0,
+        });
+
+        symmetries.into_iter().map(|s| s.game_state).collect()
+    }
+
+    #[test]
+    fn test_game_state_symmetry_initial() {
+        let game_state: GameState = GameState::initial();
+
+        let symmetries: Vec<GameState> = get_symmetries_game_state(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_eq!(
+            game_state_original.to_string(),
+            game_state_symmetry.to_string()
+        );
+    }
+
+    #[test]
+    fn test_game_state_symmetry_pawn_move() {
+        let mut game_state: GameState = GameState::initial();
+        game_state = game_state.take_action(&"d1".parse().unwrap());
+
+        let game_state_rotated: &str = "
+  +---+---+---+---+---+---+---+---+---+
+9 |   |   |   |   | 2 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+8 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+7 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+6 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+5 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+4 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+3 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+2 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+1 |   |   |   |   |   | 1 |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+    a   b   c   d   e   f   g   h   i  
+
+  P1: 10  P2: 10
+";
+
+        let symmetries: Vec<GameState> = get_symmetries_game_state(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_ne!(
+            game_state_original.to_string(),
+            game_state_symmetry.to_string()
+        );
+
+        assert_eq!(game_state_symmetry.to_string(), game_state_rotated)
+    }
+
+    #[test]
+    fn test_game_state_symmetry_vertical_wall() {
+        let mut game_state: GameState = GameState::initial();
+        game_state = game_state.take_action(&"d1v".parse().unwrap());
+
+        let game_state_rotated: &str = "
+  +---+---+---+---+---+---+---+---+---+
+9 |   |   |   |   | 2 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+8 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+7 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+6 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+5 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+4 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+3 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+2 |   |   |   |   |   █   |   |   |   |
+  +---+---+---+---+---█---+---+---+---+
+1 |   |   |   |   | 1 █   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+    a   b   c   d   e   f   g   h   i  
+
+  P1: 9  P2: 10
+";
+
+        let symmetries: Vec<GameState> = get_symmetries_game_state(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_ne!(
+            game_state_original.to_string(),
+            game_state_symmetry.to_string()
+        );
+
+        assert_eq!(game_state_symmetry.to_string(), game_state_rotated)
+    }
+
+    #[test]
+    fn test_game_state_symmetry_horizontal_wall() {
+        let mut game_state: GameState = GameState::initial();
+        game_state = game_state.take_action(&"d1h".parse().unwrap());
+
+        let game_state_rotated: &str = "
+  +---+---+---+---+---+---+---+---+---+
+9 |   |   |   |   | 2 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+8 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+7 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+6 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+5 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+4 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+3 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+2 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+■■■■■■■+---+---+---+
+1 |   |   |   |   | 1 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+    a   b   c   d   e   f   g   h   i  
+
+  P1: 9  P2: 10
+";
+
+        let symmetries: Vec<GameState> = get_symmetries_game_state(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_ne!(
+            game_state_original.to_string(),
+            game_state_symmetry.to_string()
+        );
+
+        assert_eq!(game_state_symmetry.to_string(), game_state_rotated)
+    }
+
+    #[test]
+    fn test_game_state_symmetry_horizontal_wall_2() {
+        let mut game_state: GameState = GameState::initial();
+        game_state = game_state.take_action(&"a3h".parse().unwrap());
+
+        let game_state_rotated: &str = "
+  +---+---+---+---+---+---+---+---+---+
+9 |   |   |   |   | 2 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+8 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+7 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+6 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+5 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+4 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+■■■■■■■+
+3 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+2 |   |   |   |   |   |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+1 |   |   |   |   | 1 |   |   |   |   |
+  +---+---+---+---+---+---+---+---+---+
+    a   b   c   d   e   f   g   h   i  
+
+  P1: 9  P2: 10
+";
+
+        let symmetries: Vec<GameState> = get_symmetries_game_state(game_state);
+        let game_state_original = symmetries.first().unwrap();
+        let game_state_symmetry = symmetries.last().unwrap();
+
+        assert_ne!(
+            game_state_original.to_string(),
+            game_state_symmetry.to_string()
+        );
+
+        assert_eq!(game_state_symmetry.to_string(), game_state_rotated)
+    }
+
+    #[test]
+    fn test_game_state_symmetry_actions() {
+        let game_state: GameState = GameState::initial();
+
+        let symmetries = get_symmetries(PositionMetrics {
+            game_state,
+            policy: NodeMetrics {
+                visits: 0,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
+                children: vec![
+                    NodeChildMetrics::new("a1".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("a1v".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("a1h".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("h3h".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("h3v".parse().unwrap(), 0.0, 0.0, 0),
+                ],
+            },
+            score: Value::new([0.0, 0.0]),
+            moves_left: 0,
+        });
+
+        let node_metrics = &symmetries.last().unwrap().policy.children;
+        assert_eq!(node_metrics[0].action(), &"i1".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[1].action(), &"h1v".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[2].action(), &"h1h".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[3].action(), &"a3h".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[4].action(), &"a3v".parse::<Action>().unwrap());
     }
 }

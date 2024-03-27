@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 pub struct Value(pub [f32; 2]);
 
 impl Value {
+    pub fn new(values: [f32; 2]) -> Self {
+        Self(values)
+    }
+
     pub fn update_players_value(&mut self, value: f32, player: usize) {
         self.0[player - 1] = value
     }

@@ -51,7 +51,7 @@ impl Coordinate {
         )
     }
 
-    pub fn invert_horizontal(&self, shift: bool) -> Coordinate {
+    pub fn vertical_symmetry(&self, shift: bool) -> Coordinate {
         Coordinate::new(
             if shift {
                 Self::invert_column_shift(self.column)
@@ -152,14 +152,14 @@ impl Action {
         }
     }
 
-    pub fn invert_horizontal(&self) -> Self {
+    pub fn vertical_symmetry(&self) -> Self {
         match self {
-            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert_horizontal(false)),
+            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.vertical_symmetry(false)),
             Action::PlaceHorizontalWall(coordinate) => {
-                Action::PlaceHorizontalWall(coordinate.invert_horizontal(true))
+                Action::PlaceHorizontalWall(coordinate.vertical_symmetry(true))
             }
             Action::PlaceVerticalWall(coordinate) => {
-                Action::PlaceVerticalWall(coordinate.invert_horizontal(true))
+                Action::PlaceVerticalWall(coordinate.vertical_symmetry(true))
             }
         }
     }

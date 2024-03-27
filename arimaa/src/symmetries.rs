@@ -29,7 +29,7 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits()))
+        .map(|m| NodeChildMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
         .collect();
 
     NodeMetrics {
@@ -321,10 +321,10 @@ mod tests {
             match original.action() {
                 Action::Move(original_square, original_direction) => match symmetrical.action() {
                     Action::Move(symmetrical_square, symmetrical_direction) => {
-                        assert_eq!(*original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(*original_square, symmetrical_square.vertical_symmetry());
                         assert_eq!(
                             *original_direction,
-                            symmetrical_direction.invert_horizontal()
+                            symmetrical_direction.vertical_symmetry()
                         );
                     }
                     _ => panic!(),
@@ -425,7 +425,7 @@ mod tests {
             match original.action() {
                 Action::Place(original_square) => match symmetrical.action() {
                     Action::Place(symmetrical_square) => {
-                        assert_eq!(*original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(*original_square, symmetrical_square.vertical_symmetry());
                     }
                     _ => panic!(),
                 },
@@ -525,7 +525,7 @@ mod tests {
             match original.action() {
                 Action::Place(original_square) => match symmetrical.action() {
                     Action::Place(symmetrical_square) => {
-                        assert_eq!(*original_square, symmetrical_square.invert_horizontal());
+                        assert_eq!(*original_square, symmetrical_square.vertical_symmetry());
                     }
                     _ => panic!(),
                 },

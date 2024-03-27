@@ -8,15 +8,15 @@ pub enum BoardType {
 }
 
 #[allow(clippy::assign_op_pattern)]
-pub fn map_board_to_arr_invertable(
+pub fn map_board_to_arr_rotatable(
     board: u128,
     board_type: BoardType,
-    invert: bool,
+    rotate: bool,
 ) -> [f32; BOARD_SIZE] {
     let mut board = board;
     let mut result = [0f32; BOARD_SIZE];
 
-    if invert && (board_type == BoardType::VerticalWall || board_type == BoardType::HorizontalWall)
+    if rotate && (board_type == BoardType::VerticalWall || board_type == BoardType::HorizontalWall)
     {
         // Shift the walls up and to the right so that when we do a 180 rotation, they will be in their respective positions.
         board = shift_up_right!(board);
@@ -24,7 +24,7 @@ pub fn map_board_to_arr_invertable(
 
     while board != 0 {
         let bit_idx = board.trailing_zeros() as usize;
-        let removed_bit_vec_idx = if invert {
+        let removed_bit_vec_idx = if rotate {
             bit_idx
         } else {
             map_board_idx_to_vec_idx(bit_idx)
@@ -129,11 +129,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_horizontal_walls_h8() {
+    fn test_map_board_to_arr_rotatable_horizontal_walls_h8() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"h8h".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'i', 8), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             true,
@@ -156,11 +156,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_horizontal_walls_a8() {
+    fn test_map_board_to_arr_rotatable_horizontal_walls_a8() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a8h".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'b', 8), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             true,
@@ -183,11 +183,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_horizontal_walls_a1() {
+    fn test_map_board_to_arr_rotatable_horizontal_walls_a1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'b', 1), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             true,
@@ -210,11 +210,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_horizontal_walls_h1() {
+    fn test_map_board_to_arr_rotatable_horizontal_walls_h1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             true,
@@ -237,11 +237,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_horizontal_walls_e5() {
+    fn test_map_board_to_arr_rotatable_horizontal_walls_e5() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'f', 5), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             true,
@@ -264,11 +264,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_vertical_walls_h8() {
+    fn test_map_board_to_arr_rotatable_vertical_walls_h8() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"h8v".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 9), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             true,
@@ -291,11 +291,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_vertical_walls_a8() {
+    fn test_map_board_to_arr_rotatable_vertical_walls_a8() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a8v".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             true,
@@ -318,11 +318,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_vertical_walls_a1() {
+    fn test_map_board_to_arr_rotatable_vertical_walls_a1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a1v".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 2), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             true,
@@ -345,11 +345,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_vertical_walls_h1() {
+    fn test_map_board_to_arr_rotatable_vertical_walls_h1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"h1v".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 2), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             true,
@@ -372,11 +372,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_vertical_walls_e5() {
+    fn test_map_board_to_arr_rotatable_vertical_walls_e5() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'e', 6), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(
+        let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_placement_board,
             BoardType::VerticalWall,
             true,
@@ -399,85 +399,85 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_i9() {
+    fn test_map_board_to_arr_rotatable_pawn_i9() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"i9".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, false);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 9), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, true);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_a9() {
+    fn test_map_board_to_arr_rotatable_pawn_a9() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a9".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, false);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, true);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_a1() {
+    fn test_map_board_to_arr_rotatable_pawn_a1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"a1".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, false);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, true);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 9), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_h1() {
+    fn test_map_board_to_arr_rotatable_pawn_h1() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"i1".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, false);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, true);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_e5() {
+    fn test_map_board_to_arr_rotatable_pawn_e5() {
         let game_state = GameState::initial();
         let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
 
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, false);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
 
         // Inverted
-        let arr = map_board_to_arr_invertable(game_state.p1_pawn_board, BoardType::Pawn, true);
+        let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);

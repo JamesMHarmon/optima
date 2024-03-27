@@ -42,7 +42,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_board_to_arr_invertable_pawn_a1() {
+    fn test_map_board_to_arr_rotatable_pawn_a1() {
         let game_state: GameState = "
              1g
               +-----------------+

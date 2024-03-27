@@ -1,4 +1,4 @@
-use super::board::{map_board_to_arr_invertable, BoardType};
+use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER,
 };
@@ -36,21 +36,21 @@ pub struct GameState {
 
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let p1_board = map_board_to_arr_invertable(self.p1_pawn_board, BoardType::Pawn, false);
-        let p2_board = map_board_to_arr_invertable(self.p2_pawn_board, BoardType::Pawn, false);
-        let horizontal_wall_placement = map_board_to_arr_invertable(
+        let p1_board = map_board_to_arr_rotatable(self.p1_pawn_board, BoardType::Pawn, false);
+        let p2_board = map_board_to_arr_rotatable(self.p2_pawn_board, BoardType::Pawn, false);
+        let horizontal_wall_placement = map_board_to_arr_rotatable(
             self.horizontal_wall_placement_board,
             BoardType::Pawn,
             false,
         );
         let vertical_wall_placement =
-            map_board_to_arr_invertable(self.vertical_wall_placement_board, BoardType::Pawn, false);
-        let horizontal_wall_board = map_board_to_arr_invertable(
+            map_board_to_arr_rotatable(self.vertical_wall_placement_board, BoardType::Pawn, false);
+        let horizontal_wall_board = map_board_to_arr_rotatable(
             self.horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             false,
         );
-        let vertical_wall_board = map_board_to_arr_invertable(
+        let vertical_wall_board = map_board_to_arr_rotatable(
             self.vertical_wall_placement_board,
             BoardType::VerticalWall,
             false,
@@ -198,7 +198,7 @@ impl GameState {
             Self::map_bit_board_to_coordinates(bit_board)
                 .into_iter()
                 .fold(0u128, |mut bit_board, coord| {
-                    bit_board |= coord.invert_horizontal(shift).as_bit_board();
+                    bit_board |= coord.vertical_symmetry(shift).as_bit_board();
                     bit_board
                 })
         };

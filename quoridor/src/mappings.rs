@@ -6,7 +6,7 @@ use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
 use super::transposition_entry::TranspositionEntry;
 
 use super::action::{Action, Coordinate};
-use super::board::{map_board_to_arr_invertable, BoardType};
+use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, INPUT_C, INPUT_H, INPUT_W, NUM_WALLS_PER_PLAYER,
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
@@ -141,15 +141,15 @@ impl InputMap<GameState> for Mapper {
         let invert = !*p1_turn_to_move;
 
         let curr_pawn_board_vec =
-            map_board_to_arr_invertable(curr_player_pawn_board, BoardType::Pawn, invert);
+            map_board_to_arr_rotatable(curr_player_pawn_board, BoardType::Pawn, invert);
         let oppo_pawn_board_vec =
-            map_board_to_arr_invertable(oppo_player_pawn_board, BoardType::Pawn, invert);
-        let vertical_wall_vec = map_board_to_arr_invertable(
+            map_board_to_arr_rotatable(oppo_player_pawn_board, BoardType::Pawn, invert);
+        let vertical_wall_vec = map_board_to_arr_rotatable(
             *vertical_wall_placement_board,
             BoardType::VerticalWall,
             invert,
         );
-        let horizontal_wall_vec = map_board_to_arr_invertable(
+        let horizontal_wall_vec = map_board_to_arr_rotatable(
             *horizontal_wall_placement_board,
             BoardType::HorizontalWall,
             invert,
