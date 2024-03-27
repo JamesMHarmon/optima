@@ -1,40 +1,38 @@
-use arimaa::{Action, GameState, Mapper, Value};
-use arimaa::{INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::{ActionWithPolicy, NodeMetrics};
+use quoridor::{Action, GameState, Mapper, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
 
 use crate::q_mix::{QMix, ValueStore};
 
 use super::sample::Sample;
 
-pub struct ArimaaSampler {
-    engine: arimaa::Engine,
+pub struct QuoridorSampler {
+    engine: quoridor::Engine,
     mapper: Mapper,
 }
 
-impl ArimaaSampler {
-    #[allow(dead_code)]
+impl QuoridorSampler {
     pub fn new(_mode: Option<String>) -> Self {
         Self {
-            engine: arimaa::Engine::new(),
+            engine: quoridor::Engine::new(),
             mapper: Mapper::new(),
         }
     }
 }
 
-impl Dimension for ArimaaSampler {
+impl Dimension for QuoridorSampler {
     fn dimensions(&self) -> [u64; 3] {
         self.mapper.dimensions()
     }
 }
 
-impl Sample for ArimaaSampler {
+impl Sample for QuoridorSampler {
     type State = GameState;
     type Action = Action;
     type Value = Value;
-    type ValueStore = ArimaaVStore;
+    type ValueStore = QuoridorVStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         self.engine.take_action(game_state, action)
@@ -48,7 +46,7 @@ impl Sample for ArimaaSampler {
         &self,
         metric: model::PositionMetrics<Self::State, Self::Action, Self::Value>,
     ) -> Vec<model::PositionMetrics<Self::State, Self::Action, Self::Value>> {
-        arimaa::get_symmetries(metric)
+        quoridor::get_symmetries(metric)
     }
 
     fn moves_left_size(&self) -> usize {
@@ -64,13 +62,13 @@ impl Sample for ArimaaSampler {
     }
 }
 
-impl InputMap<GameState> for ArimaaSampler {
+impl InputMap<GameState> for QuoridorSampler {
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         self.mapper.game_state_to_input(game_state, input, mode)
     }
 }
 
-impl PolicyMap<GameState, Action, Value> for ArimaaSampler {
+impl PolicyMap<GameState, Action, Value> for QuoridorSampler {
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &GameState,
@@ -85,7 +83,7 @@ impl PolicyMap<GameState, Action, Value> for ArimaaSampler {
     }
 }
 
-impl ValueMap<GameState, Value> for ArimaaSampler {
+impl ValueMap<GameState, Value> for QuoridorSampler {
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
         self.mapper.map_value_to_value_output(game_state, value)
     }
@@ -96,7 +94,7 @@ impl ValueMap<GameState, Value> for ArimaaSampler {
 }
 
 #[allow(non_snake_case)]
-impl QMix<GameState, Value> for ArimaaSampler {
+impl QMix<GameState, Value> for QuoridorSampler {
     fn mix_q(game_state: &GameState, value: &Value, q_mix: f32, Q: f32) -> Value {
         if q_mix == 0.0 {
             return value.clone();
@@ -126,10 +124,10 @@ impl QMix<GameState, Value> for ArimaaSampler {
 }
 
 #[derive(Default)]
-pub struct ArimaaVStore([Option<Value>; 2]);
+pub struct QuoridorVStore([Option<Value>; 2]);
 
 #[allow(non_snake_case)]
-impl ValueStore<GameState, Value> for ArimaaVStore {
+impl ValueStore<GameState, Value> for QuoridorVStore {
     fn get_v_for_player(&self, game_state: &GameState) -> Option<&Value> {
         let player = game_state.player_to_move();
         self.0[player - 1].as_ref()

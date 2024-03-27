@@ -12,6 +12,7 @@ pub mod constants;
 pub mod engine;
 pub mod game_state;
 pub mod mappings;
+pub mod symmetries;
 pub mod transposition_entry;
 pub mod value;
 
@@ -20,6 +21,7 @@ pub use constants::*;
 pub use engine::Engine;
 pub use game_state::*;
 pub use mappings::*;
+pub use symmetries::*;
 pub use transposition_entry::*;
 pub use value::*;
 

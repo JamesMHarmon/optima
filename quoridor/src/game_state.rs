@@ -193,8 +193,8 @@ impl GameState {
         }
     }
 
-    pub fn get_horizontal_symmetry(&self) -> Self {
-        let get_horizontal_symmetry_bit_board = |bit_board: u128, shift: bool| {
+    pub fn get_vertical_symmetry(&self) -> Self {
+        let get_vertical_symmetry_bit_board = |bit_board: u128, shift: bool| {
             Self::map_bit_board_to_coordinates(bit_board)
                 .into_iter()
                 .fold(0u128, |mut bit_board, coord| {
@@ -204,22 +204,34 @@ impl GameState {
         };
 
         Self {
-            p1_pawn_board: get_horizontal_symmetry_bit_board(self.p1_pawn_board, false),
-            p2_pawn_board: get_horizontal_symmetry_bit_board(self.p2_pawn_board, false),
-            vertical_wall_placement_board: get_horizontal_symmetry_bit_board(
+            p1_pawn_board: get_vertical_symmetry_bit_board(self.p1_pawn_board, false),
+            p2_pawn_board: get_vertical_symmetry_bit_board(self.p2_pawn_board, false),
+            vertical_wall_placement_board: get_vertical_symmetry_bit_board(
                 self.vertical_wall_placement_board,
                 true,
             ),
-            horizontal_wall_placement_board: get_horizontal_symmetry_bit_board(
+            horizontal_wall_placement_board: get_vertical_symmetry_bit_board(
                 self.horizontal_wall_placement_board,
                 true,
             ),
-            ..*self
+            num_moves: self.num_moves,
+            p1_num_walls_placed: self.p1_num_walls_placed,
+            p2_num_walls_placed: self.p2_num_walls_placed,
+            zobrist: self.zobrist,
+            p1_turn_to_move: self.p1_turn_to_move,
         }
     }
 
     pub fn get_transposition_hash(&self) -> u64 {
         self.zobrist.board_state_hash()
+    }
+
+    pub fn player_to_move(&self) -> usize {
+        if self.p1_turn_to_move {
+            1
+        } else {
+            2
+        }
     }
 
     fn move_pawn(&self, pawn_board: u128) -> Self {

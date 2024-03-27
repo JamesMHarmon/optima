@@ -2315,6 +2315,7 @@ dependencies = [
  "npy",
  "numpy",
  "pyo3",
+ "quoridor",
  "rand 0.8.1",
  "rayon",
  "self-play",

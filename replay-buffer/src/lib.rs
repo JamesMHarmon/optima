@@ -26,10 +26,11 @@ mod deblunder_test;
 mod dir_index;
 mod index;
 mod q_mix;
+mod quoridor_sampler;
 mod sample;
 mod sample_file;
 
-use arimaa_sampler::ArimaaSampler as Sampler;
+use quoridor_sampler::QuoridorSampler as Sampler;
 
 use crate::index::*;
 use crate::sample::*;

@@ -24,6 +24,9 @@ self-play = { path = "../self-play", default-features = false, features = [
 arimaa = { path = "../arimaa", default-features = false, features = [
     "mappings",
 ] }
+quoridor = { path = "../quoridor", default-features = false, features = [
+    "mappings"
+] }
 
 anyhow = "1.0.57"
 approx = "0.5.1"

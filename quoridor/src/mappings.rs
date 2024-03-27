@@ -17,8 +17,6 @@ use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
-use model::position_metrics::PositionMetrics;
-use model::NodeChildMetrics;
 use tensorflow_model::Mode;
 
 #[derive(Default)]
@@ -27,34 +25,6 @@ pub struct Mapper {}
 impl Mapper {
     pub fn new() -> Self {
         Self {}
-    }
-
-    pub fn symmetries(
-        &self,
-        metrics: PositionMetrics<GameState, Action, Value>,
-    ) -> Vec<PositionMetrics<GameState, Action, Value>> {
-        let symmetrical_children = metrics
-            .policy
-            .children
-            .iter()
-            .map(|m| {
-                NodeChildMetrics::new(m.action().invert_horizontal(), m.Q(), m.M(), m.visits())
-            })
-            .collect();
-
-        let symmetrical_pos = PositionMetrics {
-            game_state: metrics.game_state.get_horizontal_symmetry(),
-            policy: NodeMetrics {
-                visits: metrics.policy.visits,
-                children: symmetrical_children,
-                value: metrics.policy.value.clone(),
-                moves_left: metrics.policy.moves_left,
-            },
-            score: metrics.score.clone(),
-            moves_left: metrics.moves_left,
-        };
-
-        vec![metrics, symmetrical_pos]
     }
 }
 
