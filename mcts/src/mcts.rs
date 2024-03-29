@@ -327,19 +327,17 @@ where
                 node_child_index: selected_child_node_children_index,
             });
 
-            let (node_visits, edges) = node.get_parts_mut();
-            let selected_child_node = &mut edges[selected_child_node_children_index];
+            node.increment_visits();
+            let selected_edge = node.get_child_by_index_mut(selected_child_node_children_index);
 
-            game_state =
-                Cow::Owned(game_engine.take_action(&game_state, selected_child_node.action()));
+            game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
             move_number = game_engine.get_move_number(&game_state);
 
-            let selected_child_node_node = &mut selected_child_node.node;
-            let prev_visits = selected_child_node.visits;
-            selected_child_node.visits += 1;
-            *node_visits += 1;
+            let selected_child_node = &mut selected_edge.node;
+            let prev_visits = selected_edge.visits;
+            selected_edge.visits += 1;
 
-            if let Some(selected_child_node_index) = selected_child_node_node.get_index() {
+            if let Some(selected_child_node_index) = selected_child_node.get_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
                     Self::update_node_values(
@@ -357,8 +355,8 @@ where
             }
 
             // If the node is yet to be expanded and is not already expanded, then start expanding it.
-            if selected_child_node_node.is_unexpanded() {
-                selected_child_node_node.mark_as_expanding();
+            if selected_child_node.is_unexpanded() {
+                selected_child_node.mark_as_expanding();
                 drop(arena_mut);
 
                 let expanded_node = Self::analyse_and_create_node(&game_state, analyzer).await;
@@ -382,7 +380,7 @@ where
             }
 
             // The node must be expanding in another async operation. Wait for that to finish and continue the loop as if it was already expanded.
-            let waiter = selected_child_node_node.get_waiter();
+            let waiter = selected_child_node.get_waiter();
             drop(arena_mut);
 
             waiter.wait().await;
@@ -547,7 +545,7 @@ where
 
     fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
         let node = arena.node_mut(node_index);
-        node.visits = 1;
+        node.set_visits(1);
 
         for child in node.iter_edges_mut() {
             child.visits = 0;
@@ -873,7 +871,7 @@ where
 {
     fn from(val: &MCTSNode<A, V>) -> Self {
         NodeMetrics {
-            visits: val.visits,
+            visits: val.visits(),
             value: val.value_score.clone(),
             moves_left: val.moves_left_score,
             children: val.iter_edges().map(|e| e.into()).collect_vec(),

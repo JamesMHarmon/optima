@@ -8,23 +8,10 @@ use crate::edge::MCTSEdge;
 
 #[derive(Debug)]
 pub struct MCTSNode<A, V> {
-    pub(crate) visits: usize,
+    visits: usize,
     pub(crate) value_score: V,
     pub(crate) moves_left_score: f32,
     edges: Vec<MCTSEdge<A>>,
-}
-
-impl<A, V> MCTSNode<A, V>
-where
-    A: Eq,
-{
-    pub fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
-        self.iter_edges().find(|c| c.action() == action)
-    }
-
-    pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
-        self.iter_edges().position(|c| c.action() == action)
-    }
 }
 
 impl<A, V> MCTSNode<A, V> {
@@ -79,8 +66,29 @@ impl<A, V> MCTSNode<A, V> {
         self.visits += 1;
     }
 
+    pub fn visits(&self) -> usize {
+        self.visits
+    }
+
+    pub fn set_visits(&mut self, visits: usize) {
+        self.visits = visits;
+    }
+
     pub fn get_parts_mut(&mut self) -> (&mut usize, &mut Vec<MCTSEdge<A>>) {
         (&mut self.visits, &mut self.edges)
+    }
+}
+
+impl<A, V> MCTSNode<A, V>
+where
+    A: Eq,
+{
+    pub fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
+        self.iter_edges().find(|c| c.action() == action)
+    }
+
+    pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
+        self.iter_edges().position(|c| c.action() == action)
     }
 }
 
