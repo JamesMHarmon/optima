@@ -856,11 +856,8 @@ enum GameLengthBaseline {
 
 impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
     fn from(analysis: GameStateAnalysis<A, V>) -> Self {
-        MCTSNode::new(
-            analysis.value_score,
-            analysis.policy_scores,
-            analysis.moves_left,
-        )
+        let (policy_scores, value_score, moves_left_score) = analysis.into_inner();
+        MCTSNode::new(value_score, policy_scores, moves_left_score)
     }
 }
 

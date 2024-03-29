@@ -110,31 +110,31 @@ impl GameAnalyzer for CountingAnalyzer {
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let count = game_state.count as f32;
 
-        if let Some(score) = game_state.is_terminal_state() {
-            return future::ready(GameStateAnalysis {
-                policy_scores: Vec::new(),
-                value_score: score,
-                moves_left: 0.0,
-            });
+        if let Some(value_score) = game_state.is_terminal_state() {
+            return future::ready(GameStateAnalysis::new(value_score, Vec::new(), 0.0));
         }
 
-        future::ready(GameStateAnalysis {
-            policy_scores: vec![
-                ActionWithPolicy {
-                    action: CountingAction::Increment,
-                    policy_score: 0.3,
-                },
-                ActionWithPolicy {
-                    action: CountingAction::Decrement,
-                    policy_score: 0.3,
-                },
-                ActionWithPolicy {
-                    action: CountingAction::Stay,
-                    policy_score: 0.4,
-                },
-            ],
-            value_score: Value([count / 100.0, (100.0 - count) / 100.0]),
-            moves_left: 0.0,
-        })
+        let value_score = Value([count / 100.0, (100.0 - count) / 100.0]);
+        let moves_left = 0.0;
+        let policy_scores = vec![
+            ActionWithPolicy {
+                action: CountingAction::Increment,
+                policy_score: 0.3,
+            },
+            ActionWithPolicy {
+                action: CountingAction::Decrement,
+                policy_score: 0.3,
+            },
+            ActionWithPolicy {
+                action: CountingAction::Stay,
+                policy_score: 0.4,
+            },
+        ];
+
+        future::ready(GameStateAnalysis::new(
+            value_score,
+            policy_scores,
+            moves_left,
+        ))
     }
 }

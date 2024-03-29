@@ -74,10 +74,6 @@ impl<A, V> MCTSNode<A, V> {
         self.visits = visits;
     }
 
-    pub fn get_parts_mut(&mut self) -> (&mut usize, &mut Vec<MCTSEdge<A>>) {
-        (&mut self.visits, &mut self.edges)
-    }
-
     pub fn value_score(&self) -> &V {
         &self.value_score
     }
