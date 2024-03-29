@@ -403,8 +403,8 @@ where
         arena: &mut NodeArenaInner<MCTSNode<A, V>>,
     ) {
         let value_node = &arena.node(value_node_index);
-        let value_score = &value_node.value_score.clone();
-        let value_node_moves_left_score = value_node.moves_left_score;
+        let value_score = &value_node.value_score().clone();
+        let value_node_moves_left_score = value_node.moves_left_score();
         let value_node_game_length = value_node_move_num as f32 + value_node_moves_left_score;
 
         for NodeUpdateInfo {
@@ -673,7 +673,7 @@ where
             let Psa = child.policy_score;
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let moves_left = node.map_or(0.0, |n| n.moves_left_score);
+            let moves_left = node.map_or(0.0, |n| n.moves_left_score());
             let Msa = Self::get_Msa(child, game_length_baseline, options);
             let M = div_or_zero(child.M, child.visits as f32);
             let game_length = if Nsa == 0 {
@@ -872,8 +872,8 @@ where
     fn from(val: &MCTSNode<A, V>) -> Self {
         NodeMetrics {
             visits: val.visits(),
-            value: val.value_score.clone(),
-            moves_left: val.moves_left_score,
+            value: val.value_score().clone(),
+            moves_left: val.moves_left_score(),
             children: val.iter_edges().map(|e| e.into()).collect_vec(),
         }
     }

@@ -9,8 +9,8 @@ use crate::edge::MCTSEdge;
 #[derive(Debug)]
 pub struct MCTSNode<A, V> {
     visits: usize,
-    pub(crate) value_score: V,
-    pub(crate) moves_left_score: f32,
+    value_score: V,
+    moves_left_score: f32,
     edges: Vec<MCTSEdge<A>>,
 }
 
@@ -76,6 +76,14 @@ impl<A, V> MCTSNode<A, V> {
 
     pub fn get_parts_mut(&mut self) -> (&mut usize, &mut Vec<MCTSEdge<A>>) {
         (&mut self.visits, &mut self.edges)
+    }
+
+    pub fn value_score(&self) -> &V {
+        &self.value_score
+    }
+
+    pub fn moves_left_score(&self) -> f32 {
+        self.moves_left_score
     }
 }
 
