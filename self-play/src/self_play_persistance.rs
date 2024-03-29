@@ -26,9 +26,9 @@ impl SelfPlayPersistance {
     pub fn write<A: Serialize, V: Serialize>(
         &mut self,
         self_play_metrics: &SelfPlayMetrics<A, V>,
-        model_info: ModelInfo,
+        model_info: &ModelInfo,
     ) -> Result<()> {
-        let file_path = self.generate_file_path_for_game(&model_info);
+        let file_path = self.generate_file_path_for_game(model_info);
 
         fs::create_dir_all(
             file_path

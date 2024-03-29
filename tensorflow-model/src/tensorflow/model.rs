@@ -1,4 +1,5 @@
 use anyhow::Result;
+use common::get_env_usize;
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
@@ -64,19 +65,10 @@ where
         mapper: Map,
         tt_cache_size: usize,
     ) -> Result<Self> {
-        let batch_size = std::env::var("ANALYSIS_REQUEST_BATCH_SIZE")
-            .map(|v| {
-                v.parse::<usize>()
-                    .expect("ANALYSIS_REQUEST_BATCH_SIZE must be a valid int")
-            })
-            .unwrap_or(ANALYSIS_REQUEST_BATCH_SIZE);
-
-        let analysis_request_threads = std::env::var("ANALYSIS_REQUEST_THREADS")
-            .map(|v| {
-                v.parse::<usize>()
-                    .expect("ANALYSIS_REQUEST_THREADS must be a valid int")
-            })
-            .unwrap_or(ANALYSIS_REQUEST_THREADS);
+        let batch_size =
+            get_env_usize("ANALYSIS_REQUEST_BATCH_SIZE").unwrap_or(ANALYSIS_REQUEST_BATCH_SIZE);
+        let analysis_request_threads =
+            get_env_usize("ANALYSIS_REQUEST_THREADS").unwrap_or(ANALYSIS_REQUEST_THREADS);
 
         if std::env::var("TF_CPP_MIN_LOG_LEVEL").is_err() {
             std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");

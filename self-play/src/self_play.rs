@@ -1,7 +1,9 @@
 use anyhow::Result;
+use common::get_env_usize;
 use crossbeam::channel::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
+use log::warn;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -32,7 +34,8 @@ where
     <F as Latest>::MR: Debug + Eq + Send,
 {
     let starting_run_time = Instant::now();
-    let (game_results_tx, game_results_rx) = crossbeam::channel::unbounded();
+    let writer_channel_size = get_env_usize("WRITER_CHANNEL_SIZE").unwrap_or(1000);
+    let (game_results_tx, game_results_rx) = crossbeam::channel::bounded(writer_channel_size);
     let runtime_handle = tokio::runtime::Handle::current();
 
     let latest_model_ref = model_factory.latest()?;
@@ -89,11 +92,12 @@ where
             let mut num_of_games_played: usize = 0;
 
             while let Ok((self_play_metric, game_state, model_info)) = game_results_rx.recv() {
-                self_play_persistance.write(&self_play_metric, model_info).unwrap();
+                self_play_persistance.write(&self_play_metric, &model_info).unwrap();
                 num_of_games_played += 1;
 
                 info!(
-                    "Number of Actions: {}, Score: {:?}, Move: {:?}, Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
+                    "Model: {}, Number of Actions: {}, Score: {:?}, Move: {:?}, Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
+                    model_info.model_name_w_num(),
                     self_play_metric.analysis().len(),
                     self_play_metric.score(),
                     engine.get_move_number(&game_state),
@@ -139,9 +143,11 @@ where
     }
 
     while let Some(self_play_metric) = self_play_metric_stream.next().await {
-        results_channel
-            .send(self_play_metric)
-            .expect("Failed to send game result");
+        let result = results_channel.try_send(self_play_metric);
+
+        if let Err(e) = result {
+            warn!("Failed to send game results through writer channel. {}", e);
+        }
 
         self_play_metric_stream.push(play_game());
     }

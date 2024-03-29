@@ -3,7 +3,7 @@ mod cli;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use cli::{Cli, Commands};
-use common::{ConfigLoader, FsExt};
+use common::{get_env_usize, ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use log::info;
@@ -18,10 +18,8 @@ fn main() -> Result<()> {
 
     builder.enable_all();
 
-    if let Ok(worker_threads) = std::env::var("TOKIO_THREADS") {
-        if let Ok(worker_threads) = worker_threads.parse() {
-            builder.worker_threads(worker_threads);
-        }
+    if let Some(worker_threads) = get_env_usize("TOKIO_THREADS") {
+        builder.worker_threads(worker_threads);
     }
 
     info!("{:?}", builder);

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use common::get_env_usize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -42,12 +43,7 @@ impl Load for ModelFactory {
     type M = Model;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
-        let table_size = std::env::var("TABLE_SIZE")
-            .map(|v| {
-                v.parse::<usize>()
-                    .expect("TABLE_SIZE must be a valid number")
-            })
-            .unwrap_or(0);
+        let table_size = get_env_usize("TABLE_SIZE").unwrap_or(0);
 
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 

@@ -7,6 +7,7 @@ use super::constants::{INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE};
 use super::engine::Engine;
 use super::engine::GameState;
 use super::value::Value;
+use common::get_env_usize;
 use engine::value::Value as ValueTrait;
 use model::analytics::ActionWithPolicy;
 use model::analytics::GameStateAnalysis;
@@ -182,12 +183,7 @@ impl Load for ModelFactory {
         ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
-        let table_size = std::env::var("TABLE_SIZE")
-            .map(|v| {
-                v.parse::<usize>()
-                    .expect("TABLE_SIZE must be a valid number")
-            })
-            .unwrap_or(0);
+        let table_size = get_env_usize("TABLE_SIZE").unwrap_or(0);
 
         let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
 
