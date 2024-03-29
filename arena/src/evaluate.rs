@@ -12,7 +12,7 @@ use std::time::Instant;
 use tokio::runtime::Handle;
 
 use engine::{GameEngine, GameState, Value};
-use mcts::mcts::{MCTSOptions, MCTS};
+use mcts::{MCTSOptions, MCTS};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 

@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use common::div_or_zero;
 use futures::stream::{FuturesUnordered, StreamExt};
-use futures_intrusive::sync::LocalManualResetEvent;
 use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::warn;
@@ -15,9 +14,7 @@ use std::cell::Ref;
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -25,70 +22,9 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use super::node_details::{NodeDetails, PUCT};
-use engine::engine::GameEngine;
-use engine::game_state::GameState;
-use engine::value::Value;
-use model::analytics::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
-use model::node_metrics::NodeMetrics;
-
-pub struct DirichletOptions {
-    pub epsilon: f32,
-}
-
-pub struct MCTSOptions<S, C, T>
-where
-    S: GameState,
-    C: Fn(&S, usize, bool) -> f32,
-    T: Fn(&S) -> f32,
-{
-    dirichlet: Option<DirichletOptions>,
-    fpu: f32,
-    fpu_root: f32,
-    cpuct: C,
-    temperature: T,
-    temperature_visit_offset: f32,
-    moves_left_threshold: f32,
-    moves_left_scale: f32,
-    moves_left_factor: f32,
-    parallelism: usize,
-    _phantom_state: PhantomData<*const S>,
-}
-
-#[allow(clippy::too_many_arguments)]
-impl<S, C, T> MCTSOptions<S, C, T>
-where
-    S: GameState,
-    C: Fn(&S, usize, bool) -> f32,
-    T: Fn(&S) -> f32,
-{
-    pub fn new(
-        dirichlet: Option<DirichletOptions>,
-        fpu: f32,
-        fpu_root: f32,
-        cpuct: C,
-        temperature: T,
-        temperature_visit_offset: f32,
-        moves_left_threshold: f32,
-        moves_left_scale: f32,
-        moves_left_factor: f32,
-        parallelism: usize,
-    ) -> Self {
-        MCTSOptions {
-            dirichlet,
-            fpu,
-            fpu_root,
-            cpuct,
-            temperature,
-            temperature_visit_offset,
-            moves_left_threshold,
-            moves_left_scale,
-            moves_left_factor,
-            parallelism,
-            _phantom_state: PhantomData,
-        }
-    }
-}
+use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSNodeState, MCTSOptions, NodeDetails, PUCT};
+use engine::{GameEngine, GameState, Value};
+use model::{GameAnalyzer, GameStateAnalysis, NodeMetrics};
 
 pub struct MCTS<'a, S, A, E, M, C, T, V>
 where
@@ -279,7 +215,7 @@ where
                     if let Some(child_index) = arena_ref
                         .node(node_index)
                         .get_child_of_action(&action)
-                        .and_then(|child| child.node.get_index())
+                        .and_then(|child| child.node_index())
                     {
                         game_state = self.game_engine.take_action(&game_state, &action);
                         node_index = child_index;
@@ -365,7 +301,7 @@ where
             let node = arena_mut.node_mut(latest_index);
 
             if node.is_terminal() {
-                node.visits += 1;
+                node.increment_visits();
                 Self::update_node_values(
                     &nodes_to_propagate_to_stack,
                     latest_index,
@@ -391,7 +327,8 @@ where
                 node_child_index: selected_child_node_children_index,
             });
 
-            let selected_child_node = &mut node.children[selected_child_node_children_index];
+            let (node_visits, edges) = node.get_parts_mut();
+            let selected_child_node = &mut edges[selected_child_node_children_index];
 
             game_state =
                 Cow::Owned(game_engine.take_action(&game_state, selected_child_node.action()));
@@ -400,7 +337,7 @@ where
             let selected_child_node_node = &mut selected_child_node.node;
             let prev_visits = selected_child_node.visits;
             selected_child_node.visits += 1;
-            node.visits += 1;
+            *node_visits += 1;
 
             if let Some(selected_child_node_index) = selected_child_node_node.get_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
@@ -484,7 +421,7 @@ where
             // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
             let score = value_score.get_value_for_player(*parent_node_player_to_move);
 
-            let node_to_update = &mut node_to_update_parent.children[*node_child_index];
+            let node_to_update = node_to_update_parent.get_child_by_index_mut(*node_child_index);
             node_to_update.W += score;
             node_to_update.M += value_node_game_length;
         }
@@ -543,8 +480,7 @@ where
             Self::get_PUCT_for_nodes(node, game_state, &*arena_ref, is_root, &self.options);
 
         let mut children: Vec<_> = node
-            .children
-            .iter()
+            .iter_edges()
             .zip(metrics)
             .map(|(n, m)| (n.action.clone(), m))
             .collect();
@@ -602,9 +538,9 @@ where
     }
 
     fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
-        let children = arena.remove(node_index).children;
+        let node = arena.remove(node_index);
 
-        for child_node_index in children.into_iter().filter_map(|n| n.node.get_index()) {
+        for child_node_index in node.iter_edges().filter_map(|n| n.node.get_index()) {
             Self::remove_nodes_from_arena(child_node_index, arena);
         }
     }
@@ -612,15 +548,17 @@ where
     fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
         let node = arena.node_mut(node_index);
         node.visits = 1;
-        let children = &mut node.children;
 
-        for child in children.iter_mut() {
+        for child in node.iter_edges_mut() {
             child.visits = 0;
             child.W = 0.0;
             child.M = 0.0;
         }
 
-        let child_indexes: Vec<_> = children.iter().filter_map(|c| c.node.get_index()).collect();
+        let child_indexes: Vec<_> = node
+            .iter_edges()
+            .filter_map(|c| c.node.get_index())
+            .collect();
         for child_index in child_indexes {
             Self::clear_node(child_index, arena);
         }
@@ -634,8 +572,7 @@ where
             .get_child_of_action(action)
             .ok_or_else(|| anyhow!("No matching Action"))?;
         let other_actions: Vec<_> = current_root
-            .children
-            .iter()
+            .iter_edges()
             .filter(|n| n.action != *action)
             .map(|n| &n.node)
             .collect();
@@ -649,7 +586,6 @@ where
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Result<usize> {
-        let children = &node.children;
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -660,12 +596,12 @@ where
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
-            &Self::get_game_length_baseline(children, options.moves_left_threshold);
+            &Self::get_game_length_baseline(node.iter_edges(), options.moves_left_threshold);
 
         let mut best_child_index = 0;
         let mut best_puct = std::f32::MIN;
 
-        for (i, child) in children.iter().enumerate() {
+        for (i, child) in node.iter_edges().enumerate() {
             let W = child.W;
             let Nsa = child.visits;
             let Psa = child.policy_score;
@@ -718,7 +654,6 @@ where
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Vec<PUCT> {
-        let children = &node.children;
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -729,11 +664,11 @@ where
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
-            &Self::get_game_length_baseline(children, options.moves_left_threshold);
+            &Self::get_game_length_baseline(node.iter_edges(), options.moves_left_threshold);
 
-        let mut pucts = Vec::with_capacity(children.len());
+        let mut pucts = Vec::with_capacity(node.child_len());
 
-        for child in children {
+        for child in node.iter_edges() {
             let node = child.node.get_index().map(|index| arena.node(index));
             let W = child.W;
             let Nsa = child.visits;
@@ -789,18 +724,13 @@ where
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
         let policy_scores: Vec<f32> = node
-            .children
-            .iter()
+            .iter_edges()
             .map(|child_node| child_node.policy_score)
             .collect();
 
         let noisy_policy_scores = Self::generate_noise(policy_scores, dirichlet);
 
-        for (child, policy_score) in node
-            .children
-            .iter_mut()
-            .zip(noisy_policy_scores.into_iter())
-        {
+        for (child, policy_score) in node.iter_edges_mut().zip(noisy_policy_scores.into_iter()) {
             child.policy_score = policy_score;
         }
     }
@@ -893,16 +823,16 @@ where
             .collect()
     }
 
-    fn get_game_length_baseline(
-        edges: &[MCTSEdge<A>],
-        moves_left_threshold: f32,
-    ) -> GameLengthBaseline {
+    fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
+    where
+        I: Iterator<Item = &'b MCTSEdge<A>>,
+        A: 'b,
+    {
         if moves_left_threshold >= 1.0 {
             return GameLengthBaseline::None;
         }
 
         edges
-            .iter()
             .max_by_key(|n| n.visits)
             .filter(|n| n.visits > 0)
             .map_or(GameLengthBaseline::None, |n| {
@@ -926,32 +856,6 @@ enum GameLengthBaseline {
     None,
 }
 
-#[allow(non_snake_case)]
-impl<A, V> MCTSNode<A, V> {
-    pub fn new(
-        value_score: V,
-        policy_scores: Vec<ActionWithPolicy<A>>,
-        moves_left_score: f32,
-    ) -> Self {
-        MCTSNode {
-            visits: 1,
-            value_score,
-            moves_left_score,
-            children: policy_scores
-                .into_iter()
-                .map(|action_with_policy| MCTSEdge {
-                    visits: 0,
-                    W: 0.0,
-                    M: 0.0,
-                    action: action_with_policy.action,
-                    policy_score: action_with_policy.policy_score,
-                    node: MCTSNodeState::Unexpanded,
-                })
-                .collect(),
-        }
-    }
-}
-
 impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
     fn from(analysis: GameStateAnalysis<A, V>) -> Self {
         MCTSNode::new(
@@ -972,7 +876,7 @@ where
             visits: val.visits,
             value: val.value_score.clone(),
             moves_left: val.moves_left_score,
-            children: val.children.iter().map(|e| e.into()).collect_vec(),
+            children: val.iter_edges().map(|e| e.into()).collect_vec(),
         }
     }
 }
@@ -995,32 +899,6 @@ struct NodeUpdateInfo {
     parent_node_index: Index,
     node_child_index: usize,
     parent_node_player_to_move: usize,
-}
-
-#[allow(non_snake_case)]
-#[derive(Debug)]
-pub struct MCTSEdge<A> {
-    action: A,
-    W: f32,
-    /// M is the expected length of the game. Needs to be divided by visits. THIS IS NOT MOVES LEFT!
-    M: f32,
-    visits: usize,
-    policy_score: f32,
-    node: MCTSNodeState,
-}
-
-impl<A> MCTSEdge<A> {
-    pub fn visits(&self) -> usize {
-        self.visits
-    }
-
-    pub fn node_index(&self) -> Option<Index> {
-        self.node.get_index()
-    }
-
-    pub fn action(&self) -> &A {
-        &self.action
-    }
 }
 
 struct NodeArena<T>(RefCell<NodeArenaInner<T>>);
@@ -1062,7 +940,7 @@ impl<A, V> NodeArenaInner<MCTSNode<A, V>> {
 
     #[inline]
     fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSEdge<A> {
-        &mut self.0[index].children[child_index]
+        self.0[index].get_child_by_index_mut(child_index)
     }
 
     #[inline]
@@ -1075,86 +953,5 @@ impl<A, V> NodeArenaInner<MCTSNode<A, V>> {
         self.0
             .remove(index)
             .expect("Expected node to exist in the arena")
-    }
-}
-
-#[derive(Debug)]
-pub struct MCTSNode<A, V> {
-    visits: usize,
-    value_score: V,
-    moves_left_score: f32,
-    children: Vec<MCTSEdge<A>>,
-}
-
-impl<A, V> MCTSNode<A, V>
-where
-    A: Eq,
-{
-    pub fn get_node_visits(&self) -> usize {
-        self.visits
-    }
-
-    pub fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
-        self.iter_edges().find(|c| c.action == *action)
-    }
-
-    pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
-        self.iter_edges().position(|c| c.action == *action)
-    }
-
-    pub fn is_terminal(&self) -> bool {
-        self.children.is_empty()
-    }
-
-    pub fn iter_edges(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
-        self.children.iter()
-    }
-}
-
-#[derive(Debug)]
-enum MCTSNodeState {
-    Unexpanded,
-    Expanding,
-    ExpandingWithWaiters(Rc<LocalManualResetEvent>),
-    Expanded(Index),
-}
-
-impl MCTSNodeState {
-    fn get_index(&self) -> Option<Index> {
-        if let Self::Expanded(index) = self {
-            Some(*index)
-        } else {
-            None
-        }
-    }
-
-    fn is_unexpanded(&self) -> bool {
-        matches!(self, Self::Unexpanded)
-    }
-
-    fn mark_as_expanding(&mut self) {
-        debug_assert!(matches!(self, Self::Unexpanded));
-        *self = Self::Expanding
-    }
-
-    fn set_expanded(&mut self, index: Index) {
-        debug_assert!(!matches!(self, Self::Unexpanded));
-        debug_assert!(!matches!(self, Self::Expanded(_)));
-        let state = std::mem::replace(self, Self::Expanded(index));
-        if let Self::ExpandingWithWaiters(reset_events) = state {
-            reset_events.set()
-        }
-    }
-
-    fn get_waiter(&mut self) -> Rc<LocalManualResetEvent> {
-        match self {
-            Self::Expanding => {
-                let reset_event = Rc::new(LocalManualResetEvent::new(false));
-                *self = Self::ExpandingWithWaiters(reset_event.clone());
-                reset_event
-            }
-            Self::ExpandingWithWaiters(reset_event) => reset_event.clone(),
-            _ => panic!("Node state is not currently expanding"),
-        }
     }
 }

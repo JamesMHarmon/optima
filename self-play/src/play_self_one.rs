@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
-use mcts::mcts::{DirichletOptions, MCTSOptions, MCTS};
+use mcts::{DirichletOptions, MCTSOptions, MCTS};
 use model::GameAnalyzer;
 
 use super::{SelfPlayMetrics, SelfPlayOptions};

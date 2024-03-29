@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::mcts::{MCTSOptions, MCTS};
+    use super::super::{MCTSOptions, MCTS};
 
     use super::super::counting_game::{
         CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState, Value,
