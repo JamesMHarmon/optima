@@ -100,12 +100,12 @@ impl<R> SampleFileReader<R> {
         let mut sample_bytes = vec![0; sample_num_bytes];
         self.reader.read_exact(&mut sample_bytes)?;
 
-        let mut dec = lz4::Decoder::new(&*sample_bytes).unwrap();
+        let mut dec = lz4::Decoder::new(&*sample_bytes)?;
         let mut sample: Vec<f32> = vec![0.0; self.sample_len];
 
         let mut sample_mut_ref = bytemuck::cast_slice_mut(sample.as_mut_slice());
 
-        std::io::copy(&mut dec, &mut sample_mut_ref).unwrap();
+        std::io::copy(&mut dec, &mut sample_mut_ref)?;
 
         Ok(sample)
     }
