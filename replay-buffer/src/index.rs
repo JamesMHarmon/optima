@@ -1,6 +1,6 @@
 use crate::dir_index::*;
 use anyhow::Result;
-use log::{error, info};
+use log::{error, info, warn};
 use rand::prelude::*;
 use std::{ops::Range, path::PathBuf, time::Instant};
 
@@ -100,6 +100,12 @@ impl<'a> Sampler<'a> {
             }
         }
 
-        panic!("Should not be reachable")
+        warn!("Sample Index: {} is beyond available number of indexes: {}. There are not as many games as indicated by the index.", sample_idx, index_end);
+
+        self.indexes
+            .iter()
+            .last()
+            .expect("Expected at least one index in indexes to exist")
+            .sample()
     }
 }
