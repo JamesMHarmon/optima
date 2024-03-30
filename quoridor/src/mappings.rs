@@ -12,11 +12,9 @@ use super::constants::{
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
 };
 use super::{GameState, Value};
-use engine::value::Value as ValueTrait;
-use model::analytics::ActionWithPolicy;
-use model::analytics::GameStateAnalysis;
+use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
-use model::node_metrics::NodeMetrics;
+use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
 use tensorflow_model::Mode;
 
 #[derive(Default)]
@@ -211,8 +209,8 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
         &self,
         game_state: &GameState,
         transposition_entry: &TranspositionEntry,
-    ) -> GameStateAnalysis<Action, Value> {
-        GameStateAnalysis::new(
+    ) -> BasicGameStateAnalysis<Action, Value> {
+        BasicGameStateAnalysis::new(
             self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
             self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
             transposition_entry.moves_left(),

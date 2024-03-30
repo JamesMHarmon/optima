@@ -1,7 +1,7 @@
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use futures::future;
-use model::analytics::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
+use model::analytics::{ActionWithPolicy, BasicGameStateAnalysis, GameAnalyzer};
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CountingGameState {
@@ -104,7 +104,7 @@ impl CountingAnalyzer {
 impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
-    type GameStateAnalytics = GameStateAnalysis<Self::Action, Self::Value>;
+    type GameStateAnalytics = BasicGameStateAnalysis<Self::Action, Self::Value>;
     type Future = future::Ready<Self::GameStateAnalytics>;
     type Value = Value;
 
@@ -112,7 +112,7 @@ impl GameAnalyzer for CountingAnalyzer {
         let count = game_state.count as f32;
 
         if let Some(value_score) = game_state.is_terminal_state() {
-            return future::ready(GameStateAnalysis::new(value_score, Vec::new(), 0.0));
+            return future::ready(BasicGameStateAnalysis::new(value_score, Vec::new(), 0.0));
         }
 
         let value_score = Value([count / 100.0, (100.0 - count) / 100.0]);
@@ -132,7 +132,7 @@ impl GameAnalyzer for CountingAnalyzer {
             },
         ];
 
-        future::ready(GameStateAnalysis::new(
+        future::ready(BasicGameStateAnalysis::new(
             value_score,
             policy_scores,
             moves_left,

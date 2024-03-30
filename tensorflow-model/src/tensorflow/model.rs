@@ -22,7 +22,7 @@ use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::*;
-use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
+use ::model::{analytics, Analyzer, BasicGameStateAnalysis, Info, ModelInfo};
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
 #[cfg(feature = "tensorflow_system_alloc")]
@@ -369,7 +369,7 @@ where
     type State = S;
     type Action = A;
     type Value = V;
-    type GameStateAnalytics = GameStateAnalysis<A, V>;
+    type GameStateAnalytics = BasicGameStateAnalysis<A, V>;
     type Future = UnwrappedReceiver<Self::GameStateAnalytics>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
@@ -422,20 +422,20 @@ type StatesToAnalyse<S, A, V> = (
     usize,
     S,
     mpsc::UnboundedSender<AnalysisToSend<A, V>>,
-    Sender<GameStateAnalysis<A, V>>,
+    Sender<BasicGameStateAnalysis<A, V>>,
 );
 
 type AnalysisToSend<A, V> = (
     usize,
-    GameStateAnalysis<A, V>,
-    Sender<GameStateAnalysis<A, V>>,
+    BasicGameStateAnalysis<A, V>,
+    Sender<BasicGameStateAnalysis<A, V>>,
 );
 
 type StatesToInfer<S, A, V> = (
     usize,
     S,
     tokio::sync::mpsc::UnboundedSender<AnalysisToSend<A, V>>,
-    tokio::sync::oneshot::Sender<GameStateAnalysis<A, V>>,
+    tokio::sync::oneshot::Sender<BasicGameStateAnalysis<A, V>>,
 );
 
 struct BatchingModel<E, Map, Te> {
@@ -692,11 +692,11 @@ where
         engine: &E,
         mapper: &Map,
         reporter: &Reporter<Te>,
-    ) -> Option<GameStateAnalysis<A, V>> {
+    ) -> Option<BasicGameStateAnalysis<A, V>> {
         if let Some(value) = engine.is_terminal_state(game_state) {
             reporter.set_terminal();
 
-            return Some(GameStateAnalysis::new(value, Vec::new(), 0f32));
+            return Some(BasicGameStateAnalysis::new(value, Vec::new(), 0f32));
         }
 
         if let Some(transposition_table) = transposition_table {
@@ -722,8 +722,8 @@ where
 
 struct StateToTransmit<A, V> {
     id: usize,
-    tx: Sender<GameStateAnalysis<A, V>>,
-    analysis: GameStateAnalysis<A, V>,
+    tx: Sender<BasicGameStateAnalysis<A, V>>,
+    analysis: BasicGameStateAnalysis<A, V>,
 }
 
 impl<A, V> Ord for StateToTransmit<A, V> {

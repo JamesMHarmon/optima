@@ -8,13 +8,9 @@ use super::engine::Engine;
 use super::engine::GameState;
 use super::value::Value;
 use common::get_env_usize;
-use engine::value::Value as ValueTrait;
-use model::analytics::ActionWithPolicy;
-use model::analytics::GameStateAnalysis;
+use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
-use model::node_metrics::NodeMetrics;
-use model::position_metrics::PositionMetrics;
-use model::{Latest, Load};
+use model::{ActionWithPolicy, BasicGameStateAnalysis, Latest, Load, NodeMetrics, PositionMetrics};
 use tensorflow_model::{latest, unarchive, Archive as ArchiveModel};
 use tensorflow_model::{InputMap, Mode, PolicyMap, TensorflowModel, TranspositionMap, ValueMap};
 
@@ -168,8 +164,8 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
         &self,
         game_state: &GameState,
         transposition_entry: &TranspositionEntry,
-    ) -> GameStateAnalysis<Action, Value> {
-        GameStateAnalysis::new(
+    ) -> BasicGameStateAnalysis<Action, Value> {
+        BasicGameStateAnalysis::new(
             self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
             self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
             transposition_entry.moves_left(),

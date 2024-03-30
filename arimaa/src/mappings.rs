@@ -10,7 +10,7 @@ use super::value::Value;
 use super::TranspositionEntry;
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;
-use model::analytics::{ActionWithPolicy, GameStateAnalysis};
+use model::analytics::{ActionWithPolicy, BasicGameStateAnalysis};
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
 use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
@@ -179,8 +179,8 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
         &self,
         game_state: &GameState,
         transposition_entry: &TranspositionEntry,
-    ) -> GameStateAnalysis<Action, Value> {
-        GameStateAnalysis::new(
+    ) -> BasicGameStateAnalysis<Action, Value> {
+        BasicGameStateAnalysis::new(
             self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
             self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
             transposition_entry.moves_left(),

@@ -4,7 +4,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::warn;
-use model::{GameStateAnalytics, NodeChildMetrics};
+use model::{GameStateAnalysis, NodeChildMetrics};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};

@@ -1,5 +1,5 @@
 use half::f16;
-use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics};
+use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
 use serde::{Deserialize, Serialize};
 
 use super::Mode;
@@ -56,7 +56,7 @@ pub trait TranspositionMap<S, A, V, Te> {
         &self,
         game_state: &S,
         transposition_entry: &Te,
-    ) -> GameStateAnalysis<A, V>;
+    ) -> BasicGameStateAnalysis<A, V>;
 
     fn get_transposition_key(&self, game_state: &S) -> u64;
 }
