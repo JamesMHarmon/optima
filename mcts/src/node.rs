@@ -16,8 +16,8 @@ pub struct MCTSNode<A, V> {
 
 impl<A, V> MCTSNode<A, V> {
     pub fn new(
-        value_score: V,
         policy_scores: Vec<ActionWithPolicy<A>>,
+        value_score: V,
         moves_left_score: f32,
     ) -> Self {
         Self {

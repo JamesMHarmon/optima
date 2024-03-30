@@ -717,12 +717,9 @@ where
     }
 
     async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, V> {
-        // @TODO: Remove to_vec!
         let analysis = analyzer.get_state_analysis(game_state).await;
-        let value_score = analysis.value_score().clone();
-        let policy_scores = analysis.policy_scores().to_vec();
-        let moves_left_score = analysis.moves_left_score();
-        MCTSNode::new(value_score, policy_scores, moves_left_score)
+        let (policy_scores, value_score, moves_left_score) = analysis.into_inner();
+        MCTSNode::new(policy_scores, value_score, moves_left_score)
     }
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {

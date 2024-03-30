@@ -104,8 +104,8 @@ impl CountingAnalyzer {
 impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
-    type GameStateAnalytics = BasicGameStateAnalysis<Self::Action, Self::Value>;
-    type Future = future::Ready<Self::GameStateAnalytics>;
+    type GameStateAnalysis = BasicGameStateAnalysis<Self::Action, Self::Value>;
+    type Future = future::Ready<Self::GameStateAnalysis>;
     type Value = Value;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {

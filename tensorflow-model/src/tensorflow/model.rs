@@ -369,14 +369,14 @@ where
     type State = S;
     type Action = A;
     type Value = V;
-    type GameStateAnalytics = BasicGameStateAnalysis<A, V>;
-    type Future = UnwrappedReceiver<Self::GameStateAnalytics>;
+    type GameStateAnalysis = BasicGameStateAnalysis<A, V>;
+    type Future = UnwrappedReceiver<Self::GameStateAnalysis>;
 
     /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
     /// If the evaluation is a draw then 0.0 will be returned.
     /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
     /// is terminal then the vector will be empty.
-    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<Self::GameStateAnalytics> {
+    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<Self::GameStateAnalysis> {
         let (tx, rx) = oneshot::channel();
         let id = self.analysed_state_ordered.get_id();
         let sender = &self.batching_model.1;

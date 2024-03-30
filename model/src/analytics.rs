@@ -2,8 +2,8 @@ use engine::value::Value;
 use std::future::Future;
 
 pub trait GameAnalyzer {
-    type Future: Future<Output = Self::GameStateAnalytics>;
-    type GameStateAnalytics: GameStateAnalysis<Self::Action, Self::Value>;
+    type Future: Future<Output = Self::GameStateAnalysis>;
+    type GameStateAnalysis: GameStateAnalysis<Self::Action, Self::Value>;
     type Action;
     type State;
     type Value: Value;
@@ -30,6 +30,10 @@ impl<A, V> GameStateAnalysis<A, V> for BasicGameStateAnalysis<A, V> {
     fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
         &self.policy_scores
     }
+
+    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32) {
+        (self.policy_scores, self.value_score, self.moves_left)
+    }
 }
 
 impl<A, V> BasicGameStateAnalysis<A, V> {
@@ -40,16 +44,13 @@ impl<A, V> BasicGameStateAnalysis<A, V> {
             moves_left,
         }
     }
-
-    pub fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32) {
-        (self.policy_scores, self.value_score, self.moves_left)
-    }
 }
 
 pub trait GameStateAnalysis<A, V> {
     fn value_score(&self) -> &V;
     fn moves_left_score(&self) -> f32;
     fn policy_scores(&self) -> &[ActionWithPolicy<A>];
+    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32);
 }
 
 #[derive(Clone, Debug)]
