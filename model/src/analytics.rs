@@ -2,7 +2,8 @@ use engine::value::Value;
 use std::future::Future;
 
 pub trait GameAnalyzer {
-    type Future: Future<Output = GameStateAnalysis<Self::Action, Self::Value>>;
+    type Future: Future<Output = Self::GameStateAnalytics>;
+    type GameStateAnalytics: GameStateAnalytics<Self::Action, Self::Value>;
     type Action;
     type State;
     type Value: Value;
@@ -17,6 +18,20 @@ pub struct GameStateAnalysis<A, V> {
     pub moves_left: f32,
 }
 
+impl<A, V> GameStateAnalytics<A, V> for GameStateAnalysis<A, V> {
+    fn value_score(&self) -> &V {
+        &self.value_score
+    }
+
+    fn moves_left_score(&self) -> f32 {
+        self.moves_left
+    }
+
+    fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
+        &self.policy_scores
+    }
+}
+
 impl<A, V> GameStateAnalysis<A, V> {
     pub fn new(value_score: V, policy_scores: Vec<ActionWithPolicy<A>>, moves_left: f32) -> Self {
         GameStateAnalysis {
@@ -26,13 +41,15 @@ impl<A, V> GameStateAnalysis<A, V> {
         }
     }
 
-    pub fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
-        &self.policy_scores
-    }
-
     pub fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32) {
         (self.policy_scores, self.value_score, self.moves_left)
     }
+}
+
+pub trait GameStateAnalytics<A, V> {
+    fn value_score(&self) -> &V;
+    fn moves_left_score(&self) -> f32;
+    fn policy_scores(&self) -> &[ActionWithPolicy<A>];
 }
 
 #[derive(Clone, Debug)]

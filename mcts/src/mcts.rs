@@ -4,7 +4,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::warn;
-use model::NodeChildMetrics;
+use model::{GameStateAnalytics, NodeChildMetrics};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSNodeState, MCTSOptions, NodeDetails, PUCT};
 use engine::{GameEngine, GameState, Value};
-use model::{GameAnalyzer, GameStateAnalysis, NodeMetrics};
+use model::{GameAnalyzer, NodeMetrics};
 
 pub struct MCTS<'a, S, A, E, M, C, T, V>
 where
@@ -717,7 +717,12 @@ where
     }
 
     async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, V> {
-        analyzer.get_state_analysis(game_state).await.into()
+        // @TODO: Remove to_vec!
+        let analysis = analyzer.get_state_analysis(game_state).await;
+        let value_score = analysis.value_score().clone();
+        let policy_scores = analysis.policy_scores().to_vec();
+        let moves_left_score = analysis.moves_left_score();
+        MCTSNode::new(value_score, policy_scores, moves_left_score)
     }
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
@@ -852,13 +857,6 @@ enum GameLengthBaseline {
     MinimizeGameLength(f32),
     MaximizeGameLength(f32),
     None,
-}
-
-impl<A, V> From<GameStateAnalysis<A, V>> for MCTSNode<A, V> {
-    fn from(analysis: GameStateAnalysis<A, V>) -> Self {
-        let (policy_scores, value_score, moves_left_score) = analysis.into_inner();
-        MCTSNode::new(value_score, policy_scores, moves_left_score)
-    }
 }
 
 impl<A, V> From<&MCTSNode<A, V>> for NodeMetrics<A, V>

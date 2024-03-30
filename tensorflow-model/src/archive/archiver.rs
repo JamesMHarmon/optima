@@ -45,6 +45,7 @@ where
     type Action = An::Action;
     type State = An::State;
     type Value = An::Value;
+    type GameStateAnalytics = An::GameStateAnalytics;
     type Future = An::Future;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
