@@ -22,7 +22,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSNodeState, MCTSOptions, NodeDetails, PUCT};
+use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails, PUCT};
 use engine::{GameEngine, GameState, Value};
 use model::{GameAnalyzer, NodeMetrics};
 
@@ -333,11 +333,10 @@ where
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
             move_number = game_engine.get_move_number(&game_state);
 
-            let selected_child_node = &mut selected_edge.node;
-            let prev_visits = selected_edge.visits;
-            selected_edge.visits += 1;
+            let prev_visits = selected_edge.visits();
+            selected_edge.increment_visits();
 
-            if let Some(selected_child_node_index) = selected_child_node.get_index() {
+            if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
                     Self::update_node_values(
@@ -355,8 +354,8 @@ where
             }
 
             // If the node is yet to be expanded and is not already expanded, then start expanding it.
-            if selected_child_node.is_unexpanded() {
-                selected_child_node.mark_as_expanding();
+            if selected_edge.is_unexpanded() {
+                selected_edge.mark_as_expanding();
                 drop(arena_mut);
 
                 let expanded_node = Self::analyse_and_create_node(&game_state, analyzer).await;
@@ -367,7 +366,7 @@ where
                 let selected_child_node =
                     arena_mut.child(latest_index, selected_child_node_children_index);
 
-                selected_child_node.node.set_expanded(expanded_node_index);
+                selected_child_node.set_expanded(expanded_node_index);
 
                 Self::update_node_values(
                     &nodes_to_propagate_to_stack,
@@ -380,7 +379,7 @@ where
             }
 
             // The node must be expanding in another async operation. Wait for that to finish and continue the loop as if it was already expanded.
-            let waiter = selected_child_node.get_waiter();
+            let waiter = selected_edge.get_waiter();
             drop(arena_mut);
 
             waiter.wait().await;
@@ -388,8 +387,7 @@ where
             latest_index = arena
                 .get_mut()
                 .child(latest_index, selected_child_node_children_index)
-                .node
-                .get_index()
+                .node_index()
                 .expect("Node should have expanded");
         }
 
@@ -420,8 +418,8 @@ where
             let score = value_score.get_value_for_player(*parent_node_player_to_move);
 
             let node_to_update = node_to_update_parent.get_child_by_index_mut(*node_child_index);
-            node_to_update.W += score;
-            node_to_update.M += value_node_game_length;
+            node_to_update.add_W(score);
+            node_to_update.add_M(value_node_game_length);
         }
     }
 
@@ -478,9 +476,9 @@ where
             Self::get_PUCT_for_nodes(node, game_state, &*arena_ref, is_root, &self.options);
 
         let mut children: Vec<_> = node
-            .iter_edges()
+            .iter_all_edges()
             .zip(metrics)
-            .map(|(n, m)| (n.action.clone(), m))
+            .map(|(n, m)| (n.action().clone(), m))
             .collect();
 
         children.sort_by(|(_, x_puct), (_, y_puct)| y_puct.cmp(x_puct));
@@ -512,14 +510,16 @@ where
 
         self.game_state = game_engine.take_action(&self.game_state, &action);
 
-        let (chosen_node, other_nodes) = split_nodes.expect("Expected node to exist.");
+        let (chosen_node_index, other_nodes_indexes) =
+            split_nodes.expect("Expected node to exist.");
 
-        for node_index in other_nodes.into_iter().filter_map(|n| n.get_index()) {
+        for node_index in other_nodes_indexes.into_iter() {
             Self::remove_nodes_from_arena(node_index, &mut arena_mut);
         }
+
         drop(arena_mut);
 
-        let chosen_node = if let Some(node_index) = chosen_node.get_index() {
+        let chosen_node_index = if let Some(node_index) = chosen_node_index {
             if clear {
                 Self::clear_node(node_index, &mut self.arena.get_mut());
             }
@@ -530,7 +530,7 @@ where
             self.arena.get_mut().insert(node)
         };
 
-        self.root.replace(chosen_node);
+        self.root.replace(chosen_node_index);
 
         Ok(())
     }
@@ -538,7 +538,7 @@ where
     fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
         let node = arena.remove(node_index);
 
-        for child_node_index in node.iter_edges().filter_map(|n| n.node.get_index()) {
+        for child_node_index in node.iter_visited_edges().filter_map(|n| n.node_index()) {
             Self::remove_nodes_from_arena(child_node_index, arena);
         }
     }
@@ -548,34 +548,35 @@ where
         node.set_visits(1);
 
         for child in node.iter_edges_mut() {
-            child.visits = 0;
-            child.W = 0.0;
-            child.M = 0.0;
+            child.clear();
         }
 
         let child_indexes: Vec<_> = node
-            .iter_edges()
-            .filter_map(|c| c.node.get_index())
+            .iter_visited_edges()
+            .filter_map(|c| c.node_index())
             .collect();
+
         for child_index in child_indexes {
             Self::clear_node(child_index, arena);
         }
     }
 
-    fn split_node_children_by_action<'b>(
-        current_root: &'b MCTSNode<A, V>,
+    fn split_node_children_by_action(
+        current_root: &MCTSNode<A, V>,
         action: &A,
-    ) -> Result<(&'b MCTSNodeState, Vec<&'b MCTSNodeState>)> {
+    ) -> Result<(Option<Index>, Vec<Index>)> {
         let matching_action = current_root
             .get_child_of_action(action)
-            .ok_or_else(|| anyhow!("No matching Action"))?;
+            .ok_or_else(|| anyhow!("No matching Action"))?
+            .node_index();
+
         let other_actions: Vec<_> = current_root
-            .iter_edges()
-            .filter(|n| n.action != *action)
-            .map(|n| &n.node)
+            .iter_visited_edges()
+            .filter(|n| n.action() != action)
+            .filter_map(|n| n.node_index())
             .collect();
 
-        Ok((&matching_action.node, other_actions))
+        Ok((matching_action, other_actions))
     }
 
     fn select_path(
@@ -593,16 +594,18 @@ where
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
-        let game_length_baseline =
-            &Self::get_game_length_baseline(node.iter_edges(), options.moves_left_threshold);
+        let game_length_baseline = &Self::get_game_length_baseline(
+            node.iter_visited_edges_and_top_unvisited_edge(),
+            options.moves_left_threshold,
+        );
 
         let mut best_child_index = 0;
         let mut best_puct = std::f32::MIN;
 
-        for (i, child) in node.iter_edges().enumerate() {
-            let W = child.W;
-            let Nsa = child.visits;
-            let Psa = child.policy_score;
+        for (i, child) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
+            let W = child.W();
+            let Nsa = child.visits();
+            let Psa = child.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let Msa = Self::get_Msa(child, game_length_baseline, options);
@@ -662,24 +665,24 @@ where
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
         let game_length_baseline =
-            &Self::get_game_length_baseline(node.iter_edges(), options.moves_left_threshold);
+            &Self::get_game_length_baseline(node.iter_all_edges(), options.moves_left_threshold);
 
         let mut pucts = Vec::with_capacity(node.child_len());
 
-        for child in node.iter_edges() {
-            let node = child.node.get_index().map(|index| arena.node(index));
-            let W = child.W;
-            let Nsa = child.visits;
-            let Psa = child.policy_score;
+        for child in node.iter_all_edges() {
+            let node = child.node_index().map(|index| arena.node(index));
+            let W = child.W();
+            let Nsa = child.visits();
+            let Psa = child.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let moves_left = node.map_or(0.0, |n| n.moves_left_score());
             let Msa = Self::get_Msa(child, game_length_baseline, options);
-            let M = div_or_zero(child.M, child.visits as f32);
+            let M = div_or_zero(child.M(), child.visits() as f32);
             let game_length = if Nsa == 0 {
-                child.M
+                child.M()
             } else {
-                child.M / Nsa as f32
+                child.M() / Nsa as f32
             };
 
             let PUCT = Qsa + Usa;
@@ -723,15 +726,19 @@ where
     }
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
+        node.init_all_edges();
+
         let policy_scores: Vec<f32> = node
-            .iter_edges()
-            .map(|child_node| child_node.policy_score)
+            .iter_all_edges()
+            .map(|child_node| child_node.policy_score())
             .collect();
 
         let noisy_policy_scores = Self::generate_noise(policy_scores, dirichlet);
 
-        for (child, policy_score) in node.iter_edges_mut().zip(noisy_policy_scores.into_iter()) {
-            child.policy_score = policy_score;
+        for (child, noisy_policy_score) in
+            node.iter_edges_mut().zip(noisy_policy_scores.into_iter())
+        {
+            child.set_policy_score(noisy_policy_score);
         }
     }
 
@@ -740,7 +747,7 @@ where
         game_length_baseline: &GameLengthBaseline,
         options: &MCTSOptions<S, C, T>,
     ) -> f32 {
-        if child.visits == 0 {
+        if child.visits() == 0 {
             return 0.0;
         }
 
@@ -761,7 +768,7 @@ where
                 panic!();
             };
 
-        let expected_game_length = child.M / child.visits as f32;
+        let expected_game_length = child.M() / child.visits() as f32;
         let moves_left_scale = options.moves_left_scale;
         let moves_left_clamped = (game_length_baseline - expected_game_length)
             .min(moves_left_scale)
@@ -782,7 +789,7 @@ where
             match arena_ref
                 .node(node_index)
                 .get_child_of_action(action)
-                .and_then(|child| child.node.get_index())
+                .and_then(|child| child.node_index())
             {
                 Some(child_index) => node_index = child_index,
                 None => return Ok(None),
@@ -833,11 +840,11 @@ where
         }
 
         edges
-            .max_by_key(|n| n.visits)
-            .filter(|n| n.visits > 0)
+            .max_by_key(|n| n.visits())
+            .filter(|n| n.visits() > 0)
             .map_or(GameLengthBaseline::None, |n| {
-                let Qsa = n.W / n.visits as f32;
-                let expected_game_length = n.M / n.visits as f32;
+                let Qsa = n.W() / n.visits() as f32;
+                let expected_game_length = n.M() / n.visits() as f32;
 
                 if Qsa >= moves_left_threshold {
                     GameLengthBaseline::MinimizeGameLength(expected_game_length)
@@ -866,7 +873,7 @@ where
             visits: val.visits(),
             value: val.value_score().clone(),
             moves_left: val.moves_left_score(),
-            children: val.iter_edges().map(|e| e.into()).collect_vec(),
+            children: val.iter_all_edges().map(|e| e.into()).collect_vec(),
         }
     }
 }
@@ -875,12 +882,12 @@ impl<A> From<&MCTSEdge<A>> for NodeChildMetrics<A>
 where
     A: Clone,
 {
-    fn from(val: &MCTSEdge<A>) -> Self {
+    fn from(edge: &MCTSEdge<A>) -> Self {
         NodeChildMetrics::new(
-            val.action.clone(),
-            div_or_zero(val.W, val.visits as f32),
-            div_or_zero(val.M, val.visits as f32),
-            val.visits,
+            edge.action().clone(),
+            div_or_zero(edge.W(), edge.visits() as f32),
+            div_or_zero(edge.M(), edge.visits() as f32),
+            edge.visits(),
         )
     }
 }

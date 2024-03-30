@@ -1,7 +1,3 @@
-use std::rc::Rc;
-
-use futures_intrusive::sync::LocalManualResetEvent;
-use generational_arena::Index;
 use model::ActionWithPolicy;
 
 use crate::edge::MCTSEdge;
@@ -11,7 +7,8 @@ pub struct MCTSNode<A, V> {
     visits: usize,
     value_score: V,
     moves_left_score: f32,
-    edges: Vec<MCTSEdge<A>>,
+    // unvisited_edges: Vec<ActionWithPolicy<A>>,
+    visited_edges: Vec<MCTSEdge<A>>,
 }
 
 impl<A, V> MCTSNode<A, V> {
@@ -24,17 +21,8 @@ impl<A, V> MCTSNode<A, V> {
             visits: 1,
             value_score,
             moves_left_score,
-            edges: policy_scores
-                .into_iter()
-                .map(|action_with_policy| MCTSEdge {
-                    visits: 0,
-                    W: 0.0,
-                    M: 0.0,
-                    action: action_with_policy.action,
-                    policy_score: action_with_policy.policy_score,
-                    node: MCTSNodeState::Unexpanded,
-                })
-                .collect(),
+            // unvisited_edges: policy_scores,
+            visited_edges: policy_scores.into_iter().map(|p| p.into()).collect(),
         }
     }
 
@@ -43,23 +31,40 @@ impl<A, V> MCTSNode<A, V> {
     }
 
     pub fn get_child_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A> {
-        &mut self.edges[index]
+        &mut self.visited_edges[index]
     }
 
     pub fn is_terminal(&self) -> bool {
-        self.edges.is_empty()
+        self.child_len() == 0
     }
 
-    pub fn iter_edges(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
-        self.edges.iter()
+    pub fn iter_all_edges(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
+        // @TODO
+        self.visited_edges.iter()
+    }
+
+    pub fn iter_visited_edges(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
+        // @TODO
+        self.visited_edges.iter()
+    }
+
+    pub fn iter_visited_edges_and_top_unvisited_edge(&self) -> impl Iterator<Item = &MCTSEdge<A>> {
+        // @TODO
+        self.visited_edges.iter()
     }
 
     pub fn child_len(&self) -> usize {
-        self.edges.len()
+        // @TODO
+        self.visited_edges.len()
+        // self.visited_edges.is_empty() // && self.unvisited_edges.is_empty()
     }
 
     pub fn iter_edges_mut(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A>> {
-        self.edges.iter_mut()
+        self.visited_edges.iter_mut()
+    }
+
+    pub fn init_all_edges(&mut self) {
+        // @TODO
     }
 
     pub fn increment_visits(&mut self) {
@@ -88,58 +93,12 @@ where
     A: Eq,
 {
     pub fn get_child_of_action(&self, action: &A) -> Option<&MCTSEdge<A>> {
-        self.iter_edges().find(|c| c.action() == action)
+        // @TODO
+        self.iter_all_edges().find(|c| c.action() == action)
     }
 
     pub fn get_position_of_action(&self, action: &A) -> Option<usize> {
-        self.iter_edges().position(|c| c.action() == action)
-    }
-}
-
-#[derive(Debug)]
-pub enum MCTSNodeState {
-    Unexpanded,
-    Expanding,
-    ExpandingWithWaiters(Rc<LocalManualResetEvent>),
-    Expanded(Index),
-}
-
-impl MCTSNodeState {
-    pub fn get_index(&self) -> Option<Index> {
-        if let Self::Expanded(index) = self {
-            Some(*index)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_unexpanded(&self) -> bool {
-        matches!(self, Self::Unexpanded)
-    }
-
-    pub fn mark_as_expanding(&mut self) {
-        debug_assert!(matches!(self, Self::Unexpanded));
-        *self = Self::Expanding
-    }
-
-    pub fn set_expanded(&mut self, index: Index) {
-        debug_assert!(!matches!(self, Self::Unexpanded));
-        debug_assert!(!matches!(self, Self::Expanded(_)));
-        let state = std::mem::replace(self, Self::Expanded(index));
-        if let Self::ExpandingWithWaiters(reset_events) = state {
-            reset_events.set()
-        }
-    }
-
-    pub fn get_waiter(&mut self) -> Rc<LocalManualResetEvent> {
-        match self {
-            Self::Expanding => {
-                let reset_event = Rc::new(LocalManualResetEvent::new(false));
-                *self = Self::ExpandingWithWaiters(reset_event.clone());
-                reset_event
-            }
-            Self::ExpandingWithWaiters(reset_event) => reset_event.clone(),
-            _ => panic!("Node state is not currently expanding"),
-        }
+        // @TODO
+        self.iter_all_edges().position(|c| c.action() == action)
     }
 }
