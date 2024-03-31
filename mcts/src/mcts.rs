@@ -161,8 +161,8 @@ where
 
     pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, V>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
-        let arena_ref = self.arena.get_mut();
-        let root = arena_ref.node(root_index);
+        let mut arena_ref = self.arena.get_mut();
+        let root = arena_ref.node_mut(root_index);
 
         Ok(root.into())
     }
@@ -182,7 +182,7 @@ where
             .map(|index| Ref::map(self.arena.get(), |n| n.node(index)))
     }
 
-    pub fn get_focus_node_details(&self) -> Result<Option<NodeDetails<A>>> {
+    pub fn get_focus_node_details(&mut self) -> Result<Option<NodeDetails<A>>> {
         self.get_focus_node_index()?
             .map(|node_index| {
                 let is_root = self.focus_actions.is_empty();
@@ -192,12 +192,11 @@ where
             .transpose()
     }
 
-    pub fn get_principal_variation(&self) -> Result<Vec<(A, PUCT)>> {
+    pub fn get_principal_variation(&mut self) -> Result<Vec<(A, PUCT)>> {
         self.get_focus_node_index()?
             .map(|mut node_index| {
                 let mut game_state = self.get_focus_node_game_state();
                 let mut nodes = vec![];
-                let arena_ref = self.arena.get();
 
                 loop {
                     let is_root = nodes.is_empty();
@@ -212,8 +211,10 @@ where
                     let (action, puct) = children.swap_remove(0);
                     nodes.push((action.clone(), puct));
 
-                    if let Some(child_index) = arena_ref
-                        .node(node_index)
+                    if let Some(child_index) = self
+                        .arena
+                        .get_mut()
+                        .node_mut(node_index)
                         .get_child_of_action(&action)
                         .and_then(|child| child.node_index())
                     {
@@ -234,6 +235,11 @@ where
     pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
         let root_node_index = self.get_or_create_root_node().await;
 
+        let mut visits = self
+            .get_focus_node_index()?
+            .map(|node_index| self.arena.get_mut().node(node_index).get_node_visits())
+            .unwrap_or(0);
+
         let game_engine = &self.game_engine;
         let options = &self.options;
         let arena_ref = &self.arena;
@@ -243,10 +249,7 @@ where
         let mut alive_flag = true;
         let mut alive = alive;
         let mut searches = FuturesUnordered::new();
-        let mut visits = self
-            .get_focus_node_index()?
-            .map(|node_index| arena_ref.get_mut().node(node_index).get_node_visits())
-            .unwrap_or(0);
+
         let analyzer = &mut self.analyzer;
 
         let mut traverse = |searches: &mut FuturesUnordered<_>| {
@@ -315,7 +318,7 @@ where
 
             let selected_child_node_children_index =
                 if let Some(focus_action) = focus_actions.get(depth - 1) {
-                    node.get_position_of_action(focus_action)
+                    node.get_position_of_visited_action(focus_action)
                         .ok_or_else(|| anyhow!("Focused action was not found"))?
                 } else {
                     MCTS::<S, A, E, M, C, T, V>::select_path(node, &game_state, is_root, options)?
@@ -464,16 +467,21 @@ where
     }
 
     fn get_node_details(
-        &self,
+        &mut self,
         node_index: Index,
         game_state: &S,
         is_root: bool,
     ) -> Result<NodeDetails<A>> {
-        let arena_ref = self.arena.get();
-        let node = arena_ref.node(node_index);
+        let arena_ref_mut = &mut self.arena.get_mut();
+        let metrics = Self::get_PUCT_for_nodes(
+            node_index,
+            game_state,
+            arena_ref_mut,
+            is_root,
+            &self.options,
+        );
 
-        let metrics =
-            Self::get_PUCT_for_nodes(node, game_state, &*arena_ref, is_root, &self.options);
+        let node = arena_ref_mut.node_mut(node_index);
 
         let mut children: Vec<_> = node
             .iter_all_edges()
@@ -498,8 +506,8 @@ where
         let game_engine = &self.game_engine;
 
         let mut arena_mut = self.arena.get_mut();
-        let root_node = arena_mut.remove(root_index);
-        let split_nodes = Self::split_node_children_by_action(&root_node, &action);
+        let mut root_node = arena_mut.remove(root_index);
+        let split_nodes = Self::split_node_children_by_action(&mut root_node, &action);
 
         if let Err(err) = split_nodes {
             // If there is an error, replace the root node back to it's original value.
@@ -547,7 +555,7 @@ where
         let node = arena.node_mut(node_index);
         node.set_visits(1);
 
-        for child in node.iter_edges_mut() {
+        for child in node.iter_all_edges() {
             child.clear();
         }
 
@@ -562,7 +570,7 @@ where
     }
 
     fn split_node_children_by_action(
-        current_root: &MCTSNode<A, V>,
+        current_root: &mut MCTSNode<A, V>,
         action: &A,
     ) -> Result<(Option<Index>, Vec<Index>)> {
         let matching_action = current_root
@@ -580,7 +588,7 @@ where
     }
 
     fn select_path(
-        node: &MCTSNode<A, V>,
+        node: &mut MCTSNode<A, V>,
         game_state: &S,
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
@@ -649,12 +657,14 @@ where
     }
 
     fn get_PUCT_for_nodes(
-        node: &MCTSNode<A, V>,
+        node_index: Index,
         game_state: &S,
-        arena: &NodeArenaInner<MCTSNode<A, V>>,
+        arena: &mut NodeArenaInner<MCTSNode<A, V>>,
         is_root: bool,
         options: &MCTSOptions<S, C, T>,
     ) -> Vec<PUCT> {
+        let node = arena.node_mut(node_index);
+
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -664,25 +674,40 @@ where
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = &options.cpuct;
         let cpuct = cpuct(game_state, Nsb, is_root);
+        let moves_left_threshold = options.moves_left_threshold;
+        let iter_all_edges = node.iter_all_edges().map(|e| &*e);
         let game_length_baseline =
-            &Self::get_game_length_baseline(node.iter_all_edges(), options.moves_left_threshold);
+            Self::get_game_length_baseline(iter_all_edges, moves_left_threshold);
 
         let mut pucts = Vec::with_capacity(node.child_len());
 
-        for child in node.iter_all_edges() {
-            let node = child.node_index().map(|index| arena.node(index));
-            let W = child.W();
-            let Nsa = child.visits();
-            let Psa = child.policy_score();
+        let child_node_indexes = node
+            .iter_visited_edges()
+            .map(|e| e.node_index())
+            .collect_vec();
+
+        let moves_left_scores = child_node_indexes
+            .iter()
+            .map(|index| {
+                index
+                    .map(|index| arena.node(index).moves_left_score())
+                    .unwrap_or(0.0)
+            })
+            .collect_vec();
+
+        let node = arena.node_mut(node_index);
+        for (edge, moves_left_score) in node.iter_visited_edges().zip(moves_left_scores) {
+            let W = edge.W();
+            let Nsa = edge.visits();
+            let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let moves_left = node.map_or(0.0, |n| n.moves_left_score());
-            let Msa = Self::get_Msa(child, game_length_baseline, options);
-            let M = div_or_zero(child.M(), child.visits() as f32);
+            let Msa = Self::get_Msa(edge, &game_length_baseline, options);
+            let M = div_or_zero(edge.M(), edge.visits() as f32);
             let game_length = if Nsa == 0 {
-                child.M()
+                edge.M()
             } else {
-                child.M() / Nsa as f32
+                edge.M() / Nsa as f32
             };
 
             let PUCT = Qsa + Usa;
@@ -694,7 +719,7 @@ where
                 Usa,
                 Qsa,
                 M,
-                moves_left,
+                moves_left_score,
                 game_length,
                 PUCT,
             });
@@ -726,8 +751,6 @@ where
     }
 
     fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
-        node.init_all_edges();
-
         let policy_scores: Vec<f32> = node
             .iter_all_edges()
             .map(|child_node| child_node.policy_score())
@@ -736,7 +759,7 @@ where
         let noisy_policy_scores = Self::generate_noise(policy_scores, dirichlet);
 
         for (child, noisy_policy_score) in
-            node.iter_edges_mut().zip(noisy_policy_scores.into_iter())
+            node.iter_all_edges().zip(noisy_policy_scores.into_iter())
         {
             child.set_policy_score(noisy_policy_score);
         }
@@ -777,8 +800,8 @@ where
         moves_left_scaled * options.moves_left_factor * direction
     }
 
-    fn get_focus_node_index(&self) -> Result<Option<Index>> {
-        let arena_ref = self.arena.get();
+    fn get_focus_node_index(&mut self) -> Result<Option<Index>> {
+        let mut arena_ref = self.arena.get_mut();
 
         let mut node_index = *self
             .root
@@ -787,7 +810,7 @@ where
 
         for action in &self.focus_actions {
             match arena_ref
-                .node(node_index)
+                .node_mut(node_index)
                 .get_child_of_action(action)
                 .and_then(|child| child.node_index())
             {
@@ -863,17 +886,17 @@ enum GameLengthBaseline {
     None,
 }
 
-impl<A, V> From<&MCTSNode<A, V>> for NodeMetrics<A, V>
+impl<A, V> From<&mut MCTSNode<A, V>> for NodeMetrics<A, V>
 where
     A: Clone,
     V: Clone,
 {
-    fn from(val: &MCTSNode<A, V>) -> Self {
+    fn from(val: &mut MCTSNode<A, V>) -> Self {
         NodeMetrics {
             visits: val.visits(),
             value: val.value_score().clone(),
             moves_left: val.moves_left_score(),
-            children: val.iter_all_edges().map(|e| e.into()).collect_vec(),
+            children: val.iter_all_edges().map(|e| e.deref().into()).collect_vec(),
         }
     }
 }

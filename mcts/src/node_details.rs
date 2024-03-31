@@ -41,7 +41,7 @@ pub struct PUCT {
     pub Usa: f32,
     pub Msa: f32,
     pub M: f32,
-    pub moves_left: f32,
+    pub moves_left_score: f32,
     pub game_length: f32,
     pub cpuct: f32,
     pub PUCT: f32,
@@ -49,13 +49,13 @@ pub struct PUCT {
 
 impl Display for PUCT {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa:.3}, Msa: {Msa:.2}, Psa: {Psa:.3}, Usa: {Usa:.2}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1} moves_left_head_score: {moves_left:.1}, PUCT: {PUCT:.3}",
+        write!(f, "Nsa: {Nsa}, Qsa: {Qsa:.3}, Msa: {Msa:.2}, Psa: {Psa:.3}, Usa: {Usa:.2}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1} moves_left_head_score: {moves_left_score:.1}, PUCT: {PUCT:.3}",
             Nsa = self.Nsa,
             Qsa = self.Qsa,
             Psa = self.Psa,
             Usa = self.Usa,
             Msa = self.Msa,
-            moves_left = self.moves_left,
+            moves_left_score = self.moves_left_score,
             game_length = self.game_length,
             cpuct = self.cpuct,
             PUCT = self.PUCT,
@@ -114,7 +114,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -127,7 +127,7 @@ mod tests {
             Msa: 2.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 2.0,
+            moves_left_score: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -147,7 +147,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -160,7 +160,7 @@ mod tests {
             Msa: 2.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 2.0,
+            moves_left_score: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -180,7 +180,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -193,7 +193,7 @@ mod tests {
             Msa: 2.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 2.0,
+            moves_left_score: 2.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -213,7 +213,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 1.0,
             PUCT: 1.0,
         };
@@ -226,7 +226,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 2.0,
             PUCT: 2.0,
         };
@@ -246,7 +246,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 2.0,
             PUCT: 1.0,
         };
@@ -259,7 +259,7 @@ mod tests {
             Msa: 1.0,
             M: 0.0,
             game_length: 1.0,
-            moves_left: 1.0,
+            moves_left_score: 1.0,
             cpuct: 1.0,
             PUCT: 2.0,
         };

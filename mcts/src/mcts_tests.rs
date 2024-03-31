@@ -247,9 +247,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.509, 0.0, 312),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 182),
                     NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 304),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 177),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.509, 0.0, 312),
                 ],
             },
         );
@@ -290,9 +290,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.51, 0.0, 31),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 29),
                     NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 40),
+                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 29),
+                    NodeChildMetrics::new(CountingAction::Increment, 0.51, 0.0, 31),
                 ],
             },
         );
@@ -376,9 +376,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
+                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 1),
                     NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
                     NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 1),
                 ],
             },
         );
