@@ -141,11 +141,9 @@ impl GameState {
         let action: ActionExpanded = (*action).into();
 
         match action {
-            ActionExpanded::MovePawn(coord) => self.move_pawn(coord.as_bit_board()),
-            ActionExpanded::PlaceVerticalWall(coord) => self.place_wall(coord.as_bit_board(), true),
-            ActionExpanded::PlaceHorizontalWall(coord) => {
-                self.place_wall(coord.as_bit_board(), false)
-            }
+            ActionExpanded::MovePawn(coord) => self.move_pawn(coord),
+            ActionExpanded::PlaceVerticalWall(coord) => self.place_wall(coord, true),
+            ActionExpanded::PlaceHorizontalWall(coord) => self.place_wall(coord, false),
         }
 
         self.increment_turn();
@@ -237,17 +235,19 @@ impl GameState {
         }
     }
 
-    fn move_pawn(&mut self, new_pawn_board: u128) {
-        self.zobrist = self.zobrist.move_pawn(self, new_pawn_board);
+    fn move_pawn(&mut self, coord: Coordinate) {
+        let pawn_board = coord.as_bit_board();
+        self.zobrist = self.zobrist.move_pawn(self, pawn_board);
 
         if self.p1_turn_to_move {
-            self.p1_pawn_board = new_pawn_board
+            self.p1_pawn_board = pawn_board
         } else {
-            self.p2_pawn_board = new_pawn_board
+            self.p2_pawn_board = pawn_board
         }
     }
 
-    fn place_wall(&mut self, wall_placement: u128, is_vertical: bool) {
+    fn place_wall(&mut self, coord: Coordinate, is_vertical: bool) {
+        let wall_placement = coord.as_bit_board();
         self.zobrist = self.zobrist.place_wall(self, wall_placement, is_vertical);
 
         let p1_turn_to_move = self.p1_turn_to_move;

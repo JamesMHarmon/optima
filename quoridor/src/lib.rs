@@ -9,6 +9,7 @@ mod zobrist_values;
 
 pub mod action;
 pub mod constants;
+pub mod coordinate;
 pub mod engine;
 pub mod game_state;
 pub mod mappings;
@@ -18,6 +19,7 @@ pub mod value;
 
 pub use action::*;
 pub use constants::*;
+pub use coordinate::*;
 pub use engine::Engine;
 pub use game_state::*;
 pub use mappings::*;

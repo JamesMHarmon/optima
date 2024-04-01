@@ -7,13 +7,12 @@ use crate::ActionExpanded;
 
 use super::transposition_entry::TranspositionEntry;
 
-use super::action::{Action, Coordinate};
 use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, INPUT_C, INPUT_H, INPUT_W, NUM_WALLS_PER_PLAYER,
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
 };
-use super::{GameState, Value};
+use super::{Action, Coordinate, GameState, Value};
 use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
@@ -236,15 +235,15 @@ fn map_action_to_output_idx(action: &Action) -> usize {
 }
 
 fn map_coord_to_input_idx_nine_by_nine(coord: &Coordinate) -> usize {
-    let col_idx = (coord.column as u8 - ASCII_LETTER_A) as usize;
+    let col_idx = (coord.col() as u8 - ASCII_LETTER_A) as usize;
 
-    col_idx + ((BOARD_HEIGHT - coord.row) * BOARD_WIDTH)
+    col_idx + ((BOARD_HEIGHT - coord.row()) * BOARD_WIDTH)
 }
 
 fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
-    let col_idx = (coord.column as u8 - ASCII_LETTER_A) as usize;
+    let col_idx = (coord.col() as u8 - ASCII_LETTER_A) as usize;
 
-    col_idx + ((BOARD_HEIGHT - coord.row - 1) * (BOARD_WIDTH - 1))
+    col_idx + ((BOARD_HEIGHT - coord.row() - 1) * (BOARD_WIDTH - 1))
 }
 
 #[cfg(test)]
