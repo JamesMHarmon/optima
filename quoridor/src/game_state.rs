@@ -225,7 +225,7 @@ impl GameState {
         }
     }
 
-    pub fn get_transposition_hash(&self) -> u64 {
+    pub fn transposition_hash(&self) -> u64 {
         self.zobrist.board_state_hash()
     }
 

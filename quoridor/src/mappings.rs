@@ -190,7 +190,7 @@ impl InputMap<GameState> for Mapper {
 
 impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
-        game_state.get_transposition_hash()
+        game_state.transposition_hash()
     }
 
     fn map_output_to_transposition_entry(

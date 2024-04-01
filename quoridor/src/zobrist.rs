@@ -81,3 +81,76 @@ fn get_num_walls_placed_value(prev_game_state: &GameState) -> u64 {
 
     walls_placed_prev_value ^ walls_placed_new_value
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Action, GameState};
+    use engine::game_state::GameState as GameStateTrait;
+
+    /*
+       Tests that if player 1 and player 2 move their pawns and end up back in the same spots, then transposition is equivalent.
+    */
+    #[test]
+    fn test_transposition_hash_pawn_moves() {
+        let mut game_state = GameState::initial();
+        let initial_hash = game_state.transposition_hash();
+
+        game_state.take_action(&"f1".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"e1".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+
+        let after_actions_hash = game_state.transposition_hash();
+
+        assert_eq!(initial_hash, after_actions_hash);
+    }
+
+    /*
+       Tests that if player 1 and player 2 both place a wall, it doesn't depend on which player placed which wall.
+    */
+    #[test]
+    fn test_transposition_hash_alternate_player_wall_placement() {
+        let mut game_state = GameState::initial();
+
+        game_state.take_action(&"f4h".parse::<Action>().unwrap());
+        game_state.take_action(&"f6h".parse::<Action>().unwrap());
+
+        let after_actions_hash = game_state.transposition_hash();
+
+        let mut game_state = GameState::initial();
+
+        game_state.take_action(&"f6h".parse::<Action>().unwrap());
+        game_state.take_action(&"f4h".parse::<Action>().unwrap());
+
+        let after_actions_hash_2 = game_state.transposition_hash();
+
+        assert_eq!(after_actions_hash, after_actions_hash_2);
+    }
+
+    /*
+       Tests that the transposition is not equivalent when player 1 places the wall in contrast to player 2 placing the walls.
+       These are not the same as player 1 will have less walls remaining to place than player 2.
+    */
+    #[test]
+    fn test_transposition_hash_who_made_wall_placement() {
+        let mut game_state = GameState::initial();
+
+        game_state.take_action(&"f1".parse::<Action>().unwrap());
+        game_state.take_action(&"f4h".parse::<Action>().unwrap());
+        game_state.take_action(&"e1".parse::<Action>().unwrap());
+        game_state.take_action(&"f6h".parse::<Action>().unwrap());
+
+        let after_actions_hash = game_state.transposition_hash();
+
+        let mut game_state = GameState::initial();
+
+        game_state.take_action(&"f4h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"f6h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+
+        let after_actions_hash_2 = game_state.transposition_hash();
+
+        assert_ne!(after_actions_hash, after_actions_hash_2);
+    }
+}
