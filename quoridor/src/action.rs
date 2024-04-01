@@ -38,12 +38,12 @@ impl Coordinate {
         bit_in_column << row_shift
     }
 
-    pub fn invert(&self, shift: bool) -> Coordinate {
+    pub fn rotate(&self, shift: bool) -> Coordinate {
         Coordinate::new(
             if shift {
-                Self::invert_column_shift(self.column)
+                Self::rotate_column_shift(self.column)
             } else {
-                Self::invert_column(self.column)
+                Self::rotate_column(self.column)
             },
             if shift {
                 BOARD_HEIGHT
@@ -56,9 +56,9 @@ impl Coordinate {
     pub fn vertical_symmetry(&self, shift: bool) -> Coordinate {
         Coordinate::new(
             if shift {
-                Self::invert_column_shift(self.column)
+                Self::rotate_column_shift(self.column)
             } else {
-                Self::invert_column(self.column)
+                Self::rotate_column(self.column)
             },
             self.row,
         )
@@ -77,21 +77,19 @@ impl Coordinate {
         let col = (col_idx as u8 + ASCII_LETTER_A) as char;
         let row = row_idx + 1;
 
-        // @TODO Ensure tested
-
         Coordinate::new(col, row)
     }
 
-    fn invert_column(column: char) -> char {
+    fn rotate_column(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
-        let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
-        (ASCII_LETTER_A + inverted_col_num - 1) as char
+        let rotated_col_num = BOARD_WIDTH as u8 - col_num + 1;
+        (ASCII_LETTER_A + rotated_col_num - 1) as char
     }
 
-    fn invert_column_shift(column: char) -> char {
+    fn rotate_column_shift(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
-        let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
-        (ASCII_LETTER_A + inverted_col_num - 2) as char
+        let rotated_col_num = BOARD_WIDTH as u8 - col_num + 1;
+        (ASCII_LETTER_A + rotated_col_num - 2) as char
     }
 }
 
@@ -157,8 +155,8 @@ pub struct Action {
 }
 
 impl Action {
-    pub fn invert(&self) -> Self {
-        ActionExpanded::from(*self).invert().into()
+    pub fn rotate(&self) -> Self {
+        ActionExpanded::from(*self).rotate().into()
     }
 
     pub fn vertical_symmetry(&self) -> Self {
@@ -228,13 +226,13 @@ pub enum ActionExpanded {
 }
 
 impl ActionExpanded {
-    pub fn invert(&self) -> Self {
+    pub fn rotate(&self) -> Self {
         match self {
-            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.invert(false)),
+            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.rotate(false)),
             Self::PlaceHorizontalWall(coordinate) => {
-                Self::PlaceHorizontalWall(coordinate.invert(true))
+                Self::PlaceHorizontalWall(coordinate.rotate(true))
             }
-            Self::PlaceVerticalWall(coordinate) => Self::PlaceVerticalWall(coordinate.invert(true)),
+            Self::PlaceVerticalWall(coordinate) => Self::PlaceVerticalWall(coordinate.rotate(true)),
         }
     }
 
@@ -427,81 +425,81 @@ mod tests {
     }
 
     #[test]
-    fn test_invert_coordinate_a1() {
+    fn test_rotate_coordinate_a1() {
         let coord = "a1".parse::<Coordinate>().unwrap();
         let expected = "i9".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(coord.rotate(false), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_i9() {
+    fn test_rotate_coordinate_i9() {
         let coord = "i9".parse::<Coordinate>().unwrap();
         let expected = "a1".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(coord.rotate(false), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_e5() {
+    fn test_rotate_coordinate_e5() {
         let coord = "e5".parse::<Coordinate>().unwrap();
         let expected = "e5".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(coord.rotate(false), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_d3() {
+    fn test_rotate_coordinate_d3() {
         let coord = "d3".parse::<Coordinate>().unwrap();
         let expected = "f7".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(false), expected);
+        assert_eq!(coord.rotate(false), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_double_invert() {
+    fn test_rotate_coordinate_double_rotate() {
         let coord = "d3".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(false).invert(false), coord);
+        assert_eq!(coord.rotate(false).rotate(false), coord);
     }
 
     #[test]
-    fn test_invert_coordinate_shift_a1() {
+    fn test_rotate_coordinate_shift_a1() {
         let coord = "a1".parse::<Coordinate>().unwrap();
         let expected = "h8".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(true), expected);
+        assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_shift_h8() {
+    fn test_rotate_coordinate_shift_h8() {
         let coord = "h8".parse::<Coordinate>().unwrap();
         let expected = "a1".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(true), expected);
+        assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_shift_e5() {
+    fn test_rotate_coordinate_shift_e5() {
         let coord = "e5".parse::<Coordinate>().unwrap();
         let expected = "d4".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(true), expected);
+        assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_shift_d3() {
+    fn test_rotate_coordinate_shift_d3() {
         let coord = "d3".parse::<Coordinate>().unwrap();
         let expected = "e6".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(true), expected);
+        assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
-    fn test_invert_coordinate_shift_double_invert() {
+    fn test_rotate_coordinate_shift_double_rotate() {
         let coord = "d3".parse::<Coordinate>().unwrap();
 
-        assert_eq!(coord.invert(true).invert(true), coord);
+        assert_eq!(coord.rotate(true).rotate(true), coord);
     }
 
     #[test]

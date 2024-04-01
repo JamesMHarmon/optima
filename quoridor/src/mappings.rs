@@ -41,14 +41,14 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         policy_metrics: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let invert = !game_state.p1_turn_to_move;
+        let rotate: bool = !game_state.p1_turn_to_move;
         let inputs = vec![-1f32; OUTPUT_SIZE];
 
         policy_metrics.children.iter().fold(inputs, |mut r, m| {
             // Policy scores for quoridor should be in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
-            // at the board from the perspective of player 1, but with the pieces inverted.
-            let input_idx = if invert {
-                map_action_to_output_idx(&m.action().invert())
+            // at the board from the perspective of player 1, but with the pieces rotated.
+            let input_idx = if rotate {
+                map_action_to_output_idx(&m.action().rotate())
             } else {
                 map_action_to_output_idx(m.action())
             };
@@ -69,15 +69,15 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         let actions = valid_pawn_moves
             .chain(valid_vert_walls)
             .chain(valid_horiz_walls);
-        let invert = !game_state.p1_turn_to_move;
+        let rotate = !game_state.p1_turn_to_move;
 
         let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
             .map(|a| {
                 // Policy scores coming from the quoridor model are always from the perspective of player 1.
                 // This means that if we are p2, we need to flip the actions coming back and translate them
                 // to be actions in the p2 perspective.
-                let p_idx = if invert {
-                    map_action_to_output_idx(&a.invert())
+                let p_idx = if rotate {
+                    map_action_to_output_idx(&a.rotate())
                 } else {
                     map_action_to_output_idx(&a)
                 };
@@ -138,21 +138,21 @@ impl InputMap<GameState> for Mapper {
             *p1_pawn_board
         };
 
-        let invert = !*p1_turn_to_move;
+        let rotate = !*p1_turn_to_move;
 
         let curr_pawn_board_vec =
-            map_board_to_arr_rotatable(curr_player_pawn_board, BoardType::Pawn, invert);
+            map_board_to_arr_rotatable(curr_player_pawn_board, BoardType::Pawn, rotate);
         let oppo_pawn_board_vec =
-            map_board_to_arr_rotatable(oppo_player_pawn_board, BoardType::Pawn, invert);
+            map_board_to_arr_rotatable(oppo_player_pawn_board, BoardType::Pawn, rotate);
         let vertical_wall_vec = map_board_to_arr_rotatable(
             *vertical_wall_placement_board,
             BoardType::VerticalWall,
-            invert,
+            rotate,
         );
         let horizontal_wall_vec = map_board_to_arr_rotatable(
             *horizontal_wall_placement_board,
             BoardType::HorizontalWall,
-            invert,
+            rotate,
         );
 
         let curr_num_walls_placed = if *p1_turn_to_move {

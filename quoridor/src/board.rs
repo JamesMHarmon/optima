@@ -143,7 +143,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'i', 8), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
@@ -170,7 +169,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'b', 8), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
@@ -197,7 +195,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'b', 1), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
@@ -224,7 +221,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
@@ -251,7 +247,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'f', 5), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
@@ -278,7 +273,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 8), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'h', 9), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
             BoardType::VerticalWall,
@@ -305,7 +299,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 8), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
             BoardType::VerticalWall,
@@ -332,7 +325,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'a', 2), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
             BoardType::VerticalWall,
@@ -359,7 +351,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'h', 1), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'h', 2), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
             BoardType::VerticalWall,
@@ -386,7 +377,6 @@ mod tests {
         assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
         assert_eq!(value_at_coordinate(&arr, 'e', 6), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
             BoardType::VerticalWall,
@@ -408,7 +398,6 @@ mod tests {
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 9), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
@@ -425,7 +414,6 @@ mod tests {
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 9), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
@@ -442,7 +430,6 @@ mod tests {
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'a', 1), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
@@ -459,7 +446,6 @@ mod tests {
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'i', 1), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
@@ -476,7 +462,6 @@ mod tests {
         assert_eq!(num_values_set(&arr), 1);
         assert_eq!(value_at_coordinate(&arr, 'e', 5), 1.0);
 
-        // Inverted
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, true);
 
         assert_eq!(num_values_set(&arr), 1);
