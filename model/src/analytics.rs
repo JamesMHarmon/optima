@@ -1,4 +1,5 @@
 use engine::value::Value;
+use half::*;
 use std::future::Future;
 
 pub trait GameAnalyzer {
@@ -56,11 +57,11 @@ pub trait GameStateAnalysis<A, V> {
 #[derive(Clone, Debug)]
 pub struct ActionWithPolicy<A> {
     pub action: A,
-    pub policy_score: f32,
+    pub policy_score: f16,
 }
 
 impl<A> ActionWithPolicy<A> {
-    pub fn new(action: A, policy_score: f32) -> Self {
+    pub fn new(action: A, policy_score: f16) -> Self {
         ActionWithPolicy {
             action,
             policy_score,

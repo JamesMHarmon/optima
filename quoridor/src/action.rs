@@ -1,13 +1,15 @@
+use crate::BOARD_SIZE;
+
 use super::constants::{ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH};
 use anyhow::anyhow;
 use common::bits::single_bit_index;
 use serde::de::Error;
 use serde::de::{Deserialize, Deserializer, Error as DeserializeError, Unexpected, Visitor};
 use serde::ser::{Serialize, Serializer};
-use std::fmt;
+use std::fmt::{self, Debug, Display};
 use std::str::FromStr;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Coordinate {
     pub column: char,
     pub row: usize,
@@ -62,6 +64,24 @@ impl Coordinate {
         )
     }
 
+    pub fn index(&self) -> usize {
+        let col_idx = (self.column as u8 - ASCII_LETTER_A) as usize;
+
+        col_idx + ((BOARD_HEIGHT - self.row) * BOARD_WIDTH)
+    }
+
+    pub fn from_index(value: usize) -> Self {
+        let col_idx = value % BOARD_WIDTH;
+        let row_idx = BOARD_HEIGHT - 1 - value / BOARD_WIDTH;
+
+        let col = (col_idx as u8 + ASCII_LETTER_A) as char;
+        let row = row_idx + 1;
+
+        // @TODO Ensure tested
+
+        Coordinate::new(col, row)
+    }
+
     fn invert_column(column: char) -> char {
         let col_num = column as u8 - ASCII_LETTER_A + 1;
         let inverted_col_num = BOARD_WIDTH as u8 - col_num + 1;
@@ -81,7 +101,6 @@ impl FromStr for Coordinate {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars: Vec<char> = s.chars().collect();
         let row = chars[0];
-        // @TODO: Update to take multiple digits
         let col = chars[1]
             .to_digit(10)
             .ok_or_else(|| anyhow!("Invalid value"))?;
@@ -132,45 +151,112 @@ impl<'de> Deserialize<'de> for Action {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
-pub enum Action {
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct Action {
+    compact: u8,
+}
+
+impl Action {
+    pub fn invert(&self) -> Self {
+        ActionExpanded::from(*self).invert().into()
+    }
+
+    pub fn vertical_symmetry(&self) -> Self {
+        ActionExpanded::from(*self).vertical_symmetry().into()
+    }
+}
+
+impl From<ActionExpanded> for Action {
+    fn from(value: ActionExpanded) -> Self {
+        let action_type_offset = match value {
+            ActionExpanded::MovePawn(_) => 0,
+            ActionExpanded::PlaceHorizontalWall(_) => BOARD_SIZE,
+            ActionExpanded::PlaceVerticalWall(_) => BOARD_SIZE * 2,
+        };
+
+        let coordinate = match value {
+            ActionExpanded::MovePawn(coordinate) => coordinate,
+            ActionExpanded::PlaceHorizontalWall(coordinate) => coordinate,
+            ActionExpanded::PlaceVerticalWall(coordinate) => coordinate,
+        };
+
+        Self {
+            compact: (action_type_offset + coordinate.index()) as u8,
+        }
+    }
+}
+
+impl From<Action> for ActionExpanded {
+    fn from(value: Action) -> Self {
+        let action_type_offset = value.compact as usize / BOARD_SIZE;
+        let index = (value.compact as usize % BOARD_SIZE) as usize;
+
+        match action_type_offset {
+            0 => ActionExpanded::MovePawn(Coordinate::from_index(index)),
+            1 => ActionExpanded::PlaceHorizontalWall(Coordinate::from_index(index)),
+            2 => ActionExpanded::PlaceVerticalWall(Coordinate::from_index(index)),
+            _ => panic!("Invalid action type offset"),
+        }
+    }
+}
+
+impl FromStr for Action {
+    type Err = <ActionExpanded as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<ActionExpanded>().map(|a| a.into())
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&ActionExpanded::from(*self), f)
+    }
+}
+
+impl Debug for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(&ActionExpanded::from(*self), f)
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum ActionExpanded {
     MovePawn(Coordinate),
     PlaceHorizontalWall(Coordinate),
     PlaceVerticalWall(Coordinate),
 }
 
-impl Action {
+impl ActionExpanded {
     pub fn invert(&self) -> Self {
         match self {
-            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.invert(false)),
-            Action::PlaceHorizontalWall(coordinate) => {
-                Action::PlaceHorizontalWall(coordinate.invert(true))
+            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.invert(false)),
+            Self::PlaceHorizontalWall(coordinate) => {
+                Self::PlaceHorizontalWall(coordinate.invert(true))
             }
-            Action::PlaceVerticalWall(coordinate) => {
-                Action::PlaceVerticalWall(coordinate.invert(true))
-            }
+            Self::PlaceVerticalWall(coordinate) => Self::PlaceVerticalWall(coordinate.invert(true)),
         }
     }
 
     pub fn vertical_symmetry(&self) -> Self {
         match self {
-            Action::MovePawn(coordinate) => Action::MovePawn(coordinate.vertical_symmetry(false)),
-            Action::PlaceHorizontalWall(coordinate) => {
-                Action::PlaceHorizontalWall(coordinate.vertical_symmetry(true))
+            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.vertical_symmetry(false)),
+            Self::PlaceHorizontalWall(coordinate) => {
+                Self::PlaceHorizontalWall(coordinate.vertical_symmetry(true))
             }
-            Action::PlaceVerticalWall(coordinate) => {
-                Action::PlaceVerticalWall(coordinate.vertical_symmetry(true))
+            Self::PlaceVerticalWall(coordinate) => {
+                Self::PlaceVerticalWall(coordinate.vertical_symmetry(true))
             }
         }
     }
 }
 
-impl fmt::Display for Action {
+impl fmt::Display for ActionExpanded {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (coordinate, action_type) = match self {
-            Action::MovePawn(coordinate) => (coordinate, ""),
-            Action::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
-            Action::PlaceVerticalWall(coordinate) => (coordinate, "v"),
+            Self::MovePawn(coordinate) => (coordinate, ""),
+            Self::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
+            Self::PlaceVerticalWall(coordinate) => (coordinate, "v"),
         };
 
         write!(
@@ -182,22 +268,22 @@ impl fmt::Display for Action {
     }
 }
 
-impl fmt::Debug for Action {
+impl fmt::Debug for ActionExpanded {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl FromStr for Action {
+impl FromStr for ActionExpanded {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let coordinate = s[..2].parse()?;
 
         match s.chars().nth(2) {
-            None => Ok(Action::MovePawn(coordinate)),
-            Some('v') => Ok(Action::PlaceVerticalWall(coordinate)),
-            Some('h') => Ok(Action::PlaceHorizontalWall(coordinate)),
+            None => Ok(Self::MovePawn(coordinate)),
+            Some('v') => Ok(Self::PlaceVerticalWall(coordinate)),
+            Some('h') => Ok(Self::PlaceHorizontalWall(coordinate)),
             Some(_) => Err(anyhow!("Invalid value")),
         }
     }
@@ -217,7 +303,18 @@ impl fmt::Debug for Coordinate {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
+
+    fn all_coords_iter() -> impl Iterator<Item = Coordinate> {
+        let cols = || 'a'..='i';
+        let rows = 1..=9;
+
+        rows.into_iter()
+            .rev()
+            .flat_map(move |row| cols().into_iter().map(move |col| Coordinate::new(col, row)))
+    }
 
     #[test]
     fn test_as_bit_board_a1() {
@@ -321,11 +418,7 @@ mod tests {
 
     #[test]
     fn test_to_coordinate_to_bit_board_from_bit_board_back_to_coordinate() {
-        let cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
-        let rows = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-        for (col, row) in cols.iter().zip(rows.iter()) {
-            let orig_coordinate = Coordinate::new(*col, *row);
+        for orig_coordinate in all_coords_iter() {
             let bit_board = orig_coordinate.as_bit_board();
             let coordinate = Coordinate::from_bit_board(bit_board);
 
@@ -410,12 +503,6 @@ mod tests {
 
         assert_eq!(coord.invert(true).invert(true), coord);
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_action_pawn_move_ser_json() {
@@ -469,5 +556,86 @@ mod test {
             serde_json::from_str::<Action>(json).unwrap(),
             "d1v".parse::<Action>().unwrap(),
         );
+    }
+
+    #[test]
+    fn test_coordinate_to_index_a9() {
+        let coord = "a9".parse::<Coordinate>().unwrap();
+
+        assert_eq!(coord.index(), 0);
+    }
+
+    #[test]
+    fn test_coordinate_to_index_i9() {
+        let coord = "i9".parse::<Coordinate>().unwrap();
+
+        assert_eq!(coord.index(), 8);
+    }
+
+    #[test]
+    fn test_coordinate_to_index_a1() {
+        let coord = "a1".parse::<Coordinate>().unwrap();
+
+        assert_eq!(coord.index(), 72);
+    }
+
+    #[test]
+    fn test_coordinate_to_index_i1() {
+        let coord = "i1".parse::<Coordinate>().unwrap();
+
+        assert_eq!(coord.index(), 80);
+    }
+
+    #[test]
+    fn test_coordinate_to_index_all() {
+        for (i, coord) in all_coords_iter().enumerate() {
+            assert_eq!(coord.index(), i);
+        }
+    }
+
+    #[test]
+    fn test_coordinate_to_from_index_all() {
+        for coord in all_coords_iter() {
+            assert_eq!(Coordinate::from_index(coord.index()), coord);
+        }
+    }
+
+    #[test]
+    fn test_action_from_to_for_all() {
+        let into_action_and_back =
+            |action: ActionExpanded| ActionExpanded::from(Action::from(action));
+
+        for coord in all_coords_iter() {
+            let actions = [
+                ActionExpanded::MovePawn(coord),
+                ActionExpanded::PlaceHorizontalWall(coord),
+                ActionExpanded::PlaceVerticalWall(coord),
+            ];
+
+            for action in actions.into_iter() {
+                assert_eq!(action, into_action_and_back(action));
+            }
+        }
+    }
+
+    #[test]
+    fn test_action_to_string_for_all() {
+        for coord in all_coords_iter() {
+            let actions = [
+                ActionExpanded::MovePawn(coord),
+                ActionExpanded::PlaceHorizontalWall(coord),
+                ActionExpanded::PlaceVerticalWall(coord),
+            ];
+
+            for action in actions {
+                assert_eq!(action.to_string(), Action::from(action).to_string());
+                assert_eq!(
+                    action.to_string().parse::<ActionExpanded>().unwrap(),
+                    ActionExpanded::from(
+                        Action::from(action).to_string().parse::<Action>().unwrap()
+                    )
+                );
+            }
+        }
     }
 }

@@ -1,3 +1,5 @@
+use crate::ActionExpanded;
+
 use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER,
@@ -142,29 +144,38 @@ struct PathingResult {
 
 impl GameState {
     pub fn take_action(&self, action: &Action) -> Self {
+        let action: ActionExpanded = (*action).into();
+
         match action {
-            Action::MovePawn(coord) => self.move_pawn(coord.as_bit_board()),
-            Action::PlaceHorizontalWall(coord) => self.place_horizontal_wall(coord.as_bit_board()),
-            Action::PlaceVerticalWall(coord) => self.place_vertical_wall(coord.as_bit_board()),
+            ActionExpanded::MovePawn(coord) => self.move_pawn(coord.as_bit_board()),
+            ActionExpanded::PlaceVerticalWall(coord) => {
+                self.place_vertical_wall(coord.as_bit_board())
+            }
+            ActionExpanded::PlaceHorizontalWall(coord) => {
+                self.place_horizontal_wall(coord.as_bit_board())
+            }
         }
     }
 
     pub fn get_valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_pawn_moves())
             .into_iter()
-            .map(Action::MovePawn)
+            .map(ActionExpanded::MovePawn)
+            .map(Into::into)
     }
 
     pub fn get_valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_horizontal_wall_placement())
             .into_iter()
-            .map(Action::PlaceHorizontalWall)
+            .map(ActionExpanded::PlaceHorizontalWall)
+            .map(Into::into)
     }
 
     pub fn get_valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::map_bit_board_to_coordinates(self.get_valid_vertical_wall_placement())
             .into_iter()
-            .map(Action::PlaceVerticalWall)
+            .map(ActionExpanded::PlaceVerticalWall)
+            .map(Into::into)
     }
 
     pub fn is_terminal(&self) -> Option<Value> {
@@ -621,7 +632,7 @@ impl game_state::GameState for GameState {
 
 #[cfg(test)]
 mod tests {
-    use super::super::action::{Action, Coordinate};
+    use super::super::action::Action;
     use super::super::value::Value;
     use super::GameState;
     use engine::game_state::GameState as GameStateTrait;
@@ -793,7 +804,7 @@ mod tests {
 
         for row in rows.iter() {
             for col in cols.iter() {
-                actions.push(Action::PlaceHorizontalWall(Coordinate::new(*col, *row)));
+                actions.push(format!("{}{}h", col, row).parse().unwrap());
             }
         }
 
@@ -946,7 +957,7 @@ mod tests {
 
         for row in rows.iter() {
             for col in cols.iter() {
-                actions.push(Action::PlaceVerticalWall(Coordinate::new(*col, *row)));
+                actions.push(format!("{}{}v", col, row).parse().unwrap());
             }
         }
 

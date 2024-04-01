@@ -3,6 +3,8 @@ use itertools::izip;
 use std::convert::TryInto;
 use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
 
+use crate::ActionExpanded;
+
 use super::transposition_entry::TranspositionEntry;
 
 use super::action::{Action, Coordinate};
@@ -46,9 +48,9 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
             // Policy scores for quoridor should be in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
             // at the board from the perspective of player 1, but with the pieces inverted.
             let input_idx = if invert {
-                map_action_to_input_idx(&m.action().invert())
+                map_action_to_output_idx(&m.action().invert())
             } else {
-                map_action_to_input_idx(m.action())
+                map_action_to_output_idx(m.action())
             };
 
             r[input_idx] = m.visits() as f32 / total_visits;
@@ -75,14 +77,14 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
                 // This means that if we are p2, we need to flip the actions coming back and translate them
                 // to be actions in the p2 perspective.
                 let p_idx = if invert {
-                    map_action_to_input_idx(&a.invert())
+                    map_action_to_output_idx(&a.invert())
                 } else {
-                    map_action_to_input_idx(&a)
+                    map_action_to_output_idx(&a)
                 };
 
                 let p = policy_scores[p_idx];
 
-                ActionWithPolicy::new(a, p.to_f32())
+                ActionWithPolicy::new(a, p)
             })
             .collect();
 
@@ -218,17 +220,17 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
     }
 }
 
-fn map_action_to_input_idx(action: &Action) -> usize {
+fn map_action_to_output_idx(action: &Action) -> usize {
     let len_moves_inputs = PAWN_BOARD_SIZE;
     let len_wall_inputs = WALL_BOARD_SIZE;
 
-    match action {
-        Action::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(coord),
-        Action::PlaceVerticalWall(coord) => {
-            map_coord_to_input_idx_eight_by_eight(coord) + len_moves_inputs
+    match action.clone().into() {
+        ActionExpanded::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(&coord),
+        ActionExpanded::PlaceVerticalWall(coord) => {
+            map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs
         }
-        Action::PlaceHorizontalWall(coord) => {
-            map_coord_to_input_idx_eight_by_eight(coord) + len_moves_inputs + len_wall_inputs
+        ActionExpanded::PlaceHorizontalWall(coord) => {
+            map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
         }
     }
 }
@@ -381,55 +383,55 @@ mod tests {
     }
 
     #[test]
-    fn test_map_action_to_input_idx_pawn_a9() {
+    fn test_map_action_to_output_idx_pawn_a9() {
         let coord = "a9".parse::<Coordinate>().unwrap();
-        let action = Action::MovePawn(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::MovePawn(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(0, idx);
     }
 
     #[test]
-    fn test_map_action_to_input_idx_pawn_i1() {
+    fn test_map_action_to_output_idx_pawn_i1() {
         let coord = "i1".parse::<Coordinate>().unwrap();
-        let action = Action::MovePawn(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::MovePawn(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(80, idx);
     }
 
     #[test]
-    fn test_map_action_to_input_idx_vertical_wall_a8() {
+    fn test_map_action_to_output_idx_vertical_wall_a8() {
         let coord = "a8".parse::<Coordinate>().unwrap();
-        let action = Action::PlaceVerticalWall(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::PlaceVerticalWall(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(81, idx);
     }
 
     #[test]
-    fn test_map_action_to_input_idx_vertical_wall_h1() {
+    fn test_map_action_to_output_idx_vertical_wall_h1() {
         let coord = "h1".parse::<Coordinate>().unwrap();
-        let action = Action::PlaceVerticalWall(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::PlaceVerticalWall(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(144, idx);
     }
 
     #[test]
-    fn test_map_action_to_input_idx_horizontal_wall_a8() {
+    fn test_map_action_to_output_idx_horizontal_wall_a8() {
         let coord = "a8".parse::<Coordinate>().unwrap();
-        let action = Action::PlaceHorizontalWall(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::PlaceHorizontalWall(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(145, idx);
     }
 
     #[test]
-    fn test_map_action_to_input_idx_horizontal_wall_h1() {
+    fn test_map_action_to_output_idx_horizontal_wall_h1() {
         let coord = "h1".parse::<Coordinate>().unwrap();
-        let action = Action::PlaceHorizontalWall(coord);
-        let idx = map_action_to_input_idx(&action);
+        let action = ActionExpanded::PlaceHorizontalWall(coord).into();
+        let idx = map_action_to_output_idx(&action);
 
         assert_eq!(208, idx);
     }

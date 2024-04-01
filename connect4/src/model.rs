@@ -104,10 +104,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
             .enumerate()
             .filter_map(|(i, (v, p))| {
                 if *v {
-                    Some(ActionWithPolicy::new(
-                        Action::DropPiece((i + 1) as u64),
-                        p.to_f32(),
-                    ))
+                    Some(ActionWithPolicy::new(Action::DropPiece((i + 1) as u64), *p))
                 } else {
                     None
                 }

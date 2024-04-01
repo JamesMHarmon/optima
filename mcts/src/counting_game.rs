@@ -1,6 +1,7 @@
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use futures::future;
+use half::f16;
 use model::analytics::{ActionWithPolicy, BasicGameStateAnalysis, GameAnalyzer};
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
@@ -120,15 +121,15 @@ impl GameAnalyzer for CountingAnalyzer {
         let policy_scores = vec![
             ActionWithPolicy {
                 action: CountingAction::Increment,
-                policy_score: 0.3,
+                policy_score: f16::from_f32(0.3),
             },
             ActionWithPolicy {
                 action: CountingAction::Decrement,
-                policy_score: 0.3,
+                policy_score: f16::from_f32(0.3),
             },
             ActionWithPolicy {
                 action: CountingAction::Stay,
-                policy_score: 0.4,
+                policy_score: f16::from_f32(0.4),
             },
         ];
 

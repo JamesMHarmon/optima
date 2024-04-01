@@ -1716,6 +1716,7 @@ dependencies = [
  "futures",
  "futures-intrusive",
  "generational-arena",
+ "half 1.8.2",
  "itertools 0.12.1",
  "log",
  "model",
@@ -1791,6 +1792,7 @@ dependencies = [
  "anyhow",
  "common",
  "engine",
+ "half 1.8.2",
  "serde",
 ]
 

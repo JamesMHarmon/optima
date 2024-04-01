@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use futures_intrusive::sync::LocalManualResetEvent;
 use generational_arena::Index;
+use half::f16;
 use model::ActionWithPolicy;
 
 #[allow(non_snake_case)]
@@ -11,13 +12,13 @@ pub struct MCTSEdge<A> {
     W: f32,
     M: f32,
     visits: usize,
-    policy_score: f32,
+    policy_score: f16,
     node: MCTSNodeState,
 }
 
 #[allow(non_snake_case)]
 impl<A> MCTSEdge<A> {
-    pub fn new(action: A, policy_score: f32) -> Self {
+    pub fn new(action: A, policy_score: f16) -> Self {
         Self {
             action,
             policy_score,
@@ -37,11 +38,11 @@ impl<A> MCTSEdge<A> {
     }
 
     pub fn policy_score(&self) -> f32 {
-        self.policy_score
+        self.policy_score.to_f32()
     }
 
     pub fn set_policy_score(&mut self, policy_score: f32) {
-        self.policy_score = policy_score
+        self.policy_score = f16::from_f32(policy_score)
     }
 
     pub fn visits(&self) -> usize {

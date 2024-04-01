@@ -105,7 +105,16 @@ impl<A, V> MCTSNode<A, V> {
             .unvisited_actions
             .iter()
             .enumerate()
-            .max_by(|(_, e), (_, e2)| e.policy_score.total_cmp(&e2.policy_score))
+            .max_by(|(_, e), (_, e2)| {
+                e.policy_score
+                    .partial_cmp(&e2.policy_score)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Could not compare two floats {} {}",
+                            e.policy_score, e2.policy_score,
+                        )
+                    })
+            })
             .map(|(index, _)| index)
             .expect("Should have found a top action idx.");
 
