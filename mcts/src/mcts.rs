@@ -555,7 +555,7 @@ where
         let node = arena.node_mut(node_index);
         node.set_visits(1);
 
-        for child in node.iter_all_edges() {
+        for child in node.iter_visited_edges_mut() {
             child.clear();
         }
 

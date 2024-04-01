@@ -49,6 +49,10 @@ impl<A, V> MCTSNode<A, V> {
         self.visited_edges.iter()
     }
 
+    pub fn iter_visited_edges_mut(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A>> {
+        self.visited_edges.iter_mut()
+    }
+
     pub fn iter_visited_edges_and_top_unvisited_edge(
         &mut self,
     ) -> impl Iterator<Item = &MCTSEdge<A>> {
