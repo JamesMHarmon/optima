@@ -132,7 +132,7 @@ impl InputMap<GameState> for Mapper {
         } else {
             *p2_pawn_board
         };
-        let oppo_player_pawn_board = if *p1_turn_to_move {
+        let opp_player_pawn_board = if *p1_turn_to_move {
             *p2_pawn_board
         } else {
             *p1_pawn_board
@@ -142,8 +142,8 @@ impl InputMap<GameState> for Mapper {
 
         let curr_pawn_board_vec =
             map_board_to_arr_rotatable(curr_player_pawn_board, BoardType::Pawn, rotate);
-        let oppo_pawn_board_vec =
-            map_board_to_arr_rotatable(oppo_player_pawn_board, BoardType::Pawn, rotate);
+        let opp_pawn_board_vec =
+            map_board_to_arr_rotatable(opp_player_pawn_board, BoardType::Pawn, rotate);
         let vertical_wall_vec = map_board_to_arr_rotatable(
             *vertical_wall_placement_board,
             BoardType::VerticalWall,
@@ -160,28 +160,28 @@ impl InputMap<GameState> for Mapper {
         } else {
             p2_num_walls_placed
         };
-        let oppo_num_walls_placed = if *p1_turn_to_move {
+        let opp_num_walls_placed = if *p1_turn_to_move {
             p2_num_walls_placed
         } else {
             p1_num_walls_placed
         };
         let curr_num_walls_placed_norm =
             (*curr_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
-        let oppo_num_walls_placed_norm =
-            (*oppo_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
+        let opp_num_walls_placed_norm =
+            (*opp_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
 
-        for (curr_pawn, oppo_pawn, vw, hw) in izip!(
+        for (curr_pawn, opp_pawn, vw, hw) in izip!(
             curr_pawn_board_vec.iter(),
-            oppo_pawn_board_vec.iter(),
+            opp_pawn_board_vec.iter(),
             vertical_wall_vec.iter(),
             horizontal_wall_vec.iter()
         ) {
             input_vec.push(f16::from_f32(*curr_pawn));
-            input_vec.push(f16::from_f32(*oppo_pawn));
+            input_vec.push(f16::from_f32(*opp_pawn));
             input_vec.push(f16::from_f32(*vw));
             input_vec.push(f16::from_f32(*hw));
             input_vec.push(f16::from_f32(curr_num_walls_placed_norm));
-            input_vec.push(f16::from_f32(oppo_num_walls_placed_norm));
+            input_vec.push(f16::from_f32(opp_num_walls_placed_norm));
         }
 
         input.copy_from_slice(input_vec.as_slice())
