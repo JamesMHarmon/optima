@@ -120,8 +120,8 @@ impl InputMap<GameState> for Mapper {
             p1_turn_to_move,
             p1_pawn_board,
             p2_pawn_board,
-            vertical_wall_placement_board,
-            horizontal_wall_placement_board,
+            vertical_wall_board: vertical_wall_placement_board,
+            horizontal_wall_board: horizontal_wall_placement_board,
             p1_num_walls_placed,
             p2_num_walls_placed,
             ..
@@ -224,7 +224,7 @@ fn map_action_to_output_idx(action: &Action) -> usize {
     let len_moves_inputs = PAWN_BOARD_SIZE;
     let len_wall_inputs = WALL_BOARD_SIZE;
 
-    match action.clone().into() {
+    match (*action).into() {
         ActionExpanded::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(&coord),
         ActionExpanded::PlaceVerticalWall(coord) => {
             map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs

@@ -134,7 +134,7 @@ mod tests {
         let game_state = game_state.take_action(&"h8h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
@@ -145,7 +145,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             true,
         );
@@ -161,7 +161,7 @@ mod tests {
         let game_state = game_state.take_action(&"a8h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
@@ -172,7 +172,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             true,
         );
@@ -188,7 +188,7 @@ mod tests {
         let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
@@ -199,7 +199,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             true,
         );
@@ -215,7 +215,7 @@ mod tests {
         let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
@@ -226,7 +226,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             true,
         );
@@ -242,7 +242,7 @@ mod tests {
         let game_state = game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
@@ -253,7 +253,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.horizontal_wall_placement_board,
+            game_state.horizontal_wall_board,
             BoardType::HorizontalWall,
             true,
         );
@@ -269,7 +269,7 @@ mod tests {
         let game_state = game_state.take_action(&"h8v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             false,
         );
@@ -280,7 +280,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             true,
         );
@@ -296,7 +296,7 @@ mod tests {
         let game_state = game_state.take_action(&"a8v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             false,
         );
@@ -307,7 +307,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             true,
         );
@@ -323,7 +323,7 @@ mod tests {
         let game_state = game_state.take_action(&"a1v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             false,
         );
@@ -334,7 +334,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             true,
         );
@@ -350,7 +350,7 @@ mod tests {
         let game_state = game_state.take_action(&"h1v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             false,
         );
@@ -361,7 +361,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             true,
         );
@@ -377,7 +377,7 @@ mod tests {
         let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             false,
         );
@@ -388,7 +388,7 @@ mod tests {
 
         // Inverted
         let arr = map_board_to_arr_rotatable(
-            game_state.vertical_wall_placement_board,
+            game_state.vertical_wall_board,
             BoardType::VerticalWall,
             true,
         );

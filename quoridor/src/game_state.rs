@@ -29,10 +29,10 @@ pub struct GameState {
     pub p1_turn_to_move: bool,
     pub p1_pawn_board: u128,
     pub p2_pawn_board: u128,
-    pub p1_num_walls_placed: usize,
-    pub p2_num_walls_placed: usize,
-    pub vertical_wall_placement_board: u128,
-    pub horizontal_wall_placement_board: u128,
+    pub p1_num_walls_placed: u8,
+    pub p2_num_walls_placed: u8,
+    pub vertical_wall_board: u128,
+    pub horizontal_wall_board: u128,
     pub zobrist: Zobrist,
 }
 
@@ -40,23 +40,17 @@ impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let p1_board = map_board_to_arr_rotatable(self.p1_pawn_board, BoardType::Pawn, false);
         let p2_board = map_board_to_arr_rotatable(self.p2_pawn_board, BoardType::Pawn, false);
-        let horizontal_wall_placement = map_board_to_arr_rotatable(
-            self.horizontal_wall_placement_board,
-            BoardType::Pawn,
-            false,
-        );
+        let horizontal_wall_placement =
+            map_board_to_arr_rotatable(self.horizontal_wall_board, BoardType::Pawn, false);
         let vertical_wall_placement =
-            map_board_to_arr_rotatable(self.vertical_wall_placement_board, BoardType::Pawn, false);
+            map_board_to_arr_rotatable(self.vertical_wall_board, BoardType::Pawn, false);
         let horizontal_wall_board = map_board_to_arr_rotatable(
-            self.horizontal_wall_placement_board,
+            self.horizontal_wall_board,
             BoardType::HorizontalWall,
             false,
         );
-        let vertical_wall_board = map_board_to_arr_rotatable(
-            self.vertical_wall_placement_board,
-            BoardType::VerticalWall,
-            false,
-        );
+        let vertical_wall_board =
+            map_board_to_arr_rotatable(self.vertical_wall_board, BoardType::VerticalWall, false);
 
         writeln!(f)?;
 
@@ -217,12 +211,9 @@ impl GameState {
         Self {
             p1_pawn_board: get_vertical_symmetry_bit_board(self.p1_pawn_board, false),
             p2_pawn_board: get_vertical_symmetry_bit_board(self.p2_pawn_board, false),
-            vertical_wall_placement_board: get_vertical_symmetry_bit_board(
-                self.vertical_wall_placement_board,
-                true,
-            ),
-            horizontal_wall_placement_board: get_vertical_symmetry_bit_board(
-                self.horizontal_wall_placement_board,
+            vertical_wall_board: get_vertical_symmetry_bit_board(self.vertical_wall_board, true),
+            horizontal_wall_board: get_vertical_symmetry_bit_board(
+                self.horizontal_wall_board,
                 true,
             ),
             num_moves: self.num_moves,
@@ -274,8 +265,7 @@ impl GameState {
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
-            horizontal_wall_placement_board: self.horizontal_wall_placement_board
-                | horizontal_wall_placement,
+            horizontal_wall_board: self.horizontal_wall_board | horizontal_wall_placement,
             zobrist: self
                 .zobrist
                 .place_wall(self, horizontal_wall_placement, false),
@@ -291,8 +281,7 @@ impl GameState {
             p1_turn_to_move: !p1_turn_to_move,
             p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
             p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
-            vertical_wall_placement_board: self.vertical_wall_placement_board
-                | vertical_wall_placement,
+            vertical_wall_board: self.vertical_wall_board | vertical_wall_placement,
             zobrist: self.zobrist.place_wall(self, vertical_wall_placement, true),
             ..*self
         }
@@ -364,11 +353,11 @@ impl GameState {
     }
 
     fn get_vertical_wall_blocks(&self) -> u128 {
-        shift_up!(self.vertical_wall_placement_board) | self.vertical_wall_placement_board
+        shift_up!(self.vertical_wall_board) | self.vertical_wall_board
     }
 
     fn get_horizontal_wall_blocks(&self) -> u128 {
-        shift_right!(self.horizontal_wall_placement_board) | self.horizontal_wall_placement_board
+        shift_right!(self.horizontal_wall_board) | self.horizontal_wall_board
     }
 
     fn get_valid_horizontal_wall_placement(&self) -> u128 {
@@ -408,18 +397,18 @@ impl GameState {
     }
 
     fn get_candidate_horizontal_wall_placement(&self) -> u128 {
-        !(self.horizontal_wall_placement_board
-            | shift_right!(self.horizontal_wall_placement_board)
-            | shift_left!(self.horizontal_wall_placement_board))
-            & !self.vertical_wall_placement_board
+        !(self.horizontal_wall_board
+            | shift_right!(self.horizontal_wall_board)
+            | shift_left!(self.horizontal_wall_board))
+            & !self.vertical_wall_board
             & CANDIDATE_WALL_PLACEMENT_MASK
     }
 
     fn get_candidate_vertical_wall_placement(&self) -> u128 {
-        !(self.vertical_wall_placement_board
-            | shift_down!(self.vertical_wall_placement_board)
-            | shift_up!(self.vertical_wall_placement_board))
-            & !self.horizontal_wall_placement_board
+        !(self.vertical_wall_board
+            | shift_down!(self.vertical_wall_board)
+            | shift_up!(self.vertical_wall_board))
+            & !self.horizontal_wall_board
             & CANDIDATE_WALL_PLACEMENT_MASK
     }
 
@@ -433,8 +422,7 @@ impl GameState {
             let removed_candidate = with_removed_candidate ^ horizontal_connecting_candidates;
 
             let state_with_candidate = Self {
-                horizontal_wall_placement_board: self.horizontal_wall_placement_board
-                    | removed_candidate,
+                horizontal_wall_board: self.horizontal_wall_board | removed_candidate,
                 ..*self
             };
 
@@ -458,8 +446,7 @@ impl GameState {
             let removed_candidate = with_removed_candidate ^ vertical_connecting_candidates;
 
             let state_with_candidate = Self {
-                vertical_wall_placement_board: self.vertical_wall_placement_board
-                    | removed_candidate,
+                vertical_wall_board: self.vertical_wall_board | removed_candidate,
                 ..*self
             };
 
@@ -547,8 +534,8 @@ impl GameState {
 
     fn get_horizontal_connecting_candidates(&self) -> u128 {
         let candidate_horizontal_walls = self.get_candidate_horizontal_wall_placement();
-        let horizontal_walls = self.horizontal_wall_placement_board;
-        let vertical_walls = self.vertical_wall_placement_board;
+        let horizontal_walls = self.horizontal_wall_board;
+        let vertical_walls = self.vertical_wall_board;
 
         // Compare to existing walls. Wall segment candidates check against locations of possible new connections. These are checked in combinations since the walls may already be connected. We don't want to count the same existing connection twice or thrice.
         let middle_touching =
@@ -573,8 +560,8 @@ impl GameState {
 
     fn get_vertical_connecting_candidates(&self) -> u128 {
         let candidate_vertical_walls = self.get_candidate_vertical_wall_placement();
-        let vertical_walls = self.vertical_wall_placement_board;
-        let horizontal_walls = self.horizontal_wall_placement_board;
+        let vertical_walls = self.vertical_wall_board;
+        let horizontal_walls = self.horizontal_wall_board;
 
         // Compare to existing walls. Wall segment candidates check against locations of possible new connections. These are checked in combinations since the walls may already be connected. We don't want to count the same existing connection twice or thrice.
         let middle_touching = candidate_vertical_walls
@@ -623,8 +610,8 @@ impl game_state::GameState for GameState {
             p2_pawn_board: P2_STARTING_POS_MASK,
             p1_num_walls_placed: 0,
             p2_num_walls_placed: 0,
-            vertical_wall_placement_board: 0,
-            horizontal_wall_placement_board: 0,
+            vertical_wall_board: 0,
+            horizontal_wall_board: 0,
             zobrist: Zobrist::initial(),
         }
     }

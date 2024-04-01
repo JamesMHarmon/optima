@@ -189,7 +189,7 @@ impl From<ActionExpanded> for Action {
 impl From<Action> for ActionExpanded {
     fn from(value: Action) -> Self {
         let action_type_offset = value.compact as usize / BOARD_SIZE;
-        let index = (value.compact as usize % BOARD_SIZE) as usize;
+        let index = value.compact as usize % BOARD_SIZE;
 
         match action_type_offset {
             0 => ActionExpanded::MovePawn(Coordinate::from_index(index)),
@@ -313,7 +313,7 @@ mod tests {
 
         rows.into_iter()
             .rev()
-            .flat_map(move |row| cols().into_iter().map(move |col| Coordinate::new(col, row)))
+            .flat_map(move |row| cols().map(move |col| Coordinate::new(col, row)))
     }
 
     #[test]

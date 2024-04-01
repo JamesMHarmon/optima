@@ -3,7 +3,6 @@ use common::bits::single_bit_index;
 use super::zobrist_values::*;
 use super::GameState;
 use crate::constants::BOARD_SIZE;
-use crate::constants::NUM_WALLS_PER_PLAYER;
 use crate::constants::PAWN_BOARD_SIZE;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
@@ -69,18 +68,16 @@ fn get_wall_value(place_wall_bit: u128, is_vertical: bool) -> u64 {
 }
 
 fn get_num_walls_placed_value(prev_game_state: &GameState) -> u64 {
-    let is_p1_turn_to_move = prev_game_state.p1_turn_to_move;
-    let (num_walls_placed, walls_placed_offset) = if is_p1_turn_to_move {
-        (prev_game_state.p1_num_walls_placed, 0)
-    } else {
-        (
-            prev_game_state.p2_num_walls_placed,
-            NUM_WALLS_PER_PLAYER + 1,
-        )
-    };
+    // This hash only needs to track the remaining walls for p1.
+    // Placing the wall itself will change the hash.
+    if !prev_game_state.p1_turn_to_move {
+        return 0;
+    }
 
-    let walls_placed_prev_value = WALLS_PLACED[num_walls_placed + walls_placed_offset];
-    let walls_placed_new_value = WALLS_PLACED[num_walls_placed + 1 + walls_placed_offset];
+    let prev_num_p1_walls_placed = prev_game_state.p1_num_walls_placed as usize;
+
+    let walls_placed_prev_value = WALLS_PLACED[prev_num_p1_walls_placed];
+    let walls_placed_new_value = WALLS_PLACED[prev_num_p1_walls_placed + 1];
 
     walls_placed_prev_value ^ walls_placed_new_value
 }
