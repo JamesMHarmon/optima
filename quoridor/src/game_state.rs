@@ -25,7 +25,7 @@ const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__0
 
 #[derive(Hash, Clone, Debug)]
 pub struct GameState {
-    pub num_moves: usize,
+    pub move_number: usize,
     pub p1_turn_to_move: bool,
     pub p1_pawn_board: u128,
     pub p2_pawn_board: u128,
@@ -137,18 +137,18 @@ struct PathingResult {
 }
 
 impl GameState {
-    pub fn take_action(&self, action: &Action) -> Self {
+    pub fn take_action(&mut self, action: &Action) {
         let action: ActionExpanded = (*action).into();
 
         match action {
             ActionExpanded::MovePawn(coord) => self.move_pawn(coord.as_bit_board()),
-            ActionExpanded::PlaceVerticalWall(coord) => {
-                self.place_vertical_wall(coord.as_bit_board())
-            }
+            ActionExpanded::PlaceVerticalWall(coord) => self.place_wall(coord.as_bit_board(), true),
             ActionExpanded::PlaceHorizontalWall(coord) => {
-                self.place_horizontal_wall(coord.as_bit_board())
+                self.place_wall(coord.as_bit_board(), false)
             }
         }
+
+        self.increment_turn();
     }
 
     pub fn get_valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
@@ -190,7 +190,7 @@ impl GameState {
             } else {
                 Value([1.0, 0.0])
             })
-        } else if self.num_moves >= MAX_NUMBER_OF_MOVES {
+        } else if self.move_number >= MAX_NUMBER_OF_MOVES {
             // A game that runs too long will be a loss for both players.
             Some(Value([0.0, 0.0]))
         } else {
@@ -216,11 +216,12 @@ impl GameState {
                 self.horizontal_wall_board,
                 true,
             ),
-            num_moves: self.num_moves,
+            move_number: self.move_number,
             p1_num_walls_placed: self.p1_num_walls_placed,
             p2_num_walls_placed: self.p2_num_walls_placed,
-            zobrist: self.zobrist,
             p1_turn_to_move: self.p1_turn_to_move,
+            // @TODO: Need to update the zobrist hash here.
+            zobrist: self.zobrist,
         }
     }
 
@@ -236,54 +237,37 @@ impl GameState {
         }
     }
 
-    fn move_pawn(&self, pawn_board: u128) -> Self {
-        let p1_turn_to_move = self.p1_turn_to_move;
+    fn move_pawn(&mut self, new_pawn_board: u128) {
+        self.zobrist = self.zobrist.move_pawn(self, new_pawn_board);
 
-        Self {
-            num_moves: self.num_moves + 1,
-            p1_turn_to_move: !p1_turn_to_move,
-            p1_pawn_board: if p1_turn_to_move {
-                pawn_board
-            } else {
-                self.p1_pawn_board
-            },
-            p2_pawn_board: if !p1_turn_to_move {
-                pawn_board
-            } else {
-                self.p2_pawn_board
-            },
-            zobrist: self.zobrist.move_pawn(self, pawn_board),
-            ..*self
+        if self.p1_turn_to_move {
+            self.p1_pawn_board = new_pawn_board
+        } else {
+            self.p2_pawn_board = new_pawn_board
         }
     }
 
-    fn place_horizontal_wall(&self, horizontal_wall_placement: u128) -> Self {
-        let p1_turn_to_move = self.p1_turn_to_move;
+    fn place_wall(&mut self, wall_placement: u128, is_vertical: bool) {
+        self.zobrist = self.zobrist.place_wall(self, wall_placement, is_vertical);
 
-        Self {
-            num_moves: self.num_moves + 1,
-            p1_turn_to_move: !p1_turn_to_move,
-            p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
-            p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
-            horizontal_wall_board: self.horizontal_wall_board | horizontal_wall_placement,
-            zobrist: self
-                .zobrist
-                .place_wall(self, horizontal_wall_placement, false),
-            ..*self
+        let p1_turn_to_move = self.p1_turn_to_move;
+        if p1_turn_to_move {
+            self.p1_num_walls_placed += 1;
+        } else {
+            self.p2_num_walls_placed += 1;
+        }
+
+        if is_vertical {
+            self.vertical_wall_board |= wall_placement;
+        } else {
+            self.horizontal_wall_board |= wall_placement;
         }
     }
 
-    fn place_vertical_wall(&self, vertical_wall_placement: u128) -> Self {
-        let p1_turn_to_move = self.p1_turn_to_move;
-
-        Self {
-            num_moves: self.num_moves + 1,
-            p1_turn_to_move: !p1_turn_to_move,
-            p1_num_walls_placed: self.p1_num_walls_placed + if p1_turn_to_move { 1 } else { 0 },
-            p2_num_walls_placed: self.p2_num_walls_placed + if !p1_turn_to_move { 1 } else { 0 },
-            vertical_wall_board: self.vertical_wall_board | vertical_wall_placement,
-            zobrist: self.zobrist.place_wall(self, vertical_wall_placement, true),
-            ..*self
+    fn increment_turn(&mut self) {
+        self.p1_turn_to_move = !self.p1_turn_to_move;
+        if self.p1_turn_to_move {
+            self.move_number += 1;
         }
     }
 
@@ -604,7 +588,7 @@ impl GameState {
 impl game_state::GameState for GameState {
     fn initial() -> Self {
         GameState {
-            num_moves: 0,
+            move_number: 1,
             p1_turn_to_move: true,
             p1_pawn_board: P1_STARTING_POS_MASK,
             p2_pawn_board: P2_STARTING_POS_MASK,
@@ -645,8 +629,8 @@ mod tests {
 
     #[test]
     fn test_get_valid_pawn_move_actions_p2() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"f1".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"f1".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -661,9 +645,9 @@ mod tests {
 
     #[test]
     fn test_get_valid_pawn_move_actions_vertical_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"d1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"d1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(valid_actions, vec!("e2".parse::<Action>().unwrap()));
@@ -671,11 +655,11 @@ mod tests {
 
     #[test]
     fn test_get_valid_pawn_move_actions_vertical_wall_top() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"d1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"d1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -689,9 +673,9 @@ mod tests {
 
     #[test]
     fn test_get_valid_pawn_move_actions_horizontal_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"d8h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"d8h".parse::<Action>().unwrap());
+        game_state.take_action(&"e1h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -702,7 +686,7 @@ mod tests {
             )
         );
 
-        let game_state = game_state.take_action(&"f1".parse::<Action>().unwrap());
+        game_state.take_action(&"f1".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -713,7 +697,7 @@ mod tests {
             )
         );
 
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -727,14 +711,14 @@ mod tests {
 
     #[test]
     fn test_get_valid_pawn_move_actions_blocked() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e8".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"e4".parse::<Action>().unwrap());
+        game_state.take_action(&"e6".parse::<Action>().unwrap());
+        game_state.take_action(&"e5".parse::<Action>().unwrap());
 
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
         assert_eq!(
@@ -747,8 +731,8 @@ mod tests {
             )
         );
 
-        let game_state = game_state.take_action(&"e4h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
+        game_state.take_action(&"e4h".parse::<Action>().unwrap());
+        game_state.take_action(&"a1h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -762,7 +746,7 @@ mod tests {
             )
         );
 
-        let game_state = game_state.take_action(&"e6h".parse::<Action>().unwrap());
+        game_state.take_action(&"e6h".parse::<Action>().unwrap());
         let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
@@ -801,8 +785,8 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_on_horizontal_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"d1h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"d1h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -820,8 +804,8 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_on_vertical_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -835,9 +819,9 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -856,10 +840,10 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_other_player() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -877,10 +861,10 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_vert_horz() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"c1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"c1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        game_state.take_action(&"c2h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -902,11 +886,11 @@ mod tests {
 
     #[test]
     fn test_get_valid_horizontal_wall_actions_blocking_path_edge() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e1v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"b3v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e1v".parse::<Action>().unwrap());
+        game_state.take_action(&"e2h".parse::<Action>().unwrap());
+        game_state.take_action(&"c2h".parse::<Action>().unwrap());
+        game_state.take_action(&"b3v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_horizontal_wall_actions()
@@ -954,8 +938,8 @@ mod tests {
 
     #[test]
     fn test_get_valid_vertical_wall_actions_on_vertical_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_vertical_wall_actions()
@@ -973,8 +957,8 @@ mod tests {
 
     #[test]
     fn test_get_valid_vertical_wall_actions_on_horizontal_wall() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
             .get_valid_vertical_wall_actions()
@@ -988,32 +972,32 @@ mod tests {
 
     #[test]
     fn test_get_valid_wall_actions_on_all_walls_placed() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c1h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e1h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"g1h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"a2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"g2h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"a3h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"f9".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a1h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"c1h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"e1h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"g1h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"a2h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"c2h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"e2h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
+        game_state.take_action(&"g2h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"a3h".parse::<Action>().unwrap());
+        game_state.take_action(&"f9".parse::<Action>().unwrap());
 
         // 9 walls placed
         let valid_actions = game_state.get_valid_horizontal_wall_actions();
         assert_eq!(valid_actions.count(), 46);
 
-        let game_state = game_state.take_action(&"c3h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"c3h".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
 
         // 10 walls placed so we shouldn't be able to place anymore, horizontal or vertical
         let valid_horizontal_actions = game_state.get_valid_horizontal_wall_actions();
@@ -1025,25 +1009,25 @@ mod tests {
 
     #[test]
     fn test_is_terminal_p2() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e8".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"e4".parse::<Action>().unwrap());
+        game_state.take_action(&"e6".parse::<Action>().unwrap());
+        game_state.take_action(&"e5".parse::<Action>().unwrap());
+        game_state.take_action(&"e4".parse::<Action>().unwrap());
+        game_state.take_action(&"e6".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e8".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, None);
 
-        let game_state = game_state.take_action(&"e1".parse::<Action>().unwrap());
+        game_state.take_action(&"e1".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, Some(Value([0.0, 1.0])));
@@ -1051,26 +1035,26 @@ mod tests {
 
     #[test]
     fn test_is_terminal_p1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e4".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e6".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e7".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e8".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e8".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"e4".parse::<Action>().unwrap());
+        game_state.take_action(&"e6".parse::<Action>().unwrap());
+        game_state.take_action(&"e5".parse::<Action>().unwrap());
+        game_state.take_action(&"e4".parse::<Action>().unwrap());
+        game_state.take_action(&"e6".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e7".parse::<Action>().unwrap());
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"e8".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, None);
 
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e9".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
 
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, Some(Value([1.0, 0.0])));

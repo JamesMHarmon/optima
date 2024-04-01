@@ -1,4 +1,4 @@
-pub const MAX_NUMBER_OF_MOVES: usize = 200;
+pub const MAX_NUMBER_OF_MOVES: usize = 100;
 pub const BOARD_WIDTH: usize = 9;
 pub const BOARD_HEIGHT: usize = 9;
 pub const NUM_WALLS_PER_PLAYER: u8 = 10;

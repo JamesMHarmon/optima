@@ -447,8 +447,8 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_initial_p2() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -457,8 +457,8 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_walls_remaining() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h1h".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -467,9 +467,9 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_walls_remaining_p2() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"d9".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        game_state.take_action(&"d9".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -478,9 +478,9 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_vertical_walls() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c4v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"c4v".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
@@ -489,10 +489,10 @@ mod tests {
 
     #[test]
     fn test_game_state_to_input_vertical_walls_p2() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e2".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"c4v".parse::<Action>().unwrap());
-        let game_state = game_state.take_action(&"e3".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        game_state.take_action(&"c4v".parse::<Action>().unwrap());
+        game_state.take_action(&"e3".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 

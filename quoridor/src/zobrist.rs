@@ -15,8 +15,8 @@ impl Zobrist {
         Zobrist { hash: INITIAL }
     }
 
-    pub fn move_pawn(&self, prev_game_state: &GameState, pawn_board: u128) -> Self {
-        let move_piece_value = get_move_pawn_value(prev_game_state, pawn_board);
+    pub fn move_pawn(&self, prev_game_state: &GameState, new_pawn_board: u128) -> Self {
+        let move_piece_value = get_move_pawn_value(prev_game_state, new_pawn_board);
 
         let hash = self.hash ^ PLAYER_TO_MOVE ^ move_piece_value;
 
@@ -42,7 +42,7 @@ impl Zobrist {
     }
 }
 
-fn get_move_pawn_value(prev_game_state: &GameState, source_pawn_board: u128) -> u64 {
+fn get_move_pawn_value(prev_game_state: &GameState, new_pawn_board: u128) -> u64 {
     let is_p1_turn_to_move = prev_game_state.p1_turn_to_move;
     let source_coord_bit = if is_p1_turn_to_move {
         prev_game_state.p1_pawn_board
@@ -56,7 +56,7 @@ fn get_move_pawn_value(prev_game_state: &GameState, source_pawn_board: u128) -> 
     };
 
     let source_coord_value = PAWN[pawn_offset + single_bit_index(source_coord_bit)];
-    let dest_coord_value = PAWN[pawn_offset + single_bit_index(source_pawn_board)];
+    let dest_coord_value = PAWN[pawn_offset + single_bit_index(new_pawn_board)];
 
     source_coord_value ^ dest_coord_value
 }

@@ -130,8 +130,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_horizontal_walls_h8() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h8h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h8h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
@@ -156,8 +156,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_horizontal_walls_a8() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a8h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a8h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
@@ -182,8 +182,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_horizontal_walls_a1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a1h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a1h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
@@ -208,8 +208,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_horizontal_walls_h1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h1h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
@@ -234,8 +234,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_horizontal_walls_e5() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5h".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.horizontal_wall_board,
@@ -260,8 +260,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_vertical_walls_h8() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h8v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h8v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
@@ -286,8 +286,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_vertical_walls_a8() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a8v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a8v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
@@ -312,8 +312,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_vertical_walls_a1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a1v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a1v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
@@ -338,8 +338,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_vertical_walls_h1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"h1v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"h1v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
@@ -364,8 +364,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_vertical_walls_e5() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5v".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(
             game_state.vertical_wall_board,
@@ -390,8 +390,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_pawn_i9() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"i9".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"i9".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
@@ -406,8 +406,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_pawn_a9() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a9".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a9".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
@@ -422,8 +422,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_pawn_a1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"a1".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"a1".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
@@ -438,8 +438,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_pawn_h1() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"i1".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"i1".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 
@@ -454,8 +454,8 @@ mod tests {
 
     #[test]
     fn test_map_board_to_arr_rotatable_pawn_e5() {
-        let game_state = GameState::initial();
-        let game_state = game_state.take_action(&"e5".parse::<Action>().unwrap());
+        let mut game_state = GameState::initial();
+        game_state.take_action(&"e5".parse::<Action>().unwrap());
 
         let arr = map_board_to_arr_rotatable(game_state.p1_pawn_board, BoardType::Pawn, false);
 

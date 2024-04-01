@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn test_game_state_symmetry_pawn_move() {
         let mut game_state: GameState = GameState::initial();
-        game_state = game_state.take_action(&"d1".parse().unwrap());
+        game_state.take_action(&"d1".parse().unwrap());
 
         let game_state_rotated: &str = "
   +---+---+---+---+---+---+---+---+---+
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn test_game_state_symmetry_vertical_wall() {
         let mut game_state: GameState = GameState::initial();
-        game_state = game_state.take_action(&"d1v".parse().unwrap());
+        game_state.take_action(&"d1v".parse().unwrap());
 
         let game_state_rotated: &str = "
   +---+---+---+---+---+---+---+---+---+
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_game_state_symmetry_horizontal_wall() {
         let mut game_state: GameState = GameState::initial();
-        game_state = game_state.take_action(&"d1h".parse().unwrap());
+        game_state.take_action(&"d1h".parse().unwrap());
 
         let game_state_rotated: &str = "
   +---+---+---+---+---+---+---+---+---+
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn test_game_state_symmetry_horizontal_wall_2() {
         let mut game_state: GameState = GameState::initial();
-        game_state = game_state.take_action(&"a3h".parse().unwrap());
+        game_state.take_action(&"a3h".parse().unwrap());
 
         let game_state_rotated: &str = "
   +---+---+---+---+---+---+---+---+---+

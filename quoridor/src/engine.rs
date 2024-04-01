@@ -16,7 +16,9 @@ impl GameEngine for Engine {
     type Value = Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
-        game_state.take_action(action)
+        let mut game_state = game_state.clone();
+        game_state.take_action(action);
+        game_state
     }
 
     fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
@@ -32,6 +34,6 @@ impl GameEngine for Engine {
     }
 
     fn get_move_number(&self, game_state: &Self::State) -> usize {
-        game_state.num_moves / 2 + 1
+        game_state.move_number
     }
 }
