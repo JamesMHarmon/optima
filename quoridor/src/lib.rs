@@ -4,6 +4,8 @@
 #[macro_use]
 mod bits;
 mod board;
+mod game_state_test;
+mod serde;
 mod zobrist;
 mod zobrist_values;
 
@@ -14,7 +16,6 @@ pub mod display;
 pub mod engine;
 pub mod game_state;
 pub mod mappings;
-pub mod serde;
 pub mod symmetries;
 pub mod transposition_entry;
 pub mod value;
