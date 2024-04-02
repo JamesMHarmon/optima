@@ -10,7 +10,7 @@ mod tests {
     #[test]
     fn test_get_valid_pawn_move_actions_p1() {
         let game_state = GameState::initial();
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -26,7 +26,7 @@ mod tests {
     fn test_get_valid_pawn_move_actions_p2() {
         let mut game_state = GameState::initial();
         game_state.take_action(&"f1".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -43,7 +43,7 @@ mod tests {
         let mut game_state = GameState::initial();
         game_state.take_action(&"d1v".parse::<Action>().unwrap());
         game_state.take_action(&"e1v".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(valid_actions, vec!("e2".parse::<Action>().unwrap()));
     }
@@ -55,7 +55,7 @@ mod tests {
         game_state.take_action(&"e7".parse::<Action>().unwrap());
         game_state.take_action(&"d1v".parse::<Action>().unwrap());
         game_state.take_action(&"e1v".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -71,7 +71,7 @@ mod tests {
         let mut game_state = GameState::initial();
         game_state.take_action(&"d8h".parse::<Action>().unwrap());
         game_state.take_action(&"e1h".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -82,7 +82,7 @@ mod tests {
         );
 
         game_state.take_action(&"f1".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -93,7 +93,7 @@ mod tests {
         );
 
         game_state.take_action(&"f9".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -115,7 +115,7 @@ mod tests {
         game_state.take_action(&"e6".parse::<Action>().unwrap());
         game_state.take_action(&"e5".parse::<Action>().unwrap());
 
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
         assert_eq!(
             valid_actions,
             vec!(
@@ -128,7 +128,7 @@ mod tests {
 
         game_state.take_action(&"e4h".parse::<Action>().unwrap());
         game_state.take_action(&"a1h".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -142,7 +142,7 @@ mod tests {
         );
 
         game_state.take_action(&"e6h".parse::<Action>().unwrap());
-        let valid_actions = game_state.get_valid_pawn_move_actions().collect::<Vec<_>>();
+        let valid_actions = game_state.valid_pawn_move_actions().collect::<Vec<_>>();
 
         assert_eq!(
             valid_actions,
@@ -159,7 +159,7 @@ mod tests {
     fn test_get_valid_horizontal_wall_actions_initial() {
         let game_state = GameState::initial();
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
 
         let mut cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -184,7 +184,7 @@ mod tests {
         game_state.take_action(&"d1h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
             "c1h".parse::<Action>().unwrap(),
@@ -203,7 +203,7 @@ mod tests {
         game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec!["e5h".parse::<Action>().unwrap()];
         let intersects = intersects(&valid_actions, &excludes_actions);
@@ -219,7 +219,7 @@ mod tests {
         game_state.take_action(&"e1v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
             "c1h".parse::<Action>().unwrap(),
@@ -241,7 +241,7 @@ mod tests {
         game_state.take_action(&"e2".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
             "c1h".parse::<Action>().unwrap(),
@@ -262,7 +262,7 @@ mod tests {
         game_state.take_action(&"c2h".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
             "c1h".parse::<Action>().unwrap(),
@@ -288,7 +288,7 @@ mod tests {
         game_state.take_action(&"b3v".parse::<Action>().unwrap());
 
         let valid_actions = game_state
-            .get_valid_horizontal_wall_actions()
+            .valid_horizontal_wall_actions()
             .collect::<Vec<_>>();
         let excludes_actions = vec![
             "a2h".parse::<Action>().unwrap(),
@@ -311,9 +311,7 @@ mod tests {
     #[test]
     fn test_get_valid_vertical_wall_actions_initial() {
         let game_state = GameState::initial();
-        let valid_actions = game_state
-            .get_valid_vertical_wall_actions()
-            .collect::<Vec<_>>();
+        let valid_actions = game_state.valid_vertical_wall_actions().collect::<Vec<_>>();
 
         let mut cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
         let rows = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -336,9 +334,7 @@ mod tests {
         let mut game_state = GameState::initial();
         game_state.take_action(&"e5v".parse::<Action>().unwrap());
 
-        let valid_actions = game_state
-            .get_valid_vertical_wall_actions()
-            .collect::<Vec<_>>();
+        let valid_actions = game_state.valid_vertical_wall_actions().collect::<Vec<_>>();
         let excludes_actions = vec![
             "e4v".parse::<Action>().unwrap(),
             "e5v".parse::<Action>().unwrap(),
@@ -355,9 +351,7 @@ mod tests {
         let mut game_state = GameState::initial();
         game_state.take_action(&"e5h".parse::<Action>().unwrap());
 
-        let valid_actions = game_state
-            .get_valid_vertical_wall_actions()
-            .collect::<Vec<_>>();
+        let valid_actions = game_state.valid_vertical_wall_actions().collect::<Vec<_>>();
         let excludes_actions = vec!["e5v".parse::<Action>().unwrap()];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -388,17 +382,17 @@ mod tests {
         game_state.take_action(&"f9".parse::<Action>().unwrap());
 
         // 9 walls placed
-        let valid_actions = game_state.get_valid_horizontal_wall_actions();
+        let valid_actions = game_state.valid_horizontal_wall_actions();
         assert_eq!(valid_actions.count(), 46);
 
         game_state.take_action(&"c3h".parse::<Action>().unwrap());
         game_state.take_action(&"e9".parse::<Action>().unwrap());
 
         // 10 walls placed so we shouldn't be able to place anymore, horizontal or vertical
-        let valid_horizontal_actions = game_state.get_valid_horizontal_wall_actions();
+        let valid_horizontal_actions = game_state.valid_horizontal_wall_actions();
         assert_eq!(valid_horizontal_actions.count(), 0);
 
-        let valid_vertical_actions = game_state.get_valid_vertical_wall_actions();
+        let valid_vertical_actions = game_state.valid_vertical_wall_actions();
         assert_eq!(valid_vertical_actions.count(), 0);
     }
 

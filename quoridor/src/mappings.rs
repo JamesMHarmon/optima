@@ -59,9 +59,9 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         game_state: &GameState,
         policy_scores: &[f16],
     ) -> Vec<ActionWithPolicy<Action>> {
-        let valid_pawn_moves = game_state.get_valid_pawn_move_actions();
-        let valid_vert_walls = game_state.get_valid_vertical_wall_actions();
-        let valid_horiz_walls = game_state.get_valid_horizontal_wall_actions();
+        let valid_pawn_moves = game_state.valid_pawn_move_actions();
+        let valid_vert_walls = game_state.valid_vertical_wall_actions();
+        let valid_horiz_walls = game_state.valid_horizontal_wall_actions();
         let actions = valid_pawn_moves
             .chain(valid_vert_walls)
             .chain(valid_horiz_walls);

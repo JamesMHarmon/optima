@@ -13,7 +13,7 @@ pub fn get_symmetries(
         moves_left,
     } = &metrics;
 
-    let symmetrical_state = game_state.get_vertical_symmetry();
+    let symmetrical_state = game_state.vertical_symmetry();
 
     let symmetrical_metrics = PositionMetrics {
         game_state: symmetrical_state,

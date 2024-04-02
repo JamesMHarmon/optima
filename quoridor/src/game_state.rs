@@ -51,18 +51,18 @@ impl GameState {
         self.increment_turn();
     }
 
-    pub fn get_valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
+    pub fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_coords_to_actions(self.valid_pawn_moves(), ActionType::PawnMove)
     }
 
-    pub fn get_valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
+    pub fn valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_coords_to_actions(
             self.valid_horizontal_wall_placement(),
             ActionType::HorizontalWall,
         )
     }
 
-    pub fn get_valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
+    pub fn valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_coords_to_actions(
             self.valid_vertical_wall_placement(),
             ActionType::VerticalWall,
@@ -104,7 +104,7 @@ impl GameState {
         }
     }
 
-    pub fn get_vertical_symmetry(&self) -> Self {
+    pub fn vertical_symmetry(&self) -> Self {
         let get_vertical_symmetry_bit_board = |bit_board: u128, shift: bool| {
             Self::map_bit_board_to_coordinates(bit_board)
                 .into_iter()
@@ -180,13 +180,13 @@ impl GameState {
     }
 
     fn valid_pawn_moves(&self) -> u128 {
-        let active_player_board = self.get_active_player_board();
-        let opposing_player_board = self.get_opposing_player_board();
+        let active_player_board = self.active_player_board();
+        let opposing_player_board = self.opposing_player_board();
 
-        let move_up_mask = self.get_move_up_mask();
-        let move_right_mask = self.get_move_right_mask();
-        let move_down_mask = self.get_move_down_mask();
-        let move_left_mask = self.get_move_left_mask();
+        let move_up_mask = self.move_up_mask();
+        let move_right_mask = self.move_right_mask();
+        let move_down_mask = self.move_down_mask();
+        let move_left_mask = self.move_left_mask();
 
         let up_move = shift_up!(active_player_board) & move_up_mask;
         let right_move = shift_right!(active_player_board) & move_right_mask;
@@ -228,7 +228,7 @@ impl GameState {
         valid_moves & !opposing_player_board | side_jump_moves
     }
 
-    fn get_active_player_board(&self) -> u128 {
+    fn active_player_board(&self) -> u128 {
         if self.p1_turn_to_move {
             self.p1_pawn_board
         } else {
@@ -236,7 +236,7 @@ impl GameState {
         }
     }
 
-    fn get_opposing_player_board(&self) -> u128 {
+    fn opposing_player_board(&self) -> u128 {
         if self.p1_turn_to_move {
             self.p2_pawn_board
         } else {
@@ -244,17 +244,17 @@ impl GameState {
         }
     }
 
-    fn get_vertical_wall_blocks(&self) -> u128 {
+    fn vertical_wall_blocks(&self) -> u128 {
         shift_up!(self.vertical_wall_board) | self.vertical_wall_board
     }
 
-    fn get_horizontal_wall_blocks(&self) -> u128 {
+    fn horizontal_wall_blocks(&self) -> u128 {
         shift_right!(self.horizontal_wall_board) | self.horizontal_wall_board
     }
 
     fn valid_horizontal_wall_placement(&self) -> u128 {
         if self.active_player_has_wall_to_place() {
-            self.get_valid_horizontal_wall_positions()
+            self.valid_horizontal_wall_positions()
         } else {
             0
         }
@@ -262,7 +262,7 @@ impl GameState {
 
     fn valid_vertical_wall_placement(&self) -> u128 {
         if self.active_player_has_wall_to_place() {
-            self.get_valid_vertical_wall_positions()
+            self.valid_vertical_wall_positions()
         } else {
             0
         }
@@ -276,19 +276,19 @@ impl GameState {
         }
     }
 
-    fn get_valid_horizontal_wall_positions(&self) -> u128 {
-        let candidate_horizontal_wall_placement = self.get_candidate_horizontal_wall_placement();
-        let invalid_horizontal_candidates = self.get_invalid_horizontal_wall_candidates();
+    fn valid_horizontal_wall_positions(&self) -> u128 {
+        let candidate_horizontal_wall_placement = self.candidate_horizontal_wall_placement();
+        let invalid_horizontal_candidates = self.invalid_horizontal_wall_candidates();
         candidate_horizontal_wall_placement & !invalid_horizontal_candidates
     }
 
-    fn get_valid_vertical_wall_positions(&self) -> u128 {
-        let candidate_vertical_wall_placement = self.get_candidate_vertical_wall_placement();
-        let invalid_vertical_candidates = self.get_invalid_vertical_wall_candidates();
+    fn valid_vertical_wall_positions(&self) -> u128 {
+        let candidate_vertical_wall_placement = self.candidate_vertical_wall_placement();
+        let invalid_vertical_candidates = self.invalid_vertical_wall_candidates();
         candidate_vertical_wall_placement & !invalid_vertical_candidates
     }
 
-    fn get_candidate_horizontal_wall_placement(&self) -> u128 {
+    fn candidate_horizontal_wall_placement(&self) -> u128 {
         !(self.horizontal_wall_board
             | shift_right!(self.horizontal_wall_board)
             | shift_left!(self.horizontal_wall_board))
@@ -296,7 +296,7 @@ impl GameState {
             & CANDIDATE_WALL_PLACEMENT_MASK
     }
 
-    fn get_candidate_vertical_wall_placement(&self) -> u128 {
+    fn candidate_vertical_wall_placement(&self) -> u128 {
         !(self.vertical_wall_board
             | shift_down!(self.vertical_wall_board)
             | shift_up!(self.vertical_wall_board))
@@ -304,9 +304,9 @@ impl GameState {
             & CANDIDATE_WALL_PLACEMENT_MASK
     }
 
-    fn get_invalid_horizontal_wall_candidates(&self) -> u128 {
+    fn invalid_horizontal_wall_candidates(&self) -> u128 {
         let mut invalid_placements: u128 = 0;
-        let mut horizontal_connecting_candidates = self.get_horizontal_connecting_candidates();
+        let mut horizontal_connecting_candidates = self.horizontal_connecting_candidates();
 
         while horizontal_connecting_candidates != 0 {
             let with_removed_candidate =
@@ -328,9 +328,9 @@ impl GameState {
         invalid_placements
     }
 
-    fn get_invalid_vertical_wall_candidates(&self) -> u128 {
+    fn invalid_vertical_wall_candidates(&self) -> u128 {
         let mut invalid_placements: u128 = 0;
-        let mut vertical_connecting_candidates = self.get_vertical_connecting_candidates();
+        let mut vertical_connecting_candidates = self.vertical_connecting_candidates();
 
         while vertical_connecting_candidates != 0 {
             let with_removed_candidate =
@@ -371,10 +371,10 @@ impl GameState {
     }
 
     fn find_path(&self, start: u128, end: u128) -> PathingResult {
-        let up_mask = self.get_move_up_mask();
-        let right_mask = self.get_move_right_mask();
-        let down_mask = self.get_move_down_mask();
-        let left_mask = self.get_move_left_mask();
+        let up_mask = self.move_up_mask();
+        let right_mask = self.move_right_mask();
+        let down_mask = self.move_down_mask();
+        let left_mask = self.move_left_mask();
 
         let mut path = start;
 
@@ -406,26 +406,24 @@ impl GameState {
         }
     }
 
-    fn get_move_up_mask(&self) -> u128 {
-        !(shift_up!(self.get_horizontal_wall_blocks())) & VALID_PIECE_POSITION_MASK
+    fn move_up_mask(&self) -> u128 {
+        !(shift_up!(self.horizontal_wall_blocks())) & VALID_PIECE_POSITION_MASK
     }
 
-    fn get_move_right_mask(&self) -> u128 {
-        !shift_right!(self.get_vertical_wall_blocks())
-            & VALID_PIECE_POSITION_MASK
-            & !LEFT_COLUMN_MASK
+    fn move_right_mask(&self) -> u128 {
+        !shift_right!(self.vertical_wall_blocks()) & VALID_PIECE_POSITION_MASK & !LEFT_COLUMN_MASK
     }
 
-    fn get_move_down_mask(&self) -> u128 {
-        !self.get_horizontal_wall_blocks() & VALID_PIECE_POSITION_MASK
+    fn move_down_mask(&self) -> u128 {
+        !self.horizontal_wall_blocks() & VALID_PIECE_POSITION_MASK
     }
 
-    fn get_move_left_mask(&self) -> u128 {
-        !self.get_vertical_wall_blocks() & VALID_PIECE_POSITION_MASK & !RIGHT_COLUMN_MASK
+    fn move_left_mask(&self) -> u128 {
+        !self.vertical_wall_blocks() & VALID_PIECE_POSITION_MASK & !RIGHT_COLUMN_MASK
     }
 
-    fn get_horizontal_connecting_candidates(&self) -> u128 {
-        let candidate_horizontal_walls = self.get_candidate_horizontal_wall_placement();
+    fn horizontal_connecting_candidates(&self) -> u128 {
+        let candidate_horizontal_walls = self.candidate_horizontal_wall_placement();
         let horizontal_walls = self.horizontal_wall_board;
         let vertical_walls = self.vertical_wall_board;
 
@@ -450,8 +448,8 @@ impl GameState {
             | (middle_touching & right_edge_touching)
     }
 
-    fn get_vertical_connecting_candidates(&self) -> u128 {
-        let candidate_vertical_walls = self.get_candidate_vertical_wall_placement();
+    fn vertical_connecting_candidates(&self) -> u128 {
+        let candidate_vertical_walls = self.candidate_vertical_wall_placement();
         let vertical_walls = self.vertical_wall_board;
         let horizontal_walls = self.horizontal_wall_board;
 
