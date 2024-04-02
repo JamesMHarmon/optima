@@ -55,8 +55,17 @@ pub struct Action {
 }
 
 impl Action {
+    pub fn new(action_type: ActionType, coordinate: Coordinate) -> Self {
+        (action_type, coordinate).into()
+    }
+
     pub fn rotate(&self) -> Self {
-        ActionExpanded::from(*self).rotate().into()
+        let shift = self.is_wall_placement();
+        let coord = self.coord();
+        let rotated_coord = coord.rotate(shift);
+        let action_coord_idx = self.action_offset() + rotated_coord.index() as u8;
+
+        Self { action_coord_idx }
     }
 
     pub fn vertical_symmetry(&self) -> Self {
@@ -66,6 +75,15 @@ impl Action {
         let action_coord_idx = self.action_offset() + flipped_coord.index() as u8;
 
         Self { action_coord_idx }
+    }
+
+    pub(crate) fn action_type(&self) -> ActionType {
+        match self.action_coord_idx / BOARD_SIZE as u8 {
+            0 => ActionType::PawnMove,
+            1 => ActionType::HorizontalWall,
+            2 => ActionType::VerticalWall,
+            _ => panic!("action_coord_idx is not valid."),
+        }
     }
 
     pub(crate) fn is_wall_placement(&self) -> bool {
@@ -82,18 +100,14 @@ impl Action {
     }
 }
 
-impl From<ActionExpanded> for Action {
-    fn from(value: ActionExpanded) -> Self {
-        let action_type_offset = match value {
-            ActionExpanded::MovePawn(_) => 0,
-            ActionExpanded::PlaceHorizontalWall(_) => BOARD_SIZE,
-            ActionExpanded::PlaceVerticalWall(_) => BOARD_SIZE * 2,
-        };
+impl From<(ActionType, Coordinate)> for Action {
+    fn from(value: (ActionType, Coordinate)) -> Self {
+        let (action_type, coordinate) = value;
 
-        let coordinate = match value {
-            ActionExpanded::MovePawn(coordinate) => coordinate,
-            ActionExpanded::PlaceHorizontalWall(coordinate) => coordinate,
-            ActionExpanded::PlaceVerticalWall(coordinate) => coordinate,
+        let action_type_offset = match action_type {
+            ActionType::PawnMove => 0,
+            ActionType::HorizontalWall => BOARD_SIZE,
+            ActionType::VerticalWall => BOARD_SIZE * 2,
         };
 
         Self {
@@ -102,78 +116,32 @@ impl From<ActionExpanded> for Action {
     }
 }
 
-impl From<Action> for ActionExpanded {
-    fn from(value: Action) -> Self {
-        let action_type = value.action_coord_idx as usize / BOARD_SIZE;
-        let index = value.action_coord_idx as usize % BOARD_SIZE;
-
-        match action_type {
-            0 => ActionExpanded::MovePawn(Coordinate::from_index(index)),
-            1 => ActionExpanded::PlaceHorizontalWall(Coordinate::from_index(index)),
-            2 => ActionExpanded::PlaceVerticalWall(Coordinate::from_index(index)),
-            _ => panic!("Invalid action type offset"),
-        }
-    }
-}
-
 impl FromStr for Action {
-    type Err = <ActionExpanded as FromStr>::Err;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<ActionExpanded>().map(|a| a.into())
+        let coordinate = s[..2].parse()?;
+
+        let action_type = match s.chars().nth(2) {
+            None => Ok(ActionType::PawnMove),
+            Some('h') => Ok(ActionType::HorizontalWall),
+            Some('v') => Ok(ActionType::VerticalWall),
+            Some(_) => Err(anyhow!("Invalid value")),
+        };
+
+        action_type.map(|action_type| Self::new(action_type, coordinate))
     }
 }
 
 impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt(&ActionExpanded::from(*self), f)
-    }
-}
-
-impl Debug for Action {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Debug::fmt(&ActionExpanded::from(*self), f)
-    }
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum ActionExpanded {
-    MovePawn(Coordinate),
-    PlaceHorizontalWall(Coordinate),
-    PlaceVerticalWall(Coordinate),
-}
-
-impl ActionExpanded {
-    pub fn rotate(&self) -> Self {
-        match self {
-            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.rotate(false)),
-            Self::PlaceHorizontalWall(coordinate) => {
-                Self::PlaceHorizontalWall(coordinate.rotate(true))
-            }
-            Self::PlaceVerticalWall(coordinate) => Self::PlaceVerticalWall(coordinate.rotate(true)),
-        }
-    }
-
-    pub fn vertical_symmetry(&self) -> Self {
-        match self {
-            Self::MovePawn(coordinate) => Self::MovePawn(coordinate.vertical_symmetry(false)),
-            Self::PlaceHorizontalWall(coordinate) => {
-                Self::PlaceHorizontalWall(coordinate.vertical_symmetry(true))
-            }
-            Self::PlaceVerticalWall(coordinate) => {
-                Self::PlaceVerticalWall(coordinate.vertical_symmetry(true))
-            }
-        }
-    }
-}
-
-impl fmt::Display for ActionExpanded {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (coordinate, action_type) = match self {
-            Self::MovePawn(coordinate) => (coordinate, ""),
-            Self::PlaceHorizontalWall(coordinate) => (coordinate, "h"),
-            Self::PlaceVerticalWall(coordinate) => (coordinate, "v"),
+        let action_type = match self.action_type() {
+            ActionType::PawnMove => "",
+            ActionType::HorizontalWall => "h",
+            ActionType::VerticalWall => "v",
         };
+
+        let coordinate = self.coord();
 
         write!(
             f,
@@ -184,25 +152,17 @@ impl fmt::Display for ActionExpanded {
     }
 }
 
-impl fmt::Debug for ActionExpanded {
+impl Debug for Action {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl FromStr for ActionExpanded {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let coordinate = s[..2].parse()?;
-
-        match s.chars().nth(2) {
-            None => Ok(Self::MovePawn(coordinate)),
-            Some('v') => Ok(Self::PlaceVerticalWall(coordinate)),
-            Some('h') => Ok(Self::PlaceHorizontalWall(coordinate)),
-            Some(_) => Err(anyhow!("Invalid value")),
-        }
-    }
+#[derive(Clone, Copy)]
+pub enum ActionType {
+    PawnMove,
+    HorizontalWall,
+    VerticalWall,
 }
 
 #[cfg(test)]
@@ -215,15 +175,15 @@ mod tests {
         (0..81).map(Coordinate::from_index)
     }
 
-    fn all_actions_iter() -> impl Iterator<Item = (ActionExpanded, Coordinate)> {
+    fn all_actions_iter() -> impl Iterator<Item = (Action, Coordinate)> {
         all_coords_iter().flat_map(|coord| {
             [
-                ActionExpanded::MovePawn(coord),
-                ActionExpanded::PlaceHorizontalWall(coord),
-                ActionExpanded::PlaceVerticalWall(coord),
+                Action::new(ActionType::PawnMove, coord),
+                Action::new(ActionType::HorizontalWall, coord),
+                Action::new(ActionType::VerticalWall, coord),
             ]
             .into_iter()
-            .map(move |action: ActionExpanded| (action, coord))
+            .map(move |action| (action, coord))
         })
     }
 
@@ -282,21 +242,9 @@ mod tests {
     }
 
     #[test]
-    fn test_action_from_to_for_all() {
-        for (action, _) in all_actions_iter() {
-            let action_and_back = ActionExpanded::from(Action::from(action));
-            assert_eq!(action, action_and_back);
-        }
-    }
-
-    #[test]
     fn test_action_to_string_for_all() {
         for (action, _) in all_actions_iter() {
-            assert_eq!(action.to_string(), Action::from(action).to_string());
-            assert_eq!(
-                action.to_string().parse::<ActionExpanded>().unwrap(),
-                ActionExpanded::from(Action::from(action).to_string().parse::<Action>().unwrap())
-            );
+            assert_eq!(action.to_string().parse::<Action>().unwrap(), action);
         }
     }
 

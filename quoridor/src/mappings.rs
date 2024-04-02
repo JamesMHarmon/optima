@@ -1,18 +1,15 @@
+use super::transposition_entry::TranspositionEntry;
 use half::f16;
 use itertools::izip;
 use std::convert::TryInto;
 use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
-
-use crate::ActionExpanded;
-
-use super::transposition_entry::TranspositionEntry;
 
 use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, INPUT_C, INPUT_H, INPUT_W, NUM_WALLS_PER_PLAYER,
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
 };
-use super::{Action, Coordinate, GameState, Value};
+use super::{Action, ActionType, Coordinate, GameState, Value};
 use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
@@ -222,13 +219,14 @@ impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
 fn map_action_to_output_idx(action: &Action) -> usize {
     let len_moves_inputs = PAWN_BOARD_SIZE;
     let len_wall_inputs = WALL_BOARD_SIZE;
+    let coord = action.coord();
 
-    match (*action).into() {
-        ActionExpanded::MovePawn(coord) => map_coord_to_input_idx_nine_by_nine(&coord),
-        ActionExpanded::PlaceVerticalWall(coord) => {
+    match action.action_type() {
+        ActionType::PawnMove => map_coord_to_input_idx_nine_by_nine(&coord),
+        ActionType::VerticalWall => {
             map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs
         }
-        ActionExpanded::PlaceHorizontalWall(coord) => {
+        ActionType::HorizontalWall => {
             map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
         }
     }
@@ -383,8 +381,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_pawn_a9() {
-        let coord = "a9".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::MovePawn(coord).into();
+        let action = "a9".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(0, idx);
@@ -392,8 +389,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_pawn_i1() {
-        let coord = "i1".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::MovePawn(coord).into();
+        let action = "i1".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(80, idx);
@@ -401,8 +397,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_vertical_wall_a8() {
-        let coord = "a8".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::PlaceVerticalWall(coord).into();
+        let action = "a8v".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(81, idx);
@@ -410,8 +405,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_vertical_wall_h1() {
-        let coord = "h1".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::PlaceVerticalWall(coord).into();
+        let action = "h1v".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(144, idx);
@@ -419,8 +413,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_horizontal_wall_a8() {
-        let coord = "a8".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::PlaceHorizontalWall(coord).into();
+        let action = "a8h".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(145, idx);
@@ -428,8 +421,7 @@ mod tests {
 
     #[test]
     fn test_map_action_to_output_idx_horizontal_wall_h1() {
-        let coord = "h1".parse::<Coordinate>().unwrap();
-        let action = ActionExpanded::PlaceHorizontalWall(coord).into();
+        let action = "h1h".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(208, idx);

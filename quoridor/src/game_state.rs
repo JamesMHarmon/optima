@@ -1,4 +1,4 @@
-use crate::ActionExpanded;
+use crate::ActionType;
 
 use super::constants::{MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER};
 use super::{Action, Coordinate, Value, Zobrist};
@@ -40,36 +40,42 @@ struct PathingResult {
 
 impl GameState {
     pub fn take_action(&mut self, action: &Action) {
-        let action: ActionExpanded = (*action).into();
+        let coord = action.coord();
 
-        match action {
-            ActionExpanded::MovePawn(coord) => self.move_pawn(coord),
-            ActionExpanded::PlaceVerticalWall(coord) => self.place_wall(coord, true),
-            ActionExpanded::PlaceHorizontalWall(coord) => self.place_wall(coord, false),
+        match action.action_type() {
+            ActionType::PawnMove => self.move_pawn(coord),
+            ActionType::VerticalWall => self.place_wall(coord, true),
+            ActionType::HorizontalWall => self.place_wall(coord, false),
         }
 
         self.increment_turn();
     }
 
     pub fn get_valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
-        Self::map_bit_board_to_coordinates(self.get_valid_pawn_moves())
-            .into_iter()
-            .map(ActionExpanded::MovePawn)
-            .map(Into::into)
+        Self::bit_board_coords_to_actions(self.valid_pawn_moves(), ActionType::PawnMove)
     }
 
     pub fn get_valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
-        Self::map_bit_board_to_coordinates(self.get_valid_horizontal_wall_placement())
-            .into_iter()
-            .map(ActionExpanded::PlaceHorizontalWall)
-            .map(Into::into)
+        Self::bit_board_coords_to_actions(
+            self.valid_horizontal_wall_placement(),
+            ActionType::HorizontalWall,
+        )
     }
 
     pub fn get_valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
-        Self::map_bit_board_to_coordinates(self.get_valid_vertical_wall_placement())
+        Self::bit_board_coords_to_actions(
+            self.valid_vertical_wall_placement(),
+            ActionType::VerticalWall,
+        )
+    }
+
+    pub fn bit_board_coords_to_actions(
+        bit_board: u128,
+        action_type: ActionType,
+    ) -> impl Iterator<Item = Action> {
+        Self::map_bit_board_to_coordinates(bit_board)
             .into_iter()
-            .map(ActionExpanded::PlaceVerticalWall)
-            .map(Into::into)
+            .map(move |coord| Action::new(action_type, coord))
     }
 
     pub fn is_terminal(&self) -> Option<Value> {
@@ -173,7 +179,7 @@ impl GameState {
         }
     }
 
-    fn get_valid_pawn_moves(&self) -> u128 {
+    fn valid_pawn_moves(&self) -> u128 {
         let active_player_board = self.get_active_player_board();
         let opposing_player_board = self.get_opposing_player_board();
 
@@ -246,7 +252,7 @@ impl GameState {
         shift_right!(self.horizontal_wall_board) | self.horizontal_wall_board
     }
 
-    fn get_valid_horizontal_wall_placement(&self) -> u128 {
+    fn valid_horizontal_wall_placement(&self) -> u128 {
         if self.active_player_has_wall_to_place() {
             self.get_valid_horizontal_wall_positions()
         } else {
@@ -254,7 +260,7 @@ impl GameState {
         }
     }
 
-    fn get_valid_vertical_wall_placement(&self) -> u128 {
+    fn valid_vertical_wall_placement(&self) -> u128 {
         if self.active_player_has_wall_to_place() {
             self.get_valid_vertical_wall_positions()
         } else {
