@@ -14,6 +14,7 @@ pub mod display;
 pub mod engine;
 pub mod game_state;
 pub mod mappings;
+pub mod serde;
 pub mod symmetries;
 pub mod transposition_entry;
 pub mod value;
