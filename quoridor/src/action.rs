@@ -60,11 +60,25 @@ impl Action {
     }
 
     pub fn vertical_symmetry(&self) -> Self {
-        ActionExpanded::from(*self).vertical_symmetry().into()
+        let shift = self.is_wall_placement();
+        let coord = self.coord();
+        let flipped_coord = coord.vertical_symmetry(shift);
+        let action_coord_idx = self.action_offset() + flipped_coord.index() as u8;
+
+        Self { action_coord_idx }
     }
 
-    pub(crate) fn coord(&self) -> usize {
-        self.action_coord_idx as usize % BOARD_SIZE
+    pub(crate) fn is_wall_placement(&self) -> bool {
+        self.action_coord_idx >= BOARD_SIZE as u8
+    }
+
+    pub(crate) fn coord(&self) -> Coordinate {
+        let coord_idx = self.action_coord_idx as usize % BOARD_SIZE;
+        Coordinate::from_index(coord_idx)
+    }
+
+    pub(crate) fn action_offset(&self) -> u8 {
+        (self.action_coord_idx / BOARD_SIZE as u8) * BOARD_SIZE as u8
     }
 }
 
@@ -201,6 +215,18 @@ mod tests {
         (0..81).map(Coordinate::from_index)
     }
 
+    fn all_actions_iter() -> impl Iterator<Item = (ActionExpanded, Coordinate)> {
+        all_coords_iter().flat_map(|coord| {
+            [
+                ActionExpanded::MovePawn(coord),
+                ActionExpanded::PlaceHorizontalWall(coord),
+                ActionExpanded::PlaceVerticalWall(coord),
+            ]
+            .into_iter()
+            .map(move |action: ActionExpanded| (action, coord))
+        })
+    }
+
     #[test]
     fn test_action_pawn_move_ser_json() {
         let action = "a1".parse::<Action>().unwrap();
@@ -257,40 +283,27 @@ mod tests {
 
     #[test]
     fn test_action_from_to_for_all() {
-        let into_action_and_back =
-            |action: ActionExpanded| ActionExpanded::from(Action::from(action));
-
-        for coord in all_coords_iter() {
-            let actions = [
-                ActionExpanded::MovePawn(coord),
-                ActionExpanded::PlaceHorizontalWall(coord),
-                ActionExpanded::PlaceVerticalWall(coord),
-            ];
-
-            for action in actions.into_iter() {
-                assert_eq!(action, into_action_and_back(action));
-            }
+        for (action, _) in all_actions_iter() {
+            let action_and_back = ActionExpanded::from(Action::from(action));
+            assert_eq!(action, action_and_back);
         }
     }
 
     #[test]
     fn test_action_to_string_for_all() {
-        for coord in all_coords_iter() {
-            let actions = [
-                ActionExpanded::MovePawn(coord),
-                ActionExpanded::PlaceHorizontalWall(coord),
-                ActionExpanded::PlaceVerticalWall(coord),
-            ];
+        for (action, _) in all_actions_iter() {
+            assert_eq!(action.to_string(), Action::from(action).to_string());
+            assert_eq!(
+                action.to_string().parse::<ActionExpanded>().unwrap(),
+                ActionExpanded::from(Action::from(action).to_string().parse::<Action>().unwrap())
+            );
+        }
+    }
 
-            for action in actions {
-                assert_eq!(action.to_string(), Action::from(action).to_string());
-                assert_eq!(
-                    action.to_string().parse::<ActionExpanded>().unwrap(),
-                    ActionExpanded::from(
-                        Action::from(action).to_string().parse::<Action>().unwrap()
-                    )
-                );
-            }
+    #[test]
+    fn action_coordinate_matches_coordinate_index_for_all() {
+        for (action, coord) in all_actions_iter() {
+            assert_eq!(Action::from(action).coord(), coord)
         }
     }
 }

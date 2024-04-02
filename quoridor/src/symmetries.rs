@@ -45,6 +45,7 @@ mod tests {
     use super::*;
     use crate::value::Value;
     use engine::GameState as GameStateTrait;
+    use itertools::Itertools;
 
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
@@ -255,6 +256,9 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
+                    NodeChildMetrics::new("a9".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("b9".parse().unwrap(), 0.0, 0.0, 0),
+                    NodeChildMetrics::new("h9".parse().unwrap(), 0.0, 0.0, 0),
                     NodeChildMetrics::new("a1".parse().unwrap(), 0.0, 0.0, 0),
                     NodeChildMetrics::new("a1v".parse().unwrap(), 0.0, 0.0, 0),
                     NodeChildMetrics::new("a1h".parse().unwrap(), 0.0, 0.0, 0),
@@ -267,10 +271,66 @@ mod tests {
         });
 
         let node_metrics = &symmetries.last().unwrap().policy.children;
-        assert_eq!(node_metrics[0].action(), &"i1".parse::<Action>().unwrap());
-        assert_eq!(node_metrics[1].action(), &"h1v".parse::<Action>().unwrap());
-        assert_eq!(node_metrics[2].action(), &"h1h".parse::<Action>().unwrap());
-        assert_eq!(node_metrics[3].action(), &"a3h".parse::<Action>().unwrap());
-        assert_eq!(node_metrics[4].action(), &"a3v".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[0].action(), &"i9".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[1].action(), &"h9".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[2].action(), &"b9".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[3].action(), &"i1".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[4].action(), &"h1v".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[5].action(), &"h1h".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[6].action(), &"a3h".parse::<Action>().unwrap());
+        assert_eq!(node_metrics[7].action(), &"a3v".parse::<Action>().unwrap());
+    }
+
+    #[test]
+    fn test_action_node_symmetry_all_actions() {
+        let game_state: GameState = GameState::initial();
+        let move_actions = || {
+            (1..=9)
+                .flat_map(|row| ('a'..='i').map(move |col| (row, col)))
+                .map(|(row, col)| format!("{col}{row}"))
+                .map(|str| str.parse::<Action>().unwrap())
+        };
+
+        let wall_actions = || {
+            (1..9)
+                .flat_map(|row| ('a'..'i').map(move |col| (row, col)))
+                .flat_map(|(row, col)| {
+                    ["v", "h"]
+                        .into_iter()
+                        .map(move |suffix| format!("{col}{row}{suffix}"))
+                })
+                .map(|str| str.parse::<Action>().unwrap())
+        };
+
+        let actions = || move_actions().chain(wall_actions());
+
+        let children = actions()
+            .map(|action| NodeChildMetrics::new(action, 0.0, 0.0, 0))
+            .collect_vec();
+
+        let symmetries = get_symmetries(PositionMetrics {
+            game_state,
+            policy: NodeMetrics {
+                visits: 0,
+                value: Value::new([0.0, 0.0]),
+                moves_left: 0.0,
+                children,
+            },
+            score: Value::new([0.0, 0.0]),
+            moves_left: 0,
+        });
+
+        for (action, symmetrical_action) in actions().zip(
+            symmetries
+                .last()
+                .unwrap()
+                .policy
+                .children
+                .iter()
+                .map(|m| m.action()),
+        ) {
+            assert_eq!(action, symmetrical_action.vertical_symmetry());
+            assert_eq!(action.vertical_symmetry(), *symmetrical_action);
+        }
     }
 }
