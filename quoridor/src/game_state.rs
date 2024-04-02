@@ -1,12 +1,8 @@
 use crate::ActionExpanded;
 
-use super::board::{map_board_to_arr_rotatable, BoardType};
-use super::constants::{
-    ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER,
-};
+use super::constants::{MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER};
 use super::{Action, Coordinate, Value, Zobrist};
 use engine::game_state;
-use std::fmt::{self, Display, Formatter};
 
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
 const RIGHT_COLUMN_MASK: u128 =                                 0b__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001__000000001;
@@ -34,100 +30,6 @@ pub struct GameState {
     pub vertical_wall_board: u128,
     pub horizontal_wall_board: u128,
     pub zobrist: Zobrist,
-}
-
-impl Display for GameState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let p1_board = map_board_to_arr_rotatable(self.p1_pawn_board, BoardType::Pawn, false);
-        let p2_board = map_board_to_arr_rotatable(self.p2_pawn_board, BoardType::Pawn, false);
-        let horizontal_wall_placement =
-            map_board_to_arr_rotatable(self.horizontal_wall_board, BoardType::Pawn, false);
-        let vertical_wall_placement =
-            map_board_to_arr_rotatable(self.vertical_wall_board, BoardType::Pawn, false);
-        let horizontal_wall_board = map_board_to_arr_rotatable(
-            self.horizontal_wall_board,
-            BoardType::HorizontalWall,
-            false,
-        );
-        let vertical_wall_board =
-            map_board_to_arr_rotatable(self.vertical_wall_board, BoardType::VerticalWall, false);
-
-        writeln!(f)?;
-
-        for y in 0..BOARD_HEIGHT {
-            for x in 0..BOARD_WIDTH {
-                if x == 0 {
-                    write!(f, "  +")?;
-                }
-                let idx = y * BOARD_WIDTH + x;
-                let w = if horizontal_wall_board[idx] != 0.0 {
-                    "■■■"
-                } else {
-                    "---"
-                };
-                let c = if horizontal_wall_placement[idx] != 0.0 {
-                    "■"
-                } else if vertical_wall_placement[idx] != 0.0 {
-                    "█"
-                } else {
-                    "+"
-                };
-                write!(f, "{}{}", w, c)?;
-            }
-
-            writeln!(f)?;
-
-            for x in 0..BOARD_WIDTH {
-                let idx = y * BOARD_WIDTH + x;
-                if x == 0 {
-                    write!(f, "{} |", BOARD_HEIGHT - y)?;
-                }
-                let p = if p1_board[idx] != 0.0 {
-                    "1"
-                } else if p2_board[idx] != 0.0 {
-                    "2"
-                } else {
-                    " "
-                };
-                let w = if vertical_wall_board[idx] != 0.0 {
-                    "█"
-                } else {
-                    "|"
-                };
-                write!(f, " {} {}", p, w)?;
-            }
-
-            writeln!(f)?;
-        }
-
-        for x in 0..BOARD_WIDTH {
-            if x == 0 {
-                write!(f, "  +")?;
-            }
-            write!(f, "---+")?;
-        }
-
-        writeln!(f)?;
-
-        for x in 0..BOARD_WIDTH {
-            if x == 0 {
-                write!(f, "   ")?;
-            }
-            let col_letter = (ASCII_LETTER_A + x as u8) as char;
-            write!(f, " {}  ", col_letter)?;
-        }
-
-        writeln!(f)?;
-        writeln!(f)?;
-        writeln!(
-            f,
-            "  P1: {}  P2: {}",
-            NUM_WALLS_PER_PLAYER - self.p1_num_walls_placed,
-            NUM_WALLS_PER_PLAYER - self.p2_num_walls_placed
-        )?;
-
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
