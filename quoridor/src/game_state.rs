@@ -21,15 +21,15 @@ const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__0
 
 #[derive(Hash, Clone, Debug)]
 pub struct GameState {
-    pub move_number: usize,
-    pub p1_turn_to_move: bool,
-    pub p1_pawn_board: u128,
-    pub p2_pawn_board: u128,
-    pub p1_num_walls_placed: u8,
-    pub p2_num_walls_placed: u8,
-    pub vertical_wall_board: u128,
-    pub horizontal_wall_board: u128,
-    pub zobrist: Zobrist,
+    pub(crate) move_number: usize,
+    pub(crate) p1_turn_to_move: bool,
+    pub(crate) p1_pawn_board: u128,
+    pub(crate) p2_pawn_board: u128,
+    pub(crate) p1_num_walls_placed: u8,
+    pub(crate) p2_num_walls_placed: u8,
+    pub(crate) vertical_wall_board: u128,
+    pub(crate) horizontal_wall_board: u128,
+    pub(crate) zobrist: Zobrist,
 }
 
 #[derive(Debug)]
@@ -52,24 +52,24 @@ impl GameState {
     }
 
     pub fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
-        Self::bit_board_coords_to_actions(self.valid_pawn_moves(), ActionType::PawnMove)
+        Self::bit_board_actions(self.valid_pawn_moves(), ActionType::PawnMove)
     }
 
     pub fn valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
-        Self::bit_board_coords_to_actions(
+        Self::bit_board_actions(
             self.valid_horizontal_wall_placement(),
             ActionType::HorizontalWall,
         )
     }
 
     pub fn valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
-        Self::bit_board_coords_to_actions(
+        Self::bit_board_actions(
             self.valid_vertical_wall_placement(),
             ActionType::VerticalWall,
         )
     }
 
-    pub fn bit_board_coords_to_actions(
+    pub fn bit_board_actions(
         bit_board: u128,
         action_type: ActionType,
     ) -> impl Iterator<Item = Action> {
@@ -158,8 +158,7 @@ impl GameState {
         let wall_placement = coord.as_bit_board();
         self.zobrist = self.zobrist.place_wall(self, wall_placement, is_vertical);
 
-        let p1_turn_to_move = self.p1_turn_to_move;
-        if p1_turn_to_move {
+        if self.p1_turn_to_move {
             self.p1_num_walls_placed += 1;
         } else {
             self.p2_num_walls_placed += 1;

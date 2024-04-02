@@ -448,4 +448,22 @@ mod tests {
         let is_terminal = game_state.is_terminal();
         assert_eq!(is_terminal, Some(Value([1.0, 0.0])));
     }
+
+    #[test]
+    fn test_move_number() {
+        let mut game_state = GameState::initial();
+        assert_eq!(game_state.move_number, 1);
+
+        game_state.take_action(&"e2".parse::<Action>().unwrap());
+        assert_eq!(game_state.move_number, 1);
+
+        game_state.take_action(&"e9".parse::<Action>().unwrap());
+        assert_eq!(game_state.move_number, 2);
+
+        game_state.take_action(&"b4h".parse::<Action>().unwrap());
+        assert_eq!(game_state.move_number, 2);
+
+        game_state.take_action(&"d4v".parse::<Action>().unwrap());
+        assert_eq!(game_state.move_number, 3);
+    }
 }
