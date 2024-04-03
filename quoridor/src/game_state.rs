@@ -94,9 +94,8 @@ impl GameState {
             } else {
                 Value([1.0, 0.0])
             })
-        } else if self.move_number >= MAX_NUMBER_OF_MOVES {
-            // A game that runs too long will be a loss for both players.
-            Some(Value([0.0, 0.0]))
+        } else if self.move_number > MAX_NUMBER_OF_MOVES {
+            Some(Value([0.5, 0.5]))
         } else {
             None
         }
