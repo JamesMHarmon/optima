@@ -153,7 +153,7 @@ if __name__== '__main__':
 
         input_dims = InputDimensions(input_h, input_w, input_c)
         model_dims = ModelDimensions(num_filters, num_blocks, policy_size, moves_left_size, input_dims)
-        export_bundle(model_dir, model_path, model_name_w_num, epoch)
+        export_bundle(model_dir, model_path, model_name_w_num, epoch, model_dims)
 
         if export_dir is not None:
             export_dir = os.path.join(model_dir, export_dir)
