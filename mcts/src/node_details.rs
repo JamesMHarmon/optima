@@ -39,8 +39,10 @@ pub struct PUCT {
     pub Qsa: f32,
     pub Psa: f32,
     pub Usa: f32,
+    /// Expected game length calculated by each child node's moves left score normalized to expected game length.
     pub Msa: f32,
     pub M: f32,
+    /// Neural net output of the number of moves left in the game.
     pub moves_left_score: f32,
     pub game_length: f32,
     pub cpuct: f32,

@@ -32,10 +32,9 @@ pub fn deblunder<S, A, V, Vs, Qm>(
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
-            let expected_num_moves_left = max_visits_child.M().round() as usize;
-            let expect_total_num_moves = metric.move_number + expected_num_moves_left;
+            let expected_game_length = max_visits_child.M().round() as usize;
 
-            value_stack.push(q_mix_amt, expect_total_num_moves);
+            value_stack.push(q_mix_amt, expected_game_length);
 
             value_stack.set_if_not::<S, V, Qm>(game_state, max_visits_child.Q());
         }
@@ -43,7 +42,7 @@ pub fn deblunder<S, A, V, Vs, Qm>(
         let (V, total_moves) = value_stack.latest::<_, V>(game_state);
         metric.metrics.score = V.clone();
         metric.metrics.moves_left =
-            (total_moves as isize + 1 - metric.move_number as isize).max(1) as usize;
+            (total_moves as isize - metric.move_number as isize).max(1) as usize;
     }
 }
 
@@ -60,7 +59,7 @@ impl<Vs> ValueStack<Vs> {
     {
         Self {
             v_stores: vec![(Vs::default(), 0.0)],
-            total_moves: max_move_num,
+            total_moves: max_move_num + 1,
         }
     }
 

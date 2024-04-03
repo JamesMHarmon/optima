@@ -124,9 +124,9 @@ mod test {
                 90,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.6, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.6, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -136,9 +136,9 @@ mod test {
                 91,
                 "a2n",
                 vec![
-                    node_child("a1n", 0.8, 30.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 105.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -148,9 +148,9 @@ mod test {
                 92,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -160,9 +160,9 @@ mod test {
                 99,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
         ];
@@ -170,10 +170,10 @@ mod test {
         deblunder(&mut metrics, 0.1, 0.1);
 
         assert_abs_diff_eq!(metrics[0].metrics.score.get_value_for_player(1), 0.6);
-        assert_abs_diff_eq!(metrics[0].metrics.moves_left, 32);
+        assert_abs_diff_eq!(metrics[0].metrics.moves_left, 15);
 
         assert_abs_diff_eq!(metrics[1].metrics.score.get_value_for_player(2), 0.8);
-        assert_abs_diff_eq!(metrics[1].metrics.moves_left, 31);
+        assert_abs_diff_eq!(metrics[1].metrics.moves_left, 14);
 
         assert_abs_diff_eq!(metrics[2].metrics.score.get_value_for_player(1), 1.0);
         assert_abs_diff_eq!(metrics[2].metrics.moves_left, 8);
@@ -189,9 +189,9 @@ mod test {
                 90,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.6, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.6, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -201,9 +201,9 @@ mod test {
                 91,
                 "a2n",
                 vec![
-                    node_child("a1n", 0.7, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.7, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -213,9 +213,9 @@ mod test {
                 92,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
         ];
@@ -252,8 +252,8 @@ mod test {
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 40.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -263,9 +263,9 @@ mod test {
                 92,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -275,9 +275,9 @@ mod test {
                 93,
                 "a2n",
                 vec![
-                    node_child("a1n", 0.7, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.7, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -287,9 +287,9 @@ mod test {
                 94,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
         ];
@@ -297,16 +297,16 @@ mod test {
         deblunder(&mut metrics, 0.1, 0.2);
 
         assert_abs_diff_eq!(metrics[0].metrics.score.get_value_for_player(1), 0.775);
-        assert_eq!(metrics[0].metrics.moves_left, 42);
+        assert_eq!(metrics[0].metrics.moves_left, 1);
 
         assert_abs_diff_eq!(metrics[1].metrics.score.get_value_for_player(2), 0.525);
-        assert_eq!(metrics[1].metrics.moves_left, 41);
+        assert_eq!(metrics[1].metrics.moves_left, 1);
 
         assert_abs_diff_eq!(metrics[2].metrics.score.get_value_for_player(1), 0.9);
-        assert_eq!(metrics[2].metrics.moves_left, 27);
+        assert_eq!(metrics[2].metrics.moves_left, 8);
 
         assert_abs_diff_eq!(metrics[3].metrics.score.get_value_for_player(2), 0.35);
-        assert_eq!(metrics[3].metrics.moves_left, 26);
+        assert_eq!(metrics[3].metrics.moves_left, 7);
 
         assert_abs_diff_eq!(metrics[4].metrics.score.get_value_for_player(1), 1.0);
         assert_eq!(metrics[4].metrics.moves_left, 1);
@@ -322,9 +322,9 @@ mod test {
                 90,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.65, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.65, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -334,9 +334,9 @@ mod test {
                 91,
                 "a2n",
                 vec![
-                    node_child("a1n", 0.7, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.7, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -346,9 +346,9 @@ mod test {
                 92,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -358,9 +358,9 @@ mod test {
                 93,
                 "a2n",
                 vec![
-                    node_child("a1n", 0.7, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.7, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
             position_metrics(
@@ -370,9 +370,9 @@ mod test {
                 94,
                 "a1n",
                 vec![
-                    node_child("a1n", 0.8, 25.0, 30),
-                    node_child("a2n", 0.5, 25.0, 20),
-                    node_child("a3n", 0.1, 25.0, 10),
+                    node_child("a1n", 0.8, 100.0, 30),
+                    node_child("a2n", 0.5, 100.0, 20),
+                    node_child("a3n", 0.1, 100.0, 10),
                 ],
             ),
         ];
