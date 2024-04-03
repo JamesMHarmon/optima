@@ -5,3 +5,4 @@
 /*_runs/*
 .vscode/
 **/buffer_cache/*
+replay_buffer.so
