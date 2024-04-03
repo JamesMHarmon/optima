@@ -296,7 +296,7 @@ where
         let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec![];
         let mut latest_index = root_index;
         let mut game_state = Cow::Borrowed(game_state);
-        let mut move_number = game_engine.get_move_number(&game_state);
+        let mut move_number = game_engine.move_number(&game_state);
 
         loop {
             depth += 1;
@@ -326,7 +326,7 @@ where
 
             nodes_to_propagate_to_stack.push(NodeUpdateInfo {
                 parent_node_index: latest_index,
-                parent_node_player_to_move: game_engine.get_player_to_move(&game_state),
+                parent_node_player_to_move: game_engine.player_to_move(&game_state),
                 node_child_index: selected_child_node_children_index,
             });
 
@@ -334,7 +334,7 @@ where
             let selected_edge = node.get_child_by_index_mut(selected_child_node_children_index);
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
-            move_number = game_engine.get_move_number(&game_state);
+            move_number = game_engine.move_number(&game_state);
 
             let prev_visits = selected_edge.visits();
             selected_edge.increment_visits();

@@ -44,7 +44,7 @@ where
                     * if is_root { cpuct_root_scaling } else { 1.0 }
             },
             |game_state| {
-                let move_number = game_engine.get_move_number(game_state);
+                let move_number = game_engine.move_number(game_state);
                 if move_number < play_options.temperature_max_moves {
                     play_options.temperature
                 } else {
@@ -63,7 +63,7 @@ where
     let mut analysis = Vec::new();
     let mut rng = rand::thread_rng();
 
-    while game_engine.is_terminal_state(&game_state).is_none() {
+    while game_engine.terminal_state(&game_state).is_none() {
         let action = if rng.gen::<f32>() <= options.full_visits_probability {
             mcts.apply_noise_at_root().await;
             mcts.search_visits(options.visits).await?;
@@ -81,7 +81,7 @@ where
     }
 
     let score = game_engine
-        .is_terminal_state(&game_state)
+        .terminal_state(&game_state)
         .ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
     Ok((SelfPlayMetrics::<A, V>::new(analysis, score), game_state))

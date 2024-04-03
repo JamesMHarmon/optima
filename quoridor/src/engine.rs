@@ -21,19 +21,15 @@ impl GameEngine for Engine {
         game_state
     }
 
-    fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal()
     }
 
-    fn get_player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.p1_turn_to_move {
-            1
-        } else {
-            2
-        }
+    fn player_to_move(&self, game_state: &Self::State) -> usize {
+        game_state.player_to_move()
     }
 
-    fn get_move_number(&self, game_state: &Self::State) -> usize {
-        game_state.move_number
+    fn move_number(&self, game_state: &Self::State) -> usize {
+        game_state.move_number()
     }
 }

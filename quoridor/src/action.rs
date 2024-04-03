@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn action_coordinate_matches_coordinate_index_for_all() {
         for (action, coord) in all_actions_iter() {
-            assert_eq!(Action::from(action).coord(), coord)
+            assert_eq!(action.coord(), coord)
         }
     }
 }

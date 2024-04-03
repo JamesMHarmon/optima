@@ -1,10 +1,10 @@
+use crate::BOARD_SIZE;
+
 use super::transposition_entry::TranspositionEntry;
 use half::f16;
-use itertools::izip;
 use std::convert::TryInto;
 use tensorflow_model::{InputMap, PolicyMap, TranspositionMap, ValueMap};
 
-use super::board::{map_board_to_arr_rotatable, BoardType};
 use super::constants::{
     ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, INPUT_C, INPUT_H, INPUT_W, NUM_WALLS_PER_PLAYER,
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
@@ -12,7 +12,7 @@ use super::constants::{
 use super::{Action, ActionType, Coordinate, GameState, Value};
 use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
-use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
+use model::{ActionWithPolicy, BasicGameStateAnalysis, ConvInputBuilder, NodeMetrics};
 use tensorflow_model::Mode;
 
 #[derive(Default)]
@@ -37,7 +37,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         policy_metrics: &NodeMetrics<Action, Value>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
-        let rotate: bool = !game_state.p1_turn_to_move;
+        let rotate: bool = !game_state.p1_turn_to_move();
         let inputs = vec![-1f32; OUTPUT_SIZE];
 
         policy_metrics.children.iter().fold(inputs, |mut r, m| {
@@ -65,8 +65,8 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
         let actions = valid_pawn_moves
             .chain(valid_vert_walls)
             .chain(valid_horiz_walls);
-        let rotate = !game_state.p1_turn_to_move;
 
+        let rotate = !game_state.p1_turn_to_move();
         let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
             .map(|a| {
                 // Policy scores coming from the quoridor model are always from the perspective of player 1.
@@ -92,7 +92,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
 
 impl ValueMap<GameState, Value> for Mapper {
     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        let player_to_move = if game_state.p1_turn_to_move { 1 } else { 2 };
+        let player_to_move = game_state.player_to_move();
         let val = value.get_value_for_player(player_to_move);
         (val * 2.0) - 1.0
     }
@@ -100,7 +100,7 @@ impl ValueMap<GameState, Value> for Mapper {
     fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
         let curr_val = (value_output + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
-        if game_state.p1_turn_to_move {
+        if game_state.p1_turn_to_move() {
             Value([curr_val, opp_val])
         } else {
             Value([opp_val, curr_val])
@@ -110,77 +110,37 @@ impl ValueMap<GameState, Value> for Mapper {
 
 impl InputMap<GameState> for Mapper {
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
-        let mut input_vec: Vec<f16> = Vec::with_capacity(INPUT_H * INPUT_W * INPUT_C);
+        let mut builder = ConvInputBuilder::new(BOARD_SIZE, input);
 
-        let GameState {
-            p1_turn_to_move,
-            p1_pawn_board,
-            p2_pawn_board,
-            vertical_wall_board: vertical_wall_placement_board,
-            horizontal_wall_board: horizontal_wall_placement_board,
-            p1_num_walls_placed,
-            p2_num_walls_placed,
-            ..
-        } = game_state;
+        let rotate: bool = !game_state.p1_turn_to_move();
+        let rotate_pawn = |c: Coordinate| if rotate { c.rotate(false) } else { c };
+        let rotate_wall = |c: Coordinate| if rotate { c.rotate(true) } else { c };
 
-        let curr_player_pawn_board = if *p1_turn_to_move {
-            *p1_pawn_board
-        } else {
-            *p2_pawn_board
-        };
-        let opp_player_pawn_board = if *p1_turn_to_move {
-            *p2_pawn_board
-        } else {
-            *p1_pawn_board
-        };
+        let curr_player_info = game_state.curr_player();
+        let opp_player_info = game_state.opp_player();
 
-        let rotate = !*p1_turn_to_move;
+        let curr_pawn = rotate_pawn(curr_player_info.pawn());
+        let opp_pawn = rotate_pawn(opp_player_info.pawn());
+        let vertical_walls = game_state
+            .vertical_walls()
+            .map(rotate_wall)
+            .map(|c| c.index());
+        let horizontal_walls = game_state
+            .horizontal_walls()
+            .map(rotate_wall)
+            .map(|c| c.index());
 
-        let curr_pawn_board_vec =
-            map_board_to_arr_rotatable(curr_player_pawn_board, BoardType::Pawn, rotate);
-        let opp_pawn_board_vec =
-            map_board_to_arr_rotatable(opp_player_pawn_board, BoardType::Pawn, rotate);
-        let vertical_wall_vec = map_board_to_arr_rotatable(
-            *vertical_wall_placement_board,
-            BoardType::VerticalWall,
-            rotate,
-        );
-        let horizontal_wall_vec = map_board_to_arr_rotatable(
-            *horizontal_wall_placement_board,
-            BoardType::HorizontalWall,
-            rotate,
-        );
+        let curr_walls_norm = (curr_player_info.num_walls() as f32) / NUM_WALLS_PER_PLAYER as f32;
+        let curr_walls_norm = f16::from_f32(curr_walls_norm);
+        let opp_walls_norm = (opp_player_info.num_walls() as f32) / NUM_WALLS_PER_PLAYER as f32;
+        let opp_walls_norm = f16::from_f32(opp_walls_norm);
 
-        let curr_num_walls_placed = if *p1_turn_to_move {
-            p1_num_walls_placed
-        } else {
-            p2_num_walls_placed
-        };
-        let opp_num_walls_placed = if *p1_turn_to_move {
-            p2_num_walls_placed
-        } else {
-            p1_num_walls_placed
-        };
-        let curr_num_walls_placed_norm =
-            (*curr_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
-        let opp_num_walls_placed_norm =
-            (*opp_num_walls_placed as f32) / NUM_WALLS_PER_PLAYER as f32;
-
-        for (curr_pawn, opp_pawn, vw, hw) in izip!(
-            curr_pawn_board_vec.iter(),
-            opp_pawn_board_vec.iter(),
-            vertical_wall_vec.iter(),
-            horizontal_wall_vec.iter()
-        ) {
-            input_vec.push(f16::from_f32(*curr_pawn));
-            input_vec.push(f16::from_f32(*opp_pawn));
-            input_vec.push(f16::from_f32(*vw));
-            input_vec.push(f16::from_f32(*hw));
-            input_vec.push(f16::from_f32(curr_num_walls_placed_norm));
-            input_vec.push(f16::from_f32(opp_num_walls_placed_norm));
-        }
-
-        input.copy_from_slice(input_vec.as_slice())
+        builder.channel(0).write_at_idx(curr_pawn.index(), f16::ONE);
+        builder.channel(1).write_at_idx(opp_pawn.index(), f16::ONE);
+        builder.channel(2).set_bits_at_indexes(vertical_walls);
+        builder.channel(3).set_bits_at_indexes(horizontal_walls);
+        builder.channel(4).fill(curr_walls_norm);
+        builder.channel(5).fill(opp_walls_norm);
     }
 }
 
@@ -222,41 +182,44 @@ fn map_action_to_output_idx(action: &Action) -> usize {
     let coord = action.coord();
 
     match action.action_type() {
-        ActionType::PawnMove => map_coord_to_input_idx_nine_by_nine(&coord),
+        ActionType::PawnMove => map_coord_to_output_idx_nine_by_nine(&coord),
         ActionType::VerticalWall => {
-            map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs
+            map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs
         }
         ActionType::HorizontalWall => {
-            map_coord_to_input_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
+            map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
         }
     }
 }
 
-fn map_coord_to_input_idx_nine_by_nine(coord: &Coordinate) -> usize {
+fn map_coord_to_output_idx_nine_by_nine(coord: &Coordinate) -> usize {
     let col_idx = (coord.col() as u8 - ASCII_LETTER_A) as usize;
 
     col_idx + ((BOARD_HEIGHT - coord.row()) * BOARD_WIDTH)
 }
 
-fn map_coord_to_input_idx_eight_by_eight(coord: &Coordinate) -> usize {
+fn map_coord_to_output_idx_eight_by_eight(coord: &Coordinate) -> usize {
     let col_idx = (coord.col() as u8 - ASCII_LETTER_A) as usize;
 
-    col_idx + ((BOARD_HEIGHT - coord.row() - 1) * (BOARD_WIDTH - 1))
+    col_idx + ((BOARD_HEIGHT - coord.row()) * (BOARD_WIDTH - 1))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ops::RangeInclusive;
+
     use super::*;
     use assert_approx_eq::assert_approx_eq;
     use engine::game_state::GameState as GameStateTrait;
+    use itertools::Itertools;
 
     fn map_to_input_vec(
         curr_pawn_idx: usize,
         opp_pawn_idx: usize,
         vertical_wall_idxs: &[usize],
         horizontal_wall_idxs: &[usize],
-        curr_num_walls_placed: usize,
-        opp_num_walls_placed: usize,
+        curr_num_walls: usize,
+        opp_num_walls: usize,
     ) -> Vec<f32> {
         let offset = INPUT_C;
         let mut output = [0.0; INPUT_W * INPUT_H * INPUT_C];
@@ -273,11 +236,11 @@ mod tests {
         }
 
         for idx in 0..81 {
-            output[idx * offset + 4] = curr_num_walls_placed as f32 / 10.0;
+            output[idx * offset + 4] = curr_num_walls as f32 / 10.0;
         }
 
         for idx in 0..81 {
-            output[idx * offset + 5] = opp_num_walls_placed as f32 / 10.0;
+            output[idx * offset + 5] = opp_num_walls as f32 / 10.0;
         }
 
         output.to_vec()
@@ -300,81 +263,81 @@ mod tests {
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_nine_by_nine_a1() {
+    fn test_map_coord_to_output_idx_nine_by_nine_a1() {
         let coord = "a1".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+        let idx = map_coord_to_output_idx_nine_by_nine(&coord);
 
         assert_eq!(72, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_nine_by_nine_a9() {
+    fn test_map_coord_to_output_idx_nine_by_nine_a9() {
         let coord = "a9".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+        let idx = map_coord_to_output_idx_nine_by_nine(&coord);
 
         assert_eq!(0, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_nine_by_nine_i1() {
+    fn test_map_coord_to_output_idx_nine_by_nine_i1() {
         let coord = "i1".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+        let idx = map_coord_to_output_idx_nine_by_nine(&coord);
 
         assert_eq!(80, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_nine_by_nine_i9() {
+    fn test_map_coord_to_output_idx_nine_by_nine_i9() {
         let coord = "i9".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+        let idx = map_coord_to_output_idx_nine_by_nine(&coord);
 
         assert_eq!(8, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_nine_by_nine_e5() {
+    fn test_map_coord_to_output_idx_nine_by_nine_e5() {
         let coord = "e5".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_nine_by_nine(&coord);
+        let idx = map_coord_to_output_idx_nine_by_nine(&coord);
 
         assert_eq!(40, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_eight_by_eight_a1() {
-        let coord = "a1".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+    fn test_map_coord_to_output_idx_eight_by_eight_a2() {
+        let coord = "a2".parse::<Coordinate>().unwrap();
+        let idx = map_coord_to_output_idx_eight_by_eight(&coord);
 
         assert_eq!(56, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_eight_by_eight_a8() {
-        let coord = "a8".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+    fn test_map_coord_to_output_idx_eight_by_eight_a9() {
+        let coord = "a9".parse::<Coordinate>().unwrap();
+        let idx = map_coord_to_output_idx_eight_by_eight(&coord);
 
         assert_eq!(0, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_eight_by_eight_h1() {
-        let coord = "h1".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+    fn test_map_coord_to_output_idx_eight_by_eight_h2() {
+        let coord = "h2".parse::<Coordinate>().unwrap();
+        let idx = map_coord_to_output_idx_eight_by_eight(&coord);
 
         assert_eq!(63, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_eight_by_eight_h8() {
-        let coord = "h8".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+    fn test_map_coord_to_output_idx_eight_by_eight_h9() {
+        let coord = "h9".parse::<Coordinate>().unwrap();
+        let idx = map_coord_to_output_idx_eight_by_eight(&coord);
 
         assert_eq!(7, idx);
     }
 
     #[test]
-    fn test_map_coord_to_input_idx_eight_by_eight_e5() {
-        let coord = "e5".parse::<Coordinate>().unwrap();
-        let idx = map_coord_to_input_idx_eight_by_eight(&coord);
+    fn test_map_coord_to_output_idx_eight_by_eight_e6() {
+        let coord = "e6".parse::<Coordinate>().unwrap();
+        let idx = map_coord_to_output_idx_eight_by_eight(&coord);
 
         assert_eq!(28, idx);
     }
@@ -396,35 +359,64 @@ mod tests {
     }
 
     #[test]
-    fn test_map_action_to_output_idx_vertical_wall_a8() {
-        let action = "a8v".parse().unwrap();
+    fn test_map_action_to_output_idx_vertical_wall_a9() {
+        let action = "a9v".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(81, idx);
     }
 
     #[test]
-    fn test_map_action_to_output_idx_vertical_wall_h1() {
-        let action = "h1v".parse().unwrap();
+    fn test_map_action_to_output_idx_vertical_wall_h2() {
+        let action = "h2v".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(144, idx);
     }
 
     #[test]
-    fn test_map_action_to_output_idx_horizontal_wall_a8() {
-        let action = "a8h".parse().unwrap();
+    fn test_map_action_to_output_idx_horizontal_wall_a9() {
+        let action = "a9h".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(145, idx);
     }
 
     #[test]
-    fn test_map_action_to_output_idx_horizontal_wall_h1() {
-        let action = "h1h".parse().unwrap();
+    fn test_map_action_to_output_idx_horizontal_wall_h2() {
+        let action = "h2h".parse().unwrap();
         let idx = map_action_to_output_idx(&action);
 
         assert_eq!(208, idx);
+    }
+
+    #[test]
+    fn test_map_action_to_output_idx_all_actions() {
+        let generate_actions =
+            |action_type, col_range: RangeInclusive<char>, row_range: RangeInclusive<usize>| {
+                row_range.rev().flat_map(move |row| {
+                    col_range
+                        .clone()
+                        .map(move |col| Action::from((action_type, Coordinate::new(col, row))))
+                })
+            };
+
+        let pawn_actions = || generate_actions(ActionType::PawnMove, 'a'..='i', 1..=9);
+        let horizontal_wall_actions =
+            || generate_actions(ActionType::VerticalWall, 'a'..='h', 2..=9);
+        let vertical_wall_actions =
+            || generate_actions(ActionType::HorizontalWall, 'a'..='h', 2..=9);
+
+        let all_actions = pawn_actions()
+            .chain(horizontal_wall_actions())
+            .chain(vertical_wall_actions())
+            .collect_vec();
+
+        assert_eq!(all_actions.len(), OUTPUT_SIZE);
+
+        for (idx, action) in all_actions.iter().enumerate() {
+            assert_eq!(idx, map_action_to_output_idx(action));
+        }
     }
 
     #[test]
@@ -433,7 +425,7 @@ mod tests {
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[], 0, 0), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[], 10, 10), &input)
     }
 
     #[test]
@@ -443,28 +435,28 @@ mod tests {
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(76, 13, &[], &[], 0, 0), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 13, &[], &[], 10, 10), &input)
     }
 
     #[test]
     fn test_game_state_to_input_walls_remaining() {
         let mut game_state = GameState::initial();
-        game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        game_state.take_action(&"h2h".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[9, 10], 0, 1), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 4, &[], &[0], 10, 9), &input)
     }
 
     #[test]
     fn test_game_state_to_input_walls_remaining_p2() {
         let mut game_state = GameState::initial();
-        game_state.take_action(&"h1h".parse::<Action>().unwrap());
+        game_state.take_action(&"h2h".parse::<Action>().unwrap());
         game_state.take_action(&"d9".parse::<Action>().unwrap());
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(76, 3, &[], &[79, 80], 1, 0), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 3, &[], &[70], 9, 10), &input)
     }
 
     #[test]
@@ -475,7 +467,7 @@ mod tests {
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(67, 4, &[38, 47], &[], 0, 1), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(67, 4, &[47], &[], 10, 9), &input)
     }
 
     #[test]
@@ -487,6 +479,6 @@ mod tests {
 
         let input = game_state_to_input(&game_state);
 
-        assert_approximate_eq_slice(&map_to_input_vec(76, 22, &[32, 41], &[], 1, 0), &input)
+        assert_approximate_eq_slice(&map_to_input_vec(76, 22, &[23], &[], 9, 10), &input)
     }
 }

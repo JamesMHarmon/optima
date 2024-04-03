@@ -267,7 +267,7 @@ impl Arena {
                                 * if is_root { cpuct_root_scaling } else { 1.0 }
                         },
                         |game_state| {
-                            let move_number = engine.get_move_number(game_state);
+                            let move_number = engine.move_number(game_state);
                             if move_number < temperature_max_moves {
                                 temperature
                             } else {
@@ -288,8 +288,8 @@ impl Arena {
         let mut actions: Vec<A> = Vec::new();
         let mut state: S = S::initial();
 
-        while engine.is_terminal_state(&state).is_none() {
-            let player_to_move = engine.get_player_to_move(&state);
+        while engine.terminal_state(&state).is_none() {
+            let player_to_move = engine.player_to_move(&state);
             let player_to_move_mcts = &mut mctss[player_to_move - 1];
             player_to_move_mcts.search_visits(visits).await?;
             let action = player_to_move_mcts.select_action()?;
@@ -304,7 +304,7 @@ impl Arena {
         }
 
         let final_score = engine
-            .is_terminal_state(&state)
+            .terminal_state(&state)
             .ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
         let scores: Vec<_> = players

@@ -76,11 +76,11 @@ impl GameEngine for CountingGameEngine {
         }
     }
 
-    fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal_state()
     }
 
-    fn get_player_to_move(&self, game_state: &Self::State) -> usize {
+    fn player_to_move(&self, game_state: &Self::State) -> usize {
         if game_state.p1_turn {
             1
         } else {
@@ -88,7 +88,7 @@ impl GameEngine for CountingGameEngine {
         }
     }
 
-    fn get_move_number(&self, _game_state: &Self::State) -> usize {
+    fn move_number(&self, _game_state: &Self::State) -> usize {
         0
     }
 }

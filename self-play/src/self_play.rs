@@ -100,7 +100,7 @@ where
                     model_info.model_name_w_num(),
                     self_play_metric.analysis().len(),
                     self_play_metric.score(),
-                    engine.get_move_number(&game_state),
+                    engine.move_number(&game_state),
                     starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                     num_of_games_played,
                     num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60_f32

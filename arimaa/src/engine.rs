@@ -24,15 +24,15 @@ impl engine::engine::GameEngine for Engine {
         game_state.take_action(action)
     }
 
-    fn get_player_to_move(&self, game_state: &Self::State) -> usize {
+    fn player_to_move(&self, game_state: &Self::State) -> usize {
         game_state.player_to_move()
     }
 
-    fn get_move_number(&self, game_state: &Self::State) -> usize {
+    fn move_number(&self, game_state: &Self::State) -> usize {
         game_state.get_move_number()
     }
 
-    fn is_terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
         game_state.is_terminal().map(|v| v.into()).or_else(|| {
             if game_state.get_move_number() > MAX_NUMBER_OF_MOVES {
                 Some([0.0, 0.0].into())

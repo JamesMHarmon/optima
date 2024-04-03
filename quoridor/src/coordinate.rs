@@ -6,7 +6,7 @@ use common::bits::single_bit_index;
 use std::fmt::{self};
 use std::str::FromStr;
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Coordinate {
     /// The index on the board of the coordinate.
     ///
@@ -23,22 +23,26 @@ impl Coordinate {
         Self { coord_index }
     }
 
-    pub fn from_bit_board(board: u128) -> Self {
-        let coord_index = (BOARD_SIZE - 1) - single_bit_index(board);
-        let coord_index = coord_index as u8;
-        Coordinate { coord_index }
+    pub fn from_bit_board(bit_board: u128) -> Self {
+        bit_board.into()
+    }
+
+    pub fn from_bit_board_bits(bit_board: u128) -> impl Iterator<Item = Self> {
+        BitBoardIterator { bit_board }
     }
 
     pub fn as_bit_board(&self) -> u128 {
         1 << ((BOARD_SIZE - 1) - self.coord_index as usize)
     }
 
+    /// Rotate the coordinate 180 degrees.
+    /// Shift parameter should be set when rotating coordinates for walls.
     pub fn rotate(&self, shift: bool) -> Self {
         let mut coord_index = BOARD_SIZE as u8 - 1 - self.coord_index;
 
         if shift {
-            // Shift the board down.
-            coord_index += BOARD_WIDTH as u8;
+            // Shift the board up and to the left after rotating when representing walls.
+            coord_index -= BOARD_WIDTH as u8;
             // Shift the board left.
             coord_index -= 1
         }
@@ -114,6 +118,35 @@ impl fmt::Display for Coordinate {
 impl fmt::Debug for Coordinate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<u128> for Coordinate {
+    fn from(bit_board: u128) -> Self {
+        let coord_index = (BOARD_SIZE - 1) - single_bit_index(bit_board);
+        let coord_index = coord_index as u8;
+        Coordinate { coord_index }
+    }
+}
+
+struct BitBoardIterator {
+    bit_board: u128,
+}
+
+impl Iterator for BitBoardIterator {
+    type Item = Coordinate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.bit_board == 0 {
+            return None;
+        }
+
+        let bit_idx = self.bit_board.trailing_zeros();
+        let removed_bit = 1 << bit_idx;
+        self.bit_board ^= removed_bit;
+
+        let coordinate = Coordinate::from_bit_board(removed_bit);
+        Some(coordinate)
     }
 }
 
@@ -277,32 +310,32 @@ mod tests {
 
     #[test]
     fn test_rotate_coordinate_shift_a1() {
-        let coord = "a1".parse::<Coordinate>().unwrap();
-        let expected = "h8".parse::<Coordinate>().unwrap();
+        let coord = "a2".parse::<Coordinate>().unwrap();
+        let expected = "h9".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
     fn test_rotate_coordinate_shift_h8() {
-        let coord = "h8".parse::<Coordinate>().unwrap();
-        let expected = "a1".parse::<Coordinate>().unwrap();
+        let coord = "h9".parse::<Coordinate>().unwrap();
+        let expected = "a2".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
     fn test_rotate_coordinate_shift_e5() {
-        let coord = "e5".parse::<Coordinate>().unwrap();
-        let expected = "d4".parse::<Coordinate>().unwrap();
+        let coord = "e6".parse::<Coordinate>().unwrap();
+        let expected = "d5".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.rotate(true), expected);
     }
 
     #[test]
     fn test_rotate_coordinate_shift_d3() {
-        let coord = "d3".parse::<Coordinate>().unwrap();
-        let expected = "e6".parse::<Coordinate>().unwrap();
+        let coord = "d4".parse::<Coordinate>().unwrap();
+        let expected = "e7".parse::<Coordinate>().unwrap();
 
         assert_eq!(coord.rotate(true), expected);
     }
@@ -353,6 +386,18 @@ mod tests {
     fn test_coordinate_to_from_index_all() {
         for coord in all_coords_iter() {
             assert_eq!(Coordinate::from_index(coord.index()), coord);
+        }
+    }
+
+    #[test]
+    fn test_coordinate_shift_all() {
+        let shiftable_coords = || {
+            ('a'..='h').flat_map(move |row| (2..=9).rev().map(move |col| Coordinate::new(row, col)))
+        };
+        let shiftable_coords_rev = shiftable_coords().rev().map(|c| c.rotate(true));
+
+        for (coord, rotated_coord) in shiftable_coords().zip(shiftable_coords_rev) {
+            assert_eq!(coord, rotated_coord);
         }
     }
 }

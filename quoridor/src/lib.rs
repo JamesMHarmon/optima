@@ -3,7 +3,6 @@
 
 #[macro_use]
 mod bits;
-mod board;
 mod game_state_test;
 mod serde;
 mod zobrist;

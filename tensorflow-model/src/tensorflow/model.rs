@@ -693,7 +693,7 @@ where
         mapper: &Map,
         reporter: &Reporter<Te>,
     ) -> Option<BasicGameStateAnalysis<A, V>> {
-        if let Some(value) = engine.is_terminal_state(game_state) {
+        if let Some(value) = engine.terminal_state(game_state) {
             reporter.set_terminal();
 
             return Some(BasicGameStateAnalysis::new(value, Vec::new(), 0f32));

@@ -41,7 +41,7 @@ impl Sample for ArimaaSampler {
     }
 
     fn move_number(&self, game_state: &Self::State) -> usize {
-        self.engine.get_move_number(game_state)
+        self.engine.move_number(game_state)
     }
 
     fn symmetries(

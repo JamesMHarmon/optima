@@ -87,7 +87,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
             // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
             // at the board from the perspective of player 1, but with the pieces inverted.
             let policy_index = if invert {
-                map_action_to_policy_output_idx(move_map, push_pull_map, &m.action().invert())
+                map_action_to_policy_output_idx(move_map, push_pull_map, &m.action().rotate())
             } else {
                 map_action_to_policy_output_idx(move_map, push_pull_map, m.action())
             };
@@ -121,7 +121,7 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
                 // This means that if we are p2, we need to flip the actions coming back and translate them
                 // to be actions in the p2 perspective.
                 let policy_index = if invert {
-                    map_action_to_policy_output_idx(move_map, push_pull_map, &action.invert())
+                    map_action_to_policy_output_idx(move_map, push_pull_map, &action.rotate())
                 } else {
                     map_action_to_policy_output_idx(move_map, push_pull_map, &action)
                 };
@@ -1660,7 +1660,7 @@ mod tests {
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
 
         policy_scores
-            [map_action_to_policy_output_idx(&"b8s".parse::<Action>().unwrap().invert())] =
+            [map_action_to_policy_output_idx(&"b8s".parse::<Action>().unwrap().rotate())] =
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
@@ -1701,7 +1701,7 @@ mod tests {
 
         let mut policy_scores = vec![f16::ZERO; OUTPUT_SIZE];
 
-        policy_scores[map_action_to_policy_output_idx(&"b8".parse::<Action>().unwrap().invert())] =
+        policy_scores[map_action_to_policy_output_idx(&"b8".parse::<Action>().unwrap().rotate())] =
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
