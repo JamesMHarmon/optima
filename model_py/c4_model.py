@@ -45,7 +45,7 @@ def save(model, model_path):
         compress(tmp_model_path, model_path)
 
 def compile(model, learning_rate, loss_weights: LossWeights):
-    model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight = loss_weights["model_loss_weight", "policy_loss_weight", "value_loss_weight", "moves_left_loss_weight"]
+    model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight = loss_weights.model_loss_weight, loss_weights.policy_loss_weight, loss_weights.value_loss_weight, loss_weights.moves_left_loss_weight
     loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "model_loss": model_loss_weight }
 

@@ -119,7 +119,7 @@ def MovesLeftHead(x, filters, moves_left_size):
     return out
 
 def create_model(model_dims: ModelDimensions, policy_head=None):
-    num_filters, num_blocks, input_dims, output_size, moves_left_size = model_dims['num_filters', 'num_blocks', 'input_dims', 'output_size', 'moves_left_size']
+    num_filters, num_blocks, input_dims, output_size, moves_left_size = model_dims.num_filters, model_dims.num_blocks, model_dims.input_dims, model_dims.policy_size, model_dims.moves_left_size
     input_shape = (input_dims.input_h, input_dims.input_w, input_dims.input_c)
     state_input = Input(shape=input_shape)
     net = ConvBlock(filters=num_filters, kernel_size=3, batch_scale=True, name='input')(state_input)
