@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::{Action, Engine, GameState, ModelFactory};
 use engine::GameState as GameStateTrait;
 
+use itertools::Itertools;
 use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 
 pub struct UGI {}
@@ -31,8 +32,8 @@ impl ActionsToMoveString for UGI {
     type State = GameState;
     type Action = Action;
 
-    fn actions_to_move_string(&self, game_state: &GameState, actions: &[Action]) -> String {
-        todo!()
+    fn actions_to_move_string(&self, _: &GameState, actions: &[Action]) -> String {
+        actions.iter().map(|a| a.to_string()).join(" ")
     }
 }
 
@@ -40,14 +41,18 @@ impl MoveStringToActions for UGI {
     type Action = Action;
 
     fn move_string_to_actions(&self, str: &str) -> Vec<Action> {
-        todo!()
+        let action = str
+            .parse()
+            .unwrap_or_else(|_| panic!("Failed to parse action: {}", str));
+
+        vec![action]
     }
 }
 
 impl ParseGameState for UGI {
     type State = GameState;
 
-    fn parse_game_state(&self, str: &str) -> GameState {
+    fn parse_game_state(&self, _: &str) -> GameState {
         todo!()
     }
 }

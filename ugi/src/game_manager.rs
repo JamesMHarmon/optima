@@ -236,12 +236,12 @@ where
                 }
                 CommandInner::Ponder => {
                     let options_lock = options.lock().unwrap();
+                    let visits = options_lock.visits;
+                    let max_visits = options_lock.max_visits;
+                    drop(options_lock);
 
-                    if options_lock.visits == 0 {
+                    if visits == 0 {
                         let start_time = Instant::now();
-                        let max_visits = options_lock.max_visits;
-
-                        drop(options_lock);
 
                         self.output.info("ponder started");
                         mcts.search(|visits| {
@@ -308,9 +308,12 @@ where
                     let focused_actions = mcts.get_focused_actions().to_vec();
                     let current_player = self.engine.player_to_move(&focus_game_state);
                     let move_number = self.engine.move_number(&focus_game_state);
-                    let options = &*options.lock().unwrap();
-
-                    let search_duration = search_duration(options, current_player);
+                    let options = options.lock().unwrap();
+                    let options_visits = options.visits;
+                    let options_max_visits = options.max_visits;
+                    let options_alternative_action_threshold = options.alternative_action_threshold;
+                    let search_duration = search_duration(&*options, current_player);
+                    drop(options);
 
                     let mut actions = Vec::new();
                     let mut depths = Vec::new();
@@ -320,14 +323,14 @@ where
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
                     {
-                        let depth = if options.visits != 0 {
+                        let depth = if options_visits != 0 {
                             self.output
-                                .info(&format!("search visits: {}", options.visits));
-                            mcts.search_visits(options.visits).await.unwrap()
+                                .info(&format!("search visits: {}", options_visits));
+                            mcts.search_visits(options_visits).await.unwrap()
                         } else {
                             self.output
                                 .info(&format!("search duration: {:?}", search_duration));
-                            mcts.search_time_max_visits(search_duration, options.max_visits)
+                            mcts.search_time_max_visits(search_duration, options_max_visits)
                                 .await
                                 .unwrap()
                         };
@@ -344,7 +347,7 @@ where
 
                         let (action, best_node_puct) = choose_action(
                             &node_details.children,
-                            options.alternative_action_threshold,
+                            options_alternative_action_threshold,
                         );
 
                         scores.push(best_node_puct.Qsa);
@@ -420,7 +423,7 @@ impl OutputHandle {
 
     fn info_val(&self, msg: &str, value: &str) {
         self.output_tx
-            .send(Output::Info(format!("{} {}", msg, value.to_string())))
+            .send(Output::Info(format!("{} {}", msg, value)))
             .expect("Failed to send output");
     }
 }

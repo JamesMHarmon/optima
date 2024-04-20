@@ -51,6 +51,7 @@ pub enum UGIOption<S> {
     InitialGameState(S),
 }
 
+#[allow(clippy::new_without_default)]
 impl<S> UGIOptions<S> {
     pub fn new() -> Self {
         UGIOptions {
