@@ -1,0 +1,27 @@
+[package]
+name = "ugi"
+version = "0.1.0"
+authors = ["James Harmon <JamesMHarmon@gmail.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+engine = { path = "../engine" }
+common = { path = "../common" }
+model = { path = "../model" }
+mcts = { path = "../mcts" }
+
+
+regex = "1.3"
+anyhow = "1.0"
+itertools = "0.12"
+rand = "0.8"
+futures = "0.3.5"
+tokio = { version = "1.36", features = [
+    "parking_lot",
+    "macros",
+    "sync",
+    "rt-multi-thread",
+] }
+env_logger = "0.11"

@@ -5,6 +5,7 @@ members = [
     "client",
     "common",
     "engine",
+    "ugi",
     "model",
     "mcts",
     "replay-buffer",

@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[clap(author, version)]
-#[clap(name = "Quoridor Engine Self Learning Client")]
+#[clap(name = "Optima Engine Self Learning Client")]
 #[clap(about = "Does awesome things", long_about = None)]
 pub struct Cli {
     #[clap(subcommand)]
@@ -13,7 +13,7 @@ pub struct Cli {
 pub enum Commands {
     SelfPlay(SelfPlayCommand),
     Arena(ArenaCommand),
-    Init(InitCommand),
+    Ugi(UgiCommand),
 }
 
 #[derive(Args)]
@@ -29,4 +29,12 @@ pub struct ArenaCommand {
 }
 
 #[derive(Args)]
-pub struct InitCommand {}
+#[clap(name = "ugi-client")]
+#[clap(about = "Runs the game through cmd line interface similar to the UCI Universal Chess Interface.", long_about = None)]
+pub struct UgiCommand {
+    #[clap(short, long)]
+    pub dir: Option<String>,
+
+    #[clap(short, long)]
+    pub model: Option<String>,
+}

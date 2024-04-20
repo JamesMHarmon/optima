@@ -17,6 +17,7 @@ pub mod game_state;
 pub mod mappings;
 pub mod symmetries;
 pub mod transposition_entry;
+pub mod ugi;
 pub mod value;
 
 pub use action::*;
@@ -28,6 +29,7 @@ pub use game_state::*;
 pub use mappings::*;
 pub use symmetries::*;
 pub use transposition_entry::*;
+pub use ugi::*;
 pub use value::*;
 
 use zobrist::*;

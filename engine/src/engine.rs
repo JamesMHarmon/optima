@@ -10,3 +10,10 @@ pub trait GameEngine {
     fn move_number(&self, game_state: &Self::State) -> usize;
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value>;
 }
+
+pub trait ValidActions {
+    type Action;
+    type State;
+
+    fn valid_actions(&self, game_state: &Self::State) -> Vec<Self::Action>;
+}

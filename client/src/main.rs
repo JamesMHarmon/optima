@@ -40,7 +40,6 @@ async fn async_main() -> Result<()> {
             let self_play_options = config.load()?;
 
             let games_dir = config.get_relative_path("games_dir")?;
-
             let model_dir = config.get_relative_path("model_dir")?;
 
             assert_dir_exists(&games_dir)?;
@@ -89,7 +88,32 @@ async fn async_main() -> Result<()> {
                 &arena_options,
             )?
         }
-        _ => {}
+        Commands::Ugi(ugi_args) => {
+            let dir = std::env::var("BOT_MODEL_DIR")
+                .ok()
+                .or(ugi_args.dir)
+                .as_ref()
+                .map(|dir| dir.relative_to_cwd())
+                .transpose()?;
+
+            let model_name = std::env::var("BOT_MODEL_NAME")
+                .ok()
+                .or(ugi_args.model)
+                .as_ref()
+                .map(|model| model.relative_to_cwd())
+                .transpose()?;
+
+            let model_path = model_dir.join(&model_name);
+
+            assert!(model_path.is_file(), "Model not found. {:?}", &model_path);
+
+            let ugi = quoridor::UGI::new();
+            let model_factory = quoridor::ModelFactory::new(model_dir);
+            let model = model_factory.load(&model_path)?;
+            let engine = quoridor::Engine::new();
+
+            run_ugi(&ugi, &model, &engine).await?
+        }
     }
 
     Ok(())

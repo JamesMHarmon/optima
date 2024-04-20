@@ -7,8 +7,8 @@ pub mod node_details;
 pub mod options;
 
 pub use mcts::*;
+pub use node::*;
+pub use node_details::*;
 pub use options::*;
 
 pub(crate) use edge::*;
-pub(crate) use node::*;
-pub(crate) use node_details::*;
