@@ -14,8 +14,13 @@ use std::path::Path;
 use ugi::run_ugi;
 
 fn main() -> Result<()> {
+    let cli = Cli::parse();
+
     dotenv().ok();
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    let log_level = Env::default().default_filter_or("warn");
+
+    env_logger::Builder::from_env(log_level).init();
 
     let mut builder = tokio::runtime::Builder::new_multi_thread();
 
@@ -27,14 +32,12 @@ fn main() -> Result<()> {
 
     info!("{:?}", builder);
 
-    builder.build().unwrap().block_on(async_main())?;
+    builder.build().unwrap().block_on(async_main(cli))?;
 
     Ok(())
 }
 
-async fn async_main() -> Result<()> {
-    let cli = Cli::parse();
-
+async fn async_main(cli: Cli) -> Result<()> {
     match &cli.command {
         Commands::SelfPlay(self_play_args) => {
             let config_path = self_play_args.config.relative_to_cwd()?;

@@ -4,7 +4,7 @@ use mcts::{MCTSOptions, MCTS, PUCT};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -15,19 +15,19 @@ const NAME: &str = "UGI";
 const AUTHOR: &str = "Author";
 
 pub struct GameManager<S, A> {
-    command_channel: mpsc::Sender<CommandInner<A>>,
+    command_channel: mpsc::Sender<CommandInner<S, A>>,
     output: OutputHandle,
-    options: Arc<Mutex<UGIOptions<S>>>,
+    options: Arc<Mutex<UGIOptions>>,
     ponder_active: Arc<AtomicBool>,
 }
 
-enum CommandInner<A> {
+enum CommandInner<S, A> {
     Ponder,
     Go,
     MakeMove(Vec<A>),
     FocusActions(Vec<A>),
     ClearFocus,
-    NewGame,
+    SetPosition(S),
 }
 
 pub enum Output {
@@ -37,7 +37,7 @@ pub enum Output {
 }
 
 impl<S, A> GameManager<S, A> {
-    pub fn set_option(&self, option: UGIOption<S>) {
+    pub fn set_option(&self, option: UGIOption) {
         self.options.lock().unwrap().set_option(option);
     }
 
@@ -52,9 +52,8 @@ impl<S, A> GameManager<S, A> {
             UGICommand::IsReady => {
                 self.output.cmd("readyok", "");
             }
-            UGICommand::NewGame => self.send_command(CommandInner::NewGame).await,
             UGICommand::SetPosition(state) => {
-                self.set_option(UGIOption::InitialGameState(state));
+                self.send_command(CommandInner::SetPosition(state)).await
             }
             UGICommand::Go => {
                 self.ponder_active.store(false, Ordering::SeqCst);
@@ -81,7 +80,7 @@ impl<S, A> GameManager<S, A> {
         }
     }
 
-    async fn send_command(&self, command: CommandInner<A>) {
+    async fn send_command(&self, command: CommandInner<S, A>) {
         if self.command_channel.send(command).await.is_err() {
             panic!("Failed to Send Command");
         }
@@ -90,7 +89,7 @@ impl<S, A> GameManager<S, A> {
 
 impl<S, A> GameManager<S, A>
 where
-    S: GameState + Clone + Send + 'static,
+    S: GameState + Clone + Display + Send + 'static,
     A: Debug + Eq + Clone + Send + 'static,
 {
     pub fn new<U, E, M>(
@@ -142,9 +141,9 @@ where
 }
 
 pub struct GameManagerInner<S, A, U, E, M> {
-    command_rx: mpsc::Receiver<CommandInner<A>>,
+    command_rx: mpsc::Receiver<CommandInner<S, A>>,
     output: OutputHandle,
-    options: Arc<Mutex<UGIOptions<S>>>,
+    options: Arc<Mutex<UGIOptions>>,
     ponder_active: Arc<AtomicBool>,
     ugi_mapper: Arc<U>,
     engine: E,
@@ -153,16 +152,16 @@ pub struct GameManagerInner<S, A, U, E, M> {
 
 impl<S, A, U, E, M> GameManagerInner<S, A, U, E, M>
 where
-    S: GameState + Clone,
+    S: GameState + Clone + Display,
     A: Debug + Eq + Clone,
     U: InitialGameState<State = S> + ActionsToMoveString<State = S, Action = A>,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A>,
     M: Analyzer<State = S, Action = A, Value = E::Value>,
 {
     fn new(
-        command_rx: mpsc::Receiver<CommandInner<A>>,
+        command_rx: mpsc::Receiver<CommandInner<S, A>>,
         output: OutputHandle,
-        options: Arc<Mutex<UGIOptions<S>>>,
+        options: Arc<Mutex<UGIOptions>>,
         ponder_active: Arc<AtomicBool>,
         ugi_mapper: Arc<U>,
         engine: E,
@@ -181,7 +180,7 @@ where
 
     async fn run_game_loop(&mut self) {
         let mut mcts = None;
-        let mut game_state: <U as InitialGameState>::State = self.ugi_mapper.initial_game_state();
+        let mut game_state = self.ugi_mapper.initial_game_state();
         let mut focus_game_state = game_state.clone();
 
         let options = self.options.clone();
@@ -195,12 +194,6 @@ where
                 let cpuct_init = options.cpuct_init;
                 let cpuct_factor = options.cpuct_factor;
                 let cpuct_root_scaling = options.cpuct_root_scaling;
-                game_state = options
-                    .initial_game_state
-                    .as_ref()
-                    .expect("Initial Game State is not defined.")
-                    .clone();
-                focus_game_state = game_state.clone();
 
                 mcts = Some(MCTS::with_capacity(
                     game_state.clone(),
@@ -230,15 +223,19 @@ where
             let mcts = mcts.as_mut().expect("MCTS should have been created");
 
             match command {
-                CommandInner::NewGame => {
-                    let option = UGIOption::InitialGameState(self.ugi_mapper.initial_game_state());
-                    self.set_option(option)
+                CommandInner::SetPosition(state) => {
+                    game_state = state;
+                    focus_game_state = game_state.clone();
+                    self.display_board(&game_state);
                 }
                 CommandInner::Ponder => {
-                    let options_lock = options.lock().unwrap();
-                    let visits = options_lock.visits;
-                    let max_visits = options_lock.max_visits;
-                    drop(options_lock);
+                    let (visits, max_visits);
+
+                    {
+                        let options_lock = options.lock().unwrap();
+                        visits = options_lock.visits;
+                        max_visits = options_lock.max_visits;
+                    }
 
                     if visits == 0 {
                         let start_time = Instant::now();
@@ -268,11 +265,23 @@ where
                         .info(&format!("Updating tree with actions: {:?}", &actions));
 
                     for action in actions {
-                        if !self.engine.valid_actions(&game_state).contains(&action) {
-                            panic!("The action {:?} is not valid", action);
+                        let is_valid_action = self
+                            .engine
+                            .valid_actions(&focus_game_state)
+                            .contains(&action);
+
+                        if !is_valid_action {
+                            self.output
+                                .info(&format!("The action {:?} is not valid", action));
+
+                            break;
                         }
-                        if self.engine.terminal_state(&game_state).is_some() {
-                            panic!("The game is already in a terminal state");
+
+                        let is_terminal = self.engine.terminal_state(&focus_game_state).is_some();
+                        if is_terminal {
+                            self.output.info("The game is already in a terminal state");
+
+                            break;
                         }
 
                         game_state = self.engine.take_action(&game_state, &action);
@@ -280,26 +289,40 @@ where
                     }
 
                     focus_game_state = game_state.clone();
+                    self.display_board(&game_state);
                 }
                 CommandInner::FocusActions(actions) => {
                     for action in actions {
-                        if !self
+                        let is_valid_action = self
                             .engine
                             .valid_actions(&focus_game_state)
-                            .contains(&action)
-                        {
-                            panic!("The action {:?} is not valid", action);
+                            .contains(&action);
+
+                        if !is_valid_action {
+                            self.output
+                                .info(&format!("The action {:?} is not valid", action));
+
+                            break;
                         }
-                        if self.engine.terminal_state(&focus_game_state).is_some() {
-                            panic!("The game is already in a terminal state");
+
+                        let is_terminal = self.engine.terminal_state(&focus_game_state).is_some();
+                        if is_terminal {
+                            self.output.info("The game is already in a terminal state");
+
+                            break;
                         }
+
                         focus_game_state = self.engine.take_action(&focus_game_state, &action);
                         mcts.add_focus_to_action(action);
                     }
+
+                    self.display_board(&game_state);
                 }
                 CommandInner::ClearFocus => {
                     focus_game_state = game_state.clone();
                     mcts.clear_focus();
+
+                    self.display_board(&game_state);
                 }
                 CommandInner::Go => {
                     let search_start = Instant::now();
@@ -308,12 +331,21 @@ where
                     let focused_actions = mcts.get_focused_actions().to_vec();
                     let current_player = self.engine.player_to_move(&focus_game_state);
                     let move_number = self.engine.move_number(&focus_game_state);
-                    let options = options.lock().unwrap();
-                    let options_visits = options.visits;
-                    let options_max_visits = options.max_visits;
-                    let options_alternative_action_threshold = options.alternative_action_threshold;
-                    let search_duration = search_duration(&*options, current_player);
-                    drop(options);
+
+                    let (
+                        options_visits,
+                        options_max_visits,
+                        options_alternative_action_threshold,
+                        search_duration,
+                    );
+
+                    {
+                        let options = options.lock().unwrap();
+                        options_visits = options.visits;
+                        options_max_visits = options.max_visits;
+                        options_alternative_action_threshold = options.alternative_action_threshold;
+                        search_duration = calc_search_duration(&*options, current_player);
+                    }
 
                     let mut actions = Vec::new();
                     let mut depths = Vec::new();
@@ -392,14 +424,19 @@ where
                         .ugi_mapper
                         .actions_to_move_string(&pre_action_game_state, &actions);
 
-                    self.output.cmd("bestmove", &move_string)
+                    self.output.cmd("bestmove", &move_string);
                 }
             }
         }
     }
 
-    fn set_option(&self, option: UGIOption<S>) {
-        self.options.lock().unwrap().set_option(option);
+    fn display_board(&self, game_state: &S) {
+        if self.options.lock().unwrap().display {
+            game_state
+                .to_string()
+                .lines()
+                .for_each(|line| self.output.info(line));
+        }
     }
 }
 
@@ -443,7 +480,7 @@ fn choose_action<A>(actions: &[(A, PUCT)], alternative_action_threshold: f32) ->
         .expect("Expected at least one action")
 }
 
-fn init_options<S>() -> UGIOptions<S> {
+fn init_options() -> UGIOptions {
     let mut options = UGIOptions::new();
 
     if let Some(visits) = std::env::var("BOT_VISITS")
@@ -463,7 +500,7 @@ fn init_options<S>() -> UGIOptions<S> {
     options
 }
 
-fn search_duration<S>(options: &UGIOptions<S>, current_player: usize) -> Duration {
+fn calc_search_duration(options: &UGIOptions, current_player: usize) -> Duration {
     let current_g_reserve_time = options.current_g_reserve_time;
     let current_s_reserve_time = options.current_s_reserve_time;
     let reserve_time_to_use = options.reserve_time_to_use;

@@ -4,7 +4,7 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::UGIOption;
+use crate::{InitialGameState, UGIOption};
 use crate::{MoveStringToActions, ParseGameState};
 
 pub struct InputParser<'a, M> {
@@ -20,7 +20,6 @@ impl<'a, M> InputParser<'a, M> {
 pub enum UGICommand<S, A> {
     UGI,
     IsReady,
-    NewGame,
     SetPosition(S),
     Go,
     GoPonder,
@@ -29,7 +28,7 @@ pub enum UGICommand<S, A> {
     ClearFocus,
     Quit,
     Stop,
-    SetOption(UGIOption<S>),
+    SetOption(UGIOption),
     Noop,
 }
 
@@ -39,15 +38,18 @@ static SET_POSITION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^setposition\s+(
 static SET_OPTION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^setoption\s+name\s+([_\-a-zA-Z0-9]+)\s+value\s+(.+)").unwrap());
 
-impl<M> InputParser<'_, M>
+impl<M, A, S> InputParser<'_, M>
 where
-    M: MoveStringToActions + ParseGameState,
+    M: MoveStringToActions<Action = A> + ParseGameState<State = S> + InitialGameState<State = S>,
 {
-    pub fn parse_line(&self, line: &str) -> Result<UGICommand<M::State, M::Action>> {
+    pub fn parse_line(&self, line: &str) -> Result<UGICommand<S, A>> {
         match line {
             "ugi" => Ok(UGICommand::UGI),
             "isready" => Ok(UGICommand::IsReady),
-            "newgame" => Ok(UGICommand::NewGame),
+            "newgame" => {
+                let game_state = self.ugi_mapper.initial_game_state();
+                Ok(UGICommand::SetPosition(game_state))
+            }
             _ if { SET_POSITION_RE.is_match(line) } => {
                 let cap = SET_POSITION_RE.captures(line).unwrap();
                 let game_state = self.ugi_mapper.parse_game_state(&cap[1]);
@@ -179,6 +181,9 @@ where
                         }
                         None
                     }
+                    "display" => Some(UGIOption::Display(
+                        option_value.parse().expect("Could not read option display"),
+                    )),
                     "rating" => None,
                     "opponent" => None,
                     "opponent_rating" => None,
@@ -200,6 +205,7 @@ where
                     None => Ok(UGICommand::Noop),
                 }
             }
+            cmd if cmd.is_empty() => Ok(UGICommand::Noop),
             _ => {
                 anyhow::bail!("Command is unknown or not implemented");
             }

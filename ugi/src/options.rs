@@ -1,4 +1,4 @@
-pub struct UGIOptions<S> {
+pub struct UGIOptions {
     pub fpu: f32,
     pub fpu_root: f32,
     pub cpuct_base: f32,
@@ -22,10 +22,10 @@ pub struct UGIOptions<S> {
     pub silver_setup: String,
     pub gold_setup: String,
     pub fixed_time: Option<f32>,
-    pub initial_game_state: Option<S>,
+    pub display: bool,
 }
 
-pub enum UGIOption<S> {
+pub enum UGIOption {
     Fpu(f32),
     FpuRoot(f32),
     CpuctBase(f32),
@@ -48,11 +48,11 @@ pub enum UGIOption<S> {
     SilverSetup(String),
     GoldSetup(String),
     FixedTime(Option<f32>),
-    InitialGameState(S),
+    Display(bool),
 }
 
 #[allow(clippy::new_without_default)]
-impl<S> UGIOptions<S> {
+impl UGIOptions {
     pub fn new() -> Self {
         UGIOptions {
             fpu: 0.0,
@@ -73,16 +73,16 @@ impl<S> UGIOptions<S> {
             reserve_time_to_use: 1.0 / 20.0,
             current_g_reserve_time: 0.0,
             current_s_reserve_time: 0.0,
-            time_per_move: 0.0,
+            time_per_move: 10.0,
             alternative_action_threshold: 0.00,
             silver_setup: "".to_string(),
             gold_setup: "".to_string(),
             fixed_time: None,
-            initial_game_state: None,
+            display: true,
         }
     }
 
-    pub fn set_option(&mut self, option: UGIOption<S>) {
+    pub fn set_option(&mut self, option: UGIOption) {
         match option {
             UGIOption::Fpu(fpu) => self.fpu = fpu,
             UGIOption::FpuRoot(fpu_root) => self.fpu_root = fpu_root,
@@ -120,9 +120,7 @@ impl<S> UGIOptions<S> {
             UGIOption::SilverSetup(silver_setup) => self.silver_setup = silver_setup,
             UGIOption::GoldSetup(gold_setup) => self.gold_setup = gold_setup,
             UGIOption::FixedTime(fixed_time) => self.fixed_time = fixed_time,
-            UGIOption::InitialGameState(initial_game_state) => {
-                self.initial_game_state = Some(initial_game_state)
-            }
+            UGIOption::Display(display) => self.display = display,
         };
     }
 }

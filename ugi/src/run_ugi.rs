@@ -1,9 +1,8 @@
 use anyhow::Result;
 use engine::{GameEngine, GameState, ValidActions};
-use env_logger::Env;
 use model::Analyzer;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
@@ -13,7 +12,7 @@ use crate::{GameManager, InputParser};
 
 pub async fn run_ugi<M, E, S, A, U>(ugi_mapper: U, engine: E, model: M) -> Result<()>
 where
-    S: GameState + Clone + Send + 'static,
+    S: GameState + Clone + Display + Send + 'static,
     A: Debug + Eq + Clone + Send + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
@@ -26,7 +25,6 @@ where
     M: Analyzer<State = S, Action = A, Value = E::Value> + Send + 'static,
     M::Analyzer: Send,
 {
-    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     let ugi_mapper = Arc::new(ugi_mapper);
 
     let (game_manager, mut output_rx) = GameManager::new(ugi_mapper.clone(), engine, model);
