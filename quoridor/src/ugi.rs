@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
+use crate::{Action, Engine, GameState, ModelFactory};
 use engine::GameState as GameStateTrait;
-use quoridor::{Action, Engine, GameState, ModelFactory};
 
-use crate::ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
+use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 
 pub struct UGI {}
 

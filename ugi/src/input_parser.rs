@@ -1,17 +1,18 @@
 use core::panic;
 
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::UGIOption;
 use crate::{MoveStringToActions, ParseGameState};
 
-pub struct InputParser<M> {
-    ugi_mapper: M,
+pub struct InputParser<'a, M> {
+    ugi_mapper: &'a M,
 }
 
-impl<M> InputParser<M> {
-    pub fn new(ugi_mapper: M) -> Self {
+impl<'a, M> InputParser<'a, M> {
+    pub fn new(ugi_mapper: &'a M) -> Self {
         Self { ugi_mapper }
     }
 }
@@ -32,16 +33,13 @@ pub enum UGICommand<S, A> {
     Noop,
 }
 
-static MAKE_MOVE_RE: Regex = std::sync::Once::new(); 
+static MAKE_MOVE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^makemove\s+(.+)").unwrap());
+static FOCUS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^focus\s+(.+)").unwrap());
+static SET_POSITION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^setposition\s+(.+)").unwrap());
+static SET_OPTION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^setoption\s+name\s+([_\-a-zA-Z0-9]+)\s+value\s+(.+)").unwrap());
 
-MAKE_MOVE_RE.init(|| Regex::new(r"^makemove\s+(.+)").unwrap());
-
-const FOCUS_RE: Regex = Regex::new(r"^focus\s+(.+)").unwrap();
-const SET_POSITION_RE: Regex = Regex::new(r"^setposition\s+(.+)").unwrap();
-const SET_OPTION_RE: Regex =
-    Regex::new(r"^setoption\s+name\s+([_\-a-zA-Z0-9]+)\s+value\s+(.+)").unwrap();
-
-impl<M> InputParser<M>
+impl<M> InputParser<'_, M>
 where
     M: MoveStringToActions + ParseGameState,
 {

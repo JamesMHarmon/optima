@@ -5,28 +5,32 @@ use model::Analyzer;
 
 use std::fmt::Debug;
 use std::io::stdin;
+use std::sync::Arc;
 
 use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output};
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
-pub async fn run_ugi<M, E, T, S, A, V, U>(ugi_mapper: U, engine: E, model: M) -> Result<()>
+pub async fn run_ugi<M, E, S, A, U>(ugi_mapper: U, engine: E, model: M) -> Result<()>
 where
-    S: GameState + Clone + Send,
-    A: Debug + Eq + Clone + Send,
+    S: GameState + Clone + Send + 'static,
+    A: Debug + Eq + Clone + Send + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
         + InitialGameState<State = S>
         + ActionsToMoveString<State = S, Action = A>
-        + Clone
-        + Sync,
-    E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Sync,
-    M: Analyzer<State = S, Action = A, Value = E::Value> + Sync,
+        + Send
+        + Sync
+        + 'static,
+    E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
+    M: Analyzer<State = S, Action = A, Value = E::Value> + Send + 'static,
+    M::Analyzer: Send,
 {
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
+    let ugi_mapper = Arc::new(ugi_mapper);
 
     let (game_manager, mut output_rx) = GameManager::new(ugi_mapper.clone(), engine, model);
-    let input_parser = InputParser::new(ugi_mapper.clone());
+    let input_parser = InputParser::new(&*ugi_mapper);
 
     tokio::spawn(async move {
         while let Some(output) = output_rx.recv().await {

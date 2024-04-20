@@ -7,8 +7,11 @@ use common::{get_env_usize, ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use log::info;
+use model::Load;
+use quoridor::ModelRef;
 use self_play::{play_self, SelfPlayPersistance};
 use std::path::Path;
+use ugi::run_ugi;
 
 fn main() -> Result<()> {
     dotenv().ok();
@@ -89,19 +92,21 @@ async fn async_main() -> Result<()> {
             )?
         }
         Commands::Ugi(ugi_args) => {
-            let dir = std::env::var("BOT_MODEL_DIR")
+            let model_dir = std::env::var("BOT_MODEL_DIR")
                 .ok()
-                .or(ugi_args.dir)
                 .as_ref()
+                .or(ugi_args.dir.as_ref())
                 .map(|dir| dir.relative_to_cwd())
-                .transpose()?;
+                .transpose()?
+                .expect("Model dir not defined");
 
             let model_name = std::env::var("BOT_MODEL_NAME")
                 .ok()
-                .or(ugi_args.model)
                 .as_ref()
+                .or(ugi_args.model.as_ref())
                 .map(|model| model.relative_to_cwd())
-                .transpose()?;
+                .transpose()?
+                .expect("Model name not defined");
 
             let model_path = model_dir.join(&model_name);
 
@@ -109,10 +114,10 @@ async fn async_main() -> Result<()> {
 
             let ugi = quoridor::UGI::new();
             let model_factory = quoridor::ModelFactory::new(model_dir);
-            let model = model_factory.load(&model_path)?;
+            let model = model_factory.load(&ModelRef::new(model_path))?;
             let engine = quoridor::Engine::new();
 
-            run_ugi(&ugi, &model, &engine).await?
+            run_ugi(ugi, engine, model).await?
         }
     }
 

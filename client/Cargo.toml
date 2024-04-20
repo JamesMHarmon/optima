@@ -13,6 +13,7 @@ common = { path = "../common" }
 arena = { path = "../arena" }
 # connect4 = { path = "../connect4" }
 quoridor = { path = "../quoridor" }
+ugi = { path = "../ugi" }
 
 anyhow = "1.0"
 dotenv = "0.15.0"

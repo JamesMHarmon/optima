@@ -11,6 +11,3 @@ pub use options::*;
 pub use output::*;
 pub use run_ugi::*;
 pub use ugi::*;
-
-const NAME: &str = "UGI";
-const AUTHOR: &str = "Author";

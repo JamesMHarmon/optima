@@ -1,5 +1,5 @@
 use super::{Action, GameState, Value};
-use engine::engine::GameEngine;
+use engine::{engine::GameEngine, ValidActions};
 
 #[derive(Default)]
 pub struct Engine {}
@@ -31,5 +31,21 @@ impl GameEngine for Engine {
 
     fn move_number(&self, game_state: &Self::State) -> usize {
         game_state.move_number()
+    }
+}
+
+impl ValidActions for Engine {
+    type Action = Action;
+    type State = GameState;
+
+    fn valid_actions(&self, game_state: &Self::State) -> Vec<Self::Action> {
+        let valid_pawn_moves = game_state.valid_pawn_move_actions();
+        let valid_vert_walls = game_state.valid_vertical_wall_actions();
+        let valid_horiz_walls = game_state.valid_horizontal_wall_actions();
+        let actions = valid_pawn_moves
+            .chain(valid_vert_walls)
+            .chain(valid_horiz_walls);
+
+        actions.collect()
     }
 }

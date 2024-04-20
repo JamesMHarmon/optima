@@ -605,6 +605,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "ugi",
 ]
 
 [[package]]
@@ -2986,6 +2987,7 @@ dependencies = [
  "itertools 0.12.1",
  "mcts",
  "model",
+ "once_cell",
  "rand 0.8.1",
  "regex",
  "tokio",
