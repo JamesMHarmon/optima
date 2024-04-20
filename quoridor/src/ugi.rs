@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::{Action, Engine, GameState, ModelFactory};
 use engine::GameState as GameStateTrait;
 
+use anyhow::Result;
 use itertools::Itertools;
 use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 
@@ -40,12 +41,10 @@ impl ActionsToMoveString for UGI {
 impl MoveStringToActions for UGI {
     type Action = Action;
 
-    fn move_string_to_actions(&self, str: &str) -> Vec<Action> {
-        let action = str
-            .parse()
-            .unwrap_or_else(|_| panic!("Failed to parse action: {}", str));
+    fn move_string_to_actions(&self, str: &str) -> Result<Vec<Action>> {
+        let actions = str.split(' ').filter(|s| !s.is_empty()).map(|s| s.parse());
 
-        vec![action]
+        actions.collect()
     }
 }
 

@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 pub trait ActionsToMoveString {
     type State;
     type Action;
@@ -8,7 +10,7 @@ pub trait ActionsToMoveString {
 pub trait MoveStringToActions {
     type Action;
 
-    fn move_string_to_actions(&self, str: &str) -> Vec<Self::Action>;
+    fn move_string_to_actions(&self, str: &str) -> Result<Vec<Self::Action>>;
 }
 
 pub trait ParseGameState {

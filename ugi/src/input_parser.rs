@@ -60,14 +60,14 @@ where
             _ if { MAKE_MOVE_RE.is_match(line) } => {
                 let cap = MAKE_MOVE_RE.captures(line).unwrap();
                 let actions = self.ugi_mapper.move_string_to_actions(&cap[1]);
-                Ok(UGICommand::MakeMove(actions))
+                actions.map(|actions| UGICommand::MakeMove(actions))
             }
             "focus clear" => Ok(UGICommand::ClearFocus),
             // focus Ee2n Ee3n Ee4n Ee5n
             _ if { FOCUS_RE.is_match(line) } => {
                 let cap = FOCUS_RE.captures(line).unwrap();
                 let actions = self.ugi_mapper.move_string_to_actions(&cap[1]);
-                Ok(UGICommand::Focus(actions))
+                actions.map(|actions| UGICommand::Focus(actions))
             }
             "quit" => Ok(UGICommand::Quit),
             "stop" => Ok(UGICommand::Stop),

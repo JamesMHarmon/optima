@@ -316,7 +316,7 @@ where
                         mcts.add_focus_to_action(action);
                     }
 
-                    self.display_board(&game_state);
+                    self.display_board(&focus_game_state);
                 }
                 CommandInner::ClearFocus => {
                     focus_game_state = game_state.clone();

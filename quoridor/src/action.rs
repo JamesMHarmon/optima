@@ -75,13 +75,17 @@ impl FromStr for Action {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() < 2 || s.len() > 3 {
+            return Err(anyhow!("Cannot parse action: {}", s));
+        }
+
         let coordinate = s[..2].parse()?;
 
         let action_type = match s.chars().nth(2) {
             None => Ok(ActionType::PawnMove),
             Some('h') => Ok(ActionType::HorizontalWall),
             Some('v') => Ok(ActionType::VerticalWall),
-            Some(_) => Err(anyhow!("Invalid value")),
+            Some(_) => Err(anyhow!("Cannot parse action: {}", s)),
         };
 
         action_type.map(|action_type| Self::new(action_type, coordinate))
