@@ -179,7 +179,7 @@ where
     }
 
     async fn run_game_loop(&mut self) {
-        let mut mcts = None;
+        let mut mcts_container = None;
         let mut game_state = self.ugi_mapper.initial_game_state();
         let mut focus_game_state = game_state.clone();
 
@@ -188,14 +188,14 @@ where
         let analyzer = self.model.analyzer();
 
         while let Some(command) = self.command_rx.recv().await {
-            if mcts.is_none() {
+            if mcts_container.is_none() {
                 let options = options.lock().unwrap();
                 let cpuct_base = options.cpuct_base;
                 let cpuct_init = options.cpuct_init;
                 let cpuct_factor = options.cpuct_factor;
                 let cpuct_root_scaling = options.cpuct_root_scaling;
 
-                mcts = Some(MCTS::with_capacity(
+                mcts_container = Some(MCTS::with_capacity(
                     game_state.clone(),
                     &self.engine,
                     &analyzer,
@@ -220,12 +220,15 @@ where
                 ));
             }
 
-            let mcts = mcts.as_mut().expect("MCTS should have been created");
+            let mcts = mcts_container
+                .as_mut()
+                .expect("MCTS should have been created");
 
             match command {
                 CommandInner::SetPosition(state) => {
                     game_state = state;
                     focus_game_state = game_state.clone();
+                    mcts_container = None;
                     self.display_board(&game_state);
                 }
                 CommandInner::Ponder => {
@@ -397,12 +400,12 @@ where
                     }
 
                     let pv = mcts.get_principal_variation().unwrap();
-                    let actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
-                    let move_string = self
+                    let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
+                    let pv_string = self
                         .ugi_mapper
-                        .actions_to_move_string(&pre_action_game_state, &actions);
+                        .actions_to_move_string(&pre_action_game_state, &pv_actions);
 
-                    self.output.info_val("pv", &move_string);
+                    self.output.info_val("pv", &pv_string);
                     self.output
                         .info_val("time", &search_start.elapsed().as_secs().to_string());
                     self.output.info_val(
