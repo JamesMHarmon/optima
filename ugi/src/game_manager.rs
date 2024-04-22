@@ -1,6 +1,7 @@
 use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
 use engine::{GameEngine, GameState, ValidActions};
-use mcts::{MCTSOptions, MCTS, PUCT};
+use itertools::Itertools;
+use mcts::{MCTSOptions, NodeDetails, MCTS, PUCT};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -90,7 +91,7 @@ impl<S, A> GameManager<S, A> {
 impl<S, A> GameManager<S, A>
 where
     S: GameState + Clone + Display + Send + 'static,
-    A: Debug + Eq + Clone + Send + 'static,
+    A: Display + Debug + Eq + Clone + Send + 'static,
 {
     pub fn new<U, E, M>(
         ugi_mapper: Arc<U>,
@@ -153,7 +154,7 @@ pub struct GameManagerInner<S, A, U, E, M> {
 impl<S, A, U, E, M> GameManagerInner<S, A, U, E, M>
 where
     S: GameState + Clone + Display,
-    A: Debug + Eq + Clone,
+    A: Display + Debug + Eq + Clone,
     U: InitialGameState<State = S> + ActionsToMoveString<State = S, Action = A>,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A>,
     M: Analyzer<State = S, Action = A, Value = E::Value>,
@@ -355,6 +356,7 @@ where
                     let mut visits = Vec::new();
                     let mut scores = Vec::new();
                     let mut moves_left = Vec::new();
+                    let mut node_details_container = None;
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
                     {
@@ -392,6 +394,10 @@ where
 
                         focus_game_state = self.engine.take_action(&focus_game_state, action);
                         actions.push(action.clone());
+
+                        if node_details_container.is_none() {
+                            node_details_container = Some(node_details);
+                        }
                     }
 
                     mcts.clear_focus();
@@ -400,37 +406,84 @@ where
                     }
 
                     let pv = mcts.get_principal_variation().unwrap();
-                    let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
-                    let pv_string = self
-                        .ugi_mapper
-                        .actions_to_move_string(&pre_action_game_state, &pv_actions);
 
-                    self.output.info_val("pv", &pv_string);
-                    self.output
-                        .info_val("time", &search_start.elapsed().as_secs().to_string());
-                    self.output.info_val(
-                        "root_score",
-                        &format!("{:.3}", scores.first().unwrap_or(&0.5)),
+                    self.output_post_search_info(
+                        &pv,
+                        &pre_action_game_state,
+                        search_start,
+                        &scores,
+                        &visits,
+                        &moves_left,
+                        &depths,
+                        &actions,
+                        &node_details_container.expect("Expected node_details to have been set"),
                     );
-                    self.output
-                        .info_val("score", &format!("{:.3}", scores.last().unwrap_or(&0.5)));
-                    self.output.info_val(
-                        "moves_left",
-                        &format!("{:.1}", moves_left.last().unwrap_or(&0.0)),
-                    );
-                    self.output
-                        .info_val("visits", &visits.iter().max().unwrap_or(&0).to_string());
-                    self.output
-                        .info_val("depth", &depths.iter().max().unwrap_or(&0).to_string());
-
-                    let move_string = self
-                        .ugi_mapper
-                        .actions_to_move_string(&pre_action_game_state, &actions);
-
-                    self.output.cmd("bestmove", &move_string);
                 }
             }
         }
+    }
+
+    fn output_post_search_info(
+        &self,
+        pv: &[(A, PUCT)],
+        pre_action_game_state: &S,
+        search_start: Instant,
+        scores: &[f32],
+        visits: &[usize],
+        moves_left: &[f32],
+        depths: &[usize],
+        actions: &[A],
+        node_details: &NodeDetails<A>,
+    ) {
+        let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
+        let pv_string = self
+            .ugi_mapper
+            .actions_to_move_string(pre_action_game_state, &pv_actions);
+
+        self.output.info_val("pv", &pv_string);
+        self.output
+            .info_val("time", &search_start.elapsed().as_secs().to_string());
+        self.output.info_val(
+            "root_score",
+            &format!("{:.3}", scores.first().unwrap_or(&0.5)),
+        );
+        self.output
+            .info_val("score", &format!("{:.3}", scores.last().unwrap_or(&0.5)));
+        self.output.info_val(
+            "moves_left",
+            &format!("{:.1}", moves_left.last().unwrap_or(&0.0)),
+        );
+        self.output
+            .info_val("visits", &visits.iter().max().unwrap_or(&0).to_string());
+        self.output
+            .info_val("depth", &depths.iter().max().unwrap_or(&0).to_string());
+
+        let move_string = self
+            .ugi_mapper
+            .actions_to_move_string(&pre_action_game_state, &actions);
+
+        let children = &node_details.children;
+        let num_top_moves = self.options.lock().unwrap().num_top_moves;
+        let top_details = || children.iter().take(num_top_moves);
+
+        let top_moves = top_details().map(|(a, _)| a.to_string()).join(", ");
+
+        self.output.info_val("topmoves", &top_moves);
+
+        let visits_sum = children.iter().map(|(_, d)| d.Nsa).sum::<usize>().max(1);
+        let top_moves_visits = top_details()
+            .map(|(_, d)| format!("{:.3}", d.Nsa as f32 / visits_sum as f32))
+            .join(", ");
+
+        self.output.info_val("topmovesvisits", &top_moves_visits);
+
+        let top_moves_values = top_details()
+            .map(|(_, d)| format!("{:.3}", d.Qsa))
+            .join(", ");
+
+        self.output.info_val("topmovesvalues", &top_moves_values);
+
+        self.output.cmd("bestmove", &move_string);
     }
 
     fn display_board(&self, game_state: &S) {

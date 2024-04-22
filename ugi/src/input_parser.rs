@@ -1,6 +1,6 @@
 use core::panic;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -77,113 +77,99 @@ where
                 let option_value = &cap[2];
 
                 let option = match option_name {
-                    "fpu" => Some(UGIOption::Fpu(
-                        option_value.parse().expect("Could not read option fpu"),
-                    )),
-                    "fpu_root" => Some(UGIOption::FpuRoot(
-                        option_value
-                            .parse()
-                            .expect("Could not read option fpu_root"),
-                    )),
-                    "cpuct_base" => Some(UGIOption::CpuctBase(
-                        option_value
-                            .parse()
-                            .expect("Could not read option cpuct_base"),
-                    )),
-                    "cpuct_init" => Some(UGIOption::CpuctInit(
-                        option_value
-                            .parse()
-                            .expect("Could not read option cpuct_init"),
-                    )),
-                    "cpuct_factor" => Some(UGIOption::CpuctFactor(
-                        option_value
-                            .parse()
-                            .expect("Could not read option cpuct_factor"),
-                    )),
-                    "cpuct_root_scaling" => Some(UGIOption::CpuctRootScaling(
-                        option_value
-                            .parse()
-                            .expect("Could not read option cpuct_root_scaling"),
-                    )),
+                    "fpu" => Some(UGIOption::Fpu(parse_option_value("fpu", option_value)?)),
+                    "fpu_root" => Some(UGIOption::FpuRoot(parse_option_value(
+                        "fpu_root",
+                        option_value,
+                    )?)),
+                    "cpuct_base" => Some(UGIOption::CpuctBase(parse_option_value(
+                        "cpuct_base",
+                        option_value,
+                    )?)),
+                    "cpuct_init" => Some(UGIOption::CpuctInit(parse_option_value(
+                        "cpuct_init",
+                        option_value,
+                    )?)),
+                    "cpuct_factor" => Some(UGIOption::CpuctFactor(parse_option_value(
+                        "cpuct_factor",
+                        option_value,
+                    )?)),
+                    "cpuct_root_scaling" => Some(UGIOption::CpuctRootScaling(parse_option_value(
+                        "cpuct_root_scaling",
+                        option_value,
+                    )?)),
                     "moves_left_threshold" => Some(UGIOption::MovesLeftThreshold(
-                        option_value
-                            .parse()
-                            .expect("Could not read option moves_left_threshold"),
+                        parse_option_value("moves_left_threshold", option_value)?,
                     )),
-                    "moves_left_scale" => Some(UGIOption::MovesLeftScale(
-                        option_value
-                            .parse()
-                            .expect("Could not read option moves_left_scale"),
-                    )),
-                    "moves_left_factor" => Some(UGIOption::MovesLeftFactor(
-                        option_value
-                            .parse()
-                            .expect("Could not read option moves_left_factor"),
-                    )),
-                    "fixed_time" => Some(UGIOption::FixedTime(Some(
-                        option_value
-                            .parse()
-                            .expect("Could not read option fixed_time"),
-                    ))),
-                    "parallelism" => Some(UGIOption::Parallelism(
-                        option_value
-                            .parse()
-                            .expect("Could not read option parallelism"),
-                    )),
-                    "visits" => Some(UGIOption::Visits(
-                        option_value.parse().expect("Could not read option visits"),
-                    )),
-                    "max_visits" => Some(UGIOption::MaxVisits(
-                        option_value
-                            .parse()
-                            .expect("Could not read option max_visits"),
-                    )),
+                    "moves_left_scale" => Some(UGIOption::MovesLeftScale(parse_option_value(
+                        "moves_left_scale",
+                        option_value,
+                    )?)),
+                    "moves_left_factor" => Some(UGIOption::MovesLeftFactor(parse_option_value(
+                        "moves_left_factor",
+                        option_value,
+                    )?)),
+                    "fixed_time" => Some(UGIOption::FixedTime(Some(parse_option_value(
+                        "fixed_time",
+                        option_value,
+                    )?))),
+                    "parallelism" => Some(UGIOption::Parallelism(parse_option_value(
+                        "parallelism",
+                        option_value,
+                    )?)),
+                    "visits" => Some(UGIOption::Visits(parse_option_value(
+                        "visits",
+                        option_value,
+                    )?)),
+                    "max_visits" => Some(UGIOption::MaxVisits(parse_option_value(
+                        "max_visits",
+                        option_value,
+                    )?)),
                     "alternative_action_threshold" => Some(UGIOption::AlternativeActionThreshold(
-                        option_value
-                            .parse()
-                            .expect("Could not read option alternative_action_threshold"),
+                        parse_option_value("alternative_action_threshold", option_value)?,
                     )),
-                    "eee_mode" => Some(UGIOption::EEEMode(
-                        option_value
-                            .to_lowercase()
-                            .parse()
-                            .expect("Could not read option eee_mode"),
-                    )),
-                    "eee_reflective_symmetry" => Some(UGIOption::EEEReflectiveSymmetry(
-                        option_value
-                            .to_lowercase()
-                            .parse()
-                            .expect("Could not read option eee_reflective_symmetry"),
-                    )),
+                    "eee_mode" => Some(UGIOption::EEEMode(parse_option_value(
+                        "eee_mode",
+                        &option_value.to_lowercase(),
+                    )?)),
+                    "eee_reflective_symmetry" => {
+                        Some(UGIOption::EEEReflectiveSymmetry(parse_option_value(
+                            "eee_reflective_symmetry",
+                            &option_value.to_lowercase(),
+                        )?))
+                    }
                     "silver_setup" => Some(UGIOption::SilverSetup(option_value.to_owned())),
                     "gold_setup" => Some(UGIOption::GoldSetup(option_value.to_owned())),
-                    "tcmove" => Some(UGIOption::TimePerMove(
-                        option_value.parse().expect("Could not read option tcmove"),
-                    )),
-                    "time_buffer" => Some(UGIOption::TimeBuffer(
-                        option_value
-                            .parse()
-                            .expect("Could not read option time_buffer"),
-                    )),
-                    "greserve" => Some(UGIOption::CurrentGReserveTime(
-                        option_value
-                            .parse()
-                            .expect("Could not read option greserve"),
-                    )),
-                    "sreserve" => Some(UGIOption::CurrentSReserveTime(
-                        option_value
-                            .parse()
-                            .expect("Could not read option sreserve"),
-                    )),
+                    "tcmove" => Some(UGIOption::TimePerMove(parse_option_value(
+                        "tcmove",
+                        option_value,
+                    )?)),
+                    "time_buffer" => Some(UGIOption::TimeBuffer(parse_option_value(
+                        "time_buffer",
+                        option_value,
+                    )?)),
+                    "greserve" => Some(UGIOption::CurrentGReserveTime(parse_option_value(
+                        "greserve",
+                        option_value,
+                    )?)),
+                    "sreserve" => Some(UGIOption::CurrentSReserveTime(parse_option_value(
+                        "sreserve",
+                        option_value,
+                    )?)),
                     "rated" => {
                         if std::env::var("NO_RATED").is_ok() && option_value.contains('1') {
                             panic!("NO_RATED is set and rated game was joined");
                         }
                         None
                     }
-                    "display" => Some(UGIOption::Display(
-                        option_value.parse().expect("Could not read option display"),
-                    )),
+                    "display" => Some(UGIOption::Display(parse_option_value(
+                        "display",
+                        option_value,
+                    )?)),
+                    "numtopmoves" => Some(UGIOption::NumTopMoves(parse_option_value(
+                        "numtopmoves",
+                        option_value,
+                    )?)),
                     "rating" => None,
                     "opponent" => None,
                     "opponent_rating" => None,
@@ -211,4 +197,10 @@ where
             }
         }
     }
+}
+
+fn parse_option_value<T: std::str::FromStr>(option_name: &str, option_value: &str) -> Result<T> {
+    option_value
+        .parse::<T>()
+        .map_err(|_e| anyhow!("Could not read option '{}'", option_name))
 }

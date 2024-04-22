@@ -13,7 +13,7 @@ use crate::{GameManager, InputParser};
 pub async fn run_ugi<M, E, S, A, U>(ugi_mapper: U, engine: E, model: M) -> Result<()>
 where
     S: GameState + Clone + Display + Send + 'static,
-    A: Debug + Eq + Clone + Send + 'static,
+    A: Display + Debug + Eq + Clone + Send + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
         + InitialGameState<State = S>
