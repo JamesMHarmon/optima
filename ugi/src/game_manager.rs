@@ -269,10 +269,8 @@ where
                         .info(&format!("Updating tree with actions: {:?}", &actions));
 
                     for action in actions {
-                        let is_valid_action = self
-                            .engine
-                            .valid_actions(&focus_game_state)
-                            .contains(&action);
+                        let is_valid_action =
+                            self.engine.valid_actions(&game_state).contains(&action);
 
                         if !is_valid_action {
                             self.output
@@ -281,7 +279,7 @@ where
                             break;
                         }
 
-                        let is_terminal = self.engine.terminal_state(&focus_game_state).is_some();
+                        let is_terminal = self.engine.terminal_state(&game_state).is_some();
                         if is_terminal {
                             self.output.info("The game is already in a terminal state");
 
@@ -407,6 +405,9 @@ where
 
                     let pv = mcts.get_principal_variation().unwrap();
 
+                    let node_details =
+                        node_details_container.expect("Expected node_details to have been set");
+
                     self.output_post_search_info(
                         &pv,
                         &pre_action_game_state,
@@ -416,7 +417,7 @@ where
                         &moves_left,
                         &depths,
                         &actions,
-                        &node_details_container.expect("Expected node_details to have been set"),
+                        &node_details,
                     );
                 }
             }
