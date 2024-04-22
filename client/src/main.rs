@@ -10,7 +10,8 @@ use log::info;
 use model::Load;
 use quoridor::ModelRef;
 use self_play::{play_self, SelfPlayPersistance};
-use std::path::Path;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use ugi::run_ugi;
 
 fn main() -> Result<()> {
@@ -101,17 +102,17 @@ async fn async_main(cli: Cli) -> Result<()> {
                 .or(ugi_args.dir.as_ref())
                 .map(|dir| dir.relative_to_cwd())
                 .transpose()?
-                .expect("Model dir not defined");
+                .map(PathBuf::from)
+                .or_else(|| std::env::current_dir().ok())
+                .expect("Could not determine model directory");
 
             let model_name = std::env::var("BOT_MODEL_NAME")
+                .map(Cow::Owned)
                 .ok()
-                .as_ref()
-                .or(ugi_args.model.as_ref())
-                .map(|model| model.relative_to_cwd())
-                .transpose()?
-                .expect("Model name not defined");
+                .or_else(|| ugi_args.model.as_ref().map(Cow::Borrowed))
+                .expect("Model name was not provided");
 
-            let model_path = model_dir.join(&model_name);
+            let model_path = model_dir.join(&*model_name);
 
             assert!(model_path.is_file(), "Model not found. {:?}", &model_path);
 
