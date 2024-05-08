@@ -10,57 +10,49 @@ use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
 use rand_distr::Dirichlet;
 use std::borrow::Cow;
-use std::cell::Ref;
-use std::cell::RefCell;
-use std::cell::RefMut;
+use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails, PUCT};
+use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails};
+use super::{Temperature, CPUCT, PUCT};
 use engine::{GameEngine, GameState, Value};
 use model::{GameAnalyzer, NodeMetrics};
 
-pub struct MCTS<'a, S, A, E, M, C, T, V>
-where
-    S: GameState,
-    A: Clone + Eq + Debug,
-    V: Value,
-    E: GameEngine,
-    M: GameAnalyzer,
-    C: Fn(&S, usize, bool) -> f32,
-    T: Fn(&S) -> f32,
-{
-    options: MCTSOptions<S, C, T>,
+pub struct MCTS<'a, S, A, E, M, V, C, T> {
+    options: MCTSOptions,
     game_engine: &'a E,
     analyzer: &'a M,
     game_state: S,
     root: Option<Index>,
     arena: NodeArena<MCTSNode<A, V>>,
     focus_actions: Vec<A>,
+    cpuct: C,
+    temp: T,
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, C, T, V> MCTS<'a, S, A, E, M, C, T, V>
+impl<'a, S, A, E, M, V, C, T> MCTS<'a, S, A, E, M, V, C, T>
 where
     S: GameState,
     A: Clone + Eq + Debug,
     V: Value,
     E: 'a + GameEngine<State = S, Action = A, Value = V>,
     M: 'a + GameAnalyzer<State = S, Action = A, Value = V>,
-    C: Fn(&S, usize, bool) -> f32,
-    T: Fn(&S) -> f32,
+    C: CPUCT<State = S>,
+    T: Temperature<State = S>,
 {
     pub fn new(
         game_state: S,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S, C, T>,
+        options: MCTSOptions,
+        cpuct: C,
+        temp: T,
     ) -> Self {
         MCTS {
             options,
@@ -70,6 +62,8 @@ where
             root: None,
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
+            cpuct,
+            temp,
         }
     }
 
@@ -77,8 +71,10 @@ where
         game_state: S,
         game_engine: &'a E,
         analyzer: &'a M,
-        options: MCTSOptions<S, C, T>,
+        options: MCTSOptions,
         capacity: usize,
+        cpuct: C,
+        temp: T,
     ) -> Self {
         MCTS {
             options,
@@ -88,6 +84,8 @@ where
             root: None,
             arena: NodeArena::with_capacity(capacity * 2),
             focus_actions: vec![],
+            cpuct,
+            temp,
         }
     }
 
@@ -100,7 +98,10 @@ where
         &mut self,
         duration: Duration,
         max_visits: usize,
-    ) -> Result<usize> {
+    ) -> Result<usize>
+    where
+        C: CPUCT,
+    {
         let alive = Arc::new(AtomicBool::new(true));
 
         let alive_clone = alive.clone();
@@ -232,7 +233,10 @@ where
             .and_then(|v| v)
     }
 
-    pub async fn search<F: FnMut(usize) -> bool>(&mut self, alive: F) -> Result<usize> {
+    pub async fn search<F>(&mut self, alive: F) -> Result<usize>
+    where
+        F: FnMut(usize) -> bool,
+    {
         let root_node_index = self.get_or_create_root_node().await;
 
         let mut visits = self
@@ -262,6 +266,7 @@ where
                     game_engine,
                     analyzer,
                     options,
+                    &self.cpuct,
                 ));
                 visits += 1;
             } else {
@@ -283,6 +288,7 @@ where
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
+    #[allow(clippy::too_many_arguments)]
     async fn traverse_tree_and_expand(
         root_index: Index,
         arena: &NodeArena<MCTSNode<A, V>>,
@@ -290,7 +296,8 @@ where
         focus_actions: &[A],
         game_engine: &E,
         analyzer: &M,
-        options: &MCTSOptions<S, C, T>,
+        options: &MCTSOptions,
+        cpuct: &C,
     ) -> Result<usize> {
         let mut depth = 0;
         let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec![];
@@ -321,7 +328,13 @@ where
                     node.get_position_of_visited_action(focus_action)
                         .ok_or_else(|| anyhow!("Focused action was not found"))?
                 } else {
-                    MCTS::<S, A, E, M, C, T, V>::select_path(node, &game_state, is_root, options)?
+                    MCTS::<S, A, E, M, V, C, T>::select_path(
+                        node,
+                        &game_state,
+                        is_root,
+                        options,
+                        cpuct,
+                    )?
                 };
 
             nodes_to_propagate_to_stack.push(NodeUpdateInfo {
@@ -429,8 +442,7 @@ where
     fn _select_action(&mut self, use_temp: bool) -> Result<A> {
         if let Some(node_index) = &self.get_focus_node_index()? {
             let game_state = self.get_focus_node_game_state();
-            let temp = &self.options.temperature;
-            let temp = temp(&game_state);
+            let temp = self.temp.temp(&game_state);
 
             let child_node_details = self
                 .get_node_details(*node_index, &game_state, self.focus_actions.is_empty())?
@@ -479,6 +491,7 @@ where
             arena_ref_mut,
             is_root,
             &self.options,
+            &self.cpuct,
         );
 
         let node = arena_ref_mut.node_mut(node_index);
@@ -591,8 +604,12 @@ where
         node: &mut MCTSNode<A, V>,
         game_state: &S,
         is_root: bool,
-        options: &MCTSOptions<S, C, T>,
-    ) -> Result<usize> {
+        options: &MCTSOptions,
+        cpuct: &C,
+    ) -> Result<usize>
+    where
+        C: CPUCT,
+    {
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -600,8 +617,7 @@ where
         };
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = &options.cpuct;
-        let cpuct = cpuct(game_state, Nsb, is_root);
+        let cpuct = cpuct.cpuct(game_state, Nsb, is_root);
         let game_length_baseline = &Self::get_game_length_baseline(
             node.iter_visited_edges_and_top_unvisited_edge(),
             options.moves_left_threshold,
@@ -661,7 +677,8 @@ where
         game_state: &S,
         arena: &mut NodeArenaInner<MCTSNode<A, V>>,
         is_root: bool,
-        options: &MCTSOptions<S, C, T>,
+        options: &MCTSOptions,
+        cpuct: &C,
     ) -> Vec<PUCT> {
         let node = arena.node_mut(node_index);
 
@@ -672,8 +689,7 @@ where
         };
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = &options.cpuct;
-        let cpuct = cpuct(game_state, Nsb, is_root);
+        let cpuct = cpuct.cpuct(game_state, Nsb, is_root);
         let moves_left_threshold = options.moves_left_threshold;
         let iter_all_edges = node.iter_all_edges().map(|e| &*e);
         let game_length_baseline =
@@ -768,7 +784,7 @@ where
     fn get_Msa(
         child: &MCTSEdge<A>,
         game_length_baseline: &GameLengthBaseline,
-        options: &MCTSOptions<S, C, T>,
+        options: &MCTSOptions,
     ) -> f32 {
         if child.visits() == 0 {
             return 0.0;

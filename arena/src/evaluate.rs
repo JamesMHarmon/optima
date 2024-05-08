@@ -12,7 +12,7 @@ use std::time::Instant;
 use tokio::runtime::Handle;
 
 use engine::{GameEngine, GameState, Value};
-use mcts::{MCTSOptions, MCTS};
+use mcts::{DynamicCPUCT, MCTSOptions, TemperatureMaxMoves, MCTS};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 
@@ -242,38 +242,30 @@ impl Arena {
         M: Analyzer<State = S, Action = A, Analyzer = T, Value = V> + Info + Send + Sync,
         T: GameAnalyzer<Action = A, State = S> + Send,
     {
-        let cpuct_base = options.play_options.cpuct_base;
-        let cpuct_init = options.play_options.cpuct_init;
-        let cpuct_root_scaling = options.play_options.cpuct_root_scaling;
-        let temperature_max_moves = options.play_options.temperature_max_moves;
-        let temperature = options.play_options.temperature;
-        let temperature_post_max_moves = options.play_options.temperature_post_max_moves;
+        let play_options = &options.play_options;
         let visits = options.visits;
         let analyzers = players.iter().map(|m| m.analyzer()).collect::<Vec<_>>();
 
         let mut mctss: Vec<_> = analyzers
             .iter()
             .map(|a| {
+                let cpuct = DynamicCPUCT::new(
+                    play_options.cpuct_base,
+                    play_options.cpuct_init,
+                    1.0,
+                    play_options.cpuct_root_scaling,
+                );
+            
+                let temp = TemperatureMaxMoves::new(play_options.temperature, play_options.temperature_post_max_moves, play_options.temperature_max_moves, engine);
+        
                 MCTS::with_capacity(
                     S::initial(),
                     engine,
                     a,
-                    MCTSOptions::<S, _, _>::new(
+                    MCTSOptions::new(
                         None,
                         options.play_options.fpu,
                         options.play_options.fpu_root,
-                        |_, Nsb, is_root| {
-                            (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
-                                * if is_root { cpuct_root_scaling } else { 1.0 }
-                        },
-                        |game_state| {
-                            let move_number = engine.move_number(game_state);
-                            if move_number < temperature_max_moves {
-                                temperature
-                            } else {
-                                temperature_post_max_moves
-                            }
-                        },
                         0.0,
                         options.play_options.moves_left_threshold,
                         options.play_options.moves_left_scale,
@@ -281,6 +273,8 @@ impl Arena {
                         options.play_options.parallelism,
                     ),
                     visits,
+                    cpuct,
+                    temp
                 )
             })
             .collect();

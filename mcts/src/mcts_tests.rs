@@ -1,3 +1,27 @@
+use crate::{counting_game::CountingGameState, Temperature, CPUCT};
+
+struct CPUCTTest {
+    cpuct: f32,
+}
+
+impl CPUCT for CPUCTTest {
+    type State = CountingGameState;
+
+    fn cpuct(&self, _: &Self::State, _: usize, _: bool) -> f32 {
+        self.cpuct
+    }
+}
+
+struct TempTest;
+
+impl Temperature for TempTest {
+    type State = CountingGameState;
+
+    fn temp(&self, _: &Self::State) -> f32 {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{MCTSOptions, MCTS};
@@ -5,6 +29,7 @@ mod tests {
     use super::super::counting_game::{
         CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState, Value,
     };
+    use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
     use engine::GameState;
     use model::{NodeChildMetrics, NodeMetrics};
@@ -33,41 +58,27 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state.to_owned(),
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
         let mut mcts2 = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -84,23 +95,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 1.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -114,23 +118,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 1.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -148,23 +145,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 2.5 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 2.5,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -188,23 +178,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -217,23 +200,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 1.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 1.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -260,23 +236,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(100).await.unwrap();
@@ -303,23 +272,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(1).await.unwrap();
@@ -346,23 +308,16 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
+        let cpuct = CPUCTTest { cpuct: 3.0 };
+        let temp = TempTest;
 
         let mut mcts = MCTS::new(
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct,
+            temp,
         );
 
         mcts.search_visits(2).await.unwrap();
@@ -390,23 +345,16 @@ mod tests {
         let game_engine = CountingGameEngine::new();
         let analyzer = CountingAnalyzer::new();
         let search_num_visits = 800;
+        let cpuct = || CPUCTTest { cpuct: 3.0 };
+        let temp = || TempTest;
 
         let mut non_clear_mcts = MCTS::new(
             game_state.clone(),
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct(),
+            temp()
         );
 
         non_clear_mcts
@@ -429,18 +377,9 @@ mod tests {
             game_state.clone(),
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct(),
+            temp(),
         );
 
         clear_mcts.search_visits(search_num_visits).await.unwrap();
@@ -454,18 +393,9 @@ mod tests {
             game_state,
             &game_engine,
             &analyzer,
-            MCTSOptions::new(
-                None,
-                0.0,
-                0.0,
-                |_, _, _| 3.0,
-                |_| 0.0,
-                0.0,
-                1.0,
-                10.0,
-                0.05,
-                1,
-            ),
+            MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
+            cpuct(),
+            temp(),
         );
 
         initial_mcts.advance_to_action(action).await.unwrap();

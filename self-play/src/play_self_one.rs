@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use engine::value::Value;
-use mcts::{DirichletOptions, MCTSOptions, MCTS};
+use mcts::{DirichletOptions, DynamicCPUCT, MCTSOptions, TemperatureConstant, MCTS};
 use model::GameAnalyzer;
 
 use super::{SelfPlayMetrics, SelfPlayOptions};
@@ -25,32 +25,26 @@ where
 {
     let mut game_state: S = S::initial();
     let play_options = &options.play_options;
-    let cpuct_base = play_options.cpuct_base;
-    let cpuct_init = play_options.cpuct_init;
-    let cpuct_root_scaling = play_options.cpuct_root_scaling;
+
+    let cpuct = DynamicCPUCT::new(
+        play_options.cpuct_base,
+        play_options.cpuct_init,
+        1.0,
+        play_options.cpuct_root_scaling,
+    );
+
+    let temp = TemperatureConstant::new(play_options.temperature);
 
     let mut mcts = MCTS::with_capacity(
         game_state.clone(),
         game_engine,
         analyzer,
-        MCTSOptions::<S, _, _>::new(
+        MCTSOptions::new(
             Some(DirichletOptions {
                 epsilon: options.epsilon,
             }),
             play_options.fpu,
             play_options.fpu_root,
-            |_, Nsb, is_root| {
-                (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
-                    * if is_root { cpuct_root_scaling } else { 1.0 }
-            },
-            |game_state| {
-                let move_number = game_engine.move_number(game_state);
-                if move_number < play_options.temperature_max_moves {
-                    play_options.temperature
-                } else {
-                    play_options.temperature_post_max_moves
-                }
-            },
             play_options.temperature_visit_offset,
             play_options.moves_left_threshold,
             play_options.moves_left_scale,
@@ -58,6 +52,8 @@ where
             play_options.parallelism,
         ),
         options.visits,
+        cpuct,
+        temp,
     );
 
     let mut analysis = Vec::new();

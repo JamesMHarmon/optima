@@ -191,7 +191,7 @@ where
                     None => Ok(UGICommand::Noop),
                 }
             }
-            cmd if cmd.is_empty() => Ok(UGICommand::Noop),
+            "" => Ok(UGICommand::Noop),
             _ => {
                 anyhow::bail!("Command is unknown or not implemented");
             }

@@ -1,7 +1,7 @@
 use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
-use mcts::{MCTSOptions, NodeDetails, MCTS, PUCT};
+use mcts::{DynamicCPUCT, MCTSOptions, NodeDetails, TemperatureConstant, MCTS, PUCT};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -191,26 +191,23 @@ where
         while let Some(command) = self.command_rx.recv().await {
             if mcts_container.is_none() {
                 let options = options.lock().unwrap();
-                let cpuct_base = options.cpuct_base;
-                let cpuct_init = options.cpuct_init;
-                let cpuct_factor = options.cpuct_factor;
-                let cpuct_root_scaling = options.cpuct_root_scaling;
+                let cpuct = DynamicCPUCT::new(
+                    options.cpuct_base,
+                    options.cpuct_init,
+                    options.cpuct_factor,
+                    options.cpuct_root_scaling,
+                );
+
+                let temp = TemperatureConstant::new(0.0);
 
                 mcts_container = Some(MCTS::with_capacity(
                     game_state.clone(),
                     &self.engine,
                     &analyzer,
-                    MCTSOptions::<S, _, _>::new(
+                    MCTSOptions::new(
                         None,
                         options.fpu,
                         options.fpu_root,
-                        move |_, nsb, is_root| {
-                            (cpuct_init
-                                + cpuct_factor
-                                    * ((nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln())
-                                * if is_root { cpuct_root_scaling } else { 1.0 }
-                        },
-                        |_| 0.0,
                         0.0,
                         options.moves_left_threshold,
                         options.moves_left_scale,
@@ -218,6 +215,8 @@ where
                         options.parallelism,
                     ),
                     options.visits,
+                    cpuct,
+                    temp,
                 ));
             }
 
@@ -346,7 +345,7 @@ where
                         options_visits = options.visits;
                         options_max_visits = options.max_visits;
                         options_alternative_action_threshold = options.alternative_action_threshold;
-                        search_duration = calc_search_duration(&*options, current_player);
+                        search_duration = calc_search_duration(&options, current_player);
                     }
 
                     let mut actions = Vec::new();
@@ -424,6 +423,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn output_post_search_info(
         &self,
         pv: &[(A, PUCT)],
@@ -461,7 +461,7 @@ where
 
         let move_string = self
             .ugi_mapper
-            .actions_to_move_string(&pre_action_game_state, &actions);
+            .actions_to_move_string(pre_action_game_state, actions);
 
         let children = &node_details.children;
         let num_top_moves = self.options.lock().unwrap().num_top_moves;
