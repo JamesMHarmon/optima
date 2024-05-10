@@ -7,7 +7,7 @@ mod test {
 
     use arimaa::{Action, GameState, Value};
     use engine::{GameState as GameStateTrait, Value as ValueTrait};
-    use model::{NodeChildMetrics, NodeMetrics, PositionMetrics};
+    use model::{EdgeMetrics, NodeMetrics, PositionMetrics};
 
     use crate::{
         arimaa_sampler::{ArimaaSampler, ArimaaVStore},
@@ -35,17 +35,17 @@ mod test {
         game_state
     }
 
-    fn node_child<A, As>(action: As, Q: f32, M: f32, visits: usize) -> NodeChildMetrics<A>
+    fn node_child<A, As>(action: As, Q: f32, M: f32, visits: usize) -> EdgeMetrics<A>
     where
         A: FromStr,
         A::Err: Debug,
         As: AsRef<str>,
     {
         let action = action.as_ref().parse::<A>().unwrap();
-        NodeChildMetrics::new(action, Q, M, visits)
+        EdgeMetrics::new(action, Q, M, visits)
     }
 
-    fn node_metrics<A>(children: Vec<NodeChildMetrics<A>>) -> NodeMetrics<A, Value> {
+    fn node_metrics<A>(children: Vec<EdgeMetrics<A>>) -> NodeMetrics<A, Value> {
         NodeMetrics {
             visits: 0,
             value: Value::new([0.0, 0.0]),
@@ -60,7 +60,7 @@ mod test {
         moves_left: usize,
         move_number: usize,
         chosen_action: impl AsRef<str>,
-        children: Vec<NodeChildMetrics<Action>>,
+        children: Vec<EdgeMetrics<Action>>,
     ) -> PositionMetricsExtended<GameState, Action, Value> {
         PositionMetricsExtended {
             metrics: PositionMetrics {

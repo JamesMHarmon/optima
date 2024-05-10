@@ -6,19 +6,17 @@ use std::marker::PhantomData;
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
-pub struct NodeMetrics<A, V> {
+pub struct NodeMetrics<A, P> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
     pub visits: usize,
-    /// The value of the position for the specific game_state of the node as predicted by the neural network.
-    pub value: V,
-    /// The number of moves left for the specific game_state of the node as predicted by the neural network.
-    pub moves_left: f32,
+    /// Ancillery predictions by the neural network. Like score difference or moves left.
+    pub predictions: P,
     /// The valid actions of the current game_state of the node.
-    pub children: Vec<NodeChildMetrics<A>>,
+    pub children: Vec<EdgeMetrics<A, P>>,
 }
 
 #[allow(non_snake_case)]
-impl<A, V> NodeMetrics<A, V> {
+impl<A, P> NodeMetrics<A, P> {
     /// Difference between the Q of the specified action and the child that would be played with no temp.
     pub fn Q_diff(&self, action: &A) -> f32
     where
@@ -30,32 +28,28 @@ impl<A, V> NodeMetrics<A, V> {
         max_visits_Q - chosen_Q
     }
 
-    pub fn child_max_visits(&self) -> &NodeChildMetrics<A> {
+    pub fn child_max_visits(&self) -> &EdgeMetrics<A, P> {
         self.children.iter().max_by_key(|c| c.visits).unwrap()
     }
 }
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
-pub struct NodeChildMetrics<A> {
+pub struct EdgeMetrics<A, PV> {
     /// The action that this edge represents.
     action: A,
-    /// The Q score of the edge. This is an average of Q back propagated by the descendant nodes. Range is 0.0..=1.0. Q is from the perspective of the player to move of the parent node of this edge.
-    Q: f32,
-    /// The M score of the edge. This is an average of M back propagated by the descendant nodes.
-    /// THIS IS NOT MOVES LEFT! It represents expected game length!
-    M: f32,
     /// The number of visits for the child node of this specific edge.
     visits: usize,
+    /// Predictions by the neural network that have been propagated from child to parent nodes. Like score difference or moves left.
+    propagatedValues: PV,
 }
 
 #[allow(non_snake_case)]
-impl<A> NodeChildMetrics<A> {
-    pub fn new(action: A, Q: f32, M: f32, visits: usize) -> Self {
+impl<A, PV> EdgeMetrics<A, PV> {
+    pub fn new(action: A, visits: usize, propagatedValues: PV) -> Self {
         Self {
             action,
-            Q,
-            M,
+            propagatedValues,
             visits,
         }
     }
@@ -64,18 +58,12 @@ impl<A> NodeChildMetrics<A> {
         &self.action
     }
 
-    /// The M score of the edge. This is an average of M back propagated by the descendant nodes.
-    /// THIS IS NOT MOVES LEFT! It represents expected game length!
-    pub fn M(&self) -> f32 {
-        self.M
-    }
-
-    pub fn Q(&self) -> f32 {
-        self.Q
-    }
-
     pub fn visits(&self) -> usize {
         self.visits
+    }
+
+    pub fn propagatedValues(&self) -> &PV {
+        &self.propagatedValues
     }
 }
 
@@ -149,7 +137,7 @@ where
     }
 }
 
-impl<A> Serialize for NodeChildMetrics<A>
+impl<A, PV> Serialize for EdgeMetrics<A, PV>
 where
     A: Serialize,
 {
@@ -168,23 +156,23 @@ where
     }
 }
 
-struct NodeChildMetricsVisitor<A> {
-    marker: PhantomData<A>,
+struct NodeChildMetricsVisitor<A, PV> {
+    marker: PhantomData<(A, PV)>,
 }
 
-impl<A> NodeChildMetricsVisitor<A> {
+impl<A, PV> NodeChildMetricsVisitor<A, PV> {
     fn new() -> Self {
         NodeChildMetricsVisitor {
-            marker: PhantomData,
+            marker: PhantomData
         }
     }
 }
 
-impl<'de, A> Visitor<'de> for NodeChildMetricsVisitor<A>
+impl<'de, A, PV> Visitor<'de> for NodeChildMetricsVisitor<A, PV>
 where
     A: Deserialize<'de>,
 {
-    type Value = NodeChildMetrics<A>;
+    type Value = EdgeMetrics<A, PV>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("NodeChildMetrics")
@@ -194,7 +182,7 @@ where
     where
         S: SeqAccess<'de>,
     {
-        Ok(NodeChildMetrics {
+        Ok(EdgeMetrics {
             action: seq.next_element()?.unwrap(),
             Q: seq.next_element()?.unwrap(),
             M: seq.next_element()?.unwrap(),
@@ -203,7 +191,7 @@ where
     }
 }
 
-impl<'de, A> Deserialize<'de> for NodeChildMetrics<A>
+impl<'de, A> Deserialize<'de> for EdgeMetrics<A, PV>
 where
     A: Deserialize<'de>,
 {

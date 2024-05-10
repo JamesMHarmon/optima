@@ -8,7 +8,7 @@ use half::f16;
 use log::{debug, info};
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashMap};
 use std::future::Future;
 use std::hash::Hash;
 use std::os::raw::c_int;
@@ -178,7 +178,7 @@ impl Predictor {
     pub fn new(path: &Path) -> Self {
         let mut graph = Graph::new();
 
-        let model = SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
+        let model: SavedModelBundle = SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
             .expect("Expected to be able to load model");
 
         let signature = model
@@ -191,75 +191,22 @@ impl Predictor {
                 )
             });
 
-        let input_tensor_info = signature
-            .inputs()
-            .iter()
-            .next()
-            .expect("Expect at least one input in signature")
-            .1;
-        let value_head_tensor_info = signature
-            .outputs()
-            .iter()
-            .find(|(s, _)| s.contains("value_head"))
-            .expect("'value_head' output in signature not found")
-            .1;
-        let policy_head_tensor_info = signature
-            .outputs()
-            .iter()
-            .find(|(s, _)| s.contains("policy_head"))
-            .expect("'policy_head' output in signature not found")
-            .1;
-        let moves_left_head_tensor_info = signature
-            .outputs()
-            .iter()
-            .find(|(s, _)| s.contains("moves_left_head"))
-            .map(|(_, s)| s);
+        let signature_def_to_ops = |signature_def: &HashMap<String, TensorInfo>| {
+            signature_def.iter()
+                .map(OperationWithIndex::from)
+                .map(|op| (op.operation.name().to_string(), op))
+                .collect::<HashMap<_, _>>()
+        };
 
-        let input_name = &input_tensor_info.name().name;
-        let value_head_name = &value_head_tensor_info.name().name;
-        let policy_head_name = &policy_head_tensor_info.name().name;
-        let moves_left_head_name = moves_left_head_tensor_info.map(|x| &x.name().name);
-
-        let op_input = graph
-            .operation_by_name_required(input_name)
-            .map(|operation| OperationWithIndex {
-                operation,
-                index: input_tensor_info.name().index,
-            })
-            .expect("Expected to find input operation");
-        let op_value_head = graph
-            .operation_by_name_required(value_head_name)
-            .map(|operation| OperationWithIndex {
-                operation,
-                index: value_head_tensor_info.name().index,
-            })
-            .expect("Expected to find value_head operation");
-        let op_policy_head = graph
-            .operation_by_name_required(policy_head_name)
-            .map(|operation| OperationWithIndex {
-                operation,
-                index: policy_head_tensor_info.name().index,
-            })
-            .expect("Expected to find policy_head operation");
-        let op_moves_left_head = moves_left_head_name.and_then(|name| {
-            graph
-                .operation_by_name_required(name)
-                .map(|operation| OperationWithIndex {
-                    operation,
-                    index: moves_left_head_tensor_info.unwrap().name().index,
-                })
-                .ok()
-        });
-
+        let inputs = signature_def_to_ops(signature.inputs());
+        let outputs = signature_def_to_ops(signature.outputs());
         let session = model.session;
 
         Self {
             session: SessionAndOps {
                 session,
-                op_input,
-                op_value_head,
-                op_policy_head,
-                op_moves_left_head,
+                inputs,
+                outputs
             },
         }
     }
@@ -309,22 +256,27 @@ impl Predictor {
 }
 
 struct AnalysisResults {
-    policy_head_output: Tensor<f16>,
-    value_head_output: Tensor<f16>,
-    moves_left_head_output: Option<Tensor<f16>>,
+    outputs: HashMap<String, Tensor<f16>>
 }
 
 pub struct SessionAndOps {
     pub session: Session,
-    pub op_input: OperationWithIndex,
-    pub op_value_head: OperationWithIndex,
-    pub op_policy_head: OperationWithIndex,
-    pub op_moves_left_head: Option<OperationWithIndex>,
+    pub inputs: Vec<OperationWithIndex>,
+    pub outputs: Vec<OperationWithIndex>
 }
 
 pub struct OperationWithIndex {
     pub operation: Operation,
     pub index: c_int,
+}
+
+impl From<(&String, &TensorInfo)> for OperationWithIndex {
+    fn from((name, tensor_info): (&String, &TensorInfo)) -> Self {
+        Self {
+            operation: graph.operation_by_name_required(&tensor_info.name().name).expect("Expected to find input operation"),
+            index: tensor_info.name().index,
+        }
+    }
 }
 
 type BatchingModelAndSender<S, A, V, E, Map, Te> = (
@@ -361,21 +313,16 @@ impl<S, A, V, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, V, E, M
 where
     S: Clone + Hash + Unpin,
     A: Clone,
-    V: Value,
     E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
     Map: InputMap<S> + PolicyMap<S, A, V> + ValueMap<S, V> + TranspositionMap<S, A, V, Te>,
     Te: Send + Sync + 'static,
 {
     type State = S;
     type Action = A;
-    type Value = V;
+    type Predictions = P;
     type GameStateAnalysis = BasicGameStateAnalysis<A, V>;
     type Future = UnwrappedReceiver<Self::GameStateAnalysis>;
 
-    /// Outputs a value from [-1, 1] depending on the player to move's evaluation of the current state.
-    /// If the evaluation is a draw then 0.0 will be returned.
-    /// Along with the value output a list of policy scores for all VALID moves is returned. If the position
-    /// is terminal then the vector will be empty.
     fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<Self::GameStateAnalysis> {
         let (tx, rx) = oneshot::channel();
         let id = self.analysed_state_ordered.get_id();
@@ -594,7 +541,7 @@ where
                         return;
                     }
 
-                    let tensor = tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
+                    let tensor: &mut Tensor<f16> = tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
 
                     reporter.set_batch_size(states_to_analyse.len());
 
@@ -617,9 +564,7 @@ where
                         predictions,
                         states_to_analyse,
                         transposition_table,
-                        mapper,
-                        output_size,
-                        moves_left_size,
+                        mapper
                     );
                 }
             });
@@ -630,33 +575,19 @@ where
         predictions: AnalysisResults,
         states_to_analyse: Vec<StatesToInfer<S, A, V>>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
-        mapper: Arc<Map>,
-        output_size: usize,
-        moves_left_size: usize,
+        mapper: Arc<Map>
     ) {
         states_to_analyse
             .into_par_iter()
             .enumerate()
             .for_each(|(i, (id, game_state, tx, tx2))| {
-                let policy_head =
-                    &predictions.policy_head_output[(i * output_size)..((i + 1) * output_size)];
-                let value_head_iter = predictions.value_head_output[i];
-                let moves_left_head_iter = predictions
-                    .moves_left_head_output
-                    .as_ref()
-                    .map(|ml| &ml[(i * moves_left_size)..((i + 1) * moves_left_size)]);
+                let outputs = predictions.outputs.map(|(k, v)| (k, &v[(i * output_size)..((i + 1) * output_size)])).collect::<HashMap<String, &[f16]>>();
 
                 let mapper = &*mapper;
                 let transposition_table = &*transposition_table;
                 let transposition_table_entry = mapper.map_output_to_transposition_entry(
                     &game_state,
-                    policy_head,
-                    value_head_iter,
-                    moves_left_head_iter
-                        .map(|moves_left| {
-                            moves_left_expected_value(moves_left.iter().map(|v| v.to_f32()))
-                        })
-                        .unwrap_or(0.0),
+                    outputs
                 );
 
                 let analysis = mapper

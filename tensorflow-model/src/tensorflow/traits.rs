@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use half::f16;
 use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
 use serde::{Deserialize, Serialize};
@@ -19,44 +21,56 @@ pub trait Dimension {
     fn dimensions(&self) -> [u64; 3];
 }
 
-pub trait InputMap<S> {
-    fn game_state_to_input(&self, game_state: &S, input: &mut [f16], mode: Mode);
+pub trait InputMap {
+    type State;
+
+    fn game_state_to_input(&self, game_state: &Self::State, inputs: HashMap<&str, &mut [f16]>, mode: Mode);
 }
 
-pub trait PolicyMap<S, A, V> {
+pub trait PolicyMap {
+    type State;
+    type Action;
+    type Predictions;
+
     fn policy_metrics_to_expected_output(
         &self,
-        game_state: &S,
-        policy: &NodeMetrics<A, V>,
+        game_state: &Self::State,
+        policy: &NodeMetrics<Self::Action, Self::Predictions>,
     ) -> Vec<f32>;
 
     fn policy_to_valid_actions(
         &self,
-        game_state: &S,
+        game_state: &Self::State,
         policy_scores: &[f16],
-    ) -> Vec<ActionWithPolicy<A>>;
+    ) -> Vec<ActionWithPolicy<Self::Action>>;
 }
 
-pub trait ValueMap<S, V> {
-    fn map_value_to_value_output(&self, game_state: &S, value: &V) -> f32;
+pub trait PredictionsMap<S, P> {
+    type State;
+    type Predictions;
 
-    fn map_value_output_to_value(&self, game_state: &S, value_output: f32) -> V;
+    fn from_output(&self, game_state: &Self::State, prediction_output: HashMap<String, &[f16]>) -> Self::Predictions;
+
+    fn to_output(&self, game_state: &Self::State, predictions: &Self::Predictions) -> HashMap<String, Vec<f16>>;
 }
 
-pub trait TranspositionMap<S, A, V, Te> {
+pub trait TranspositionMap {
+    type State;
+    type Action;
+    type Predictions;
+    type TranspositionEntry;
+
     fn map_output_to_transposition_entry(
         &self,
-        game_state: &S,
-        policy_scores: &[f16],
-        value: f16,
-        moves_left: f32,
+        game_state: &Self::State,
+        outputs: HashMap<String, &[f16]>
     ) -> Te;
 
     fn map_transposition_entry_to_analysis(
         &self,
-        game_state: &S,
-        transposition_entry: &Te,
-    ) -> BasicGameStateAnalysis<A, V>;
+        game_state: &Self::State,
+        transposition_entry: &Self::TranspositionEntry,
+    ) -> BasicGameStateAnalysis<Self::Action, Self::Value>;
 
-    fn get_transposition_key(&self, game_state: &S) -> u64;
+    fn get_transposition_key(&self, game_state: &Self::GameState) -> u64;
 }
