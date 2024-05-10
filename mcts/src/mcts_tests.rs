@@ -32,7 +32,7 @@ mod tests {
     use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
     use engine::GameState;
-    use model::{NodeChildMetrics, NodeMetrics};
+    use model::{EdgeMetrics, NodeMetrics};
 
     const ERROR_DIFF: f32 = 0.02;
     const ERROR_DIFF_W: f32 = 0.01;
@@ -223,9 +223,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 304),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 177),
-                    NodeChildMetrics::new(CountingAction::Increment, 0.509, 0.0, 312),
+                    EdgeMetrics::new(CountingAction::Stay, 0.5, 0.0, 304),
+                    EdgeMetrics::new(CountingAction::Decrement, 0.49, 0.0, 177),
+                    EdgeMetrics::new(CountingAction::Increment, 0.509, 0.0, 312),
                 ],
             },
         );
@@ -259,9 +259,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 40),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.49, 0.0, 29),
-                    NodeChildMetrics::new(CountingAction::Increment, 0.51, 0.0, 31),
+                    EdgeMetrics::new(CountingAction::Stay, 0.5, 0.0, 40),
+                    EdgeMetrics::new(CountingAction::Decrement, 0.49, 0.0, 29),
+                    EdgeMetrics::new(CountingAction::Increment, 0.51, 0.0, 31),
                 ],
             },
         );
@@ -295,9 +295,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Stay, 0.0, 0.0, 0),
+                    EdgeMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
+                    EdgeMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
+                    EdgeMetrics::new(CountingAction::Stay, 0.0, 0.0, 0),
                 ],
             },
         );
@@ -331,9 +331,9 @@ mod tests {
                 value: Value([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new(CountingAction::Stay, 0.5, 0.0, 1),
-                    NodeChildMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
-                    NodeChildMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
+                    EdgeMetrics::new(CountingAction::Stay, 0.5, 0.0, 1),
+                    EdgeMetrics::new(CountingAction::Increment, 0.0, 0.0, 0),
+                    EdgeMetrics::new(CountingAction::Decrement, 0.0, 0.0, 0),
                 ],
             },
         );

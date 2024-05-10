@@ -1,57 +1,49 @@
-use engine::value::Value;
 use half::*;
 use std::future::Future;
 
 pub trait GameAnalyzer {
-    type Future: Future<Output = Self::GameStateAnalysis>;
-    type GameStateAnalysis: GameStateAnalysis<Self::Action, Self::Value>;
     type Action;
     type State;
-    type Value: Value;
+    type Predictions;
+    type Future: Future<Output = Self::GameStateAnalysis>;
+    type GameStateAnalysis: GameStateAnalysis<Self::Action, Self::Predictions>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
 }
 
 #[derive(Clone, Debug)]
-pub struct BasicGameStateAnalysis<A, V> {
+pub struct BasicGameStateAnalysis<A, P> {
     policy_scores: Vec<ActionWithPolicy<A>>,
-    pub value_score: V,
-    pub moves_left: f32,
+    predictions: P
 }
 
-impl<A, V> GameStateAnalysis<A, V> for BasicGameStateAnalysis<A, V> {
-    fn value_score(&self) -> &V {
-        &self.value_score
-    }
-
-    fn moves_left_score(&self) -> f32 {
-        self.moves_left
-    }
-
+impl<A, P> GameStateAnalysis<A, P> for BasicGameStateAnalysis<A, P> {
     fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
         &self.policy_scores
     }
 
-    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32) {
-        (self.policy_scores, self.value_score, self.moves_left)
+    fn predictions(&self) -> &P {
+        &self.predictions
+    }
+
+    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, P) {
+        (self.policy_scores, self.predictions)
     }
 }
 
-impl<A, V> BasicGameStateAnalysis<A, V> {
-    pub fn new(value_score: V, policy_scores: Vec<ActionWithPolicy<A>>, moves_left: f32) -> Self {
+impl<A, P> BasicGameStateAnalysis<A, P> {
+    pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, predictions: P) -> Self {
         Self {
             policy_scores,
-            value_score,
-            moves_left,
+            predictions
         }
     }
 }
 
-pub trait GameStateAnalysis<A, V> {
-    fn value_score(&self) -> &V;
-    fn moves_left_score(&self) -> f32;
+pub trait GameStateAnalysis<A, P> {
     fn policy_scores(&self) -> &[ActionWithPolicy<A>];
-    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, V, f32);
+    fn predictions(&self) -> &P;
+    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, P);
 }
 
 #[derive(Clone, Debug)]

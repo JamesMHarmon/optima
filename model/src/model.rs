@@ -9,8 +9,8 @@ use super::model_info::ModelInfo;
 pub trait Analyzer {
     type State;
     type Action;
-    type Value;
-    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Value = Self::Value>;
+    type Predictions;
+    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Predictions = Self::Predictions>;
 
     fn analyzer(&self) -> Self::Analyzer;
 }

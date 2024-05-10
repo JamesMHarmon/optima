@@ -7,24 +7,23 @@ use model::ActionWithPolicy;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-pub struct MCTSEdge<A> {
+pub struct MCTSEdge<A, PV> {
     action: A,
-    W: f32,
-    M: f32,
     visits: usize,
     policy_score: f16,
+    propagatedValues: PV,
     node: MCTSNodeState,
 }
 
 #[allow(non_snake_case)]
-impl<A> MCTSEdge<A> {
+impl<A, PV> MCTSEdge<A, PV>
+{
     pub fn new(action: A, policy_score: f16) -> Self {
         Self {
             action,
-            policy_score,
-            W: 0.0,
-            M: 0.0,
             visits: 0,
+            policy_score,
+            propagatedValues,
             node: MCTSNodeState::Unexpanded,
         }
     }
@@ -57,22 +56,8 @@ impl<A> MCTSEdge<A> {
         self.visits += 1;
     }
 
-    /// M is the sum of the expected length of the game of all child nodes. Needs to be divided by visits. THIS IS NOT MOVES LEFT! It represents game length!
-    pub fn M(&self) -> f32 {
-        self.M
-    }
-
-    pub fn add_M(&mut self, value: f32) {
-        self.M += value
-    }
-
-    /// W is the sum of values of each child node. Needs to be divided by visits.
-    pub fn W(&self) -> f32 {
-        self.W
-    }
-
-    pub fn add_W(&mut self, value: f32) {
-        self.W += value
+    pub fn features(&self) -> &F {
+        &self.features
     }
 
     pub fn is_unexpanded(&self) -> bool {
@@ -90,15 +75,32 @@ impl<A> MCTSEdge<A> {
     pub fn get_waiter(&mut self) -> Rc<LocalManualResetEvent> {
         self.node.get_waiter()
     }
+}
+
+impl<A, PV> MCTSEdge<A, PV>
+where
+    PV: Default,
+{
+    pub fn new(action: A, policy_score: f16) -> Self {
+        Self {
+            action,
+            visits: 0,
+            policy_score,
+            propagatedValues,
+            node: MCTSNodeState::Unexpanded,
+        }
+    }
 
     pub fn clear(&mut self) {
         self.visits = 0;
-        self.W = 0.0;
-        self.M = 0.0;
+        self.propagatedValues = PV::default();
     }
 }
 
-impl<A> From<ActionWithPolicy<A>> for MCTSEdge<A> {
+impl<A, F> From<ActionWithPolicy<A>> for MCTSEdge<A, F>
+where
+    F: Default,
+{
     fn from(action_with_policy: ActionWithPolicy<A>) -> Self {
         MCTSEdge::new(action_with_policy.action, action_with_policy.policy_score)
     }

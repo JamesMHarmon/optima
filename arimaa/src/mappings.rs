@@ -381,7 +381,7 @@ mod tests {
     use arimaa_engine::take_actions;
     use engine::GameState as GameStateTrait;
     use itertools::Itertools;
-    use model::NodeChildMetrics;
+    use model::EdgeMetrics;
 
     fn map_action_to_policy_output_idx(action: &Action) -> usize {
         let move_map = static_sparse_piece_move_map().as_slice();
@@ -1503,9 +1503,9 @@ mod tests {
             value: Value::new([0.0, 0.0]),
             moves_left: 0.0,
             children: vec![
-                NodeChildMetrics::new("a7n".parse().unwrap(), 0.0, 0.0, 7),
-                NodeChildMetrics::new("pa7nn".parse().unwrap(), 0.0, 0.0, 2),
-                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
+                EdgeMetrics::new("a7n".parse().unwrap(), 0.0, 0.0, 7),
+                EdgeMetrics::new("pa7nn".parse().unwrap(), 0.0, 0.0, 2),
+                EdgeMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 
@@ -1549,9 +1549,9 @@ mod tests {
             value: Value::new([0.0, 0.0]),
             moves_left: 0.0,
             children: vec![
-                NodeChildMetrics::new("h2s".parse().unwrap(), 0.0, 0.0, 7),
-                NodeChildMetrics::new("ph2ss".parse().unwrap(), 0.0, 0.0, 2),
-                NodeChildMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
+                EdgeMetrics::new("h2s".parse().unwrap(), 0.0, 0.0, 7),
+                EdgeMetrics::new("ph2ss".parse().unwrap(), 0.0, 0.0, 2),
+                EdgeMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
             ],
         };
 

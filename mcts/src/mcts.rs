@@ -4,7 +4,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::warn;
-use model::{GameStateAnalysis, NodeChildMetrics};
+use model::{GameStateAnalysis, EdgeMetrics};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
@@ -23,20 +23,20 @@ use super::{Temperature, CPUCT, PUCT};
 use engine::{GameEngine, GameState, Value};
 use model::{GameAnalyzer, NodeMetrics};
 
-pub struct MCTS<'a, S, A, E, M, V, C, T> {
+pub struct MCTS<'a, S, A, E, M, V, C, T, F> {
     options: MCTSOptions,
     game_engine: &'a E,
     analyzer: &'a M,
     game_state: S,
     root: Option<Index>,
-    arena: NodeArena<MCTSNode<A, V>>,
+    arena: NodeArena<MCTSNode<A, V, F>>,
     focus_actions: Vec<A>,
     cpuct: C,
     temp: T,
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, V, C, T> MCTS<'a, S, A, E, M, V, C, T>
+impl<'a, S, A, E, M, V, C, T, F> MCTS<'a, S, A, E, M, V, C, T, F>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -45,6 +45,7 @@ where
     M: 'a + GameAnalyzer<State = S, Action = A, Value = V>,
     C: CPUCT<State = S>,
     T: Temperature<State = S>,
+    F: Default
 {
     pub fn new(
         game_state: S,
@@ -168,7 +169,7 @@ where
         Ok(root.into())
     }
 
-    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, V>> + '_> {
+    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, V, F>> + '_> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let arena_ref = self.arena.get();
         let node = Ref::map(arena_ref, |arena_ref| arena_ref.node(root_index));
@@ -177,8 +178,8 @@ where
 
     pub fn get_node_of_edge(
         &self,
-        edge: &MCTSEdge<A>,
-    ) -> Option<impl Deref<Target = MCTSNode<A, V>> + '_> {
+        edge: &MCTSEdge<A, F>,
+    ) -> Option<impl Deref<Target = MCTSNode<A, V, F>> + '_> {
         edge.node_index()
             .map(|index| Ref::map(self.arena.get(), |n| n.node(index)))
     }
@@ -245,9 +246,9 @@ where
             .context("Focused action was not found")?
     }
 
-    pub async fn search<F>(&mut self, alive: F) -> Result<usize>
+    pub async fn search<Fn>(&mut self, alive: Fn) -> Result<usize>
     where
-        F: FnMut(usize) -> bool,
+        Fn: FnMut(usize) -> bool,
     {
         let root_node_index = self.get_or_create_root_node().await;
 
@@ -300,7 +301,7 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn traverse_tree_and_expand(
         root_index: Index,
-        arena: &NodeArena<MCTSNode<A, V>>,
+        arena: &NodeArena<MCTSNode<A, V, F>>,
         game_state: &S,
         focus_actions: &[A],
         game_engine: &E,
@@ -337,7 +338,7 @@ where
                     node.get_position_of_visited_action(focus_action)
                         .ok_or_else(|| anyhow!("Focused action was not found"))?
                 } else {
-                    MCTS::<S, A, E, M, V, C, T>::select_path(
+                    MCTS::<S, A, E, M, V, C, T, F>::select_path(
                         node,
                         &game_state,
                         is_root,
@@ -431,7 +432,7 @@ where
         nodes_to_update: &[NodeUpdateInfo],
         value_node_index: Index,
         value_node_move_num: usize,
-        arena: &mut NodeArenaInner<MCTSNode<A, V>>,
+        arena: &mut NodeArenaInner<MCTSNode<A, V, F>>,
     ) {
         let value_node = &arena.node(value_node_index);
         let value_score = &value_node.value_score().clone();
@@ -573,7 +574,7 @@ where
         Ok(())
     }
 
-    fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
+    fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V, F>>) {
         let node = arena.remove(node_index);
 
         for child_node_index in node.iter_visited_edges().filter_map(|n| n.node_index()) {
@@ -581,7 +582,7 @@ where
         }
     }
 
-    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V>>) {
+    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, V, F>>) {
         let node = arena.node_mut(node_index);
         node.set_visits(1);
 
@@ -600,7 +601,7 @@ where
     }
 
     fn split_node_children_by_action(
-        current_root: &mut MCTSNode<A, V>,
+        current_root: &mut MCTSNode<A, V, F>,
         action: &A,
     ) -> Result<(Option<Index>, Vec<Index>)> {
         let matching_action = current_root
@@ -618,7 +619,7 @@ where
     }
 
     fn select_path(
-        node: &mut MCTSNode<A, V>,
+        node: &mut MCTSNode<A, V, F>,
         game_state: &S,
         is_root: bool,
         options: &MCTSOptions,
@@ -692,7 +693,7 @@ where
     fn get_PUCT_for_nodes(
         node_index: Index,
         game_state: &S,
-        arena: &mut NodeArenaInner<MCTSNode<A, V>>,
+        arena: &mut NodeArenaInner<MCTSNode<A, V, F>>,
         is_root: bool,
         options: &MCTSOptions,
         cpuct: &C,
@@ -777,13 +778,13 @@ where
         root_node_index
     }
 
-    async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, V> {
+    async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, V, F> {
         let analysis = analyzer.get_state_analysis(game_state).await;
-        let (policy_scores, value_score, moves_left_score) = analysis.into_inner();
-        MCTSNode::new(policy_scores, value_score, moves_left_score)
+        let (policy_scores, predictions) = analysis.into_inner();
+        MCTSNode::new(policy_scores, predictions)
     }
 
-    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V>, dirichlet: &DirichletOptions) {
+    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, V, F>, dirichlet: &DirichletOptions) {
         let policy_scores: Vec<f32> = node
             .iter_all_edges()
             .map(|child_node| child_node.policy_score())
@@ -799,7 +800,7 @@ where
     }
 
     fn get_Msa(
-        child: &MCTSEdge<A>,
+        child: &MCTSEdge<A, F>,
         game_length_baseline: &GameLengthBaseline,
         options: &MCTSOptions,
     ) -> f32 {
@@ -888,8 +889,9 @@ where
 
     fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
     where
-        I: Iterator<Item = &'b MCTSEdge<A>>,
+        I: Iterator<Item = &'b MCTSEdge<A, F>>,
         A: 'b,
+        F: 'b,
     {
         if moves_left_threshold >= 1.0 {
             return GameLengthBaseline::None;
@@ -919,31 +921,30 @@ enum GameLengthBaseline {
     None,
 }
 
-impl<A, V> From<&mut MCTSNode<A, V>> for NodeMetrics<A, V>
+impl<A, V, P> From<&mut MCTSNode<A, P>> for NodeMetrics<A, P>
 where
     A: Clone,
-    V: Clone,
+    V: Clone
 {
-    fn from(val: &mut MCTSNode<A, V>) -> Self {
+    fn from(val: &mut MCTSNode<A, V, F>) -> Self {
         NodeMetrics {
             visits: val.visits(),
-            value: val.value_score().clone(),
-            moves_left: val.moves_left_score(),
+            predictions: val.predictions().clone(),
             children: val.iter_all_edges().map(|e| e.deref().into()).collect_vec(),
         }
     }
 }
 
-impl<A> From<&MCTSEdge<A>> for NodeChildMetrics<A>
+impl<A, PV> From<&MCTSEdge<A, PV>> for EdgeMetrics<A>
 where
     A: Clone,
+    F: Clone
 {
-    fn from(edge: &MCTSEdge<A>) -> Self {
-        NodeChildMetrics::new(
+    fn from(edge: &MCTSEdge<A, F>) -> Self {
+        EdgeMetrics::new(
             edge.action().clone(),
-            div_or_zero(edge.W(), edge.visits() as f32),
-            div_or_zero(edge.M(), edge.visits() as f32),
             edge.visits(),
+            edge.propagated_value().clone(),
         )
     }
 }
@@ -980,29 +981,29 @@ impl<T> NodeArenaInner<T> {
     }
 }
 
-impl<A, V> NodeArenaInner<MCTSNode<A, V>> {
+impl<A, V, F> NodeArenaInner<MCTSNode<A, V, F>> {
     #[inline]
-    fn node(&self, index: Index) -> &MCTSNode<A, V> {
+    fn node(&self, index: Index) -> &MCTSNode<A, V, F> {
         &self.0[index]
     }
 
     #[inline]
-    fn node_mut(&mut self, index: Index) -> &mut MCTSNode<A, V> {
+    fn node_mut(&mut self, index: Index) -> &mut MCTSNode<A, V, F> {
         &mut self.0[index]
     }
 
     #[inline]
-    fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSEdge<A> {
+    fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSEdge<A, F> {
         self.0[index].get_child_by_index_mut(child_index)
     }
 
     #[inline]
-    fn insert(&mut self, node: MCTSNode<A, V>) -> Index {
+    fn insert(&mut self, node: MCTSNode<A, V, F>) -> Index {
         self.0.insert(node)
     }
 
     #[inline]
-    fn remove(&mut self, index: Index) -> MCTSNode<A, V> {
+    fn remove(&mut self, index: Index) -> MCTSNode<A, V, F> {
         self.0
             .remove(index)
             .expect("Expected node to exist in the arena")

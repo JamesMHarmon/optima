@@ -1,5 +1,5 @@
 use model::position_metrics::PositionMetrics;
-use model::{node_metrics::NodeMetrics, NodeChildMetrics};
+use model::{node_metrics::NodeMetrics, EdgeMetrics};
 
 use super::{Action, GameState, Value};
 
@@ -29,7 +29,7 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| NodeChildMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
+        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
         .collect();
 
     NodeMetrics {
@@ -46,7 +46,7 @@ mod tests {
     use crate::value::Value;
     use arimaa_engine::{take_actions, Action};
     use engine::GameState as GameStateTrait;
-    use model::NodeChildMetrics;
+    use model::EdgeMetrics;
 
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
@@ -281,9 +281,9 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
-                    NodeChildMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
-                    NodeChildMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
+                    EdgeMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
+                    EdgeMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,
@@ -385,9 +385,9 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new("a2".parse().unwrap(), 0.0, 0.0, 500),
-                    NodeChildMetrics::new("c2".parse().unwrap(), 0.0, 0.0, 250),
-                    NodeChildMetrics::new("d1".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new("a2".parse().unwrap(), 0.0, 0.0, 500),
+                    EdgeMetrics::new("c2".parse().unwrap(), 0.0, 0.0, 250),
+                    EdgeMetrics::new("d1".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,
@@ -485,9 +485,9 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new("g7".parse().unwrap(), 0.0, 0.0, 500),
-                    NodeChildMetrics::new("d8".parse().unwrap(), 0.0, 0.0, 250),
-                    NodeChildMetrics::new("e7".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new("g7".parse().unwrap(), 0.0, 0.0, 500),
+                    EdgeMetrics::new("d8".parse().unwrap(), 0.0, 0.0, 250),
+                    EdgeMetrics::new("e7".parse().unwrap(), 0.0, 0.0, 50),
                 ],
             },
             moves_left: 0,

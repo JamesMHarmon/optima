@@ -1,5 +1,5 @@
 use model::position_metrics::PositionMetrics;
-use model::{node_metrics::NodeMetrics, NodeChildMetrics};
+use model::{node_metrics::NodeMetrics, EdgeMetrics};
 
 use super::{Action, GameState, Value};
 
@@ -29,7 +29,7 @@ fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| NodeChildMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
+        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
         .collect();
 
     NodeMetrics {
@@ -256,14 +256,14 @@ mod tests {
                 value: Value::new([0.0, 0.0]),
                 moves_left: 0.0,
                 children: vec![
-                    NodeChildMetrics::new("a9".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("b9".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("h9".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("a1".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("a1v".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("a1h".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("h3h".parse().unwrap(), 0.0, 0.0, 0),
-                    NodeChildMetrics::new("h3v".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("a9".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("b9".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("h9".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("a1".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("a1v".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("a1h".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("h3h".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("h3v".parse().unwrap(), 0.0, 0.0, 0),
                 ],
             },
             score: Value::new([0.0, 0.0]),
@@ -305,7 +305,7 @@ mod tests {
         let actions = || move_actions().chain(wall_actions());
 
         let children = actions()
-            .map(|action| NodeChildMetrics::new(action, 0.0, 0.0, 0))
+            .map(|action| EdgeMetrics::new(action, 0.0, 0.0, 0))
             .collect_vec();
 
         let symmetries = get_symmetries(PositionMetrics {
