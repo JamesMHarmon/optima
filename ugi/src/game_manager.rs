@@ -467,20 +467,20 @@ where
         let num_top_moves = self.options.lock().unwrap().num_top_moves;
         let top_details = || children.iter().take(num_top_moves);
 
-        let top_moves = top_details().map(|(a, _)| a.to_string()).join(", ");
+        let top_moves = top_details().map(|(a, _)| a.to_string()).join(" ");
 
         self.output.info_val("topmoves", &top_moves);
 
         let visits_sum = children.iter().map(|(_, d)| d.Nsa).sum::<usize>().max(1);
         let top_moves_visits = top_details()
             .map(|(_, d)| format!("{:.3}", d.Nsa as f32 / visits_sum as f32))
-            .join(", ");
+            .join(" ");
 
         self.output.info_val("topmovesvisits", &top_moves_visits);
 
         let top_moves_values = top_details()
             .map(|(_, d)| format!("{:.3}", d.Qsa))
-            .join(", ");
+            .join(" ");
 
         self.output.info_val("topmovesvalues", &top_moves_values);
 
