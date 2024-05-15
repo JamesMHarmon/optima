@@ -242,13 +242,45 @@ where
 
                     if visits == 0 {
                         let start_time = Instant::now();
+                        let mut last_output = start_time;
 
                         self.output.info("ponder started");
-                        mcts.search(|visits| {
-                            ponder_active.load(Ordering::SeqCst) && visits < max_visits
-                        })
-                        .await
-                        .unwrap();
+
+                        while ponder_active.load(Ordering::SeqCst) && self.command_rx.is_empty() {
+                            let depth = mcts
+                                .search(|visits| {
+                                    ponder_active.load(Ordering::SeqCst)
+                                        && visits < max_visits
+                                        && last_output.elapsed().as_secs() < 1
+                                })
+                                .await
+                                .unwrap();
+
+                            last_output = Instant::now();
+
+                            let node_details = mcts
+                                .get_focus_node_details()
+                                .unwrap()
+                                .expect("There should have been at least one visit");
+
+                            let pv = mcts.get_principal_variation().unwrap();
+
+                            let (_, best_node_puct) = choose_action(&node_details.children, 0.0);
+
+                            let move_number = self.engine.move_number(&focus_game_state);
+                            let moves_left = (best_node_puct.M - move_number as f32).max(0.0);
+                            self.output_post_search_info(
+                                &pv,
+                                &focus_game_state,
+                                start_time,
+                                &[best_node_puct.Qsa],
+                                &[node_details.visits],
+                                &[moves_left],
+                                &[depth],
+                                &node_details,
+                            );
+                        }
+
                         self.output.info(&format!(
                             "ponder ended. duration: {:?}",
                             start_time.elapsed()
@@ -415,9 +447,13 @@ where
                         &visits,
                         &moves_left,
                         &depths,
-                        &actions,
                         &node_details,
                     );
+
+                    let move_string = self
+                        .ugi_mapper
+                        .actions_to_move_string(&pre_action_game_state, &actions);
+                    self.output.cmd("bestmove", &move_string);
                 }
             }
         }
@@ -433,7 +469,6 @@ where
         visits: &[usize],
         moves_left: &[f32],
         depths: &[usize],
-        actions: &[A],
         node_details: &NodeDetails<A>,
     ) {
         let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
@@ -459,10 +494,6 @@ where
         self.output
             .info_val("depth", &depths.iter().max().unwrap_or(&0).to_string());
 
-        let move_string = self
-            .ugi_mapper
-            .actions_to_move_string(pre_action_game_state, actions);
-
         let children = &node_details.children;
         let num_top_moves = self.options.lock().unwrap().num_top_moves;
         let top_details = || children.iter().take(num_top_moves);
@@ -483,8 +514,6 @@ where
             .join(" ");
 
         self.output.info_val("topmovesvalues", &top_moves_values);
-
-        self.output.cmd("bestmove", &move_string);
     }
 
     fn display_board(&self, game_state: &S) {
