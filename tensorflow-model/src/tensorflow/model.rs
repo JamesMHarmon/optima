@@ -141,7 +141,7 @@ where
 {
     type State = S;
     type Action = A;
-    type Value = V;
+    type Predictions = P;
     type Analyzer = GameAnalyzer<S, A, V, E, Map, Te>;
 
     fn analyzer(&self) -> Self::Analyzer {
@@ -192,20 +192,17 @@ impl Predictor {
             });
 
         let signature_def_to_ops = |signature_def: &HashMap<String, TensorInfo>| {
-            signature_def.iter()
-                .map(OperationWithIndex::from)
-                .map(|op| (op.operation.name().to_string(), op))
-                .collect::<HashMap<_, _>>()
+            
         };
 
-        let inputs = signature_def_to_ops(signature.inputs());
-        let outputs = signature_def_to_ops(signature.outputs());
+        let input = OperationWithIndex::from(signature.inputs().single());
+        let outputs: HashMap<String, OperationWithIndex> = signature.outputs().iter().map(OperationWithIndex::from).collect::<HashMap<_, _>>();
         let session = model.session;
 
         Self {
             session: SessionAndOps {
                 session,
-                inputs,
+                input,
                 outputs
             },
         }
@@ -214,43 +211,36 @@ impl Predictor {
     fn predict(&self, tensor: &Tensor<f16>) -> Result<AnalysisResults> {
         let session = &self.session;
 
-        let mut output_step = SessionRunArgs::new();
-        output_step.add_feed(&session.op_input.operation, session.op_input.index, tensor);
-        let value_head_fetch_token = output_step.request_fetch(
-            &session.op_value_head.operation,
-            session.op_value_head.index,
-        );
-        let policy_head_fetch_token = output_step.request_fetch(
-            &session.op_policy_head.operation,
-            session.op_policy_head.index,
-        );
-        let moves_left_head_fetch_token = session
-            .op_moves_left_head
-            .as_ref()
-            .map(|op| output_step.request_fetch(&op.operation, op.index));
+        let mut session_run_args = SessionRunArgs::new();
+
+        session_run_args.add_feed(&session.input.operation, session.input.index, tensor);
+
+        let fetch_tokens = session.outputs.iter().map(|(name, (operation, index))| (name, session_run_args.request_fetch(operation, index))).collect_vec();
 
         session
             .session
-            .run(&mut output_step)
+            .run(&mut session_run_args)
             .expect("Expected to be able to run the model session");
 
-        let value_head_output: Tensor<f16> = output_step
+        let value_head_output: Tensor<f16> = session_run_args
             .fetch(value_head_fetch_token)
             .expect("Expected to be able to load value_head output");
-        let policy_head_output: Tensor<f16> = output_step
+        let policy_head_output: Tensor<f16> = session_run_args
             .fetch(policy_head_fetch_token)
             .expect("Expected to be able to load policy_head output");
         let moves_left_head_output: Option<Tensor<f16>> =
             moves_left_head_fetch_token.map(|moves_left_head_fetch_token| {
-                output_step
+                session_run_args
                     .fetch(moves_left_head_fetch_token)
                     .expect("Expected to be able to load moves_left_head output")
             });
 
+        let outputs = fetch_tokens.into_iter().map(|(name, fetch_token)| 
+            (name, session_run_args.fetch(fetch_token).expect("Expected to be able to load output"))
+        ).collect::<HashMap<String, Tensor<f16>>>();
+
         Ok(AnalysisResults {
-            policy_head_output,
-            value_head_output,
-            moves_left_head_output,
+            outputs
         })
     }
 }
@@ -261,20 +251,24 @@ struct AnalysisResults {
 
 pub struct SessionAndOps {
     pub session: Session,
-    pub inputs: Vec<OperationWithIndex>,
-    pub outputs: Vec<OperationWithIndex>
+    pub input: OperationWithIndex,
+    pub outputs: HashMap<String, OperationWithIndex>
 }
 
 pub struct OperationWithIndex {
+    pub name: String,
     pub operation: Operation,
     pub index: c_int,
+    pub size: usize,
 }
 
 impl From<(&String, &TensorInfo)> for OperationWithIndex {
     fn from((name, tensor_info): (&String, &TensorInfo)) -> Self {
         Self {
+            name: name.to_owned(),
             operation: graph.operation_by_name_required(&tensor_info.name().name).expect("Expected to find input operation"),
             index: tensor_info.name().index,
+            size: tensor_info.shape().iter().product::<usize>()
         }
     }
 }
