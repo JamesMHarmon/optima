@@ -38,7 +38,7 @@ tempfile = { version = "3.3.0" }
 tensorflow = { version = "0.18", features = [
     "tensorflow_gpu",
 ], optional = true }
-tokio = { version = "1.36", features = [
+tokio = { version = "1.37", features = [
     "parking_lot",
     "sync",
     "rt",
