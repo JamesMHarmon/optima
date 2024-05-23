@@ -28,7 +28,10 @@ impl Zobrist {
         place_wall_bit: u128,
         is_vertical: bool,
     ) -> Self {
-        let wall_value = get_wall_value(Coordinate::from_bit_board(place_wall_bit).index(), is_vertical);
+        let wall_value = get_wall_value(
+            Coordinate::from_bit_board(place_wall_bit).index(),
+            is_vertical,
+        );
         let walls_remaining_value = get_num_walls_placed_value(prev_game_state);
 
         let hash = self.hash ^ PLAYER_TO_MOVE ^ wall_value ^ walls_remaining_value;
@@ -61,8 +64,12 @@ impl From<&GameState> for Zobrist {
             ^ player_to_move_hash
             ^ get_pawn_hash_value(game_state.player_info(1).pawn().index(), true)
             ^ get_pawn_hash_value(game_state.player_info(2).pawn().index(), false)
-            ^ game_state.vertical_walls().fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), true))
-            ^ game_state.horizontal_walls().fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), false))
+            ^ game_state
+                .vertical_walls()
+                .fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), true))
+            ^ game_state
+                .horizontal_walls()
+                .fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), false))
             ^ WALLS_PLACED[game_state.player_info(1).num_walls()];
 
         Zobrist { hash }
@@ -81,11 +88,7 @@ fn get_move_pawn_value(prev_game_state: &GameState, new_pawn_board: u128) -> u64
 }
 
 fn get_pawn_hash_value(coord_index: usize, is_p1: bool) -> u64 {
-    let pawn_offset = if is_p1 {
-        0
-    } else {
-        PAWN_BOARD_SIZE
-    };
+    let pawn_offset = if is_p1 { 0 } else { PAWN_BOARD_SIZE };
 
     PAWN[pawn_offset + coord_index]
 }
@@ -191,7 +194,9 @@ mod tests {
         let zobrist: Zobrist = (&game_state).into();
         assert_eq!(game_state.transposition_hash(), zobrist.board_state_hash());
 
-        let actions = ["e2", "e8", "e3", "e7", "a2h", "e6", "a4v", "a6h", "a8h"].iter().map(|s| s.parse::<Action>().unwrap());
+        let actions = ["e2", "e8", "e3", "e7", "a2h", "e6", "a4v", "a6h", "a8h"]
+            .iter()
+            .map(|s| s.parse::<Action>().unwrap());
 
         for action in actions {
             game_state.take_action(&action);

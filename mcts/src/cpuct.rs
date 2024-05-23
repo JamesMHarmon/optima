@@ -34,8 +34,7 @@ impl<S> CPUCT for DynamicCPUCT<S> {
 
     fn cpuct(&self, _: &Self::State, nsb: usize, is_root: bool) -> f32 {
         (self.cpuct_init
-            + self.cpuct_factor
-            * ((nsb as f32 + self.cpuct_base + 1.0) / self.cpuct_base).ln())
+            + self.cpuct_factor * ((nsb as f32 + self.cpuct_base + 1.0) / self.cpuct_base).ln())
             * if is_root {
                 self.cpuct_root_scaling
             } else {

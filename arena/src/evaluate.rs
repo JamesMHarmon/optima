@@ -255,9 +255,14 @@ impl Arena {
                     1.0,
                     play_options.cpuct_root_scaling,
                 );
-            
-                let temp = TemperatureMaxMoves::new(play_options.temperature, play_options.temperature_post_max_moves, play_options.temperature_max_moves, engine);
-        
+
+                let temp = TemperatureMaxMoves::new(
+                    play_options.temperature,
+                    play_options.temperature_post_max_moves,
+                    play_options.temperature_max_moves,
+                    engine,
+                );
+
                 MCTS::with_capacity(
                     S::initial(),
                     engine,
@@ -274,7 +279,7 @@ impl Arena {
                     ),
                     visits,
                     cpuct,
-                    temp
+                    temp,
                 )
             })
             .collect();

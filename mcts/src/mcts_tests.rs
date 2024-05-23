@@ -354,7 +354,7 @@ mod tests {
             &analyzer,
             MCTSOptions::new(None, 0.0, 0.0, 0.0, 1.0, 10.0, 0.05, 1),
             cpuct(),
-            temp()
+            temp(),
         );
 
         non_clear_mcts

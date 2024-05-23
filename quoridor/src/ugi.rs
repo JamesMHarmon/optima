@@ -4,8 +4,8 @@ use crate::{Action, Coordinate, Engine, GameState, ModelFactory};
 use engine::GameState as GameStateTrait;
 
 use anyhow::{anyhow, Result};
-use regex::Regex;
 use itertools::Itertools;
+use regex::Regex;
 use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 
 pub struct UGI {}
@@ -58,13 +58,55 @@ impl ParseGameState for UGI {
         let walls_remaining_re = Regex::new(r"[0-9]+").unwrap();
         let mut fen_parts = str.split('/');
 
-        let horizontal_walls = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
-        let vertical_walls = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
-        let player_positions = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
-        let walls_remaining = fen_parts.next().and_then(|s| walls_remaining_re.find_iter(s).map(|c| c.as_str().parse::<usize>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
-        let p1_turn_to_move = fen_parts.next().and_then(|s| s.parse::<usize>().ok()).ok_or(anyhow!("Invalid FEN format"))? == 1;
+        let horizontal_walls = fen_parts
+            .next()
+            .and_then(|s| {
+                coord_parts_re
+                    .find_iter(s)
+                    .map(|c| c.as_str().parse::<Coordinate>().ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or(anyhow!("Invalid FEN format"))?;
+        let vertical_walls = fen_parts
+            .next()
+            .and_then(|s| {
+                coord_parts_re
+                    .find_iter(s)
+                    .map(|c| c.as_str().parse::<Coordinate>().ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or(anyhow!("Invalid FEN format"))?;
+        let player_positions = fen_parts
+            .next()
+            .and_then(|s| {
+                coord_parts_re
+                    .find_iter(s)
+                    .map(|c| c.as_str().parse::<Coordinate>().ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or(anyhow!("Invalid FEN format"))?;
+        let walls_remaining = fen_parts
+            .next()
+            .and_then(|s| {
+                walls_remaining_re
+                    .find_iter(s)
+                    .map(|c| c.as_str().parse::<usize>().ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .ok_or(anyhow!("Invalid FEN format"))?;
+        let p1_turn_to_move = fen_parts
+            .next()
+            .and_then(|s| s.parse::<usize>().ok())
+            .ok_or(anyhow!("Invalid FEN format"))?
+            == 1;
 
-        Ok(GameState::new(horizontal_walls, vertical_walls, player_positions, walls_remaining, p1_turn_to_move))
+        Ok(GameState::new(
+            horizontal_walls,
+            vertical_walls,
+            player_positions,
+            walls_remaining,
+            p1_turn_to_move,
+        ))
     }
 }
 
