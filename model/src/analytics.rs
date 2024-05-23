@@ -5,19 +5,18 @@ pub trait GameAnalyzer {
     type Action;
     type State;
     type Predictions;
-    type Future: Future<Output = Self::GameStateAnalysis>;
-    type GameStateAnalysis: GameStateAnalysis<Self::Action, Self::Predictions>;
+    type Future: Future<Output = GameStateAnalysis<Self::Action, Self::Predictions>>;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
 }
 
 #[derive(Clone, Debug)]
-pub struct BasicGameStateAnalysis<A, P> {
+pub struct GameStateAnalysis<A, P> {
     policy_scores: Vec<ActionWithPolicy<A>>,
     predictions: P
 }
 
-impl<A, P> GameStateAnalysis<A, P> for BasicGameStateAnalysis<A, P> {
+impl<A, P> GameStateAnalysis<A, P> {
     fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
         &self.policy_scores
     }
@@ -31,19 +30,13 @@ impl<A, P> GameStateAnalysis<A, P> for BasicGameStateAnalysis<A, P> {
     }
 }
 
-impl<A, P> BasicGameStateAnalysis<A, P> {
+impl<A, P> GameStateAnalysis<A, P> {
     pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, predictions: P) -> Self {
         Self {
             policy_scores,
             predictions
         }
     }
-}
-
-pub trait GameStateAnalysis<A, P> {
-    fn policy_scores(&self) -> &[ActionWithPolicy<A>];
-    fn predictions(&self) -> &P;
-    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, P);
 }
 
 #[derive(Clone, Debug)]

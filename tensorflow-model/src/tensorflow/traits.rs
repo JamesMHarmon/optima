@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use half::f16;
-use model::{ActionWithPolicy, BasicGameStateAnalysis, NodeMetrics};
+use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics};
 use serde::{Deserialize, Serialize};
 
 use super::Mode;
@@ -38,18 +38,18 @@ pub trait PolicyMap {
         policy: &NodeMetrics<Self::Action, Self::Predictions>,
     ) -> Vec<f32>;
 
-    fn policy_to_valid_actions(
-        &self,
-        game_state: &Self::State,
-        policy_scores: &[f16],
-    ) -> Vec<ActionWithPolicy<Self::Action>>;
+    // fn policy_to_valid_actions(
+    //     &self,
+    //     game_state: &Self::State,
+    //     policy_scores: &[f16],
+    // ) -> Vec<ActionWithPolicy<Self::Action>>;
 }
 
 pub trait PredictionsMap<S, P> {
     type State;
     type Predictions;
 
-    fn from_output(&self, game_state: &Self::State, prediction_output: HashMap<String, &[f16]>) -> Self::Predictions;
+    // fn from_output(&self, game_state: &Self::State, prediction_output: Option<HashMap<String, &[f16]>>) -> Self::Predictions;
 
     fn to_output(&self, game_state: &Self::State, predictions: &Self::Predictions) -> HashMap<String, Vec<f16>>;
 }
@@ -64,13 +64,13 @@ pub trait TranspositionMap {
         &self,
         game_state: &Self::State,
         outputs: HashMap<String, &[f16]>
-    ) -> Te;
+    ) -> Self::TranspositionEntry;
 
-    fn map_transposition_entry_to_analysis(
+    fn map_outputs_to_analysis(
         &self,
         game_state: &Self::State,
-        transposition_entry: &Self::TranspositionEntry,
-    ) -> BasicGameStateAnalysis<Self::Action, Self::Value>;
+        outputs: Option<&Self::TranspositionEntry>,
+    ) -> GameStateAnalysis<Self::Action, Self::Value>;
 
     fn get_transposition_key(&self, game_state: &Self::GameState) -> u64;
 }
