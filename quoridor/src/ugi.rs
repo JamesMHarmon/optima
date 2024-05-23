@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use crate::{Action, Engine, GameState, ModelFactory};
+use crate::{Action, Coordinate, Engine, GameState, ModelFactory};
 use engine::GameState as GameStateTrait;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use regex::Regex;
 use itertools::Itertools;
 use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 
@@ -51,8 +52,19 @@ impl MoveStringToActions for UGI {
 impl ParseGameState for UGI {
     type State = GameState;
 
-    fn parse_game_state(&self, _: &str) -> GameState {
-        todo!()
+    // Parses a FEN state. d4f4e7 / a2a8 / e4 e6 / 7 8 / 2
+    fn parse_game_state(&self, str: &str) -> Result<GameState> {
+        let coord_parts_re = Regex::new(r"[a-z][1-9]").unwrap();
+        let walls_remaining_re = Regex::new(r"[0-9]+").unwrap();
+        let mut fen_parts = str.split('/');
+
+        let horizontal_walls = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
+        let vertical_walls = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
+        let player_positions = fen_parts.next().and_then(|s| coord_parts_re.find_iter(s).map(|c| c.as_str().parse::<Coordinate>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
+        let walls_remaining = fen_parts.next().and_then(|s| walls_remaining_re.find_iter(s).map(|c| c.as_str().parse::<usize>().ok()).collect::<Option<Vec<_>>>()).ok_or(anyhow!("Invalid FEN format"))?;
+        let p1_turn_to_move = fen_parts.next().and_then(|s| s.parse::<usize>().ok()).ok_or(anyhow!("Invalid FEN format"))? == 1;
+
+        Ok(GameState::new(horizontal_walls, vertical_walls, player_positions, walls_remaining, p1_turn_to_move))
     }
 }
 

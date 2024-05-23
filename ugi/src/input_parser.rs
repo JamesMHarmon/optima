@@ -52,8 +52,7 @@ where
             }
             _ if { SET_POSITION_RE.is_match(line) } => {
                 let cap = SET_POSITION_RE.captures(line).unwrap();
-                let game_state = self.ugi_mapper.parse_game_state(&cap[1]);
-                Ok(UGICommand::SetPosition(game_state))
+                self.ugi_mapper.parse_game_state(&cap[1]).map(|game_state| UGICommand::SetPosition(game_state))
             }
             "go" => Ok(UGICommand::Go),
             "go ponder" => Ok(UGICommand::GoPonder),

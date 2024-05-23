@@ -1,5 +1,3 @@
-use common::bits::single_bit_index;
-
 use super::zobrist_values::*;
 use super::GameState;
 use crate::constants::BOARD_SIZE;
@@ -30,7 +28,7 @@ impl Zobrist {
         place_wall_bit: u128,
         is_vertical: bool,
     ) -> Self {
-        let wall_value = get_wall_value(place_wall_bit, is_vertical);
+        let wall_value = get_wall_value(Coordinate::from_bit_board(place_wall_bit).index(), is_vertical);
         let walls_remaining_value = get_num_walls_placed_value(prev_game_state);
 
         let hash = self.hash ^ PLAYER_TO_MOVE ^ wall_value ^ walls_remaining_value;
@@ -41,29 +39,61 @@ impl Zobrist {
     pub fn board_state_hash(&self) -> u64 {
         self.hash
     }
+
+    /* Represents the initial hash position with negated state. */
+    fn inverse_initial() -> u64 {
+        INITIAL
+            ^ get_pawn_hash_value("e1".parse::<Coordinate>().unwrap().index(), true)
+            ^ get_pawn_hash_value("e9".parse::<Coordinate>().unwrap().index(), false)
+            ^ WALLS_PLACED[10]
+    }
+}
+
+impl From<&GameState> for Zobrist {
+    fn from(game_state: &GameState) -> Self {
+        let player_to_move_hash = if game_state.p1_turn_to_move() {
+            0
+        } else {
+            PLAYER_TO_MOVE
+        };
+
+        let hash = Zobrist::inverse_initial()
+            ^ player_to_move_hash
+            ^ get_pawn_hash_value(game_state.player_info(1).pawn().index(), true)
+            ^ get_pawn_hash_value(game_state.player_info(2).pawn().index(), false)
+            ^ game_state.vertical_walls().fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), true))
+            ^ game_state.horizontal_walls().fold(0, |acc, coord| acc ^ get_wall_value(coord.index(), false))
+            ^ WALLS_PLACED[game_state.player_info(1).num_walls()];
+
+        Zobrist { hash }
+    }
 }
 
 fn get_move_pawn_value(prev_game_state: &GameState, new_pawn_board: u128) -> u64 {
-    let is_p1_turn_to_move = prev_game_state.p1_turn_to_move();
+    let is_p1 = prev_game_state.p1_turn_to_move();
     let source_coord = prev_game_state.curr_player().pawn();
     let dest_coord = Coordinate::from_bit_board(new_pawn_board);
 
-    let pawn_offset = if is_p1_turn_to_move {
+    let source_coord_value = get_pawn_hash_value(source_coord.index(), is_p1);
+    let dest_coord_value = get_pawn_hash_value(dest_coord.index(), is_p1);
+
+    source_coord_value ^ dest_coord_value
+}
+
+fn get_pawn_hash_value(coord_index: usize, is_p1: bool) -> u64 {
+    let pawn_offset = if is_p1 {
         0
     } else {
         PAWN_BOARD_SIZE
     };
 
-    let source_coord_value = PAWN[pawn_offset + source_coord.index()];
-    let dest_coord_value = PAWN[pawn_offset + dest_coord.index()];
-
-    source_coord_value ^ dest_coord_value
+    PAWN[pawn_offset + coord_index]
 }
 
-fn get_wall_value(place_wall_bit: u128, is_vertical: bool) -> u64 {
+fn get_wall_value(coord_index: usize, is_vertical: bool) -> u64 {
     let wall_type_offset = if is_vertical { 0 } else { BOARD_SIZE };
 
-    WALL[wall_type_offset + single_bit_index(place_wall_bit)]
+    WALL[wall_type_offset + coord_index]
 }
 
 fn get_num_walls_placed_value(prev_game_state: &GameState) -> u64 {
@@ -83,6 +113,8 @@ fn get_num_walls_placed_value(prev_game_state: &GameState) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::Zobrist;
+
     use super::super::{Action, GameState};
     use engine::game_state::GameState as GameStateTrait;
 
@@ -151,5 +183,20 @@ mod tests {
         let after_actions_hash_2 = game_state.transposition_hash();
 
         assert_ne!(after_actions_hash, after_actions_hash_2);
+    }
+
+    #[test]
+    fn test_hash_from_game_state() {
+        let mut game_state = GameState::initial();
+        let zobrist: Zobrist = (&game_state).into();
+        assert_eq!(game_state.transposition_hash(), zobrist.board_state_hash());
+
+        let actions = ["e2", "e8", "e3", "e7", "a2h", "e6", "a4v", "a6h", "a8h"].iter().map(|s| s.parse::<Action>().unwrap());
+
+        for action in actions {
+            game_state.take_action(&action);
+            let zobrist: Zobrist = (&game_state).into();
+            assert_eq!(game_state.transposition_hash(), zobrist.board_state_hash());
+        }
     }
 }

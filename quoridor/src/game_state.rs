@@ -39,6 +39,49 @@ struct PathingResult {
 }
 
 impl GameState {
+    pub fn new(
+        horizontal_walls: impl IntoIterator<Item = Coordinate>,
+        vertical_walls: impl IntoIterator<Item = Coordinate>,
+        player_positions: impl IntoIterator<Item = Coordinate>,
+        walls_remaining: impl IntoIterator<Item = usize>,
+        p1_turn_to_move: bool,
+    ) -> Self {
+        let mut player_positions = player_positions.into_iter();
+        let p1_pawn_board = player_positions
+            .next()
+            .expect("Expected p1 position")
+            .as_bit_board();
+        let p2_pawn_board = player_positions
+            .next()
+            .expect("Expected p2 position")
+            .as_bit_board();
+        let mut walls_remaining = walls_remaining.into_iter();
+        let p1_num_walls = walls_remaining.next().expect("Expected p1 walls remaining") as u8;
+        let p2_num_walls = walls_remaining.next().expect("Expected p2 walls remaining") as u8;
+        let vertical_wall_board = vertical_walls
+            .into_iter()
+            .fold(0u128, |bit_board, coord| bit_board | coord.as_bit_board());
+        let horizontal_wall_board = horizontal_walls
+            .into_iter()
+            .fold(0u128, |bit_board, coord| bit_board | coord.as_bit_board());
+
+        let mut game_state = Self {
+            move_number: 0,
+            p1_turn_to_move,
+            p1_pawn_board,
+            p2_pawn_board,
+            p1_num_walls,
+            p2_num_walls,
+            vertical_wall_board,
+            horizontal_wall_board,
+            zobrist: Zobrist::initial(),
+        };
+
+        game_state.zobrist = Zobrist::from(&game_state);
+
+        game_state
+    }
+
     pub fn take_action(&mut self, action: &Action) {
         let coord = action.coord();
 
@@ -109,7 +152,7 @@ impl GameState {
             })
         };
 
-        Self {
+        let mut symmetrical_state = Self {
             p1_pawn_board: vertical_symmetry_bit_board(self.p1_pawn_board, false),
             p2_pawn_board: vertical_symmetry_bit_board(self.p2_pawn_board, false),
             vertical_wall_board: vertical_symmetry_bit_board(self.vertical_wall_board, true),
@@ -118,9 +161,12 @@ impl GameState {
             p1_num_walls: self.p1_num_walls,
             p2_num_walls: self.p2_num_walls,
             p1_turn_to_move: self.p1_turn_to_move,
-            // @TODO: Need to update the zobrist hash here.
-            zobrist: self.zobrist,
-        }
+            zobrist: Zobrist::initial(),
+        };
+
+        symmetrical_state.zobrist = Zobrist::from(&symmetrical_state);
+
+        symmetrical_state
     }
 
     pub fn transposition_hash(&self) -> u64 {

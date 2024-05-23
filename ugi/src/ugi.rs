@@ -16,7 +16,7 @@ pub trait MoveStringToActions {
 pub trait ParseGameState {
     type State;
 
-    fn parse_game_state(&self, str: &str) -> Self::State;
+    fn parse_game_state(&self, str: &str) -> Result<Self::State>;
 }
 
 pub trait InitialGameState {
