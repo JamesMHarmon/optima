@@ -96,7 +96,7 @@ impl ParseGameState for UGI {
             .ok_or(anyhow!("Invalid FEN format"))?;
         let p1_turn_to_move = fen_parts
             .next()
-            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|s| s.trim().parse::<usize>().ok())
             .ok_or(anyhow!("Invalid FEN format"))?
             == 1;
 
