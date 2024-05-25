@@ -193,7 +193,7 @@ where
             .transpose()
     }
 
-    pub fn get_principal_variation(&mut self) -> Result<Vec<(A, PUCT)>> {
+    pub fn get_principal_variation(&mut self, action: Option<A>) -> Result<Vec<(A, PUCT)>> {
         self.get_focus_node_index()?
             .map(|mut node_index| {
                 let mut game_state = self.get_focus_node_game_state();
@@ -207,6 +207,10 @@ where
 
                     if children.is_empty() {
                         break;
+                    }
+
+                    if let Some(action) = action.as_ref() {
+                        children.retain(|(a, _)| a == action);
                     }
 
                     let (action, puct) = children.swap_remove(0);
@@ -239,10 +243,7 @@ where
     {
         let root_node_index = self.get_or_create_root_node().await;
 
-        let mut visits = self
-            .get_focus_node_index()?
-            .map(|node_index| self.arena.get_mut().node(node_index).get_node_visits())
-            .unwrap_or(0);
+        let mut visits = self.num_focus_node_visits()?;
 
         let game_engine = &self.game_engine;
         let options = &self.options;
@@ -408,6 +409,15 @@ where
         }
 
         Ok(depth)
+    }
+
+    pub fn num_focus_node_visits(&mut self) -> Result<usize> {
+        let visits = self
+            .get_focus_node_index()?
+            .map(|node_index| self.arena.get_mut().node(node_index).get_node_visits())
+            .unwrap_or(0);
+
+        Ok(visits)
     }
 
     fn update_node_values(

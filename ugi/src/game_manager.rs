@@ -246,7 +246,7 @@ where
 
                         self.output.info("ponder started");
 
-                        while ponder_active.load(Ordering::SeqCst) && self.command_rx.is_empty() {
+                        while ponder_active.load(Ordering::SeqCst) && self.command_rx.is_empty() && (max_visits == 0 || mcts.num_focus_node_visits().unwrap() < max_visits) {
                             let depth = mcts
                                 .search(|visits| {
                                     ponder_active.load(Ordering::SeqCst)
@@ -263,13 +263,15 @@ where
                                 .unwrap()
                                 .expect("There should have been at least one visit");
 
-                            let pv = mcts.get_principal_variation().unwrap();
+                            let pv = mcts.get_principal_variation(None).unwrap();
 
                             let (_, best_node_puct) = choose_action(&node_details.children, 0.0);
 
                             let move_number = self.engine.move_number(&focus_game_state);
+                            let player_to_move = self.engine.player_to_move(&focus_game_state);
                             let moves_left = (best_node_puct.M - move_number as f32).max(0.0);
                             self.output_post_search_info(
+                                player_to_move,
                                 &pv,
                                 &focus_game_state,
                                 start_time,
@@ -434,12 +436,13 @@ where
                         mcts.add_focus_to_action(action);
                     }
 
-                    let pv = mcts.get_principal_variation().unwrap();
+                    let pv = mcts.get_principal_variation(None).unwrap();
 
                     let node_details =
                         node_details_container.expect("Expected node_details to have been set");
 
                     self.output_post_search_info(
+                        current_player,
                         &pv,
                         &pre_action_game_state,
                         search_start,
@@ -462,6 +465,7 @@ where
     #[allow(clippy::too_many_arguments)]
     fn output_post_search_info(
         &self,
+        player_to_move: usize,
         pv: &[(A, PUCT)],
         pre_action_game_state: &S,
         search_start: Instant,
@@ -471,6 +475,8 @@ where
         depths: &[usize],
         node_details: &NodeDetails<A>,
     ) {
+        self.output.info(&format!("playertomove: {}", player_to_move));
+
         let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
         let pv_string = self
             .ugi_mapper
