@@ -246,7 +246,10 @@ where
 
                         self.output.info("ponder started");
 
-                        while ponder_active.load(Ordering::SeqCst) && self.command_rx.is_empty() && (max_visits == 0 || mcts.num_focus_node_visits().unwrap() < max_visits) {
+                        while ponder_active.load(Ordering::SeqCst)
+                            && self.command_rx.is_empty()
+                            && (max_visits == 0 || mcts.num_focus_node_visits() < max_visits)
+                        {
                             let depth = mcts
                                 .search(|visits| {
                                     ponder_active.load(Ordering::SeqCst)
@@ -263,7 +266,13 @@ where
                                 .unwrap()
                                 .expect("There should have been at least one visit");
 
-                            let pv = mcts.get_principal_variation(None).unwrap();
+                            let num_top_moves = self.options.lock().unwrap().num_top_moves;
+                            let pv = node_details
+                                .children
+                                .iter()
+                                .take(num_top_moves)
+                                .filter_map(|(a, _)| mcts.get_principal_variation(Some(a), 10).ok())
+                                .collect_vec();
 
                             let (_, best_node_puct) = choose_action(&node_details.children, 0.0);
 
@@ -436,7 +445,10 @@ where
                         mcts.add_focus_to_action(action);
                     }
 
-                    let pv = mcts.get_principal_variation(None).unwrap();
+                    let pv = mcts
+                        .get_principal_variation(None, 10)
+                        .into_iter()
+                        .collect_vec();
 
                     let node_details =
                         node_details_container.expect("Expected node_details to have been set");
@@ -466,7 +478,7 @@ where
     fn output_post_search_info(
         &self,
         player_to_move: usize,
-        pv: &[(A, PUCT)],
+        pv: &[Vec<(A, PUCT)>],
         pre_action_game_state: &S,
         search_start: Instant,
         scores: &[f32],
@@ -475,14 +487,9 @@ where
         depths: &[usize],
         node_details: &NodeDetails<A>,
     ) {
-        self.output.info(&format!("playertomove: {}", player_to_move));
+        self.output
+            .info(&format!("playertomove: {}", player_to_move));
 
-        let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
-        let pv_string = self
-            .ugi_mapper
-            .actions_to_move_string(pre_action_game_state, &pv_actions);
-
-        self.output.info_val("pv", &pv_string);
         self.output
             .info_val("time", &search_start.elapsed().as_secs().to_string());
         self.output.info_val(
@@ -491,6 +498,7 @@ where
         );
         self.output
             .info_val("score", &format!("{:.3}", scores.last().unwrap_or(&0.5)));
+
         self.output.info_val(
             "moves_left",
             &format!("{:.1}", moves_left.last().unwrap_or(&0.0)),
@@ -520,6 +528,20 @@ where
             .join(" ");
 
         self.output.info_val("topmovesvalues", &top_moves_values);
+
+        for (i, pv) in pv.iter().enumerate() {
+            let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
+            let pv_string = self
+                .ugi_mapper
+                .actions_to_move_string(pre_action_game_state, &pv_actions);
+
+            let pv_num = if i == 0 {
+                "".to_string()
+            } else {
+                (i + 1).to_string()
+            };
+            self.output.info_val(&format!("pv{}", pv_num), &pv_string);
+        }
     }
 
     fn display_board(&self, game_state: &S) {

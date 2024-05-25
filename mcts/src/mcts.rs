@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use common::div_or_zero;
 use futures::stream::{FuturesUnordered, StreamExt};
 use generational_arena::{Arena, Index};
@@ -193,13 +193,17 @@ where
             .transpose()
     }
 
-    pub fn get_principal_variation(&mut self, action: Option<A>) -> Result<Vec<(A, PUCT)>> {
+    pub fn get_principal_variation(
+        &mut self,
+        action: Option<&A>,
+        depth: usize,
+    ) -> Result<Vec<(A, PUCT)>> {
         self.get_focus_node_index()?
             .map(|mut node_index| {
                 let mut game_state = self.get_focus_node_game_state();
                 let mut nodes = vec![];
 
-                loop {
+                while nodes.len() < depth {
                     let is_root = nodes.is_empty();
                     let mut children = self
                         .get_node_details(node_index, &game_state, is_root)?
@@ -209,11 +213,16 @@ where
                         break;
                     }
 
-                    if let Some(action) = action.as_ref() {
-                        children.retain(|(a, _)| a == action);
-                    }
+                    let child_idx = if is_root && action.is_some() {
+                        children
+                            .iter()
+                            .position(|(a, _)| a == action.unwrap())
+                            .context("Action not found")?
+                    } else {
+                        0
+                    };
 
-                    let (action, puct) = children.swap_remove(0);
+                    let (action, puct) = children.swap_remove(child_idx);
                     nodes.push((action.clone(), puct));
 
                     if let Some(child_index) = self
@@ -233,8 +242,7 @@ where
 
                 Ok(nodes)
             })
-            .ok_or_else(|| anyhow!("Focused action was not found"))
-            .and_then(|v| v)
+            .context("Focused action was not found")?
     }
 
     pub async fn search<F>(&mut self, alive: F) -> Result<usize>
@@ -243,7 +251,7 @@ where
     {
         let root_node_index = self.get_or_create_root_node().await;
 
-        let mut visits = self.num_focus_node_visits()?;
+        let mut visits = self.num_focus_node_visits();
 
         let game_engine = &self.game_engine;
         let options = &self.options;
@@ -411,13 +419,12 @@ where
         Ok(depth)
     }
 
-    pub fn num_focus_node_visits(&mut self) -> Result<usize> {
-        let visits = self
-            .get_focus_node_index()?
+    pub fn num_focus_node_visits(&mut self) -> usize {
+        self.get_focus_node_index()
+            .ok()
+            .flatten()
             .map(|node_index| self.arena.get_mut().node(node_index).get_node_visits())
-            .unwrap_or(0);
-
-        Ok(visits)
+            .unwrap_or(0)
     }
 
     fn update_node_values(
