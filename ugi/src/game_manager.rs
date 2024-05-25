@@ -488,7 +488,7 @@ where
         node_details: &NodeDetails<A>,
     ) {
         self.output
-            .info(&format!("playertomove: {}", player_to_move));
+            .info(&format!("playertomove {}", player_to_move));
 
         self.output
             .info_val("time", &search_start.elapsed().as_secs().to_string());
