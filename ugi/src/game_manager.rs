@@ -266,11 +266,11 @@ where
                                 .unwrap()
                                 .expect("There should have been at least one visit");
 
-                            let num_top_moves = self.options.lock().unwrap().num_top_moves;
+                            let multi_pv = self.options.lock().unwrap().multi_pv;
                             let pv = node_details
                                 .children
                                 .iter()
-                                .take(num_top_moves)
+                                .take(multi_pv)
                                 .filter_map(|(a, _)| mcts.get_principal_variation(Some(a), 10).ok())
                                 .collect_vec();
 
@@ -487,60 +487,33 @@ where
         depths: &[usize],
         node_details: &NodeDetails<A>,
     ) {
-        self.output
-            .info(&format!("playertomove {}", player_to_move));
+        self.output.info(&format!(
+            "time {time} playertomove {playertomove} score {score:.3} visits {visits} movesleft {moves_left:.3} depth {depth}",
+            time = search_start.elapsed().as_secs(),
+            playertomove = player_to_move,
+            score = scores.first().unwrap_or(&0.5),
+            visits = visits.iter().max().unwrap_or(&0),
+            moves_left = moves_left.last().unwrap_or(&0.0),
+            depth = depths.iter().max().unwrap_or(&0)
+        ));
 
-        self.output
-            .info_val("time", &search_start.elapsed().as_secs().to_string());
-        self.output.info_val(
-            "root_score",
-            &format!("{:.3}", scores.first().unwrap_or(&0.5)),
-        );
-        self.output
-            .info_val("score", &format!("{:.3}", scores.last().unwrap_or(&0.5)));
+        let visits_sum = (node_details.visits - 1).max(1);
 
-        self.output.info_val(
-            "moves_left",
-            &format!("{:.1}", moves_left.last().unwrap_or(&0.0)),
-        );
-        self.output
-            .info_val("visits", &visits.iter().max().unwrap_or(&0).to_string());
-        self.output
-            .info_val("depth", &depths.iter().max().unwrap_or(&0).to_string());
-
-        let children = &node_details.children;
-        let num_top_moves = self.options.lock().unwrap().num_top_moves;
-        let top_details = || children.iter().take(num_top_moves);
-
-        let top_moves = top_details().map(|(a, _)| a.to_string()).join(" ");
-
-        self.output.info_val("topmoves", &top_moves);
-
-        let visits_sum = children.iter().map(|(_, d)| d.Nsa).sum::<usize>().max(1);
-        let top_moves_visits = top_details()
-            .map(|(_, d)| format!("{:.3}", d.Nsa as f32 / visits_sum as f32))
-            .join(" ");
-
-        self.output.info_val("topmovesvisits", &top_moves_visits);
-
-        let top_moves_values = top_details()
-            .map(|(_, d)| format!("{:.3}", d.Qsa))
-            .join(" ");
-
-        self.output.info_val("topmovesvalues", &top_moves_values);
-
-        for (i, pv) in pv.iter().enumerate() {
+        for (i, ((_, edge), pv)) in node_details.children.iter().zip(pv).enumerate() {
             let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
             let pv_string = self
                 .ugi_mapper
                 .actions_to_move_string(pre_action_game_state, &pv_actions);
 
-            let pv_num = if i == 0 {
-                "".to_string()
-            } else {
-                (i + 1).to_string()
-            };
-            self.output.info_val(&format!("pv{}", pv_num), &pv_string);
+            self.output.info(&format!(
+                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} movesleft {moves_left:.3} pv {pv}",
+                pv_num = i + 1,
+                score = edge.Qsa,
+                visits = edge.Nsa,
+                visitspct = edge.Nsa as f32 / visits_sum as f32,
+                moves_left = edge.M,
+                pv = &pv_string,
+            ));
         }
     }
 
@@ -569,12 +542,6 @@ impl OutputHandle {
     fn info(&self, msg: &str) {
         self.output_tx
             .send(Output::Info(msg.to_string()))
-            .expect("Failed to send output");
-    }
-
-    fn info_val(&self, msg: &str, value: &str) {
-        self.output_tx
-            .send(Output::Info(format!("{} {}", msg, value)))
             .expect("Failed to send output");
     }
 }

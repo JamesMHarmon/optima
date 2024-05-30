@@ -23,7 +23,7 @@ pub struct UGIOptions {
     pub gold_setup: String,
     pub fixed_time: Option<f32>,
     pub display: bool,
-    pub num_top_moves: usize,
+    pub multi_pv: usize,
 }
 
 pub enum UGIOption {
@@ -50,7 +50,7 @@ pub enum UGIOption {
     GoldSetup(String),
     FixedTime(Option<f32>),
     Display(bool),
-    NumTopMoves(usize),
+    MultiPV(usize),
 }
 
 #[allow(clippy::new_without_default)]
@@ -81,7 +81,7 @@ impl UGIOptions {
             gold_setup: "".to_string(),
             fixed_time: None,
             display: true,
-            num_top_moves: 8,
+            multi_pv: 1,
         }
     }
 
@@ -124,7 +124,7 @@ impl UGIOptions {
             UGIOption::GoldSetup(gold_setup) => self.gold_setup = gold_setup,
             UGIOption::FixedTime(fixed_time) => self.fixed_time = fixed_time,
             UGIOption::Display(display) => self.display = display,
-            UGIOption::NumTopMoves(num_top_moves) => self.num_top_moves = num_top_moves,
+            UGIOption::MultiPV(multi_pv) => self.multi_pv = multi_pv,
         };
     }
 }

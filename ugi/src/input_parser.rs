@@ -167,8 +167,8 @@ where
                         "display",
                         option_value,
                     )?)),
-                    "numtopmoves" => Some(UGIOption::NumTopMoves(parse_option_value(
-                        "numtopmoves",
+                    "multipv" => Some(UGIOption::MultiPV(parse_option_value(
+                        "multipv",
                         option_value,
                     )?)),
                     "rating" => None,
