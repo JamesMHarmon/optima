@@ -5,14 +5,14 @@ use model::ActionWithPolicy;
 use crate::edge::MCTSEdge;
 
 #[derive(Debug)]
-pub struct MCTSNode<A, P> {
+pub struct MCTSNode<A, P, PV> {
     visits: usize,
     predictions: P,
-    visited_edges: Vec<MCTSEdge<A, P>>,
+    visited_edges: Vec<MCTSEdge<A, PV>>,
     unvisited_edges: Vec<ActionWithPolicy<A>>,
 }
 
-impl<A, P> MCTSNode<A, P> {
+impl<A, P, PV> MCTSNode<A, P, PV> {
     pub fn new(
         policy_scores: Vec<ActionWithPolicy<A>>,
         predictions: P,
@@ -29,7 +29,7 @@ impl<A, P> MCTSNode<A, P> {
         self.visits
     }
 
-    pub fn get_child_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A, F> {
+    pub fn get_child_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A, PV> {
         &mut self.visited_edges[index]
     }
 
@@ -37,11 +37,11 @@ impl<A, P> MCTSNode<A, P> {
         self.child_len() == 0
     }
 
-    pub fn iter_visited_edges(&self) -> impl Iterator<Item = &MCTSEdge<A, F>> {
+    pub fn iter_visited_edges(&self) -> impl Iterator<Item = &MCTSEdge<A, PV>> {
         self.visited_edges.iter()
     }
 
-    pub fn iter_visited_edges_mut(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A, F>> {
+    pub fn iter_visited_edges_mut(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A, PV>> {
         self.visited_edges.iter_mut()
     }
 
@@ -66,7 +66,7 @@ impl<A, P> MCTSNode<A, P> {
     }
 }
 
-impl<A, V, F> MCTSNode<A, V, F>
+impl<A, P, PV> MCTSNode<A, P, PV>
 where
     A: Eq,
 {
@@ -75,18 +75,17 @@ where
     }
 }
 
-impl<A, V, F> MCTSNode<A, V, F>
-where
-    F: Default
+impl<A, P, PV> MCTSNode<A, P, PV>
+    where PV: Default
 {
     pub fn iter_visited_edges_and_top_unvisited_edge(
         &mut self,
-    ) -> impl Iterator<Item = &MCTSEdge<A, F>> {
+    ) -> impl Iterator<Item = &MCTSEdge<A, PV>> {
         self.init_top_policy_unvisited_action_if_all_initialized_edges_visited();
         self.visited_edges.iter()
     }
 
-    pub fn iter_all_edges(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A, F>> {
+    pub fn iter_all_edges(&mut self) -> impl Iterator<Item = &mut MCTSEdge<A, PV>> {
         self.init_all_edges();
         self.visited_edges.iter_mut()
     }
@@ -146,12 +145,12 @@ where
 }
 
 
-impl<A, V, F> MCTSNode<A, V, F>
+impl<A, P, PV> MCTSNode<A, P, PV>
 where
     A: Eq,
-    F: Default
+    PV: Default,
 {
-    pub fn get_child_of_action(&mut self, action: &A) -> Option<&mut MCTSEdge<A, F>> {
+    pub fn get_child_of_action(&mut self, action: &A) -> Option<&mut MCTSEdge<A, PV>> {
         self.iter_all_edges().find(|e| e.action() == action)
     }
 }

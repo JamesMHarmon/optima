@@ -28,7 +28,7 @@ pub fn deblunder<S, A, V, Vs, Qm>(
 
         value_stack.set_if_not::<S, V, Qm>(game_state, max_visits_child.Q());
 
-        let q_diff = metric.metrics.policy.Q_diff(&metric.chosen_action);
+        let q_diff = q_diff(metric.metrics.policy, &metric.chosen_action);
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
@@ -147,4 +147,15 @@ impl<Vs> ValueStack<Vs> {
             .0
             .set_v_for_player(game_state, mixed_V);
     }
+}
+
+/// Difference between the Q of the specified action and the child that would be played with no temp.
+fn q_diff(&self, action: &A) -> f32
+where
+    A: PartialEq,
+{
+    let max_visits_Q = self.child_max_visits().Q();
+    let chosen_Q = self.children.iter().find(|c| c.action() == action);
+    let chosen_Q = chosen_Q.expect("Specified action was not found").Q();
+    max_visits_Q - chosen_Q
 }

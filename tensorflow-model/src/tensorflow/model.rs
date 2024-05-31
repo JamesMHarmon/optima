@@ -7,7 +7,6 @@ use engine::value::Value;
 use half::f16;
 use log::{debug, info};
 use parking_lot::Mutex;
-use rayon::prelude::*;
 use std::collections::{BinaryHeap, HashMap};
 use std::future::Future;
 use std::hash::Hash;
@@ -22,17 +21,17 @@ use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::*;
-use ::model::{analytics, Analyzer, BasicGameStateAnalysis, Info, ModelInfo};
+use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
 #[cfg(feature = "tensorflow_system_alloc")]
 static ALLOCATOR: std::alloc::System = std::alloc::System;
 
 #[allow(clippy::type_complexity)]
-pub struct TensorflowModel<S, A, V, E, Map, Te> {
+pub struct TensorflowModel<S, A, P, E, Map, Te> {
     model_info: ModelInfo,
     model_dir: PathBuf,
-    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, V, E, Map, Te>>>,
+    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, P, E, Map, Te>>>,
     analysis_request_threads: usize,
     engine: Arc<E>,
     mapper: Arc<Map>,
@@ -41,17 +40,14 @@ pub struct TensorflowModel<S, A, V, E, Map, Te> {
     tt_cache_size: usize,
 }
 
-impl<S, A, V, E, Map, Te> TensorflowModel<S, A, V, E, Map, Te>
+impl<S, A, P, E, Map, Te> TensorflowModel<S, A, P, E, Map, Te>
 where
     S: Hash + Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
-    V: Value + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: InputMap<S>
-        + PolicyMap<S, A, V>
-        + ValueMap<S, V>
-        + TranspositionMap<S, A, V, Te>
-        + Dimension
+    P: Send + Sync + 'static,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
+    Map: Dimension
+        + Clone
         + Send
         + Sync
         + 'static,
@@ -98,7 +94,7 @@ where
 
     fn create_batching_model(
         &self,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> BatchingModel<E, Map, Te> {
         let transposition_table = Arc::new(if self.tt_cache_size > 0 {
             Some(TranspositionTable::new(self.tt_cache_size))
@@ -123,16 +119,13 @@ where
     }
 }
 
-impl<S, A, V, E, Map, Te> Analyzer for TensorflowModel<S, A, V, E, Map, Te>
+impl<S, A, P, E, Map, Te> Analyzer for TensorflowModel<S, A, P, E, Map, Te>
 where
     S: GameState + Send + Sync + Unpin + 'static,
     A: Clone + Send + Sync + 'static,
-    V: Value + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: InputMap<S>
-        + PolicyMap<S, A, V>
-        + ValueMap<S, V>
-        + TranspositionMap<S, A, V, Te>
+    P: Value + Send + Sync + 'static,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
+    Map: TranspositionMap<State = S, TranspositionEntry = Te>
         + Dimension
         + Send
         + Sync
@@ -142,7 +135,7 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type Analyzer = GameAnalyzer<S, A, V, E, Map, Te>;
+    type Analyzer = GameAnalyzer<S, A, P, E, Map, Te>;
 
     fn analyzer(&self) -> Self::Analyzer {
         let batching_model_ref = &mut *self.batching_model.lock();
@@ -164,7 +157,7 @@ where
     }
 }
 
-impl<S, A, V, E, Map, Te> Info for TensorflowModel<S, A, V, E, Map, Te> {
+impl<S, A, P, E, Map, Te> Info for TensorflowModel<S, A, P, E, Map, Te> {
     fn info(&self) -> &ModelInfo {
         &self.model_info
     }
@@ -273,23 +266,23 @@ impl From<(&String, &TensorInfo)> for OperationWithIndex {
     }
 }
 
-type BatchingModelAndSender<S, A, V, E, Map, Te> = (
+type BatchingModelAndSender<S, A, P, E, Map, Te> = (
     BatchingModel<E, Map, Te>,
-    UnboundedSender<StatesToAnalyse<S, A, V>>,
+    UnboundedSender<StatesToAnalyse<S, A, P>>,
 );
 
-pub struct GameAnalyzer<S, A, V, E, Map, Te> {
-    batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>,
+pub struct GameAnalyzer<S, A, P, E, Map, Te> {
+    batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>,
     analysed_state_ordered: CompletedAnalysisOrdered,
-    analysed_state_sender: mpsc::UnboundedSender<AnalysisToSend<A, V>>,
+    analysed_state_sender: mpsc::UnboundedSender<AnalysisToSend<A, P>>,
 }
 
-impl<S, A, V, E, Map, Te> GameAnalyzer<S, A, V, E, Map, Te>
+impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te>
 where
     A: Send + 'static,
     V: Send + 'static,
 {
-    fn new(batching_model: Arc<BatchingModelAndSender<S, A, V, E, Map, Te>>) -> Self {
+    fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>) -> Self {
         let (analysed_state_sender, analyzed_state_receiver) = mpsc::unbounded_channel();
 
         let analysed_state_ordered =
@@ -303,21 +296,19 @@ where
     }
 }
 
-impl<S, A, V, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, V, E, Map, Te>
+impl<S, A, P, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, E, Map, Te>
 where
     S: Clone + Hash + Unpin,
     A: Clone,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: InputMap<S> + PolicyMap<S, A, V> + ValueMap<S, V> + TranspositionMap<S, A, V, Te>,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Te: Send + Sync + 'static,
 {
     type State = S;
     type Action = A;
     type Predictions = P;
-    type GameStateAnalysis = BasicGameStateAnalysis<A, V>;
-    type Future = UnwrappedReceiver<Self::GameStateAnalysis>;
+    type Future = UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>>;
 
-    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<Self::GameStateAnalysis> {
+    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>> {
         let (tx, rx) = oneshot::channel();
         let id = self.analysed_state_ordered.get_id();
         let sender = &self.batching_model.1;
@@ -359,24 +350,24 @@ impl<T> Future for UnwrappedReceiver<T> {
     }
 }
 
-type StatesToAnalyse<S, A, V> = (
+type StatesToAnalyse<S, A, P> = (
     usize,
     S,
-    mpsc::UnboundedSender<AnalysisToSend<A, V>>,
-    Sender<BasicGameStateAnalysis<A, V>>,
+    mpsc::UnboundedSender<AnalysisToSend<A, P>>,
+    Sender<GameStateAnalysis<A, P>>,
 );
 
-type AnalysisToSend<A, V> = (
+type AnalysisToSend<A, P> = (
     usize,
-    BasicGameStateAnalysis<A, V>,
-    Sender<BasicGameStateAnalysis<A, V>>,
+    GameStateAnalysis<A, P>,
+    Sender<GameStateAnalysis<A, P>>,
 );
 
-type StatesToInfer<S, A, V> = (
+type StatesToInfer<S, A, P> = (
     usize,
     S,
-    tokio::sync::mpsc::UnboundedSender<AnalysisToSend<A, V>>,
-    tokio::sync::oneshot::Sender<BasicGameStateAnalysis<A, V>>,
+    tokio::sync::mpsc::UnboundedSender<AnalysisToSend<A, P>>,
+    tokio::sync::oneshot::Sender<GameStateAnalysis<A, P>>,
 );
 
 struct BatchingModel<E, Map, Te> {
@@ -386,17 +377,13 @@ struct BatchingModel<E, Map, Te> {
     _reporter: Arc<Reporter<Te>>,
 }
 
-impl<S, A, V, E, Map, Te> BatchingModel<E, Map, Te>
+impl<S, A, P, E, Map, Te> BatchingModel<E, Map, Te>
 where
     S: Hash + Send + Sync + 'static,
     A: Clone + Send + 'static,
-    V: Value + Send + 'static,
-    E: GameEngine<State = S, Action = A, Value = V> + Send + Sync + 'static,
-    Map: InputMap<S>
-        + PolicyMap<S, A, V>
-        + ValueMap<S, V>
-        + TranspositionMap<S, A, V, Te>
-        + Dimension
+    P: Send + 'static,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
+    Map: Dimension
         + Send
         + Sync
         + 'static,
@@ -413,7 +400,7 @@ where
         analysis_request_threads: usize,
         output_size: usize,
         moves_left_size: usize,
-        states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+        states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> Self {
         let inner_self = Self {
             transposition_table,
@@ -441,8 +428,8 @@ where
         mapper: Arc<Map>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
-        states_to_predict_tx: UnboundedSender<StatesToInfer<S, A, V>>,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
+        states_to_predict_tx: UnboundedSender<StatesToInfer<S, A, P>>,
     ) {
         let engine = &*engine;
         let mapper = &*mapper;
@@ -485,7 +472,7 @@ where
         engine: Arc<E>,
         reporter: Arc<Reporter<Te>>,
         model_dir: PathBuf,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, V>>,
+        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
         output_size: usize,
         moves_left_size: usize,
         batch_size: usize,
@@ -567,7 +554,7 @@ where
 
     fn process_predictions(
         predictions: AnalysisResults,
-        states_to_analyse: Vec<StatesToInfer<S, A, V>>,
+        states_to_analyse: Vec<StatesToInfer<S, A, P>>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         mapper: Arc<Map>
     ) {
@@ -617,11 +604,11 @@ where
         engine: &E,
         mapper: &Map,
         reporter: &Reporter<Te>,
-    ) -> Option<BasicGameStateAnalysis<A, V>> {
+    ) -> Option<GameStateAnalysis<A, P>> {
         if let Some(value) = engine.terminal_state(game_state) {
             reporter.set_terminal();
 
-            return Some(BasicGameStateAnalysis::new(value, Vec::new(), 0f32));
+            return Some(GameStateAnalysis::new(value, Vec::new()));
         }
 
         if let Some(transposition_table) = transposition_table {
@@ -645,39 +632,39 @@ where
     }
 }
 
-struct StateToTransmit<A, V> {
+struct StateToTransmit<A, P> {
     id: usize,
-    tx: Sender<BasicGameStateAnalysis<A, V>>,
-    analysis: BasicGameStateAnalysis<A, V>,
+    tx: Sender<GameStateAnalysis<A, P>>,
+    analysis: GameStateAnalysis<A, P>,
 }
 
-impl<A, V> Ord for StateToTransmit<A, V> {
+impl<A, P> Ord for StateToTransmit<A, P> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other.id.cmp(&self.id)
     }
 }
 
-impl<A, V> PartialOrd for StateToTransmit<A, V> {
+impl<A, P> PartialOrd for StateToTransmit<A, P> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(other.id.cmp(&self.id))
     }
 }
 
-impl<A, V> PartialEq for StateToTransmit<A, V> {
+impl<A, P> PartialEq for StateToTransmit<A, P> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<A, V> Eq for StateToTransmit<A, V> {}
+impl<A, P> Eq for StateToTransmit<A, P> {}
 
 struct CompletedAnalysisOrdered {
     id_generator: AtomicUsize,
 }
 
 impl CompletedAnalysisOrdered {
-    fn with_capacity<A, V>(
-        analyzed_state_receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, V>>,
+    fn with_capacity<A, P>(
+        analyzed_state_receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, P>>,
         n: usize,
     ) -> Self
     where
@@ -695,16 +682,16 @@ impl CompletedAnalysisOrdered {
         self.id_generator.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn create_ordering_task<A, V>(
-        receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, V>>,
+    fn create_ordering_task<A, P>(
+        receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, P>>,
         capacity: usize,
     ) where
         A: Send + 'static,
-        V: Send + 'static,
+        P: Send + 'static,
     {
         tokio::task::spawn(async move {
             let mut analyzed_states_to_tx =
-                BinaryHeap::<StateToTransmit<A, V>>::with_capacity(capacity);
+                BinaryHeap::<StateToTransmit<A, P>>::with_capacity(capacity);
             let mut next_id_to_tx: usize = 1;
             let mut receiver = receiver;
 

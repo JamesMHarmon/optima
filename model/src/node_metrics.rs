@@ -17,17 +17,6 @@ pub struct NodeMetrics<A, P> {
 
 #[allow(non_snake_case)]
 impl<A, P> NodeMetrics<A, P> {
-    /// Difference between the Q of the specified action and the child that would be played with no temp.
-    pub fn Q_diff(&self, action: &A) -> f32
-    where
-        A: PartialEq,
-    {
-        let max_visits_Q = self.child_max_visits().Q();
-        let chosen_Q = self.children.iter().find(|c| c.action() == action);
-        let chosen_Q = chosen_Q.expect("Specified action was not found").Q();
-        max_visits_Q - chosen_Q
-    }
-
     pub fn child_max_visits(&self) -> &EdgeMetrics<A, P> {
         self.children.iter().max_by_key(|c| c.visits).unwrap()
     }
@@ -67,19 +56,18 @@ impl<A, PV> EdgeMetrics<A, PV> {
     }
 }
 
-impl<A, V> Serialize for NodeMetrics<A, V>
+impl<A, P> Serialize for NodeMetrics<A, P>
 where
     A: Serialize,
-    V: Serialize,
+    P: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut tup = serializer.serialize_tuple(4)?;
+        let mut tup = serializer.serialize_tuple(3)?;
         tup.serialize_element(&self.visits)?;
-        tup.serialize_element(&self.value)?;
-        tup.serialize_element(&self.moves_left)?;
+        tup.serialize_element(&self.predictions)?;
         tup.serialize_element(&self.children)?;
 
         tup.end()
@@ -100,12 +88,12 @@ impl<A, V> NodeMetricsVisitor<A, V> {
     }
 }
 
-impl<'de, A, V> Visitor<'de> for NodeMetricsVisitor<A, V>
+impl<'de, A, P> Visitor<'de> for NodeMetricsVisitor<A, P>
 where
     A: Deserialize<'de>,
-    V: Deserialize<'de>,
+    P: Deserialize<'de>,
 {
-    type Value = NodeMetrics<A, V>;
+    type Value = NodeMetrics<A, P>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("NodeMetrics")
@@ -117,39 +105,38 @@ where
     {
         Ok(NodeMetrics {
             visits: seq.next_element()?.unwrap(),
-            value: seq.next_element()?.unwrap(),
-            moves_left: seq.next_element()?.unwrap(),
+            predictions: seq.next_element()?.unwrap(),
             children: seq.next_element()?.unwrap(),
         })
     }
 }
 
-impl<'de, A, V> Deserialize<'de> for NodeMetrics<A, V>
+impl<'de, A, P> Deserialize<'de> for NodeMetrics<A, P>
 where
     A: Deserialize<'de>,
-    V: Deserialize<'de>,
+    P: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_tuple(4, NodeMetricsVisitor::new())
+        deserializer.deserialize_tuple(3, NodeMetricsVisitor::new())
     }
 }
 
 impl<A, PV> Serialize for EdgeMetrics<A, PV>
 where
     A: Serialize,
+    PV: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut tup = serializer.serialize_tuple(4)?;
+        let mut tup = serializer.serialize_tuple(3)?;
 
         tup.serialize_element(&self.action)?;
-        tup.serialize_element(&self.Q)?;
-        tup.serialize_element(&self.M)?;
+        tup.serialize_element(&self.propagatedValues)?;
         tup.serialize_element(&self.visits)?;
 
         tup.end()
@@ -171,6 +158,7 @@ impl<A, PV> NodeChildMetricsVisitor<A, PV> {
 impl<'de, A, PV> Visitor<'de> for NodeChildMetricsVisitor<A, PV>
 where
     A: Deserialize<'de>,
+    PV: Deserialize<'de>,
 {
     type Value = EdgeMetrics<A, PV>;
 
@@ -184,21 +172,21 @@ where
     {
         Ok(EdgeMetrics {
             action: seq.next_element()?.unwrap(),
-            Q: seq.next_element()?.unwrap(),
-            M: seq.next_element()?.unwrap(),
+            propagatedValues: seq.next_element()?.unwrap(),
             visits: seq.next_element()?.unwrap(),
         })
     }
 }
 
-impl<'de, A> Deserialize<'de> for EdgeMetrics<A, PV>
+impl<'de, A, PV> Deserialize<'de> for EdgeMetrics<A, PV>
 where
     A: Deserialize<'de>,
+    PV: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_tuple(4, NodeChildMetricsVisitor::new())
+        deserializer.deserialize_tuple(3, NodeChildMetricsVisitor::new())
     }
 }

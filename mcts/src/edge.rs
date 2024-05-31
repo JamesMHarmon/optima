@@ -18,16 +18,6 @@ pub struct MCTSEdge<A, PV> {
 #[allow(non_snake_case)]
 impl<A, PV> MCTSEdge<A, PV>
 {
-    pub fn new(action: A, policy_score: f16) -> Self {
-        Self {
-            action,
-            visits: 0,
-            policy_score,
-            propagatedValues,
-            node: MCTSNodeState::Unexpanded,
-        }
-    }
-
     pub fn node_index(&self) -> Option<Index> {
         self.node.get_index()
     }
@@ -56,8 +46,8 @@ impl<A, PV> MCTSEdge<A, PV>
         self.visits += 1;
     }
 
-    pub fn features(&self) -> &F {
-        &self.features
+    pub fn propagatedValues(&self) -> &PV {
+        &self.propagatedValues
     }
 
     pub fn is_unexpanded(&self) -> bool {
@@ -86,7 +76,7 @@ where
             action,
             visits: 0,
             policy_score,
-            propagatedValues,
+            propagatedValues: PV::default(),
             node: MCTSNodeState::Unexpanded,
         }
     }
@@ -97,9 +87,9 @@ where
     }
 }
 
-impl<A, F> From<ActionWithPolicy<A>> for MCTSEdge<A, F>
+impl<A, PV> From<ActionWithPolicy<A>> for MCTSEdge<A, PV>
 where
-    F: Default,
+    PV: Default,
 {
     fn from(action_with_policy: ActionWithPolicy<A>) -> Self {
         MCTSEdge::new(action_with_policy.action, action_with_policy.policy_score)
