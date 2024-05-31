@@ -8,7 +8,6 @@ pub use channel::*;
 pub use latest::*;
 pub use mode::*;
 pub use traits::*;
-pub use transposition_entry::*;
 pub use transposition_table::*;
 
 #[cfg(feature = "all")]

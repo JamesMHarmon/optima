@@ -32,11 +32,11 @@ pub trait PolicyMap {
     type Action;
     type Predictions;
 
-    fn policy_metrics_to_expected_output(
-        &self,
-        game_state: &Self::State,
-        policy: &NodeMetrics<Self::Action, Self::Predictions>,
-    ) -> Vec<f32>;
+    // fn policy_metrics_to_expected_output(
+    //     &self,
+    //     game_state: &Self::State,
+    //     policy: &NodeMetrics<Self::Action, Self::Predictions>,
+    // ) -> Vec<f32>;
 
     // fn policy_to_valid_actions(
     //     &self,
@@ -51,14 +51,13 @@ pub trait PredictionsMap<S, P> {
 
     // fn from_output(&self, game_state: &Self::State, prediction_output: Option<HashMap<String, &[f16]>>) -> Self::Predictions;
 
-    fn to_output(&self, game_state: &Self::State, predictions: &Self::Predictions) -> HashMap<String, Vec<f16>>;
+    // fn to_output(&self, game_state: &Self::State, predictions: &Self::Predictions) -> HashMap<String, Vec<f16>>;
 }
 
 pub trait TranspositionMap {
     type State;
-    type Action;
-    type Predictions;
     type TranspositionEntry;
+    type GameStateAnalysis;
 
     fn map_output_to_transposition_entry(
         &self,
@@ -66,11 +65,11 @@ pub trait TranspositionMap {
         outputs: HashMap<String, &[f16]>
     ) -> Self::TranspositionEntry;
 
-    fn map_outputs_to_analysis(
+    fn map_transposition_entry_to_analysis(
         &self,
         game_state: &Self::State,
-        outputs: Option<&Self::TranspositionEntry>,
-    ) -> GameStateAnalysis<Self::Action, Self::Value>;
+        transposition_entry: &Self::TranspositionEntry,
+    ) -> Self::GameStateAnalysis;
 
-    fn get_transposition_key(&self, game_state: &Self::GameState) -> u64;
+    fn get_transposition_key(&self, game_state: &Self::State) -> u64;
 }
