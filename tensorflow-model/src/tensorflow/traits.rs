@@ -24,7 +24,12 @@ pub trait Dimension {
 pub trait InputMap {
     type State;
 
-    fn game_state_to_input(&self, game_state: &Self::State, inputs: HashMap<&str, &mut [f16]>, mode: Mode);
+    fn game_state_to_input(
+        &self,
+        game_state: &Self::State,
+        inputs: HashMap<&str, &mut [f16]>,
+        mode: Mode,
+    );
 }
 
 pub trait PolicyMap {
@@ -62,7 +67,7 @@ pub trait TranspositionMap {
     fn map_output_to_transposition_entry(
         &self,
         game_state: &Self::State,
-        outputs: HashMap<String, &[f16]>
+        outputs: HashMap<String, &[f16]>,
     ) -> Self::TranspositionEntry;
 
     fn map_transposition_entry_to_analysis(

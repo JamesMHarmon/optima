@@ -7,6 +7,7 @@ use engine::value::Value;
 use half::f16;
 use log::{debug, info};
 use parking_lot::Mutex;
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use std::collections::{BinaryHeap, HashMap};
 use std::future::Future;
 use std::hash::Hash;
@@ -19,7 +20,6 @@ use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
-use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use super::*;
 use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
@@ -49,8 +49,11 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
-        + Clone
+        + TranspositionMap<
+            State = S,
+            TranspositionEntry = Te,
+            GameStateAnalysis = GameStateAnalysis<A, P>,
+        > + Clone
         + Send
         + Sync
         + 'static,
@@ -115,8 +118,6 @@ where
             reporter,
             self.batch_size,
             self.analysis_request_threads,
-            self.options.output_size,
-            self.options.moves_left_size,
             receiver,
         )
     }
@@ -129,8 +130,11 @@ where
     P: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
-        + Clone
+        + TranspositionMap<
+            State = S,
+            TranspositionEntry = Te,
+            GameStateAnalysis = GameStateAnalysis<A, P>,
+        > + Clone
         + Send
         + Sync
         + 'static,
@@ -168,15 +172,18 @@ impl<S, A, P, E, Map, Te> Info for TensorflowModel<S, A, P, E, Map, Te> {
 }
 
 pub struct Predictor {
-    pub session: SessionAndOps,
+    pub session: Session,
+    pub input: OperationWithIndex,
+    pub outputs: HashMap<String, OperationWithIndex>,
 }
 
 impl Predictor {
     pub fn new(path: &Path) -> Self {
         let mut graph = Graph::new();
 
-        let model: SavedModelBundle = SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
-            .expect("Expected to be able to load model");
+        let model: SavedModelBundle =
+            SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
+                .expect("Expected to be able to load model");
 
         let signature = model
             .meta_graph_def()
@@ -188,20 +195,20 @@ impl Predictor {
                 )
             });
 
-        let signature_def_to_ops = |signature_def: &HashMap<String, TensorInfo>| {
-            
-        };
+        let signature_def_to_ops = |signature_def: &HashMap<String, TensorInfo>| {};
 
         let input = OperationWithIndex::from(signature.inputs().single());
-        let outputs: HashMap<String, OperationWithIndex> = signature.outputs().iter().map(OperationWithIndex::from).collect::<HashMap<_, _>>();
+        let outputs: HashMap<String, OperationWithIndex> = signature
+            .outputs()
+            .iter()
+            .map(OperationWithIndex::from)
+            .collect::<HashMap<_, _>>();
         let session = model.session;
 
         Self {
-            session: SessionAndOps {
-                session,
-                input,
-                outputs
-            },
+            session,
+            input,
+            outputs,
         }
     }
 
@@ -212,44 +219,37 @@ impl Predictor {
 
         session_run_args.add_feed(&session.input.operation, session.input.index, tensor);
 
-        let fetch_tokens = session.outputs.iter().map(|(name, (operation, index))| (name, session_run_args.request_fetch(operation, index))).collect_vec();
+        let fetch_tokens = session
+            .outputs
+            .iter()
+            .map(|(name, (operation, index))| {
+                (name, session_run_args.request_fetch(operation, index))
+            })
+            .collect_vec();
 
         session
             .session
             .run(&mut session_run_args)
             .expect("Expected to be able to run the model session");
 
-        let value_head_output: Tensor<f16> = session_run_args
-            .fetch(value_head_fetch_token)
-            .expect("Expected to be able to load value_head output");
-        let policy_head_output: Tensor<f16> = session_run_args
-            .fetch(policy_head_fetch_token)
-            .expect("Expected to be able to load policy_head output");
-        let moves_left_head_output: Option<Tensor<f16>> =
-            moves_left_head_fetch_token.map(|moves_left_head_fetch_token| {
-                session_run_args
-                    .fetch(moves_left_head_fetch_token)
-                    .expect("Expected to be able to load moves_left_head output")
-            });
+        let outputs = fetch_tokens
+            .into_iter()
+            .map(|(name, fetch_token)| {
+                (
+                    name,
+                    session_run_args
+                        .fetch(fetch_token)
+                        .expect("Expected to be able to load output"),
+                )
+            })
+            .collect::<HashMap<String, Tensor<f16>>>();
 
-        let outputs = fetch_tokens.into_iter().map(|(name, fetch_token)| 
-            (name, session_run_args.fetch(fetch_token).expect("Expected to be able to load output"))
-        ).collect::<HashMap<String, Tensor<f16>>>();
-
-        Ok(AnalysisResults {
-            outputs
-        })
+        Ok(AnalysisResults { outputs })
     }
 }
 
 struct AnalysisResults {
-    outputs: HashMap<String, Tensor<f16>>
-}
-
-pub struct SessionAndOps {
-    pub session: Session,
-    pub input: OperationWithIndex,
-    pub outputs: HashMap<String, OperationWithIndex>
+    outputs: HashMap<String, Tensor<f16>>,
 }
 
 pub struct OperationWithIndex {
@@ -263,9 +263,11 @@ impl From<(&String, &TensorInfo)> for OperationWithIndex {
     fn from((name, tensor_info): (&String, &TensorInfo)) -> Self {
         Self {
             name: name.to_owned(),
-            operation: graph.operation_by_name_required(&tensor_info.name().name).expect("Expected to find input operation"),
+            operation: graph
+                .operation_by_name_required(&tensor_info.name().name)
+                .expect("Expected to find input operation"),
             index: tensor_info.name().index,
-            size: tensor_info.shape().iter().product::<usize>()
+            size: tensor_info.shape().iter().product::<usize>(),
         }
     }
 }
@@ -312,7 +314,10 @@ where
     type Predictions = P;
     type Future = UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>>;
 
-    fn get_state_analysis(&self, game_state: &S) -> UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>> {
+    fn get_state_analysis(
+        &self,
+        game_state: &S,
+    ) -> UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>> {
         let (tx, rx) = oneshot::channel();
         let id = self.analysed_state_ordered.get_id();
         let sender = &self.batching_model.1;
@@ -389,8 +394,11 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
-        + Send
+        + TranspositionMap<
+            State = S,
+            TranspositionEntry = Te,
+            GameStateAnalysis = GameStateAnalysis<A, P>,
+        > + Send
         + Sync
         + 'static,
     Te: Send + 'static,
@@ -404,8 +412,6 @@ where
         reporter: Arc<Reporter<Te>>,
         batch_size: usize,
         analysis_request_threads: usize,
-        output_size: usize,
-        moves_left_size: usize,
         states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> Self {
         let inner_self = Self {
@@ -420,8 +426,6 @@ where
             reporter,
             model_dir,
             states_to_analyse_receiver,
-            output_size,
-            moves_left_size,
             batch_size,
             analysis_request_threads,
         );
@@ -479,8 +483,6 @@ where
         reporter: Arc<Reporter<Te>>,
         model_dir: PathBuf,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
-        output_size: usize,
-        moves_left_size: usize,
         batch_size: usize,
         analysis_request_threads: usize,
     ) {
@@ -528,7 +530,8 @@ where
                         return;
                     }
 
-                    let tensor: &mut Tensor<f16> = tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
+                    let tensor: &mut Tensor<f16> =
+                        tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
 
                     reporter.set_batch_size(states_to_analyse.len());
 
@@ -551,7 +554,7 @@ where
                         predictions,
                         states_to_analyse,
                         transposition_table,
-                        mapper
+                        mapper,
                     );
                 }
             });
@@ -562,20 +565,21 @@ where
         predictions: AnalysisResults,
         states_to_analyse: Vec<StatesToInfer<S, A, P>>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
-        mapper: Arc<Map>
+        mapper: Arc<Map>,
     ) {
         states_to_analyse
             .into_par_iter()
             .enumerate()
             .for_each(|(i, (id, game_state, tx, tx2))| {
-                let outputs = predictions.outputs.map(|(k, v)| (k, &v[(i * output_size)..((i + 1) * output_size)])).collect::<HashMap<String, &[f16]>>();
+                let outputs = predictions
+                    .outputs
+                    .map(|(k, v)| (k, &v[(i * output_size)..((i + 1) * output_size)]))
+                    .collect::<HashMap<String, &[f16]>>();
 
                 let mapper = &*mapper;
                 let transposition_table = &*transposition_table;
-                let transposition_table_entry = mapper.map_output_to_transposition_entry(
-                    &game_state,
-                    outputs
-                );
+                let transposition_table_entry =
+                    mapper.map_output_to_transposition_entry(&game_state, outputs);
 
                 let analysis = mapper
                     .map_transposition_entry_to_analysis(&game_state, &transposition_table_entry);
@@ -614,7 +618,7 @@ where
         if let Some(value) = engine.terminal_state(game_state) {
             reporter.set_terminal();
 
-            return Some(GameStateAnalysis::new(Vec::new(), value, ));
+            return Some(GameStateAnalysis::new(Vec::new(), value));
         }
 
         if let Some(transposition_table) = transposition_table {
