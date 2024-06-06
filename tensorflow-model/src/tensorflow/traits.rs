@@ -27,7 +27,7 @@ pub trait InputMap {
     fn game_state_to_input(
         &self,
         game_state: &Self::State,
-        inputs: HashMap<&str, &mut [f16]>,
+        inputs: &mut [f16],
         mode: Mode,
     );
 }
