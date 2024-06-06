@@ -19,6 +19,7 @@ use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use super::*;
 use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
@@ -47,6 +48,8 @@ where
     P: Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
+        + InputMap<State = S>
+        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
         + Clone
         + Send
         + Sync
@@ -125,8 +128,9 @@ where
     A: Clone + Send + Sync + 'static,
     P: Value + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
-    Map: TranspositionMap<State = S, TranspositionEntry = Te>
-        + Dimension
+    Map: Dimension
+        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
+        + Clone
         + Send
         + Sync
         + 'static,
@@ -280,7 +284,7 @@ pub struct GameAnalyzer<S, A, P, E, Map, Te> {
 impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te>
 where
     A: Send + 'static,
-    V: Send + 'static,
+    P: Send + 'static,
 {
     fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>) -> Self {
         let (analysed_state_sender, analyzed_state_receiver) = mpsc::unbounded_channel();
@@ -384,6 +388,8 @@ where
     P: Send + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
+        + InputMap<State = S>
+        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
         + Send
         + Sync
         + 'static,
@@ -608,7 +614,7 @@ where
         if let Some(value) = engine.terminal_state(game_state) {
             reporter.set_terminal();
 
-            return Some(GameStateAnalysis::new(value, Vec::new()));
+            return Some(GameStateAnalysis::new(Vec::new(), value, ));
         }
 
         if let Some(transposition_table) = transposition_table {
@@ -669,7 +675,7 @@ impl CompletedAnalysisOrdered {
     ) -> Self
     where
         A: Send + 'static,
-        V: Send + 'static,
+        P: Send + 'static,
     {
         Self::create_ordering_task(analyzed_state_receiver, n);
 
