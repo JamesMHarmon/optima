@@ -40,8 +40,8 @@ where
     S: GameState,
     A: Clone + Eq + Debug,
     V: Value,
-    E: 'a + GameEngine<State = S, Action = A, Value = V>,
-    M: 'a + GameAnalyzer<State = S, Action = A, Value = V>,
+    E: 'a + GameEngine<State = S, Action = A, Terminal = V>,
+    M: 'a + GameAnalyzer<State = S, Action = A, Predictions = V>,
     C: CPUCT<State = S>,
     T: Temperature<State = S>,
     F: Default
