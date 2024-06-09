@@ -2,7 +2,10 @@ use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use futures::future;
 use half::f16;
-use model::analytics::{ActionWithPolicy, BasicGameStateAnalysis, GameAnalyzer};
+use model::{
+    analytics::{ActionWithPolicy, GameAnalyzer},
+    GameStateAnalysis,
+};
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CountingGameState {
@@ -59,7 +62,7 @@ pub enum CountingAction {
 impl GameEngine for CountingGameEngine {
     type Action = CountingAction;
     type State = CountingGameState;
-    type Value = Value;
+    type Terminal = Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         let count = game_state.count;
@@ -76,7 +79,7 @@ impl GameEngine for CountingGameEngine {
         }
     }
 
-    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
         game_state.is_terminal_state()
     }
 
@@ -105,15 +108,14 @@ impl CountingAnalyzer {
 impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
-    type GameStateAnalysis = BasicGameStateAnalysis<Self::Action, Self::Value>;
-    type Future = future::Ready<Self::GameStateAnalysis>;
-    type Value = Value;
+    type Future = future::Ready<GameStateAnalysis<Self::Action, Self::Predictions>>;
+    type Predictions = Value;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let count = game_state.count as f32;
 
         if let Some(value_score) = game_state.is_terminal_state() {
-            return future::ready(BasicGameStateAnalysis::new(value_score, Vec::new(), 0.0));
+            return future::ready(GameStateAnalysis::new(Vec::new(), value_score));
         }
 
         let value_score = Value([count / 100.0, (100.0 - count) / 100.0]);
@@ -133,10 +135,6 @@ impl GameAnalyzer for CountingAnalyzer {
             },
         ];
 
-        future::ready(BasicGameStateAnalysis::new(
-            value_score,
-            policy_scores,
-            moves_left,
-        ))
+        future::ready(GameStateAnalysis::new(policy_scores, value_score))
     }
 }

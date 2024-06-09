@@ -13,7 +13,7 @@ pub trait GameAnalyzer {
 #[derive(Clone, Debug)]
 pub struct GameStateAnalysis<A, P> {
     policy_scores: Vec<ActionWithPolicy<A>>,
-    predictions: P
+    predictions: P,
 }
 
 impl<A, P> GameStateAnalysis<A, P> {
@@ -25,7 +25,7 @@ impl<A, P> GameStateAnalysis<A, P> {
         &self.predictions
     }
 
-    fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, P) {
+    pub fn into_inner(self) -> (Vec<ActionWithPolicy<A>>, P) {
         (self.policy_scores, self.predictions)
     }
 }
@@ -34,7 +34,7 @@ impl<A, P> GameStateAnalysis<A, P> {
     pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, predictions: P) -> Self {
         Self {
             policy_scores,
-            predictions
+            predictions,
         }
     }
 }
