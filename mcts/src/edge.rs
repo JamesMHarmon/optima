@@ -5,17 +5,15 @@ use generational_arena::Index;
 use half::f16;
 use model::ActionWithPolicy;
 
-#[allow(non_snake_case)]
 #[derive(Debug)]
 pub struct MCTSEdge<A, PV> {
     action: A,
     visits: usize,
     policy_score: f16,
-    propagatedValues: PV,
+    propagated_values: PV,
     node: MCTSNodeState,
 }
 
-#[allow(non_snake_case)]
 impl<A, PV> MCTSEdge<A, PV>
 {
     pub fn node_index(&self) -> Option<Index> {
@@ -46,8 +44,8 @@ impl<A, PV> MCTSEdge<A, PV>
         self.visits += 1;
     }
 
-    pub fn propagatedValues(&self) -> &PV {
-        &self.propagatedValues
+    pub fn propagated_values(&self) -> &PV {
+        &self.propagated_values
     }
 
     pub fn is_unexpanded(&self) -> bool {
@@ -76,14 +74,14 @@ where
             action,
             visits: 0,
             policy_score,
-            propagatedValues: PV::default(),
+            propagated_values: PV::default(),
             node: MCTSNodeState::Unexpanded,
         }
     }
 
     pub fn clear(&mut self) {
         self.visits = 0;
-        self.propagatedValues = PV::default();
+        self.propagated_values = PV::default();
     }
 }
 

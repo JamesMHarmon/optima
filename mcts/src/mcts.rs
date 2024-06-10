@@ -1,3 +1,5 @@
+use crate::{BackpropagationStrategy, SelectionStrategy};
+
 use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails};
 use super::{Temperature, PUCT};
 use anyhow::{anyhow, Context, Result};
@@ -76,7 +78,6 @@ where
         selection_strategy: Sel,
         options: MCTSOptions,
         capacity: usize,
-        cpuct: C,
         temp: T,
     ) -> Self {
         MCTS {
@@ -91,36 +92,6 @@ where
             focus_actions: vec![],
             temp,
         }
-    }
-
-    pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
-        self.search_time_max_visits(duration, usize::max_value())
-            .await
-    }
-
-    pub async fn search_time_max_visits(
-        &mut self,
-        duration: Duration,
-        max_visits: usize,
-    ) -> Result<usize> {
-        let alive = Arc::new(AtomicBool::new(true));
-
-        let alive_clone = alive.clone();
-        thread::spawn(move || {
-            thread::sleep(duration);
-            alive_clone.store(false, Ordering::SeqCst);
-        });
-
-        self.search(|visits| alive.load(Ordering::SeqCst) && visits < max_visits)
-            .await
-    }
-
-    pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
-        self.search(|node_visits| node_visits < visits).await
-    }
-
-    pub async fn play(&mut self, alive: &mut bool) -> Result<usize> {
-        self.search(|_| *alive).await
     }
 
     pub fn select_action(&mut self) -> Result<A> {
@@ -159,14 +130,6 @@ where
 
             Self::apply_dirichlet_noise_to_node(root_node.node_mut(root_node_index), dirichlet);
         }
-    }
-
-    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P>> {
-        let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
-        let mut arena_ref = self.arena.get_mut();
-        let root = arena_ref.node_mut(root_index);
-
-        Ok(root.into())
     }
 
     pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, P, PV>> + '_> {
@@ -609,9 +572,41 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
+    B: 'a + BackpropagationStrategy<State = S, Action = A, Predictions = P>,
+    Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P>,
     T: Temperature<State = S>,
     PV: Default,
 {
+    pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
+        self.search_time_max_visits(duration, usize::max_value())
+            .await
+    }
+
+    pub async fn search_time_max_visits(
+        &mut self,
+        duration: Duration,
+        max_visits: usize,
+    ) -> Result<usize> {
+        let alive = Arc::new(AtomicBool::new(true));
+
+        let alive_clone = alive.clone();
+        thread::spawn(move || {
+            thread::sleep(duration);
+            alive_clone.store(false, Ordering::SeqCst);
+        });
+
+        self.search(|visits| alive.load(Ordering::SeqCst) && visits < max_visits)
+            .await
+    }
+
+    pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
+        self.search(|node_visits| node_visits < visits).await
+    }
+
+    pub async fn play(&mut self, alive: &mut bool) -> Result<usize> {
+        self.search(|_| *alive).await
+    }
+
     pub async fn search<Fn>(&mut self, alive: Fn) -> Result<usize>
     where
         Fn: FnMut(usize) -> bool,
@@ -621,7 +616,6 @@ where
         let mut visits = self.num_focus_node_visits();
 
         let game_engine = &self.game_engine;
-        let options = &self.options;
         let arena_ref = &self.arena;
         let focus_actions = &self.focus_actions;
         let game_state = &self.game_state;
@@ -632,6 +626,7 @@ where
 
         let analyzer = &mut self.analyzer;
         let selection_strategy = &self.selection_strategy;
+        let backpropagation_strategy = &self.backpropagation_strategy;
 
         let mut traverse = |searches: &mut FuturesUnordered<_>| {
             if alive_flag && alive(visits) {
@@ -643,7 +638,7 @@ where
                     game_engine,
                     analyzer,
                     selection_strategy,
-                    options,
+                    backpropagation_strategy
                 ));
                 visits += 1;
             } else {
@@ -674,10 +669,10 @@ where
         game_engine: &E,
         analyzer: &M,
         selection_strategy: &Sel,
-        options: &MCTSOptions,
+        backpropagation_strategy: &B
     ) -> Result<usize> {
         let mut depth = 0;
-        let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo> = vec![];
+        let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo<B::NodeInfo>> = vec![];
         let mut latest_index = root_index;
         let mut game_state = Cow::Borrowed(game_state);
         let mut move_number = game_engine.move_number(&game_state);
@@ -689,7 +684,7 @@ where
 
             if node.is_terminal() {
                 node.increment_visits();
-                Self::update_node_values(
+                backpropagation_strategy.backpropagate(
                     &nodes_to_propagate_to_stack,
                     latest_index,
                     move_number,
@@ -700,22 +695,22 @@ where
 
             let is_root = depth == 1;
 
-            let selected_child_node_children_index =
+            let selected_child_node_edge_index =
                 if let Some(focus_action) = focus_actions.get(depth - 1) {
                     node.get_position_of_visited_action(focus_action)
                         .ok_or_else(|| anyhow!("Focused action was not found"))?
                 } else {
-                    selection_strategy.select_path(node, &game_state, is_root, options)?
+                    selection_strategy.select_path(node, &game_state, is_root)?
                 };
 
             nodes_to_propagate_to_stack.push(NodeUpdateInfo {
                 parent_node_index: latest_index,
-                parent_node_player_to_move: game_engine.player_to_move(&game_state),
-                node_child_index: selected_child_node_children_index,
+                node_info: backpropagation_strategy.node_info(&game_state),
+                child_edge_index: selected_child_node_edge_index,
             });
 
             node.increment_visits();
-            let selected_edge = node.get_child_by_index_mut(selected_child_node_children_index);
+            let selected_edge = node.get_edge_by_index_mut(selected_child_node_edge_index);
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
             move_number = game_engine.move_number(&game_state);
@@ -726,9 +721,9 @@ where
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    Self::update_node_values(
+                    backpropagation_strategy.backpropagate(
                         &nodes_to_propagate_to_stack,
-                        selected_child_node_index,
+                        latest_index,
                         move_number,
                         &mut *arena_mut,
                     );
@@ -751,13 +746,13 @@ where
                 let expanded_node_index = arena_mut.insert(expanded_node);
 
                 let selected_child_node =
-                    arena_mut.child(latest_index, selected_child_node_children_index);
+                    arena_mut.child(latest_index, selected_child_node_edge_index);
 
                 selected_child_node.set_expanded(expanded_node_index);
 
-                Self::update_node_values(
+                backpropagation_strategy.backpropagate(
                     &nodes_to_propagate_to_stack,
-                    expanded_node_index,
+                    latest_index,
                     move_number,
                     &mut *arena_mut,
                 );
@@ -773,41 +768,27 @@ where
 
             latest_index = arena
                 .get_mut()
-                .child(latest_index, selected_child_node_children_index)
+                .child(latest_index, selected_child_node_edge_index)
                 .node_index()
                 .expect("Node should have expanded");
         }
 
         Ok(depth)
     }
+}
 
-    fn update_node_values(
-        nodes_to_update: &[NodeUpdateInfo],
-        value_node_index: Index,
-        value_node_move_num: usize,
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
-    ) {
-        let value_node = &arena.node(value_node_index);
-        let value_score = &value_node.value_score().clone();
-        let value_node_moves_left_score = value_node.moves_left_score();
-        let value_node_game_length = value_node_move_num as f32 + value_node_moves_left_score;
+impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
+where
+    A: Clone,
+    P: Clone,
+    PV: Default
+{
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P>> {
+        let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
+        let mut arena_ref = self.arena.get_mut();
+        let root = arena_ref.node_mut(root_index);
 
-        for NodeUpdateInfo {
-            parent_node_index,
-            node_child_index,
-            parent_node_player_to_move,
-        } in nodes_to_update
-        {
-            let node_to_update_parent = arena.node_mut(*parent_node_index);
-            // Update value of W from the parent node's perspective.
-            // This is because the parent chooses which child node to select, and as such will want the one with the
-            // highest V from it's perspective. A node never cares what its value (W or Q) is from its own perspective.
-            let score = value_score.get_value_for_player(*parent_node_player_to_move);
-
-            let node_to_update = node_to_update_parent.get_child_by_index_mut(*node_child_index);
-            node_to_update.add_W(score);
-            node_to_update.add_M(value_node_game_length);
-        }
+        Ok(root.into())
     }
 }
 
@@ -835,15 +816,15 @@ where
         EdgeMetrics::new(
             edge.action().clone(),
             edge.visits(),
-            edge.propagated_value().clone(),
+            edge.propagated_values().clone(),
         )
     }
 }
 
-struct NodeUpdateInfo {
+struct NodeUpdateInfo<I> {
     parent_node_index: Index,
-    node_child_index: usize,
-    parent_node_player_to_move: usize,
+    child_edge_index: usize,
+    node_info: I,
 }
 
 struct NodeArena<T>(RefCell<NodeArenaInner<T>>);
@@ -884,8 +865,8 @@ impl<A, P, PV> NodeArenaInner<MCTSNode<A, P, PV>> {
     }
 
     #[inline]
-    fn child(&mut self, index: Index, child_index: usize) -> &mut MCTSEdge<A, PV> {
-        self.0[index].get_child_by_index_mut(child_index)
+    fn child(&mut self, index: Index, edge_index: usize) -> &mut MCTSEdge<A, PV> {
+        self.0[index].get_edge_by_index_mut(edge_index)
     }
 
     #[inline]
