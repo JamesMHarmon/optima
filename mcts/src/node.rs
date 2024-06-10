@@ -29,7 +29,7 @@ impl<A, P, PV> MCTSNode<A, P, PV> {
         self.visits
     }
 
-    pub fn get_child_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A, PV> {
+    pub fn get_edge_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A, PV> {
         &mut self.visited_edges[index]
     }
 
