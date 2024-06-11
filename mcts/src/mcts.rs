@@ -404,77 +404,6 @@ where
         Ok(chosen_idx)
     }
 
-    fn get_PUCT_for_nodes(
-        node_index: Index,
-        game_state: &S,
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
-        is_root: bool,
-        options: &MCTSOptions,
-    ) -> Vec<PUCT> {
-        let node = arena.node_mut(node_index);
-
-        let fpu = if is_root {
-            options.fpu_root
-        } else {
-            options.fpu
-        };
-        let Nsb = node.get_node_visits();
-        let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = cpuct.cpuct(game_state, Nsb, is_root);
-        let moves_left_threshold = options.moves_left_threshold;
-        let iter_all_edges = node.iter_all_edges().map(|e| &*e);
-        let game_length_baseline =
-            Self::get_game_length_baseline(iter_all_edges, moves_left_threshold);
-
-        let mut pucts = Vec::with_capacity(node.child_len());
-
-        let child_node_indexes = node
-            .iter_visited_edges()
-            .map(|e| e.node_index())
-            .collect_vec();
-
-        let moves_left_scores = child_node_indexes
-            .iter()
-            .map(|index| {
-                index
-                    .map(|index| arena.node(index).moves_left_score())
-                    .unwrap_or(0.0)
-            })
-            .collect_vec();
-
-        let node = arena.node_mut(node_index);
-        for (edge, moves_left_score) in node.iter_visited_edges().zip(moves_left_scores) {
-            let W = edge.W();
-            let Nsa = edge.visits();
-            let Psa = edge.policy_score();
-            let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let Msa = Self::get_Msa(edge, &game_length_baseline, options);
-            let M = div_or_zero(edge.M(), edge.visits() as f32);
-            let game_length = if Nsa == 0 {
-                edge.M()
-            } else {
-                edge.M() / Nsa as f32
-            };
-
-            let PUCT = Qsa + Usa;
-            pucts.push(PUCT {
-                Psa,
-                Nsa,
-                Msa,
-                cpuct,
-                Usa,
-                Qsa,
-                M,
-                moves_left_score,
-                game_length,
-                PUCT,
-            });
-        }
-
-        pucts
-    }
-
     async fn get_or_create_root_node(&mut self) -> Index {
         let root = &mut self.root;
 
@@ -788,11 +717,11 @@ where
             arena,
         };
 
-        let evaluated_node = arena.node_mut(evaluated_node_index);
-
         let node_and_info_iter = node_update_info
             .iter()
             .map(|info| (info.node_info.clone(), arena.node_mut(info.node_index)));
+
+        let evaluated_node = arena.node_mut(evaluated_node_index);
 
         backpropagation_strategy.backpropagate(node_and_info_iter, evaluated_node);
     }
@@ -803,7 +732,7 @@ struct NodeIterator<'a, A, P, PV> {
     arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
 }
 
-impl<'a, A, P, PV> Iterator for NodeIterator<'a, A, P, PV> {
+impl<'a, 'b, A, P, PV> Iterator for NodeIterator<'b, A, P, PV> {
     type Item = &'a mut MCTSNode<A, P, PV>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -819,7 +748,7 @@ where
     P: Clone,
     PV: Default,
 {
-    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P>> {
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P, PV>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let mut arena_ref = self.arena.get_mut();
         let root = arena_ref.node(root_index);
@@ -828,7 +757,7 @@ where
     }
 }
 
-impl<A, P, PV> From<&MCTSNode<A, P, PV>> for NodeMetrics<A, P>
+impl<A, P, PV> From<&MCTSNode<A, P, PV>> for NodeMetrics<A, P, PV>
 where
     A: Clone,
     P: Clone,
