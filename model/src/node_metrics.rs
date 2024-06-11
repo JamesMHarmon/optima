@@ -6,18 +6,18 @@ use std::marker::PhantomData;
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
-pub struct NodeMetrics<A, P> {
+pub struct NodeMetrics<A, P, PV> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
     pub visits: usize,
     /// Ancillery predictions by the neural network. Like score difference or moves left.
     pub predictions: P,
     /// The valid actions of the current game_state of the node.
-    pub children: Vec<EdgeMetrics<A, P>>,
+    pub children: Vec<EdgeMetrics<A, PV>>,
 }
 
 #[allow(non_snake_case)]
-impl<A, P> NodeMetrics<A, P> {
-    pub fn child_max_visits(&self) -> &EdgeMetrics<A, P> {
+impl<A, P, PV> NodeMetrics<A, P, PV> {
+    pub fn child_max_visits(&self) -> &EdgeMetrics<A, PV> {
         self.children.iter().max_by_key(|c| c.visits).unwrap()
     }
 }
@@ -56,10 +56,11 @@ impl<A, PV> EdgeMetrics<A, PV> {
     }
 }
 
-impl<A, P> Serialize for NodeMetrics<A, P>
+impl<A, P, PV> Serialize for NodeMetrics<A, P, PV>
 where
     A: Serialize,
     P: Serialize,
+    PV: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -74,26 +75,25 @@ where
     }
 }
 
-struct NodeMetricsVisitor<A, V> {
-    marker: PhantomData<A>,
-    marker2: PhantomData<V>,
+struct NodeMetricsVisitor<A, P, PV> {
+    marker: PhantomData<(A, P, PV)>,
 }
 
-impl<A, V> NodeMetricsVisitor<A, V> {
+impl<A, P, PV> NodeMetricsVisitor<A, P, PV> {
     fn new() -> Self {
         NodeMetricsVisitor {
             marker: PhantomData,
-            marker2: PhantomData,
         }
     }
 }
 
-impl<'de, A, P> Visitor<'de> for NodeMetricsVisitor<A, P>
+impl<'de, A, P, PV> Visitor<'de> for NodeMetricsVisitor<A, P, PV>
 where
     A: Deserialize<'de>,
     P: Deserialize<'de>,
+    PV: Deserialize<'de>,
 {
-    type Value = NodeMetrics<A, P>;
+    type Value = NodeMetrics<A, P, PV>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("NodeMetrics")
@@ -111,10 +111,11 @@ where
     }
 }
 
-impl<'de, A, P> Deserialize<'de> for NodeMetrics<A, P>
+impl<'de, A, P, PV> Deserialize<'de> for NodeMetrics<A, P, PV>
 where
     A: Deserialize<'de>,
     P: Deserialize<'de>,
+    PV: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -150,7 +151,7 @@ struct NodeChildMetricsVisitor<A, PV> {
 impl<A, PV> NodeChildMetricsVisitor<A, PV> {
     fn new() -> Self {
         NodeChildMetricsVisitor {
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }

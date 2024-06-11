@@ -14,8 +14,7 @@ pub struct MCTSEdge<A, PV> {
     node: MCTSNodeState,
 }
 
-impl<A, PV> MCTSEdge<A, PV>
-{
+impl<A, PV> MCTSEdge<A, PV> {
     pub fn node_index(&self) -> Option<Index> {
         self.node.get_index()
     }
@@ -116,13 +115,13 @@ impl MCTSNodeState {
     }
 
     fn mark_as_expanding(&mut self) {
-        debug_assert!(matches!(self, Self::Unexpanded));
+        assert!(matches!(self, Self::Unexpanded));
         *self = Self::Expanding
     }
 
     fn set_expanded(&mut self, index: Index) {
-        debug_assert!(!matches!(self, Self::Unexpanded));
-        debug_assert!(!matches!(self, Self::Expanded(_)));
+        assert!(!matches!(self, Self::Unexpanded));
+        assert!(!matches!(self, Self::Expanded(_)));
         let state = std::mem::replace(self, Self::Expanded(index));
         if let Self::ExpandingWithWaiters(reset_events) = state {
             reset_events.set()

@@ -1,5 +1,3 @@
-use generational_arena::Index;
-
 use crate::MCTSNode;
 
 pub trait BackpropagationStrategy {
@@ -11,11 +9,18 @@ pub trait BackpropagationStrategy {
 
     fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo;
 
-    fn backpropagate(
+    fn backpropagate<'a, I>(
         &self,
-        visited_nodes: &[NodeUpdateInfo],
-        evaluated_node_index: Index,
-        evaluated_node_move_num: usize,
-        arena: &mut NodeArenaInner<MCTSNode<Self::Action, Self::Predictions, Self::PredicationValues>>,
-    );
+        visited_nodes: I,
+        evaluated_node: &'a mut MCTSNode<Self::Action, Self::Predictions, Self::PredicationValues>,
+    ) where
+        I: Iterator<
+            Item = (
+                Self::NodeInfo,
+                &'a mut MCTSNode<Self::Action, Self::Predictions, Self::PredicationValues>,
+            ),
+        >,
+        Self::Action: 'a,
+        Self::Predictions: 'a,
+        Self::PredicationValues: 'a;
 }
