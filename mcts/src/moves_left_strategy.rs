@@ -9,32 +9,26 @@ pub struct MovesLeftSelectionStrategy<S, A, C> {
 
 pub struct MovesLeftPrediction {
     moves_left: f32,
-    value: f32
+    value: f32,
 }
 
 #[allow(non_snake_case)]
 impl MovesLeftPrediction {
     pub fn new(moves_left: f32, value: f32) -> Self {
-        Self {
-            moves_left,
-            value
-        }
+        Self { moves_left, value }
     }
 }
 
 #[derive(Default)]
 pub struct MovesLeftPropagatedValue {
     game_length: f32,
-    value: f32
+    value: f32,
 }
 
 #[allow(non_snake_case)]
 impl MovesLeftPropagatedValue {
     pub fn new(game_length: f32, value: f32) -> Self {
-        Self {
-            game_length,
-            value
-        }
+        Self { game_length, value }
     }
 
     pub fn M(&self) -> f32 {
@@ -62,7 +56,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
         options: &MCTSOptions,
     ) -> Result<usize>
     where
-        C: CPUCT<State = S>
+        C: CPUCT<State = S>,
     {
         let fpu = if is_root {
             options.fpu_root
@@ -102,7 +96,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
     fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
     where
         I: Iterator<Item = &'b MCTSEdge<A, MovesLeftPropagatedValue>>,
-        A: 'b
+        A: 'b,
     {
         if moves_left_threshold >= 1.0 {
             return GameLengthBaseline::None;
@@ -162,24 +156,24 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
     }
 }
 
-pub struct MovesLeftBackpropagationStrategy {
+pub struct MovesLeftBackpropagationStrategy<S, A, P, PV> {
     game_length_baseline: GameLengthBaseline,
+    _phantom: std::marker::PhantomData<(S, A, P, PV)>,
 }
 
-impl MovesLeftBackpropagationStrategy {
+impl<S, A, P, PV> MovesLeftBackpropagationStrategy<S, A, P, PV> {
     pub fn new(game_length_baseline: GameLengthBaseline) -> Self {
         Self {
-            game_length_baseline
+            game_length_baseline,
         }
     }
 }
 
-impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy
-{
+impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy<S, A, P, PV> {
     type State = S;
     type Action = A;
-    type Predictions;
-    type PredicationValues;
+    type Predictions = P;
+    type PredicationValues = PV;
     type NodeInfo;
 
     fn backpropagate(
@@ -192,7 +186,8 @@ impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy
         let evaluated_node = &arena.node(evaluated_node_index);
         let value_score = &evaluated_node.value_score().clone();
         let evaluated_node_moves_left_score = evaluated_node.moves_left_score();
-        let evaluated_node_game_length = evaluated_node_move_num as f32 + evaluated_node_moves_left_score;
+        let evaluated_node_game_length =
+            evaluated_node_move_num as f32 + evaluated_node_moves_left_score;
 
         for NodeUpdateInfo {
             parent_node_index,
@@ -207,13 +202,12 @@ impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy
             let score = value_score.get_value_for_player(*parent_node_player_to_move);
 
             let node_to_update = node_to_update_parent.get_child_by_index_mut(*child_edge_index);
-            
+
             node_to_update.add_W(score);
             node_to_update.add_M(evaluated_node_game_length);
         }
     }
 
-    
     fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo {
         todo!()
     }

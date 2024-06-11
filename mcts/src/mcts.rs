@@ -1,4 +1,4 @@
-use crate::{BackpropagationStrategy, SelectionStrategy};
+use crate::{node, BackpropagationStrategy, SelectionStrategy};
 
 use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails};
 use super::{Temperature, PUCT};
@@ -572,10 +572,11 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
-    B: 'a + BackpropagationStrategy<State = S, Action = A, Predictions = P>,
-    Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P>,
+    B: 'a + BackpropagationStrategy<State = S, Action = A, Predictions = P, PredicationValues = PV>,
+    Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PredicationValues = PV>,
     T: Temperature<State = S>,
     PV: Default,
+    B::NodeInfo: Clone,
 {
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
         self.search_time_max_visits(duration, usize::max_value())
@@ -638,7 +639,7 @@ where
                     game_engine,
                     analyzer,
                     selection_strategy,
-                    backpropagation_strategy
+                    backpropagation_strategy,
                 ));
                 visits += 1;
             } else {
@@ -669,13 +670,12 @@ where
         game_engine: &E,
         analyzer: &M,
         selection_strategy: &Sel,
-        backpropagation_strategy: &B
+        backpropagation_strategy: &B,
     ) -> Result<usize> {
         let mut depth = 0;
         let mut nodes_to_propagate_to_stack: Vec<NodeUpdateInfo<B::NodeInfo>> = vec![];
         let mut latest_index = root_index;
         let mut game_state = Cow::Borrowed(game_state);
-        let mut move_number = game_engine.move_number(&game_state);
 
         loop {
             depth += 1;
@@ -684,10 +684,10 @@ where
 
             if node.is_terminal() {
                 node.increment_visits();
-                backpropagation_strategy.backpropagate(
+                Self::backpropagate(
                     &nodes_to_propagate_to_stack,
                     latest_index,
-                    move_number,
+                    backpropagation_strategy,
                     &mut *arena_mut,
                 );
                 break;
@@ -695,25 +695,24 @@ where
 
             let is_root = depth == 1;
 
-            let selected_child_node_edge_index =
-                if let Some(focus_action) = focus_actions.get(depth - 1) {
-                    node.get_position_of_visited_action(focus_action)
-                        .ok_or_else(|| anyhow!("Focused action was not found"))?
-                } else {
-                    selection_strategy.select_path(node, &game_state, is_root)?
-                };
+            let selected_edge_index = if let Some(focus_action) = focus_actions.get(depth - 1) {
+                node.get_position_of_visited_action(focus_action)
+                    .ok_or_else(|| anyhow!("Focused action was not found"))?
+            } else {
+                selection_strategy.select_path(node, &game_state, is_root)?
+            };
 
+            let node_info = backpropagation_strategy.node_info(&game_state);
             nodes_to_propagate_to_stack.push(NodeUpdateInfo {
-                parent_node_index: latest_index,
-                node_info: backpropagation_strategy.node_info(&game_state),
-                child_edge_index: selected_child_node_edge_index,
+                node_index: latest_index,
+                node_info,
+                selected_edge_index: selected_edge_index,
             });
 
             node.increment_visits();
-            let selected_edge = node.get_edge_by_index_mut(selected_child_node_edge_index);
+            let selected_edge = node.get_edge_by_index_mut(selected_edge_index);
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
-            move_number = game_engine.move_number(&game_state);
 
             let prev_visits = selected_edge.visits();
             selected_edge.increment_visits();
@@ -721,10 +720,10 @@ where
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    backpropagation_strategy.backpropagate(
+                    Self::backpropagate(
                         &nodes_to_propagate_to_stack,
                         latest_index,
-                        move_number,
+                        backpropagation_strategy,
                         &mut *arena_mut,
                     );
                     break;
@@ -745,15 +744,14 @@ where
                 let mut arena_mut = arena.get_mut();
                 let expanded_node_index = arena_mut.insert(expanded_node);
 
-                let selected_child_node =
-                    arena_mut.child(latest_index, selected_child_node_edge_index);
+                let selected_child_node = arena_mut.child(latest_index, selected_edge_index);
 
                 selected_child_node.set_expanded(expanded_node_index);
 
-                backpropagation_strategy.backpropagate(
+                Self::backpropagate(
                     &nodes_to_propagate_to_stack,
                     latest_index,
-                    move_number,
+                    backpropagation_strategy,
                     &mut *arena_mut,
                 );
 
@@ -768,12 +766,50 @@ where
 
             latest_index = arena
                 .get_mut()
-                .child(latest_index, selected_child_node_edge_index)
+                .child(latest_index, selected_edge_index)
                 .node_index()
                 .expect("Node should have expanded");
         }
 
         Ok(depth)
+    }
+
+    fn backpropagate(
+        node_update_info: &[NodeUpdateInfo<B::NodeInfo>],
+        evaluated_node_index: Index,
+        backpropagation_strategy: &B,
+        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
+    ) {
+        let node_iter = NodeIterator {
+            node_indexes: node_update_info
+                .iter()
+                .map(|info| info.node_index)
+                .collect(),
+            arena,
+        };
+
+        let evaluated_node = arena.node_mut(evaluated_node_index);
+
+        let node_and_info_iter = node_update_info
+            .iter()
+            .map(|info| (info.node_info.clone(), arena.node_mut(info.node_index)));
+
+        backpropagation_strategy.backpropagate(node_and_info_iter, evaluated_node);
+    }
+}
+
+struct NodeIterator<'a, A, P, PV> {
+    node_indexes: Vec<Index>,
+    arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
+}
+
+impl<'a, A, P, PV> Iterator for NodeIterator<'a, A, P, PV> {
+    type Item = &'a mut MCTSNode<A, P, PV>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.node_indexes
+            .pop()
+            .map(|node_index| self.arena.node_mut(node_index))
     }
 }
 
@@ -781,24 +817,24 @@ impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
 where
     A: Clone,
     P: Clone,
-    PV: Default
+    PV: Default,
 {
     pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let mut arena_ref = self.arena.get_mut();
-        let root = arena_ref.node_mut(root_index);
+        let root = arena_ref.node(root_index);
 
         Ok(root.into())
     }
 }
 
-impl<A, P, PV> From<&mut MCTSNode<A, P, PV>> for NodeMetrics<A, P>
+impl<A, P, PV> From<&MCTSNode<A, P, PV>> for NodeMetrics<A, P>
 where
     A: Clone,
     P: Clone,
     PV: Default,
 {
-    fn from(val: &mut MCTSNode<A, P, PV>) -> Self {
+    fn from(val: &MCTSNode<A, P, PV>) -> Self {
         NodeMetrics {
             visits: val.visits(),
             predictions: val.predictions().clone(),
@@ -822,8 +858,8 @@ where
 }
 
 struct NodeUpdateInfo<I> {
-    parent_node_index: Index,
-    child_edge_index: usize,
+    node_index: Index,
+    selected_edge_index: usize,
     node_info: I,
 }
 
