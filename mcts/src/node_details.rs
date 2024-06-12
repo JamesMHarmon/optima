@@ -2,12 +2,13 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
 #[allow(non_snake_case)]
-pub struct NodeDetails<A> {
+pub struct NodeDetails<A, P, PV> {
     pub visits: usize,
-    pub children: Vec<(A, PUCT)>,
+    pub predictions: P,
+    pub children: Vec<EdgeDetails<A, PV>>,
 }
 
-impl<A: Display> Display for NodeDetails<A> {
+impl<A: Display, P, PV> Display for NodeDetails<A, P, PV> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{}]",
@@ -26,7 +27,7 @@ impl<A: Display> Display for NodeDetails<A> {
     }
 }
 
-impl<A: Debug + Display> Debug for NodeDetails<A> {
+impl<A: Debug + Display, P, PV> Debug for NodeDetails<A, P, PV> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Display::fmt(self, f)
     }
@@ -34,7 +35,8 @@ impl<A: Debug + Display> Debug for NodeDetails<A> {
 
 #[derive(PartialEq)]
 #[allow(non_snake_case)]
-pub struct PUCT {
+pub struct EdgeDetails<A, PV> {
+    pub action: A,
     pub Nsa: usize,
     pub Qsa: f32,
     pub Psa: f32,
@@ -46,10 +48,10 @@ pub struct PUCT {
     pub moves_left_score: f32,
     pub game_length: f32,
     pub cpuct: f32,
-    pub PUCT: f32,
+    pub puct_score: f32,
 }
 
-impl Display for PUCT {
+impl<A, PV> Display for EdgeDetails<A, PV> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "Nsa: {Nsa}, Qsa: {Qsa:.3}, Msa: {Msa:.2}, Psa: {Psa:.3}, Usa: {Usa:.2}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1} moves_left_head_score: {moves_left_score:.1}, PUCT: {PUCT:.3}",
             Nsa = self.Nsa,
@@ -65,13 +67,13 @@ impl Display for PUCT {
     }
 }
 
-impl Debug for PUCT {
+impl<A, PV> Debug for EdgeDetails<A, PV> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl Ord for PUCT {
+impl<A, PV> Ord for EdgeDetails<A, PV> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
             other.Nsa,
@@ -92,13 +94,13 @@ impl Ord for PUCT {
     }
 }
 
-impl PartialOrd for PUCT {
+impl<A, PV> PartialOrd for EdgeDetails<A, PV> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Eq for PUCT {}
+impl<A, PV> Eq for EdgeDetails<A, PV> {}
 
 #[cfg(test)]
 mod tests {
@@ -108,7 +110,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Nsa() {
-        let puct_greater = PUCT {
+        let puct_greater = EdgeDetails {
             Nsa: 2,
             Qsa: 1.0,
             Psa: 1.0,
@@ -118,10 +120,10 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 1.0,
-            PUCT: 1.0,
+            puct_score: 1.0,
         };
 
-        let puct_less = PUCT {
+        let puct_less = EdgeDetails {
             Nsa: 1,
             Qsa: 2.0,
             Psa: 2.0,
@@ -131,7 +133,7 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 2.0,
             cpuct: 2.0,
-            PUCT: 2.0,
+            puct_score: 2.0,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -141,7 +143,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Qsa() {
-        let puct_greater = PUCT {
+        let puct_greater = EdgeDetails {
             Nsa: 1,
             Qsa: 2.0,
             Psa: 1.0,
@@ -151,10 +153,10 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 1.0,
-            PUCT: 1.0,
+            puct_score: 1.0,
         };
 
-        let puct_less = PUCT {
+        let puct_less = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 2.0,
@@ -164,7 +166,7 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 2.0,
             cpuct: 2.0,
-            PUCT: 2.0,
+            puct_score: 2.0,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -174,7 +176,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Psa() {
-        let puct_greater = PUCT {
+        let puct_greater = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 2.0,
@@ -184,10 +186,10 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 1.0,
-            PUCT: 1.0,
+            puct_score: 1.0,
         };
 
-        let puct_less = PUCT {
+        let puct_less = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 1.0,
@@ -197,7 +199,7 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 2.0,
             cpuct: 2.0,
-            PUCT: 2.0,
+            puct_score: 2.0,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -207,7 +209,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Usa() {
-        let puct_greater = PUCT {
+        let puct_greater = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 1.0,
@@ -217,10 +219,10 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 1.0,
-            PUCT: 1.0,
+            puct_score: 1.0,
         };
 
-        let puct_less = PUCT {
+        let puct_less = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 1.0,
@@ -230,7 +232,7 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 2.0,
-            PUCT: 2.0,
+            puct_score: 2.0,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -240,7 +242,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn test_node_details_ordering_cpuct() {
-        let puct_greater = PUCT {
+        let puct_greater = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 1.0,
@@ -250,10 +252,10 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 2.0,
-            PUCT: 1.0,
+            puct_score: 1.0,
         };
 
-        let puct_less = PUCT {
+        let puct_less = EdgeDetails {
             Nsa: 1,
             Qsa: 1.0,
             Psa: 1.0,
@@ -263,7 +265,7 @@ mod tests {
             game_length: 1.0,
             moves_left_score: 1.0,
             cpuct: 1.0,
-            PUCT: 2.0,
+            puct_score: 2.0,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
