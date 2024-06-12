@@ -157,6 +157,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
     }
 
     fn get_PUCT_for_nodes(
+        &self,
         node_index: Index,
         game_state: &S,
         arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
@@ -172,7 +173,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
         };
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = cpuct.cpuct(game_state, Nsb, is_root);
+        let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
         let moves_left_threshold = options.moves_left_threshold;
         let iter_all_edges = node.iter_all_edges().map(|e| &*e);
         let game_length_baseline =
@@ -226,7 +227,6 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
 
         pucts
     }
-
 }
 
 pub struct MovesLeftBackpropagationStrategy<S, A, P, PV> {

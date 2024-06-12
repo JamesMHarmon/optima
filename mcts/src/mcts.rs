@@ -709,13 +709,13 @@ where
         backpropagation_strategy: &B,
         arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
     ) {
-        let node_iter = NodeIterator {
-            node_indexes: node_update_info
-                .iter()
-                .map(|info| info.node_index)
-                .collect(),
-            arena,
-        };
+        // let node_iter = NodeIterator {
+        //     node_indexes: node_update_info
+        //         .iter()
+        //         .map(|info| info.node_index)
+        //         .collect(),
+        //     arena,
+        // };
 
         let node_and_info_iter = node_update_info
             .iter()
@@ -727,26 +727,26 @@ where
     }
 }
 
-struct NodeIterator<'a, A, P, PV> {
-    node_indexes: Vec<Index>,
-    arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
-}
+// struct NodeIterator<'a, A, P, PV> {
+//     node_indexes: Vec<Index>,
+//     arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
+// }
 
-impl<'a, 'b, A, P, PV> Iterator for NodeIterator<'b, A, P, PV> {
-    type Item = &'a mut MCTSNode<A, P, PV>;
+// impl<'a, 'b, A, P, PV> Iterator for NodeIterator<'b, A, P, PV> {
+//     type Item = &'a mut MCTSNode<A, P, PV>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.node_indexes
-            .pop()
-            .map(|node_index| self.arena.node_mut(node_index))
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         self.node_indexes
+//             .pop()
+//             .map(|node_index| self.arena.node_mut(node_index))
+//     }
+// }
 
 impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
 where
     A: Clone,
     P: Clone,
-    PV: Default,
+    PV: Clone + Default,
 {
     pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P, PV>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
@@ -761,7 +761,7 @@ impl<A, P, PV> From<&MCTSNode<A, P, PV>> for NodeMetrics<A, P, PV>
 where
     A: Clone,
     P: Clone,
-    PV: Default,
+    PV: Clone + Default,
 {
     fn from(val: &MCTSNode<A, P, PV>) -> Self {
         NodeMetrics {
