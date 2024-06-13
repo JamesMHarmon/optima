@@ -111,10 +111,13 @@ pub struct CountingAnalyzer {
 impl CountingAnalyzer {
     #[cfg(test)]
     pub fn new(policy_scores: [f32; 3]) -> Self {
-        let policy_scores = policy_scores.into_iter().map(|x| f16::from_f32(x)).collect::<Vec<f16>>();
+        let policy_scores = policy_scores
+            .into_iter()
+            .map(|x| f16::from_f32(x))
+            .collect::<Vec<f16>>();
 
         Self {
-            policy_scores: [policy_scores[0], policy_scores[1], policy_scores[2]]
+            policy_scores: [policy_scores[0], policy_scores[1], policy_scores[2]],
         }
     }
 }

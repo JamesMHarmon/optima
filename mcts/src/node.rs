@@ -13,10 +13,7 @@ pub struct MCTSNode<A, P, PV> {
 }
 
 impl<A, P, PV> MCTSNode<A, P, PV> {
-    pub fn new(
-        policy_scores: Vec<ActionWithPolicy<A>>,
-        predictions: P,
-    ) -> Self {
+    pub fn new(policy_scores: Vec<ActionWithPolicy<A>>, predictions: P) -> Self {
         Self {
             visits: 1,
             predictions,
@@ -76,7 +73,8 @@ where
 }
 
 impl<A, P, PV> MCTSNode<A, P, PV>
-    where PV: Default
+where
+    PV: Default,
 {
     pub fn iter_visited_edges_and_top_unvisited_edge(
         &mut self,
@@ -144,7 +142,6 @@ impl<A, P, PV> MCTSNode<A, P, PV>
     }
 }
 
-
 impl<A, P, PV> MCTSNode<A, P, PV>
 where
     A: Eq,
@@ -154,4 +151,3 @@ where
         self.iter_all_edges().find(|e| e.action() == action)
     }
 }
-
