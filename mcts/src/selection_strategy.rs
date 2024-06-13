@@ -16,7 +16,7 @@ pub trait SelectionStrategy {
 
     fn node_details(
         &self,
-        node: &MCTSNode<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        node: &mut MCTSNode<Self::Action, Self::Predictions, Self::PropagatedValues>,
         game_state: &Self::State,
         is_root: bool
     ) -> Vec<EdgeDetails<Self::Action, Self::PropagatedValues>>;

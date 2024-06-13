@@ -7,7 +7,7 @@ pub struct SelectedNode<'node, N, A, P, PV> {
 }
 
 pub trait NodeLendingIterator<'node, N, A, P, V> {
-    fn next(&'node mut self) -> Option<SelectedNode<'node, N, A, P, V>>;
+    fn next(&mut self) -> Option<SelectedNode<'_, N, A, P, V>>;
 }
 
 pub trait BackpropagationStrategy {

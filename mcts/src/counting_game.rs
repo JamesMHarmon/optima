@@ -7,6 +7,8 @@ use model::{
     GameStateAnalysis,
 };
 
+use crate::GameLength;
+
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CountingGameState {
     pub p1_turn: bool,
@@ -14,11 +16,11 @@ pub struct CountingGameState {
 }
 
 impl CountingGameState {
-    pub fn is_terminal_state(&self) -> Option<Value> {
+    pub fn is_terminal_state(&self) -> Option<CountingGamePredictions> {
         if self.count == 100 {
-            Some(Value([1.0, 0.0]))
+            Some(CountingGamePredictions([1.0, 0.0]))
         } else if self.count == 0 {
-            Some(Value([0.0, 1.0]))
+            Some(CountingGamePredictions([0.0, 1.0]))
         } else {
             None
         }
@@ -44,11 +46,17 @@ impl CountingGameEngine {
 }
 
 #[derive(Clone)]
-pub struct Value(pub [f32; 2]);
+pub struct CountingGamePredictions(pub [f32; 2]);
 
-impl engine::value::Value for Value {
+impl engine::value::Value for CountingGamePredictions {
     fn get_value_for_player(&self, player: usize) -> f32 {
         self.0[player - 1]
+    }
+}
+
+impl GameLength for CountingGamePredictions {
+    fn game_length_score(&self) -> f32 {
+        0.0
     }
 }
 
@@ -62,7 +70,7 @@ pub enum CountingAction {
 impl GameEngine for CountingGameEngine {
     type Action = CountingAction;
     type State = CountingGameState;
-    type Terminal = Value;
+    type Terminal = CountingGamePredictions;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         let count = game_state.count;
@@ -109,7 +117,7 @@ impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
     type Future = future::Ready<GameStateAnalysis<Self::Action, Self::Predictions>>;
-    type Predictions = Value;
+    type Predictions = CountingGamePredictions;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
         let count = game_state.count as f32;
@@ -118,7 +126,7 @@ impl GameAnalyzer for CountingAnalyzer {
             return future::ready(GameStateAnalysis::new(Vec::new(), value_score));
         }
 
-        let value_score = Value([count / 100.0, (100.0 - count) / 100.0]);
+        let value_score = CountingGamePredictions([count / 100.0, (100.0 - count) / 100.0]);
         let policy_scores = vec![
             ActionWithPolicy {
                 action: CountingAction::Increment,

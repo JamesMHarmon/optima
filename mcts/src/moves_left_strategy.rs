@@ -1,53 +1,141 @@
 use crate::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, MCTSOptions, NodeLendingIterator,
-    CPUCT,
+    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator, SelectionStrategy, CPUCT
 };
 use anyhow::Result;
 use common::div_or_zero;
 use engine::{GameEngine, Value};
-use itertools::Itertools;
 
-pub struct MovesLeftSelectionStrategy<S, A, C> {
+pub struct MovesLeftSelectionStrategy<S, A, P, C> {
     cpuct: C,
-    _phantom: std::marker::PhantomData<(S, A)>,
+    options: MovesLeftStrategyOptions,
+    _phantom: std::marker::PhantomData<(S, A, P)>,
 }
 
-pub struct MovesLeftPrediction {
-    moves_left: f32,
-    value: f32,
+pub struct MovesLeftStrategyOptions {
+    pub fpu: f32,
+    pub fpu_root: f32,
+    pub temperature_visit_offset: f32,
+    pub moves_left_threshold: f32,
+    pub moves_left_scale: f32,
+    pub moves_left_factor: f32,
 }
 
-#[allow(non_snake_case)]
-impl MovesLeftPrediction {
-    pub fn new(moves_left: f32, value: f32) -> Self {
-        Self { moves_left, value }
+#[allow(clippy::too_many_arguments)]
+impl MovesLeftStrategyOptions {
+    pub fn new(
+        fpu: f32,
+        fpu_root: f32,
+        temperature_visit_offset: f32,
+        moves_left_threshold: f32,
+        moves_left_scale: f32,
+        moves_left_factor: f32,
+    ) -> Self {
+        MovesLeftStrategyOptions {
+            fpu,
+            fpu_root,
+            temperature_visit_offset,
+            moves_left_threshold,
+            moves_left_scale,
+            moves_left_factor,
+        }
     }
 }
 
-#[derive(Default, Clone)]
-pub struct MovesLeftPropagatedValue {
-    game_length: f32,
-    value: f32,
-}
+#[allow(non_snake_case)]
+impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
+    pub fn new(cpuct: C, options: MovesLeftStrategyOptions) -> Self {
+        Self {
+            cpuct,
+            options,
+            _phantom: std::marker::PhantomData,
+        }
+    }
 
-enum GameLengthBaseline {
-    MinimizeGameLength(f32),
-    MaximizeGameLength(f32),
-    None,
+    fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
+    where
+        I: Iterator<Item = &'b MCTSEdge<A, MovesLeftPropagatedValue>>,
+        A: 'b,
+    {
+        if moves_left_threshold >= 1.0 {
+            return GameLengthBaseline::None;
+        }
+
+        edges
+            .max_by_key(|n| n.visits())
+            .filter(|n| n.visits() > 0)
+            .map_or(GameLengthBaseline::None, |e| {
+                let pv = e.propagated_values();
+                let Qsa = pv.value / e.visits() as f32;
+                let expected_game_length = pv.game_length / e.visits() as f32;
+
+                if Qsa >= moves_left_threshold {
+                    GameLengthBaseline::MinimizeGameLength(expected_game_length)
+                } else if Qsa <= (1.0 - moves_left_threshold) {
+                    GameLengthBaseline::MaximizeGameLength(expected_game_length)
+                } else {
+                    GameLengthBaseline::None
+                }
+            })
+    }
+
+    fn Msa(
+        edge: &MCTSEdge<A, MovesLeftPropagatedValue>,
+        game_length_baseline: &GameLengthBaseline,
+        options: &MovesLeftStrategyOptions
+    ) -> f32 {
+        if edge.visits() == 0 {
+            return 0.0;
+        }
+
+        if let GameLengthBaseline::None = game_length_baseline {
+            return 0.0;
+        }
+
+        let (direction, game_length_baseline) =
+            if let GameLengthBaseline::MinimizeGameLength(game_length_baseline) =
+                game_length_baseline
+            {
+                (1.0f32, game_length_baseline)
+            } else if let GameLengthBaseline::MaximizeGameLength(game_length_baseline) =
+                game_length_baseline
+            {
+                (-1.0, game_length_baseline)
+            } else {
+                panic!();
+            };
+
+        let expected_game_length = edge.propagated_values().game_length / edge.visits() as f32;
+        let moves_left_scale = options.moves_left_scale;
+        let moves_left_clamped = (game_length_baseline - expected_game_length)
+            .min(moves_left_scale)
+            .max(-moves_left_scale);
+        let moves_left_scaled = moves_left_clamped / moves_left_scale;
+        moves_left_scaled * options.moves_left_factor * direction
+    }
 }
 
 #[allow(non_snake_case)]
-impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
+impl<S, A, P, C> SelectionStrategy for MovesLeftSelectionStrategy<S, A, P, C>
+where
+    C: CPUCT<State = S>,
+    A: Clone
+{
+    type State = S;
+    type Action = A;
+    type Predictions = P;
+    type PropagatedValues = MovesLeftPropagatedValue;
+
     fn select_path(
         &self,
-        node: &mut MCTSNode<A, MovesLeftPrediction, MovesLeftPropagatedValue>,
+        node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
         game_state: &S,
-        is_root: bool,
-        options: &MCTSOptions,
+        is_root: bool
     ) -> Result<usize>
     where
         C: CPUCT<State = S>,
     {
+        let options = &self.options;
+
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -83,79 +171,17 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
         Ok(best_child_index)
     }
 
-    fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
-    where
-        I: Iterator<Item = &'b MCTSEdge<A, MovesLeftPropagatedValue>>,
-        A: 'b,
-    {
-        if moves_left_threshold >= 1.0 {
-            return GameLengthBaseline::None;
-        }
-
-        edges
-            .max_by_key(|n| n.visits())
-            .filter(|n| n.visits() > 0)
-            .map_or(GameLengthBaseline::None, |e| {
-                let pv = e.propagated_values();
-                let Qsa = pv.value / e.visits() as f32;
-                let expected_game_length = pv.game_length / e.visits() as f32;
-
-                if Qsa >= moves_left_threshold {
-                    GameLengthBaseline::MinimizeGameLength(expected_game_length)
-                } else if Qsa <= (1.0 - moves_left_threshold) {
-                    GameLengthBaseline::MaximizeGameLength(expected_game_length)
-                } else {
-                    GameLengthBaseline::None
-                }
-            })
-    }
-
-    fn Msa(
-        edge: &MCTSEdge<A, MovesLeftPropagatedValue>,
-        game_length_baseline: &GameLengthBaseline,
-        options: &MCTSOptions,
-    ) -> f32 {
-        if edge.visits() == 0 {
-            return 0.0;
-        }
-
-        if let GameLengthBaseline::None = game_length_baseline {
-            return 0.0;
-        }
-
-        let (direction, game_length_baseline) =
-            if let GameLengthBaseline::MinimizeGameLength(game_length_baseline) =
-                game_length_baseline
-            {
-                (1.0f32, game_length_baseline)
-            } else if let GameLengthBaseline::MaximizeGameLength(game_length_baseline) =
-                game_length_baseline
-            {
-                (-1.0, game_length_baseline)
-            } else {
-                panic!();
-            };
-
-        let expected_game_length = edge.propagated_values().game_length / edge.visits() as f32;
-        let moves_left_scale = options.moves_left_scale;
-        let moves_left_clamped = (game_length_baseline - expected_game_length)
-            .min(moves_left_scale)
-            .max(-moves_left_scale);
-        let moves_left_scaled = moves_left_clamped / moves_left_scale;
-        moves_left_scaled * options.moves_left_factor * direction
-    }
-
     fn node_details(
         &self,
-        node: &mut MCTSNode<A, MovesLeftPrediction, MovesLeftPropagatedValue>,
+        node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
         game_state: &S,
-        is_root: bool,
-        options: &MCTSOptions,
+        is_root: bool
     ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>>
     where
-        C: CPUCT<State = S>,
-        A: Clone,
+        C: CPUCT<State = S>
     {
+        let options = &self.options;
+
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -199,17 +225,53 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
     }
 }
 
+#[derive(Default, Clone, PartialEq)]
+pub struct MovesLeftPropagatedValue {
+    value: f32,
+    game_length: f32,
+}
+
+impl MovesLeftPropagatedValue {
+    pub fn new(value: f32, game_length: f32) -> Self {
+        Self { value, game_length }
+    }
+
+    pub fn game_length(&self) -> f32 {
+        self.game_length
+    }
+
+    pub fn value(&self) -> f32 {
+        self.value
+    }
+}
+
+impl Eq for MovesLeftPropagatedValue {}
+
+impl Ord for MovesLeftPropagatedValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.game_length, self.value).partial_cmp(&(other.game_length, other.value)).expect("Failed to compare")
+    }
+}
+
+impl PartialOrd for MovesLeftPropagatedValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+enum GameLengthBaseline {
+    MinimizeGameLength(f32),
+    MaximizeGameLength(f32),
+    None,
+}
+
 pub struct MovesLeftBackpropagationStrategy<'a, E, S, A, P> {
     engine: &'a E,
-    game_length_baseline: GameLengthBaseline,
     _phantom: std::marker::PhantomData<(S, A, P)>,
 }
 
 impl<'e, E, S, A, P> MovesLeftBackpropagationStrategy<'e, E, S, A, P> {
-    pub fn new(engine: &'e E, game_length_baseline: GameLengthBaseline) -> Self {
+    pub fn new(engine: &'e E) -> Self {
         Self {
             engine,
-            game_length_baseline,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -242,7 +304,7 @@ where
             Self::Action,
             Self::Predictions,
             Self::PropagatedValues,
-        >,
+        >
     {
         let mut visited_nodes = visited_nodes;
         let estimated_game_length = predictions.game_length_score();
