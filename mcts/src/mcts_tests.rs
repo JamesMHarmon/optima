@@ -33,6 +33,7 @@ mod tests {
     };
     use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
+    use common::div_or_zero;
     use engine::GameState;
     use model::{EdgeMetrics, NodeMetrics};
 
@@ -42,13 +43,19 @@ mod tests {
     fn assert_metrics(
         left: &NodeMetrics<CountingAction, CountingGamePredictions, MovesLeftPropagatedValue>,
         right: &NodeMetrics<CountingAction, CountingGamePredictions, MovesLeftPropagatedValue>,
+        divide_values: bool,
     ) {
         assert_eq!(left.visits, right.visits);
         assert_eq!(left.children.len(), right.children.len());
 
         for (left, right) in left.children.iter().zip(right.children.iter()) {
             assert_eq!(left.action(), right.action());
-            assert_approx_eq!(left.propagatedValues().value(), right.propagatedValues().value(), ERROR_DIFF_W);
+            let left_pv_value = if divide_values {
+                div_or_zero(left.propagatedValues().value(), left.visits() as f32)
+            } else {
+                left.propagatedValues().value()
+            };
+            assert_approx_eq!(left_pv_value, right.propagatedValues().value(), ERROR_DIFF_W);
             let max_visits = left.visits().max(right.visits());
             let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
             assert_approx_eq!(left.visits() as f32, right.visits() as f32, allowed_diff);
@@ -92,7 +99,7 @@ mod tests {
         let metrics = mcts.get_root_node_metrics().unwrap();
         let metrics2 = mcts.get_root_node_metrics().unwrap();
 
-        assert_metrics(&metrics, &metrics2);
+        assert_metrics(&metrics, &metrics2, false);
     }
 
     #[tokio::test]
@@ -102,7 +109,7 @@ mod tests {
         let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
-        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
+        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 1.0 }, options);
         let temp = TempTest;
 
         let mut mcts = MCTS::new(
@@ -129,7 +136,7 @@ mod tests {
         let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
-        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
+        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 1.0 }, options);
         let temp = TempTest;
 
         let mut mcts = MCTS::new(
@@ -147,7 +154,6 @@ mod tests {
             .unwrap();
 
         mcts.search_visits(800).await.unwrap();
-        println!("{:?}", mcts.get_focus_node_details().unwrap().unwrap());
         let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
@@ -221,7 +227,7 @@ mod tests {
         let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
-        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
+        let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 1.0 }, options);
         let temp = TempTest;
 
         let mut mcts = MCTS::new(
@@ -249,6 +255,7 @@ mod tests {
                     EdgeMetrics::new(CountingAction::Increment, 312, MovesLeftPropagatedValue::new(0.509, 0.0)),
                 ],
             },
+            true
         );
     }
 
@@ -287,6 +294,7 @@ mod tests {
                     EdgeMetrics::new(CountingAction::Increment, 31, MovesLeftPropagatedValue::new(0.51, 0.0)),
                 ],
             },
+            true
         );
     }
 
@@ -325,6 +333,7 @@ mod tests {
                     EdgeMetrics::new(CountingAction::Stay, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
                 ],
             },
+            true
         );
     }
 
@@ -363,6 +372,7 @@ mod tests {
                     EdgeMetrics::new(CountingAction::Decrement, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
                 ],
             },
+            true
         );
     }
 
@@ -435,7 +445,7 @@ mod tests {
 
         let initial_metrics = initial_mcts.get_root_node_metrics().unwrap();
 
-        assert_metrics(&initial_metrics, &clear_metrics);
-        assert_metrics(&non_clear_metrics, &clear_metrics);
+        assert_metrics(&initial_metrics, &clear_metrics, false);
+        assert_metrics(&non_clear_metrics, &clear_metrics, false);
     }
 }

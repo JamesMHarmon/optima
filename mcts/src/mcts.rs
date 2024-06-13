@@ -648,7 +648,7 @@ where
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    let predictions = arena.get().node(selected_child_node_index).predictions().clone();
+                    let predictions = arena_mut.node(selected_child_node_index).predictions().clone();
                     Self::backpropagate(
                         &predictions,
                         visited_nodes_stack,
