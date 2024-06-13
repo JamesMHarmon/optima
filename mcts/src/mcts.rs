@@ -2,7 +2,7 @@ use crate::SelectedNode;
 
 use super::Temperature;
 use super::{BackpropagationStrategy, EdgeDetails, NodeLendingIterator, SelectionStrategy};
-use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails};
+use super::{DirichletOptions, MCTSEdge, MCTSNode, NodeDetails};
 use anyhow::{anyhow, Context, Result};
 use engine::{GameEngine, GameState};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -25,16 +25,16 @@ use std::thread;
 use std::time::Duration;
 
 pub struct MCTS<'a, S, A, E, M, B, Sel, P, T, PV> {
-    options: MCTSOptions,
     game_engine: &'a E,
     analyzer: &'a M,
-    backpropagation_strategy: B,
-    selection_strategy: Sel,
+    backpropagation_strategy: &'a B,
+    selection_strategy: &'a Sel,
     game_state: S,
     root: Option<Index>,
     arena: NodeArena<MCTSNode<A, P, PV>>,
     focus_actions: Vec<A>,
     temp: T,
+    parallelism: usize,
 }
 
 #[allow(non_snake_case)]
@@ -51,13 +51,12 @@ where
         game_state: S,
         game_engine: &'a E,
         analyzer: &'a M,
-        backpropagation_strategy: B,
-        selection_strategy: Sel,
-        options: MCTSOptions,
+        backpropagation_strategy: &'a B,
+        selection_strategy: &'a Sel,
         temp: T,
+        parallelism: usize,
     ) -> Self {
         MCTS {
-            options,
             game_engine,
             analyzer,
             backpropagation_strategy,
@@ -67,21 +66,22 @@ where
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
             temp,
-        }
+        parallelism,
+    }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn with_capacity(
         game_state: S,
         game_engine: &'a E,
         analyzer: &'a M,
-        backpropagation_strategy: B,
-        selection_strategy: Sel,
-        options: MCTSOptions,
+        backpropagation_strategy: &'a B,
+        selection_strategy: &'a Sel,
         capacity: usize,
         temp: T,
+        parallelism: usize,
     ) -> Self {
         MCTS {
-            options,
             game_engine,
             analyzer,
             backpropagation_strategy,
@@ -91,6 +91,7 @@ where
             arena: NodeArena::with_capacity(capacity * 2),
             focus_actions: vec![],
             temp,
+            parallelism,
         }
     }
 
@@ -114,10 +115,10 @@ where
         self.focus_actions.clear();
     }
 
-    pub async fn apply_noise_at_root(&mut self) {
+    pub async fn apply_noise_at_root(&mut self, dirichlet: Option<&DirichletOptions>) {
         let root_node_index = self.get_or_create_root_node().await;
 
-        if let Some(dirichlet) = &self.options.dirichlet {
+        if let Some(dirichlet) = dirichlet {
             let mut root_node = self.arena.get_mut();
 
             Self::apply_dirichlet_noise_to_node(root_node.node_mut(root_node_index), dirichlet);
@@ -364,12 +365,12 @@ where
     T: Temperature<State = S>,
     PV: Default + Ord,
 {
-    pub fn select_action(&mut self) -> Result<A> {
-        self._select_action(true)
+    pub fn select_action(&mut self, temperature_visit_offset: f32) -> Result<A> {
+        self._select_action(true, temperature_visit_offset)
     }
 
     pub fn select_action_no_temp(&mut self) -> Result<A> {
-        self._select_action(false)
+        self._select_action(false, 0.0)
     }
 
     pub fn get_focus_node_details(&mut self) -> Result<Option<NodeDetails<A, PV>>> {
@@ -441,8 +442,8 @@ where
         game_state: &S,
         is_root: bool,
     ) -> Result<NodeDetails<A, PV>> {
-        let arena_ref = &mut self.arena.get();
-        let node = arena_ref.node(node_index);
+        let arena_ref = &mut self.arena.get_mut();
+        let node = arena_ref.node_mut(node_index);
         let mut children = self
             .selection_strategy
             .node_details(node, game_state, is_root);
@@ -455,7 +456,7 @@ where
         })
     }
 
-    fn _select_action(&mut self, use_temp: bool) -> Result<A> {
+    fn _select_action(&mut self, use_temp: bool, temperature_visit_offset: f32) -> Result<A> {
         if let Some(node_index) = &self.get_focus_node_index()? {
             let game_state = self.get_focus_node_game_state();
             let temp = self.temp.temp(&game_state);
@@ -478,7 +479,7 @@ where
                 Self::select_action_using_temperature(
                     &child_node_details,
                     temp,
-                    self.options.temperature_visit_offset,
+                    temperature_visit_offset,
                 )?
             };
 
@@ -501,8 +502,7 @@ where
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     T: Temperature<State = S>,
     P: Clone,
-    PV: Default,
-    B::NodeInfo: Clone,
+    PV: Default
 {
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
         self.search_time_max_visits(duration, usize::max_value())
@@ -573,7 +573,7 @@ where
             }
         };
 
-        for _ in 0..self.options.parallelism {
+        for _ in 0..self.parallelism {
             traverse(&mut searches);
         }
 
@@ -725,7 +725,7 @@ pub struct NodeIterator<'a, I, A, P, PV> {
 impl<'a, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
     for NodeIterator<'a, I, A, P, PV>
 {
-    fn next(&'node mut self) -> Option<SelectedNode<I, A, P, PV>> {
+    fn next(&mut self) -> Option<SelectedNode<I, A, P, PV>> {
         let node = self.visited_node_info.pop()?;
         let selected_node = SelectedNode {
             node: self.arena.node_mut(node.node_index),
