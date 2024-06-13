@@ -2,13 +2,12 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
 #[allow(non_snake_case)]
-pub struct NodeDetails<A, P, PV> {
+pub struct NodeDetails<A, PV> {
     pub visits: usize,
-    pub predictions: P,
     pub children: Vec<EdgeDetails<A, PV>>,
 }
 
-impl<A: Display, P, PV> Display for NodeDetails<A, P, PV> {
+impl<A: Display, PV> Display for NodeDetails<A, PV> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{}]",
@@ -27,7 +26,7 @@ impl<A: Display, P, PV> Display for NodeDetails<A, P, PV> {
     }
 }
 
-impl<A: Debug + Display, P, PV> Debug for NodeDetails<A, P, PV> {
+impl<A: Debug + Display, PV> Debug for NodeDetails<A, PV> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Display::fmt(self, f)
     }
@@ -41,14 +40,10 @@ pub struct EdgeDetails<A, PV> {
     pub Qsa: f32,
     pub Psa: f32,
     pub Usa: f32,
-    /// Expected game length calculated by each child node's moves left score normalized to expected game length.
-    pub Msa: f32,
-    pub M: f32,
-    /// Neural net output of the number of moves left in the game.
-    pub moves_left_score: f32,
     pub game_length: f32,
     pub cpuct: f32,
     pub puct_score: f32,
+    pub predicted_values: PV,
 }
 
 impl<A, PV> Display for EdgeDetails<A, PV> {

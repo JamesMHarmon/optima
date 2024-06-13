@@ -1,4 +1,4 @@
-use crate::{BackpropagationStrategy, MCTSEdge, MCTSNode, MCTSOptions, CPUCT};
+use crate::{BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, MCTSOptions, CPUCT};
 use anyhow::Result;
 use common::div_or_zero;
 use generational_arena::Index;
@@ -81,7 +81,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
             let Psa = child.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let Msa = Self::get_Msa(child, game_length_baseline, options);
+            let Msa = Self::Msa(child, game_length_baseline, options);
 
             let PUCT = Msa + Qsa + Usa;
 
@@ -121,7 +121,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
             })
     }
 
-    fn get_Msa(
+    fn Msa(
         edge: &MCTSEdge<A, MovesLeftPropagatedValue>,
         game_length_baseline: &GameLengthBaseline,
         options: &MCTSOptions,
@@ -156,16 +156,13 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
         moves_left_scaled * options.moves_left_factor * direction
     }
 
-    fn get_PUCT_for_nodes(
+    fn node_details(
         &self,
-        node_index: Index,
+        node: &MCTSNode<A, MovesLeftPrediction, MovesLeftPropagatedValue>,
         game_state: &S,
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
         is_root: bool,
         options: &MCTSOptions,
-    ) -> Vec<PUCT> {
-        let node = arena.node_mut(node_index);
-
+    ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>> {
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -186,23 +183,14 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
             .map(|e| e.node_index())
             .collect_vec();
 
-        let moves_left_scores = child_node_indexes
-            .iter()
-            .map(|index| {
-                index
-                    .map(|index| arena.node(index).moves_left_score())
-                    .unwrap_or(0.0)
-            })
-            .collect_vec();
-
-        let node = arena.node_mut(node_index);
-        for (edge, moves_left_score) in node.iter_visited_edges().zip(moves_left_scores) {
+        for edge in node.iter_visited_edges() {
+            let action = edge.action().clone();
             let W = edge.W();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let Msa = Self::get_Msa(edge, &game_length_baseline, options);
+            let Msa = Self::Msa(edge, &game_length_baseline, options);
             let M = div_or_zero(edge.M(), edge.visits() as f32);
             let game_length = if Nsa == 0 {
                 edge.M()
@@ -210,8 +198,10 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
                 edge.M() / Nsa as f32
             };
 
-            let PUCT = Qsa + Usa;
-            pucts.push(PUCT {
+            let puct_score = Qsa + Usa;
+            pucts.push(EdgeDetails {
+                action,
+                puct_score,
                 Psa,
                 Nsa,
                 Msa,
@@ -219,9 +209,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
                 Usa,
                 Qsa,
                 M,
-                moves_left_score,
                 game_length,
-                PUCT,
             });
         }
 
@@ -246,7 +234,7 @@ impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy<S
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PredicationValues = PV;
+    type PropagatedValues = PV;
     type NodeInfo;
 
     fn backpropagate(
