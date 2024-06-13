@@ -104,12 +104,18 @@ impl GameEngine for CountingGameEngine {
     }
 }
 
-pub struct CountingAnalyzer {}
+pub struct CountingAnalyzer {
+    policy_scores: [f16; 3],
+}
 
 impl CountingAnalyzer {
     #[cfg(test)]
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(policy_scores: [f32; 3]) -> Self {
+        let policy_scores = policy_scores.into_iter().map(|x| f16::from_f32(x)).collect::<Vec<f16>>();
+
+        Self {
+            policy_scores: [policy_scores[0], policy_scores[1], policy_scores[2]]
+        }
     }
 }
 
@@ -130,15 +136,15 @@ impl GameAnalyzer for CountingAnalyzer {
         let policy_scores = vec![
             ActionWithPolicy {
                 action: CountingAction::Increment,
-                policy_score: f16::from_f32(0.3),
+                policy_score: self.policy_scores[0],
             },
             ActionWithPolicy {
                 action: CountingAction::Decrement,
-                policy_score: f16::from_f32(0.3),
+                policy_score: self.policy_scores[1],
             },
             ActionWithPolicy {
                 action: CountingAction::Stay,
-                policy_score: f16::from_f32(0.4),
+                policy_score: self.policy_scores[2],
             },
         ];
 

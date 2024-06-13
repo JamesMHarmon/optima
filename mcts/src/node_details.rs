@@ -7,7 +7,7 @@ pub struct NodeDetails<A, PV> {
     pub children: Vec<EdgeDetails<A, PV>>,
 }
 
-impl<A: Display, PV> Display for NodeDetails<A, PV> where PV: Display {
+impl<A, PV> Display for NodeDetails<A, PV> where A: Display, PV: Display {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{}]",
@@ -26,9 +26,22 @@ impl<A: Display, PV> Display for NodeDetails<A, PV> where PV: Display {
     }
 }
 
-impl<A: Debug + Display, PV> Debug for NodeDetails<A, PV> where PV: Display {
+impl<A, PV> Debug for NodeDetails<A, PV> where A: Debug, PV: Debug {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        Display::fmt(self, f)
+        let actions = format!(
+            "[{:?}]",
+            self.children
+                .iter()
+                .fold(String::new(), |acc, details| acc
+                    + &format!("\n\t({:?}),", details))
+        );
+
+        write!(
+            f,
+            "V: {visits}, Actions: {actions}",
+            visits = self.visits,
+            actions = actions
+        )
     }
 }
 
@@ -60,9 +73,18 @@ impl<A, PV> Display for EdgeDetails<A, PV> where A: Display, PV: Display {
     }
 }
 
-impl<A, PV> Debug for EdgeDetails<A, PV> where A: Display, PV: Display {
+impl<A, PV> Debug for EdgeDetails<A, PV> where A: Debug, PV: Debug {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
+        action = self.action,
+        Nsa = self.Nsa,
+        puct_score = self.puct_score,
+        Psa = self.Psa,
+        Usa = self.Usa,
+        propagated_values = self.propagated_values,
+        cpuct = self.cpuct,
+        game_length = self.game_length,
+    )
     }
 }
 

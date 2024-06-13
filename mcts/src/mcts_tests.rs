@@ -59,7 +59,7 @@ mod tests {
     async fn test_mcts_is_deterministic() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -99,7 +99,7 @@ mod tests {
     async fn test_mcts_chooses_best_p1_move() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -116,7 +116,8 @@ mod tests {
         );
 
         mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action(0.0).unwrap();
+
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Increment);
     }
@@ -125,7 +126,7 @@ mod tests {
     async fn test_mcts_chooses_best_p2_move() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -146,7 +147,8 @@ mod tests {
             .unwrap();
 
         mcts.search_visits(800).await.unwrap();
-        let action = mcts.select_action(0.0).unwrap();
+        println!("{:?}", mcts.get_focus_node_details().unwrap().unwrap());
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -155,7 +157,7 @@ mod tests {
     async fn test_mcts_should_overcome_policy_through_value() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 2.5 }, options);
@@ -182,7 +184,7 @@ mod tests {
         assert_eq!(top_edge.action, CountingAction::Stay);
 
         mcts.search_visits(8000).await.unwrap();
-        let action = mcts.select_action(0.0).unwrap();
+        let action = mcts.select_action().unwrap();
 
         assert_eq!(action, CountingAction::Decrement);
     }
@@ -191,7 +193,7 @@ mod tests {
     async fn test_mcts_advance_to_next_works_without_search() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer: CountingAnalyzer = CountingAnalyzer::new();
+        let analyzer: CountingAnalyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy: MovesLeftBackpropagationStrategy<CountingGameEngine, CountingGameState, CountingAction, CountingGamePredictions> = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy: MovesLeftSelectionStrategy<CountingGameState, CountingAction, CountingGamePredictions, CPUCTTest> = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -216,7 +218,7 @@ mod tests {
     async fn test_mcts_metrics_returns_accurate_results() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -254,7 +256,7 @@ mod tests {
     async fn test_mcts_weights_policy_initially() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -292,7 +294,7 @@ mod tests {
     async fn test_mcts_works_with_single_node() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -330,7 +332,7 @@ mod tests {
     async fn test_mcts_works_with_two_nodes() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -368,7 +370,7 @@ mod tests {
     async fn test_mcts_clear_nodes_results_in_same_outcome() {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
-        let analyzer = CountingAnalyzer::new();
+        let analyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
         let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
         let selection_strategy = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
@@ -389,7 +391,7 @@ mod tests {
             .search_visits(search_num_visits)
             .await
             .unwrap();
-        let action = non_clear_mcts.select_action(0.0).unwrap();
+        let action = non_clear_mcts.select_action().unwrap();
         non_clear_mcts
             .advance_to_action_retain(action)
             .await
@@ -412,7 +414,7 @@ mod tests {
         );
 
         clear_mcts.search_visits(search_num_visits).await.unwrap();
-        let action = clear_mcts.select_action(0.0).unwrap();
+        let action = clear_mcts.select_action().unwrap();
         clear_mcts.advance_to_action(action.clone()).await.unwrap();
         clear_mcts.search_visits(search_num_visits).await.unwrap();
 

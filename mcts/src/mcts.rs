@@ -365,12 +365,13 @@ where
     T: Temperature<State = S>,
     PV: Default + Ord,
 {
-    pub fn select_action(&mut self, temperature_visit_offset: f32) -> Result<A> {
-        self._select_action(true, temperature_visit_offset)
-    }
-
-    pub fn select_action_no_temp(&mut self) -> Result<A> {
+    // @TODO: Ensure that all calls to select action are using with no temp.
+    pub fn select_action(&mut self) -> Result<A> {
         self._select_action(false, 0.0)
+    }
+    
+    pub fn select_action_with_temp(&mut self, temperature_visit_offset: f32) -> Result<A> {
+        self._select_action(true, temperature_visit_offset)
     }
 
     pub fn get_focus_node_details(&mut self) -> Result<Option<NodeDetails<A, PV>>> {
@@ -647,9 +648,9 @@ where
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    // @TODO: Predictions needs to come from the node from the edge, not from the parent node.
+                    let predictions = arena.get().node(selected_child_node_index).predictions().clone();
                     Self::backpropagate(
-                        &node.predictions().clone(),
+                        &predictions,
                         visited_nodes_stack,
                         backpropagation_strategy,
                         &mut *arena_mut,

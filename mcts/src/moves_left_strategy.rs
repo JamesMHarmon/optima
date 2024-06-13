@@ -225,7 +225,7 @@ where
     }
 }
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq, Debug)]
 pub struct MovesLeftPropagatedValue {
     value: f32,
     game_length: f32,
