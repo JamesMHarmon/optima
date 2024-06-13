@@ -1,9 +1,13 @@
 use crate::MCTSNode;
 
-type InfoNodePair<'node, N, A, P, PV> = (N, &'node mut MCTSNode<A, P, PV>);
+pub struct SelectedNode<'node, N, A, P, PV> {
+    pub node: &'node mut MCTSNode<A, P, PV>,
+    pub selected_edge_index: usize,
+    pub node_info: N,
+}
 
 pub trait NodeLendingIterator<'node, N, A, P, V> {
-    fn next(&'node mut self) -> Option<InfoNodePair<'node, N, A, P, V>>;
+    fn next(&'node mut self) -> Option<SelectedNode<'node, N, A, P, V>>;
 }
 
 pub trait BackpropagationStrategy {
@@ -15,13 +19,13 @@ pub trait BackpropagationStrategy {
 
     fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo;
 
-    fn backpropagate<'node, I>(
-        &self,
-        visited_nodes: I,
-        predictions: &Self::Predictions,
-    ) where
-        I: NodeLendingIterator<'node, Self::NodeInfo, Self::Action, Self::Predictions, Self::PropagatedValues>,
-        Self::Action: 'node,
-        Self::Predictions: 'node,
-        Self::PropagatedValues: 'node;
+    fn backpropagate<'node, I>(&'node self, visited_nodes: I, predictions: &Self::Predictions)
+    where
+        I: NodeLendingIterator<
+            'node,
+            Self::NodeInfo,
+            Self::Action,
+            Self::Predictions,
+            Self::PropagatedValues,
+        >;
 }

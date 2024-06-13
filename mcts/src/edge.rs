@@ -47,6 +47,10 @@ impl<A, PV> MCTSEdge<A, PV> {
         &self.propagated_values
     }
 
+    pub fn propagated_values_mut(&mut self) -> &mut PV {
+        &mut self.propagated_values
+    }
+
     pub fn is_unexpanded(&self) -> bool {
         self.node.is_unexpanded()
     }

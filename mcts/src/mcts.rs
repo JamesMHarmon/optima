@@ -1,6 +1,8 @@
+use crate::SelectedNode;
+
+use super::Temperature;
 use super::{BackpropagationStrategy, EdgeDetails, NodeLendingIterator, SelectionStrategy};
 use super::{DirichletOptions, MCTSEdge, MCTSNode, MCTSOptions, NodeDetails};
-use super::Temperature;
 use anyhow::{anyhow, Context, Result};
 use engine::{GameEngine, GameState};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -360,8 +362,8 @@ where
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     T: Temperature<State = S>,
-    PV: Default + Ord
-{    
+    PV: Default + Ord,
+{
     pub fn select_action(&mut self) -> Result<A> {
         self._select_action(true)
     }
@@ -432,7 +434,7 @@ where
             })
             .context("Focused action was not found")?
     }
-    
+
     fn node_details(
         &mut self,
         node_index: Index,
@@ -441,11 +443,9 @@ where
     ) -> Result<NodeDetails<A, PV>> {
         let arena_ref = &mut self.arena.get();
         let node = arena_ref.node(node_index);
-        let mut children = self.selection_strategy.node_details(
-            node,
-            game_state,
-            is_root
-        );
+        let mut children = self
+            .selection_strategy
+            .node_details(node, game_state, is_root);
 
         children.sort_by(|x_details, y_details| y_details.cmp(x_details));
 
@@ -469,7 +469,10 @@ where
             }
 
             let best_action = if temp == 0.0 || !use_temp {
-                let best_action = child_node_details.into_iter().next().ok_or_else(|| anyhow!("No available actions"))?;
+                let best_action = child_node_details
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow!("No available actions"))?;
                 best_action.action
             } else {
                 Self::select_action_using_temperature(
@@ -487,7 +490,6 @@ where
         ))
     }
 }
-
 
 impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
 where
@@ -630,6 +632,7 @@ where
             let node_info = backpropagation_strategy.node_info(&game_state);
             visited_nodes_stack.push(NodeUpdateInfo {
                 node_index: latest_index,
+                selected_edge_index,
                 node_info,
             });
 
@@ -707,7 +710,7 @@ where
     ) {
         let node_iter = NodeIterator {
             visited_node_info,
-            arena
+            arena,
         };
 
         backpropagation_strategy.backpropagate(node_iter, predictions);
@@ -719,11 +722,18 @@ pub struct NodeIterator<'a, I, A, P, PV> {
     arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
 }
 
-impl<'a, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV> for NodeIterator<'a, I, A, P, PV> {
-    fn next(&'node mut self) -> Option<(I, &'node mut MCTSNode<A, P, PV>)> {
+impl<'a, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
+    for NodeIterator<'a, I, A, P, PV>
+{
+    fn next(&'node mut self) -> Option<SelectedNode<I, A, P, PV>> {
         let node = self.visited_node_info.pop()?;
+        let selected_node = SelectedNode {
+            node: self.arena.node_mut(node.node_index),
+            selected_edge_index: node.selected_edge_index,
+            node_info: node.node_info,
+        };
 
-        Some((node.node_info, self.arena.node_mut(node.node_index)))
+        Some(selected_node)
     }
 }
 
@@ -773,7 +783,7 @@ where
 
 struct NodeUpdateInfo<I> {
     node_index: Index,
-    // selected_edge_index: usize,
+    selected_edge_index: usize,
     node_info: I,
 }
 
