@@ -1,7 +1,11 @@
-use crate::{BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, MCTSOptions, CPUCT};
+use crate::{
+    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, MCTSOptions, NodeLendingIterator,
+    CPUCT,
+};
 use anyhow::Result;
 use common::div_or_zero;
-use generational_arena::Index;
+use engine::{GameEngine, Value};
+use itertools::Itertools;
 
 pub struct MovesLeftSelectionStrategy<S, A, C> {
     cpuct: C,
@@ -20,25 +24,10 @@ impl MovesLeftPrediction {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct MovesLeftPropagatedValue {
     game_length: f32,
     value: f32,
-}
-
-#[allow(non_snake_case)]
-impl MovesLeftPropagatedValue {
-    pub fn new(game_length: f32, value: f32) -> Self {
-        Self { game_length, value }
-    }
-
-    pub fn M(&self) -> f32 {
-        self.game_length
-    }
-
-    pub fn W(&self) -> f32 {
-        self.value
-    }
 }
 
 enum GameLengthBaseline {
@@ -76,7 +65,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
         let mut best_puct = std::f32::MIN;
 
         for (i, child) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
-            let W = child.propagated_values().W();
+            let W = child.propagated_values().value;
             let Nsa = child.visits();
             let Psa = child.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
@@ -108,8 +97,8 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
             .filter(|n| n.visits() > 0)
             .map_or(GameLengthBaseline::None, |e| {
                 let pv = e.propagated_values();
-                let Qsa = pv.W() / e.visits() as f32;
-                let expected_game_length = pv.M() / e.visits() as f32;
+                let Qsa = pv.value / e.visits() as f32;
+                let expected_game_length = pv.game_length / e.visits() as f32;
 
                 if Qsa >= moves_left_threshold {
                     GameLengthBaseline::MinimizeGameLength(expected_game_length)
@@ -147,7 +136,7 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
                 panic!();
             };
 
-        let expected_game_length = edge.propagated_values().M() / edge.visits() as f32;
+        let expected_game_length = edge.propagated_values().game_length / edge.visits() as f32;
         let moves_left_scale = options.moves_left_scale;
         let moves_left_clamped = (game_length_baseline - expected_game_length)
             .min(moves_left_scale)
@@ -158,11 +147,15 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
 
     fn node_details(
         &self,
-        node: &MCTSNode<A, MovesLeftPrediction, MovesLeftPropagatedValue>,
+        node: &mut MCTSNode<A, MovesLeftPrediction, MovesLeftPropagatedValue>,
         game_state: &S,
         is_root: bool,
         options: &MCTSOptions,
-    ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>> {
+    ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>>
+    where
+        C: CPUCT<State = S>,
+        A: Clone,
+    {
         let fpu = if is_root {
             options.fpu_root
         } else {
@@ -178,25 +171,16 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
 
         let mut pucts = Vec::with_capacity(node.child_len());
 
-        let child_node_indexes = node
-            .iter_visited_edges()
-            .map(|e| e.node_index())
-            .collect_vec();
-
         for edge in node.iter_visited_edges() {
             let action = edge.action().clone();
-            let W = edge.W();
+            let propagated_values = edge.propagated_values().clone();
+            let W = propagated_values.value;
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
             let Msa = Self::Msa(edge, &game_length_baseline, options);
-            let M = div_or_zero(edge.M(), edge.visits() as f32);
-            let game_length = if Nsa == 0 {
-                edge.M()
-            } else {
-                edge.M() / Nsa as f32
-            };
+            let game_length = div_or_zero(propagated_values.game_length, Nsa as f32);
 
             let puct_score = Qsa + Usa;
             pucts.push(EdgeDetails {
@@ -204,12 +188,10 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
                 puct_score,
                 Psa,
                 Nsa,
-                Msa,
                 cpuct,
                 Usa,
-                Qsa,
-                M,
                 game_length,
+                propagated_values,
             });
         }
 
@@ -217,59 +199,70 @@ impl<S, A, C> MovesLeftSelectionStrategy<S, A, C> {
     }
 }
 
-pub struct MovesLeftBackpropagationStrategy<S, A, P, PV> {
+pub struct MovesLeftBackpropagationStrategy<'a, E, S, A, P> {
+    engine: &'a E,
     game_length_baseline: GameLengthBaseline,
-    _phantom: std::marker::PhantomData<(S, A, P, PV)>,
+    _phantom: std::marker::PhantomData<(S, A, P)>,
 }
 
-impl<S, A, P, PV> MovesLeftBackpropagationStrategy<S, A, P, PV> {
-    pub fn new(game_length_baseline: GameLengthBaseline) -> Self {
+impl<'e, E, S, A, P> MovesLeftBackpropagationStrategy<'e, E, S, A, P> {
+    pub fn new(engine: &'e E, game_length_baseline: GameLengthBaseline) -> Self {
         Self {
+            engine,
             game_length_baseline,
+            _phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<S, A, P, PV> BackpropagationStrategy for MovesLeftBackpropagationStrategy<S, A, P, PV> {
+pub struct MovesLeftNodeInfo {
+    pub player_to_move: usize,
+}
+
+pub trait GameLength {
+    fn game_length_score(&self) -> f32;
+}
+
+impl<'a, E, S, A, P> BackpropagationStrategy for MovesLeftBackpropagationStrategy<'a, E, S, A, P>
+where
+    P: Value + GameLength,
+    E: GameEngine<State = S, Action = A>,
+{
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PropagatedValues = PV;
-    type NodeInfo;
+    type PropagatedValues = MovesLeftPropagatedValue;
+    type NodeInfo = MovesLeftNodeInfo;
 
-    fn backpropagate(
-        &self,
-        visited_nodes: &[NodeUpdateInfo],
-        evaluated_node_index: Index,
-        evaluated_node_move_num: usize,
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
-    ) {
-        let evaluated_node = &arena.node(evaluated_node_index);
-        let value_score = &evaluated_node.value_score().clone();
-        let evaluated_node_moves_left_score = evaluated_node.moves_left_score();
-        let evaluated_node_game_length =
-            evaluated_node_move_num as f32 + evaluated_node_moves_left_score;
+    fn backpropagate<'node, I>(&self, visited_nodes: I, predictions: &Self::Predictions)
+    where
+        I: NodeLendingIterator<
+            'node,
+            Self::NodeInfo,
+            Self::Action,
+            Self::Predictions,
+            Self::PropagatedValues,
+        >,
+    {
+        let mut visited_nodes = visited_nodes;
+        let estimated_game_length = predictions.game_length_score();
 
-        for NodeUpdateInfo {
-            parent_node_index,
-            child_edge_index,
-            parent_node_player_to_move,
-        } in visited_nodes
-        {
-            let node_to_update_parent = arena.node_mut(*parent_node_index);
+        while let Some(node) = visited_nodes.next() {
             // Update value of W from the parent node's perspective.
             // This is because the parent chooses which child node to select, and as such will want the one with the
             // highest V from its perspective. A child node (or edge) does not care what its value (W or Q) is from its own perspective.
-            let score = value_score.get_value_for_player(*parent_node_player_to_move);
+            let score = predictions.get_value_for_player(node.node_info.player_to_move);
 
-            let node_to_update = node_to_update_parent.get_child_by_index_mut(*child_edge_index);
+            let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            node_to_update.add_W(score);
-            node_to_update.add_M(evaluated_node_game_length);
+            edge_to_update.propagated_values_mut().value += score;
+            edge_to_update.propagated_values_mut().game_length += estimated_game_length;
         }
     }
 
     fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo {
-        todo!()
+        MovesLeftNodeInfo {
+            player_to_move: self.engine.player_to_move(game_state),
+        }
     }
 }
