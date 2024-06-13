@@ -7,14 +7,14 @@ pub struct NodeDetails<A, PV> {
     pub children: Vec<EdgeDetails<A, PV>>,
 }
 
-impl<A: Display, PV> Display for NodeDetails<A, PV> {
+impl<A: Display, PV> Display for NodeDetails<A, PV> where PV: Display {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{}]",
             self.children
                 .iter()
-                .fold(String::new(), |acc, (a, puct)| acc
-                    + &format!("\n\t(A: {}, {}),", a, puct))
+                .fold(String::new(), |acc, details| acc
+                    + &format!("\n\t({}),", details))
         );
 
         write!(
@@ -26,53 +26,51 @@ impl<A: Display, PV> Display for NodeDetails<A, PV> {
     }
 }
 
-impl<A: Debug + Display, PV> Debug for NodeDetails<A, PV> {
+impl<A: Debug + Display, PV> Debug for NodeDetails<A, PV> where PV: Display {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Display::fmt(self, f)
     }
 }
 
-#[derive(PartialEq)]
 #[allow(non_snake_case)]
+#[derive(PartialEq)]
 pub struct EdgeDetails<A, PV> {
     pub action: A,
     pub Nsa: usize,
-    pub Qsa: f32,
     pub Psa: f32,
     pub Usa: f32,
     pub game_length: f32,
     pub cpuct: f32,
     pub puct_score: f32,
-    pub predicted_values: PV,
+    pub propagated_values: PV,
 }
 
-impl<A, PV> Display for EdgeDetails<A, PV> {
+impl<A, PV> Display for EdgeDetails<A, PV> where A: Display, PV: Display {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Nsa: {Nsa}, Qsa: {Qsa:.3}, Msa: {Msa:.2}, Psa: {Psa:.3}, Usa: {Usa:.2}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1} moves_left_head_score: {moves_left_score:.1}, PUCT: {PUCT:.3}",
+        write!(f, "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
+            action = self.action,
             Nsa = self.Nsa,
-            Qsa = self.Qsa,
+            puct_score = self.puct_score,
             Psa = self.Psa,
             Usa = self.Usa,
-            Msa = self.Msa,
-            moves_left_score = self.moves_left_score,
-            game_length = self.game_length,
+            propagated_values = self.propagated_values,
             cpuct = self.cpuct,
-            PUCT = self.PUCT,
+            game_length = self.game_length,
         )
     }
 }
 
-impl<A, PV> Debug for EdgeDetails<A, PV> {
+impl<A, PV> Debug for EdgeDetails<A, PV> where A: Display, PV: Display {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl<A, PV> Ord for EdgeDetails<A, PV> {
+impl<A, PV> Ord for EdgeDetails<A, PV> where A: Eq, PV: Ord {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
+        match (self.Nsa, &self.propagated_values, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
             other.Nsa,
-            &other.Qsa,
+            &other.propagated_values,
             &other.Psa,
             &other.Usa,
             &other.cpuct,
@@ -81,21 +79,21 @@ impl<A, PV> Ord for EdgeDetails<A, PV> {
             None => {
                 panic!(
                     "Could not compare: {:?} to {:?}",
-                    (self.Nsa, &self.Qsa, &self.Psa, &self.Usa, &self.cpuct),
-                    (other.Nsa, &other.Qsa, &other.Psa, &other.Usa, &other.cpuct)
+                    (self.Nsa, &self.Psa, &self.Usa, &self.cpuct),
+                    (other.Nsa, &other.Psa, &other.Usa, &other.cpuct)
                 );
             }
         }
     }
 }
 
-impl<A, PV> PartialOrd for EdgeDetails<A, PV> {
+impl<A, PV> PartialOrd for EdgeDetails<A, PV> where A: Eq, PV: Ord + PartialOrd {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<A, PV> Eq for EdgeDetails<A, PV> {}
+impl<A, PV> Eq for EdgeDetails<A, PV> where A: Eq, PV: Eq {}
 
 #[cfg(test)]
 mod tests {
@@ -106,27 +104,23 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Nsa() {
         let puct_greater = EdgeDetails {
+            action: (),
             Nsa: 2,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
 
         let puct_less = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 2.0,
+            propagated_values: 1,
             Psa: 2.0,
             Usa: 2.0,
-            Msa: 2.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -139,27 +133,23 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Qsa() {
         let puct_greater = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 2.0,
+            propagated_values: 2,
             Psa: 1.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
 
         let puct_less = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 2.0,
             Usa: 2.0,
-            Msa: 2.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -172,27 +162,23 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Psa() {
         let puct_greater = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 2.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
 
         let puct_less = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 2.0,
-            Msa: 2.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -205,27 +191,23 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_node_details_ordering_Usa() {
         let puct_greater = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 2.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
 
         let puct_less = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -238,27 +220,23 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_node_details_ordering_cpuct() {
         let puct_greater = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 2.0,
             puct_score: 1.0,
         };
 
         let puct_less = EdgeDetails {
+            action: (),
             Nsa: 1,
-            Qsa: 1.0,
+            propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            Msa: 1.0,
-            M: 0.0,
             game_length: 1.0,
-            moves_left_score: 1.0,
             cpuct: 1.0,
             puct_score: 2.0,
         };
