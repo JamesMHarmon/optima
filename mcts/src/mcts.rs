@@ -253,7 +253,6 @@ where
                 warn!(
                     "Invalid puct scores. Most likely all are 0. Move will be randomly selected."
                 );
-                warn!("{:?}", edge_details);
                 thread_rng().gen_range(0..edge_details.len())
             }
             Ok(weighted_index) => weighted_index.sample(&mut thread_rng()),
@@ -361,7 +360,7 @@ where
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     T: Temperature<State = S>,
-    PV: Default
+    PV: Default + Ord
 {    
     pub fn select_action(&mut self) -> Result<A> {
         self._select_action(true)

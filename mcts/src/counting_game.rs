@@ -119,7 +119,6 @@ impl GameAnalyzer for CountingAnalyzer {
         }
 
         let value_score = Value([count / 100.0, (100.0 - count) / 100.0]);
-        let moves_left = 0.0;
         let policy_scores = vec![
             ActionWithPolicy {
                 action: CountingAction::Increment,
