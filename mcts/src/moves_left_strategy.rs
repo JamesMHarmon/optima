@@ -1,5 +1,6 @@
 use crate::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator, SelectionStrategy, CPUCT
+    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
+    SelectionStrategy, CPUCT,
 };
 use anyhow::Result;
 use common::div_or_zero;
@@ -81,7 +82,7 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
     fn Msa(
         edge: &MCTSEdge<A, MovesLeftPropagatedValue>,
         game_length_baseline: &GameLengthBaseline,
-        options: &MovesLeftStrategyOptions
+        options: &MovesLeftStrategyOptions,
     ) -> f32 {
         if edge.visits() == 0 {
             return 0.0;
@@ -118,7 +119,7 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
 impl<S, A, P, C> SelectionStrategy for MovesLeftSelectionStrategy<S, A, P, C>
 where
     C: CPUCT<State = S>,
-    A: Clone
+    A: Clone,
 {
     type State = S;
     type Action = A;
@@ -129,7 +130,7 @@ where
         &self,
         node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
         game_state: &S,
-        is_root: bool
+        is_root: bool,
     ) -> Result<usize>
     where
         C: CPUCT<State = S>,
@@ -175,10 +176,10 @@ where
         &self,
         node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
         game_state: &S,
-        is_root: bool
+        is_root: bool,
     ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>>
     where
-        C: CPUCT<State = S>
+        C: CPUCT<State = S>,
     {
         let options = &self.options;
 
@@ -249,12 +250,16 @@ impl Eq for MovesLeftPropagatedValue {}
 
 impl Ord for MovesLeftPropagatedValue {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.game_length, self.value).partial_cmp(&(other.game_length, other.value)).expect("Failed to compare")
+        (self.game_length, self.value)
+            .partial_cmp(&(other.game_length, other.value))
+            .expect("Failed to compare")
     }
 }
 
 impl PartialOrd for MovesLeftPropagatedValue {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 enum GameLengthBaseline {
@@ -304,7 +309,7 @@ where
             Self::Action,
             Self::Predictions,
             Self::PropagatedValues,
-        >
+        >,
     {
         let mut visited_nodes = visited_nodes;
         let estimated_game_length = predictions.game_length_score();

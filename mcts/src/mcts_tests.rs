@@ -24,12 +24,16 @@ impl Temperature for TempTest {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MovesLeftBackpropagationStrategy, MovesLeftPropagatedValue, MovesLeftSelectionStrategy, MovesLeftStrategyOptions};
+    use crate::{
+        MovesLeftBackpropagationStrategy, MovesLeftPropagatedValue, MovesLeftSelectionStrategy,
+        MovesLeftStrategyOptions,
+    };
 
     use super::super::MCTS;
 
     use super::super::counting_game::{
-        CountingAction, CountingAnalyzer, CountingGameEngine, CountingGameState, CountingGamePredictions,
+        CountingAction, CountingAnalyzer, CountingGameEngine, CountingGamePredictions,
+        CountingGameState,
     };
     use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
@@ -55,7 +59,11 @@ mod tests {
             } else {
                 left.propagatedValues().value()
             };
-            assert_approx_eq!(left_pv_value, right.propagatedValues().value(), ERROR_DIFF_W);
+            assert_approx_eq!(
+                left_pv_value,
+                right.propagatedValues().value(),
+                ERROR_DIFF_W
+            );
             let max_visits = left.visits().max(right.visits());
             let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
             assert_approx_eq!(left.visits() as f32, right.visits() as f32, allowed_diff);
@@ -79,7 +87,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         let temp = TempTest;
@@ -90,7 +98,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -119,7 +127,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -146,7 +154,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -176,7 +184,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -200,9 +208,19 @@ mod tests {
         let game_state = CountingGameState::initial();
         let game_engine = CountingGameEngine::new();
         let analyzer: CountingAnalyzer = CountingAnalyzer::new([0.3, 0.3, 0.4]);
-        let backpropagation_strategy: MovesLeftBackpropagationStrategy<CountingGameEngine, CountingGameState, CountingAction, CountingGamePredictions> = MovesLeftBackpropagationStrategy::new(&game_engine);
+        let backpropagation_strategy: MovesLeftBackpropagationStrategy<
+            CountingGameEngine,
+            CountingGameState,
+            CountingAction,
+            CountingGamePredictions,
+        > = MovesLeftBackpropagationStrategy::new(&game_engine);
         let options = MovesLeftStrategyOptions::new(0.0, 0.0, 0.0, 1.0, 10.0, 0.05);
-        let selection_strategy: MovesLeftSelectionStrategy<CountingGameState, CountingAction, CountingGamePredictions, CPUCTTest> = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
+        let selection_strategy: MovesLeftSelectionStrategy<
+            CountingGameState,
+            CountingAction,
+            CountingGamePredictions,
+            CPUCTTest,
+        > = MovesLeftSelectionStrategy::new(CPUCTTest { cpuct: 3.0 }, options);
         let temp = TempTest;
 
         let mut mcts: MCTS<_, _, _, _, _, _, _, _, MovesLeftPropagatedValue> = MCTS::new(
@@ -212,7 +230,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.advance_to_action(CountingAction::Increment)
@@ -237,7 +255,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(800).await.unwrap();
@@ -250,12 +268,24 @@ mod tests {
                 visits: 800,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(CountingAction::Stay, 304, MovesLeftPropagatedValue::new(0.5, 0.0)),
-                    EdgeMetrics::new(CountingAction::Decrement, 177, MovesLeftPropagatedValue::new(0.49, 0.0)),
-                    EdgeMetrics::new(CountingAction::Increment, 312, MovesLeftPropagatedValue::new(0.509, 0.0)),
+                    EdgeMetrics::new(
+                        CountingAction::Stay,
+                        304,
+                        MovesLeftPropagatedValue::new(0.5, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Decrement,
+                        177,
+                        MovesLeftPropagatedValue::new(0.49, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Increment,
+                        312,
+                        MovesLeftPropagatedValue::new(0.509, 0.0),
+                    ),
                 ],
             },
-            true
+            true,
         );
     }
 
@@ -276,7 +306,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(100).await.unwrap();
@@ -289,12 +319,24 @@ mod tests {
                 visits: 100,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(CountingAction::Stay, 40, MovesLeftPropagatedValue::new(0.5, 0.0)),
-                    EdgeMetrics::new(CountingAction::Decrement, 29, MovesLeftPropagatedValue::new(0.49, 0.0)),
-                    EdgeMetrics::new(CountingAction::Increment, 31, MovesLeftPropagatedValue::new(0.51, 0.0)),
+                    EdgeMetrics::new(
+                        CountingAction::Stay,
+                        40,
+                        MovesLeftPropagatedValue::new(0.5, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Decrement,
+                        29,
+                        MovesLeftPropagatedValue::new(0.49, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Increment,
+                        31,
+                        MovesLeftPropagatedValue::new(0.51, 0.0),
+                    ),
                 ],
             },
-            true
+            true,
         );
     }
 
@@ -315,7 +357,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(1).await.unwrap();
@@ -328,12 +370,24 @@ mod tests {
                 visits: 1,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(CountingAction::Increment, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
-                    EdgeMetrics::new(CountingAction::Decrement, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
-                    EdgeMetrics::new(CountingAction::Stay, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new(
+                        CountingAction::Increment,
+                        0,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Decrement,
+                        0,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Stay,
+                        0,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
                 ],
             },
-            true
+            true,
         );
     }
 
@@ -354,7 +408,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp,
-            1
+            1,
         );
 
         mcts.search_visits(2).await.unwrap();
@@ -367,12 +421,24 @@ mod tests {
                 visits: 2,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(CountingAction::Stay, 1, MovesLeftPropagatedValue::new(0.5, 0.0)),
-                    EdgeMetrics::new(CountingAction::Increment, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
-                    EdgeMetrics::new(CountingAction::Decrement, 0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new(
+                        CountingAction::Stay,
+                        1,
+                        MovesLeftPropagatedValue::new(0.5, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Increment,
+                        0,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        CountingAction::Decrement,
+                        0,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
                 ],
             },
-            true
+            true,
         );
     }
 
@@ -394,7 +460,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp(),
-            1
+            1,
         );
 
         non_clear_mcts
@@ -420,7 +486,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp(),
-            1
+            1,
         );
 
         clear_mcts.search_visits(search_num_visits).await.unwrap();
@@ -437,7 +503,7 @@ mod tests {
             &backpropagation_strategy,
             &selection_strategy,
             temp(),
-            1
+            1,
         );
 
         initial_mcts.advance_to_action(action).await.unwrap();

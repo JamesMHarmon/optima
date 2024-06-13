@@ -66,8 +66,8 @@ where
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
             temp,
-        parallelism,
-    }
+            parallelism,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -369,7 +369,7 @@ where
     pub fn select_action(&mut self) -> Result<A> {
         self._select_action(false, 0.0)
     }
-    
+
     pub fn select_action_with_temp(&mut self, temperature_visit_offset: f32) -> Result<A> {
         self._select_action(true, temperature_visit_offset)
     }
@@ -503,7 +503,7 @@ where
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     T: Temperature<State = S>,
     P: Clone,
-    PV: Default
+    PV: Default,
 {
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
         self.search_time_max_visits(duration, usize::max_value())
@@ -648,7 +648,10 @@ where
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
                 if prev_visits == 0 {
-                    let predictions = arena_mut.node(selected_child_node_index).predictions().clone();
+                    let predictions = arena_mut
+                        .node(selected_child_node_index)
+                        .predictions()
+                        .clone();
                     Self::backpropagate(
                         &predictions,
                         visited_nodes_stack,

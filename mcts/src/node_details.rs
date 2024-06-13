@@ -7,14 +7,16 @@ pub struct NodeDetails<A, PV> {
     pub children: Vec<EdgeDetails<A, PV>>,
 }
 
-impl<A, PV> Display for NodeDetails<A, PV> where A: Display, PV: Display {
+impl<A, PV> Display for NodeDetails<A, PV>
+where
+    A: Display,
+    PV: Display,
+{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{}]",
-            self.children
-                .iter()
-                .fold(String::new(), |acc, details| acc
-                    + &format!("\n\t({}),", details))
+            self.children.iter().fold(String::new(), |acc, details| acc
+                + &format!("\n\t({}),", details))
         );
 
         write!(
@@ -26,14 +28,16 @@ impl<A, PV> Display for NodeDetails<A, PV> where A: Display, PV: Display {
     }
 }
 
-impl<A, PV> Debug for NodeDetails<A, PV> where A: Debug, PV: Debug {
+impl<A, PV> Debug for NodeDetails<A, PV>
+where
+    A: Debug,
+    PV: Debug,
+{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
             "[{:?}]",
-            self.children
-                .iter()
-                .fold(String::new(), |acc, details| acc
-                    + &format!("\n\t({:?}),", details))
+            self.children.iter().fold(String::new(), |acc, details| acc
+                + &format!("\n\t({:?}),", details))
         );
 
         write!(
@@ -58,7 +62,11 @@ pub struct EdgeDetails<A, PV> {
     pub propagated_values: PV,
 }
 
-impl<A, PV> Display for EdgeDetails<A, PV> where A: Display, PV: Display {
+impl<A, PV> Display for EdgeDetails<A, PV>
+where
+    A: Display,
+    PV: Display,
+{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
             action = self.action,
@@ -73,7 +81,11 @@ impl<A, PV> Display for EdgeDetails<A, PV> where A: Display, PV: Display {
     }
 }
 
-impl<A, PV> Debug for EdgeDetails<A, PV> where A: Debug, PV: Debug {
+impl<A, PV> Debug for EdgeDetails<A, PV>
+where
+    A: Debug,
+    PV: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
         action = self.action,
@@ -88,15 +100,26 @@ impl<A, PV> Debug for EdgeDetails<A, PV> where A: Debug, PV: Debug {
     }
 }
 
-impl<A, PV> Ord for EdgeDetails<A, PV> where A: Eq, PV: Ord {
+impl<A, PV> Ord for EdgeDetails<A, PV>
+where
+    A: Eq,
+    PV: Ord,
+{
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.Nsa, &self.propagated_values, &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
-            other.Nsa,
-            &other.propagated_values,
-            &other.Psa,
-            &other.Usa,
-            &other.cpuct,
-        )) {
+        match (
+            self.Nsa,
+            &self.propagated_values,
+            &self.Psa,
+            &self.Usa,
+            &self.cpuct,
+        )
+            .partial_cmp(&(
+                other.Nsa,
+                &other.propagated_values,
+                &other.Psa,
+                &other.Usa,
+                &other.cpuct,
+            )) {
             Some(ordering) => ordering,
             None => {
                 panic!(
@@ -109,13 +132,22 @@ impl<A, PV> Ord for EdgeDetails<A, PV> where A: Eq, PV: Ord {
     }
 }
 
-impl<A, PV> PartialOrd for EdgeDetails<A, PV> where A: Eq, PV: Ord + PartialOrd {
+impl<A, PV> PartialOrd for EdgeDetails<A, PV>
+where
+    A: Eq,
+    PV: Ord + PartialOrd,
+{
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<A, PV> Eq for EdgeDetails<A, PV> where A: Eq, PV: Eq {}
+impl<A, PV> Eq for EdgeDetails<A, PV>
+where
+    A: Eq,
+    PV: Eq,
+{
+}
 
 #[cfg(test)]
 mod tests {
