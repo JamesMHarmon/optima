@@ -1,5 +1,5 @@
 use half::f16;
-use tensorflow_model::transposition_entry::TranspositionEntry as TFTranspositionEntry;
+use tensorflow_model::TranspositionEntry as TFTranspositionEntry;
 
 use super::constants::OUTPUT_SIZE;
 

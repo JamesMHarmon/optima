@@ -31,6 +31,11 @@ impl tensorflow_model::Dimension for Mapper {
 }
 
 impl PolicyMap<GameState, Action, Value> for Mapper {
+    type State = GameState;
+    type Action = Action;
+    type Predictions = Value;
+    type PropagatedValues = MovesLeftPropagatedValues;
+
     fn policy_metrics_to_expected_output(
         &self,
         game_state: &GameState,
@@ -108,7 +113,9 @@ impl ValueMap<GameState, Value> for Mapper {
     }
 }
 
-impl InputMap<GameState> for Mapper {
+impl InputMap for Mapper {
+    type State = GameState; 
+
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
         let mut builder = ConvInputBuilder::new(BOARD_SIZE, input);
 
@@ -144,7 +151,12 @@ impl InputMap<GameState> for Mapper {
     }
 }
 
-impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
+impl TranspositionMap for Mapper {
+    type State = GameState;
+    type Action = Action;
+    type Predictions = Value;
+    type TranspositionEntry = TranspositionEntry;
+
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
         game_state.transposition_hash()
     }

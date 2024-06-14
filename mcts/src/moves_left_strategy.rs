@@ -2,7 +2,7 @@ use crate::{
     BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator, SelectionStrategy, CPUCT
 };
 use anyhow::Result;
-use common::{div_or_zero, PropagatedGameLength, PropagatedValue};
+use common::{div_or_zero, MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value};
 
 pub struct MovesLeftSelectionStrategy<S, A, P, C> {
@@ -65,8 +65,8 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
             .filter(|n| n.visits() > 0)
             .map_or(GameLengthBaseline::None, |e| {
                 let pv = e.propagated_values();
-                let Qsa = pv.value / e.visits() as f32;
-                let expected_game_length = pv.game_length / e.visits() as f32;
+                let Qsa = pv.value() / e.visits() as f32;
+                let expected_game_length = pv.game_length() / e.visits() as f32;
 
                 if Qsa >= moves_left_threshold {
                     GameLengthBaseline::MinimizeGameLength(expected_game_length)
@@ -104,7 +104,7 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
                 panic!();
             };
 
-        let expected_game_length = edge.propagated_values().game_length / edge.visits() as f32;
+        let expected_game_length = edge.propagated_values().game_length() / edge.visits() as f32;
         let moves_left_scale = options.moves_left_scale;
         let moves_left_clamped = (game_length_baseline - expected_game_length)
             .min(moves_left_scale)
@@ -153,7 +153,7 @@ where
         let mut best_puct = std::f32::MIN;
 
         for (i, edge) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
-            let W = edge.propagated_values().value;
+            let W = edge.propagated_values().value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
@@ -196,7 +196,7 @@ where
         for edge in node.iter_visited_edges() {
             let action = edge.action().clone();
             let propagated_values = edge.propagated_values().clone();
-            let W = propagated_values.value;
+            let W = propagated_values.value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
@@ -215,46 +215,6 @@ where
         }
 
         pucts
-    }
-}
-
-#[derive(Default, Clone, PartialEq, Debug)]
-pub struct MovesLeftPropagatedValue {
-    value: f32,
-    game_length: f32,
-}
-
-impl MovesLeftPropagatedValue {
-    pub fn new(value: f32, game_length: f32) -> Self {
-        Self { value, game_length }
-    }
-}
-
-impl PropagatedValue for MovesLeftPropagatedValue {
-    fn value(&self) -> f32 {
-        self.value
-    }
-}
-
-impl PropagatedGameLength for MovesLeftPropagatedValue {
-    fn game_length(&self) -> f32 {
-        self.game_length
-    }
-}
-
-impl Eq for MovesLeftPropagatedValue {}
-
-impl Ord for MovesLeftPropagatedValue {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.game_length, self.value)
-            .partial_cmp(&(other.game_length, other.value))
-            .expect("Failed to compare")
-    }
-}
-
-impl PartialOrd for MovesLeftPropagatedValue {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
     }
 }
 
@@ -327,8 +287,8 @@ where
 
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            edge_to_update.propagated_values_mut().value += score;
-            edge_to_update.propagated_values_mut().game_length += estimated_game_length;
+            *edge_to_update.propagated_values_mut().value_mut() += score;
+            *edge_to_update.propagated_values_mut().game_length_mut() += estimated_game_length;
         }
     }
 
