@@ -37,7 +37,6 @@ mod tests {
     };
     use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
-    use common::div_or_zero;
     use engine::GameState;
     use model::{EdgeMetrics, NodeMetrics};
 
@@ -47,27 +46,29 @@ mod tests {
     fn assert_metrics(
         left: &NodeMetrics<CountingAction, CountingGamePredictions, MovesLeftPropagatedValue>,
         right: &NodeMetrics<CountingAction, CountingGamePredictions, MovesLeftPropagatedValue>,
-        divide_values: bool,
     ) {
         assert_eq!(left.visits, right.visits);
         assert_eq!(left.children.len(), right.children.len());
 
         for (left, right) in left.children.iter().zip(right.children.iter()) {
             assert_eq!(left.action(), right.action());
-            let left_pv_value = if divide_values {
-                div_or_zero(left.propagatedValues().value(), left.visits() as f32)
-            } else {
-                left.propagatedValues().value()
-            };
-            assert_approx_eq!(
-                left_pv_value,
-                right.propagatedValues().value(),
-                ERROR_DIFF_W
-            );
+            assert_approx_eq!(left.avg_value(), right.avg_value(), ERROR_DIFF_W);
             let max_visits = left.visits().max(right.visits());
             let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
             assert_approx_eq!(left.visits() as f32, right.visits() as f32, allowed_diff);
         }
+    }
+
+    fn edge_metrics(
+        action: CountingAction,
+        visits: usize,
+        value: f32,
+    ) -> EdgeMetrics<CountingAction, MovesLeftPropagatedValue> {
+        EdgeMetrics::new(
+            action,
+            visits,
+            MovesLeftPropagatedValue::new(value * visits as f32, 0.0),
+        )
     }
 
     #[tokio::test]
@@ -107,7 +108,7 @@ mod tests {
         let metrics = mcts.get_root_node_metrics().unwrap();
         let metrics2 = mcts.get_root_node_metrics().unwrap();
 
-        assert_metrics(&metrics, &metrics2, false);
+        assert_metrics(&metrics, &metrics2);
     }
 
     #[tokio::test]
@@ -268,24 +269,11 @@ mod tests {
                 visits: 800,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(
-                        CountingAction::Stay,
-                        304,
-                        MovesLeftPropagatedValue::new(0.5, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Decrement,
-                        177,
-                        MovesLeftPropagatedValue::new(0.49, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Increment,
-                        312,
-                        MovesLeftPropagatedValue::new(0.509, 0.0),
-                    ),
+                    edge_metrics(CountingAction::Stay, 304, 0.5),
+                    edge_metrics(CountingAction::Decrement, 177, 0.49),
+                    edge_metrics(CountingAction::Increment, 312, 0.509),
                 ],
             },
-            true,
         );
     }
 
@@ -319,24 +307,11 @@ mod tests {
                 visits: 100,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(
-                        CountingAction::Stay,
-                        40,
-                        MovesLeftPropagatedValue::new(0.5, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Decrement,
-                        29,
-                        MovesLeftPropagatedValue::new(0.49, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Increment,
-                        31,
-                        MovesLeftPropagatedValue::new(0.51, 0.0),
-                    ),
+                    edge_metrics(CountingAction::Stay, 40, 0.5),
+                    edge_metrics(CountingAction::Decrement, 29, 0.49),
+                    edge_metrics(CountingAction::Increment, 31, 0.51),
                 ],
             },
-            true,
         );
     }
 
@@ -370,24 +345,11 @@ mod tests {
                 visits: 1,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(
-                        CountingAction::Increment,
-                        0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Decrement,
-                        0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Stay,
-                        0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
+                    edge_metrics(CountingAction::Increment, 0, 0.0),
+                    edge_metrics(CountingAction::Decrement, 0, 0.0),
+                    edge_metrics(CountingAction::Stay, 0, 0.0),
                 ],
             },
-            true,
         );
     }
 
@@ -421,24 +383,11 @@ mod tests {
                 visits: 2,
                 predictions: CountingGamePredictions([0.0, 0.0]),
                 children: vec![
-                    EdgeMetrics::new(
-                        CountingAction::Stay,
-                        1,
-                        MovesLeftPropagatedValue::new(0.5, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Increment,
-                        0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        CountingAction::Decrement,
-                        0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
+                    edge_metrics(CountingAction::Stay, 1, 0.5),
+                    edge_metrics(CountingAction::Increment, 0, 0.0),
+                    edge_metrics(CountingAction::Decrement, 0, 0.0),
                 ],
             },
-            true,
         );
     }
 
@@ -511,7 +460,7 @@ mod tests {
 
         let initial_metrics = initial_mcts.get_root_node_metrics().unwrap();
 
-        assert_metrics(&initial_metrics, &clear_metrics, false);
-        assert_metrics(&non_clear_metrics, &clear_metrics, false);
+        assert_metrics(&initial_metrics, &clear_metrics);
+        assert_metrics(&non_clear_metrics, &clear_metrics);
     }
 }

@@ -17,11 +17,11 @@ pub struct GameStateAnalysis<A, P> {
 }
 
 impl<A, P> GameStateAnalysis<A, P> {
-    fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
+    pub fn policy_scores(&self) -> &[ActionWithPolicy<A>] {
         &self.policy_scores
     }
 
-    fn predictions(&self) -> &P {
+    pub fn predictions(&self) -> &P {
         &self.predictions
     }
 

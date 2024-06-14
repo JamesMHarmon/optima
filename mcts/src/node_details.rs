@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
+use common::{div_or_zero, PropagatedValue};
+
 #[allow(non_snake_case)]
 pub struct NodeDetails<A, PV> {
     pub visits: usize,
@@ -56,10 +58,18 @@ pub struct EdgeDetails<A, PV> {
     pub Nsa: usize,
     pub Psa: f32,
     pub Usa: f32,
-    pub game_length: f32,
     pub cpuct: f32,
     pub puct_score: f32,
     pub propagated_values: PV,
+}
+
+#[allow(non_snake_case)]
+impl<A, PV> EdgeDetails<A, PV>
+    where PV: PropagatedValue
+{
+    pub fn Qsa(&self) -> f32 {
+        div_or_zero(self.propagated_values.value(), self.Nsa as f32)
+    }
 }
 
 impl<A, PV> Display for EdgeDetails<A, PV>
@@ -68,15 +78,14 @@ where
     PV: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
+        write!(f, "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}",
             action = self.action,
             Nsa = self.Nsa,
             puct_score = self.puct_score,
             Psa = self.Psa,
             Usa = self.Usa,
             propagated_values = self.propagated_values,
-            cpuct = self.cpuct,
-            game_length = self.game_length,
+            cpuct = self.cpuct
         )
     }
 }
@@ -87,15 +96,14 @@ where
     PV: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}, avg_game_length: {game_length:.1}",
+        write!(f, "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}",
         action = self.action,
         Nsa = self.Nsa,
         puct_score = self.puct_score,
         Psa = self.Psa,
         Usa = self.Usa,
         propagated_values = self.propagated_values,
-        cpuct = self.cpuct,
-        game_length = self.game_length,
+        cpuct = self.cpuct
     )
     }
 }
@@ -163,7 +171,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
@@ -174,7 +181,6 @@ mod tests {
             propagated_values: 1,
             Psa: 2.0,
             Usa: 2.0,
-            game_length: 1.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -192,7 +198,6 @@ mod tests {
             propagated_values: 2,
             Psa: 1.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
@@ -203,7 +208,6 @@ mod tests {
             propagated_values: 1,
             Psa: 2.0,
             Usa: 2.0,
-            game_length: 1.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -221,7 +225,6 @@ mod tests {
             propagated_values: 1,
             Psa: 2.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
@@ -232,7 +235,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 2.0,
-            game_length: 1.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -250,7 +252,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 2.0,
-            game_length: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
         };
@@ -261,7 +262,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 2.0,
             puct_score: 2.0,
         };
@@ -279,7 +279,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 2.0,
             puct_score: 1.0,
         };
@@ -290,7 +289,6 @@ mod tests {
             propagated_values: 1,
             Psa: 1.0,
             Usa: 1.0,
-            game_length: 1.0,
             cpuct: 1.0,
             puct_score: 2.0,
         };

@@ -1,9 +1,8 @@
 use crate::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
-    SelectionStrategy, CPUCT,
+    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator, SelectionStrategy, CPUCT
 };
 use anyhow::Result;
-use common::div_or_zero;
+use common::{div_or_zero, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value};
 
 pub struct MovesLeftSelectionStrategy<S, A, P, C> {
@@ -153,13 +152,13 @@ where
         let mut best_child_index = 0;
         let mut best_puct = std::f32::MIN;
 
-        for (i, child) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
-            let W = child.propagated_values().value;
-            let Nsa = child.visits();
-            let Psa = child.policy_score();
+        for (i, edge) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
+            let W = edge.propagated_values().value;
+            let Nsa = edge.visits();
+            let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let Msa = Self::Msa(child, game_length_baseline, options);
+            let Msa = Self::Msa(edge, game_length_baseline, options);
 
             let PUCT = Msa + Qsa + Usa;
 
@@ -191,10 +190,6 @@ where
         let Nsb = node.get_node_visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
-        let moves_left_threshold = options.moves_left_threshold;
-        let iter_all_edges = node.iter_all_edges().map(|e| &*e);
-        let game_length_baseline =
-            Self::get_game_length_baseline(iter_all_edges, moves_left_threshold);
 
         let mut pucts = Vec::with_capacity(node.child_len());
 
@@ -206,8 +201,6 @@ where
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
-            let Msa = Self::Msa(edge, &game_length_baseline, options);
-            let game_length = div_or_zero(propagated_values.game_length, Nsa as f32);
 
             let puct_score = Qsa + Usa;
             pucts.push(EdgeDetails {
@@ -217,7 +210,6 @@ where
                 Nsa,
                 cpuct,
                 Usa,
-                game_length,
                 propagated_values,
             });
         }
@@ -236,13 +228,17 @@ impl MovesLeftPropagatedValue {
     pub fn new(value: f32, game_length: f32) -> Self {
         Self { value, game_length }
     }
+}
 
-    pub fn game_length(&self) -> f32 {
-        self.game_length
-    }
-
-    pub fn value(&self) -> f32 {
+impl PropagatedValue for MovesLeftPropagatedValue {
+    fn value(&self) -> f32 {
         self.value
+    }
+}
+
+impl PropagatedGameLength for MovesLeftPropagatedValue {
+    fn game_length(&self) -> f32 {
+        self.game_length
     }
 }
 
@@ -259,6 +255,15 @@ impl Ord for MovesLeftPropagatedValue {
 impl PartialOrd for MovesLeftPropagatedValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[allow(non_snake_case)]
+impl<A, PV> EdgeDetails<A, PV>
+    where PV: PropagatedGameLength
+{
+    pub fn game_length(&self) -> f32 {
+        div_or_zero(self.propagated_values.game_length(), self.Nsa as f32)
     }
 }
 
