@@ -28,7 +28,7 @@ impl Model {
 impl model::Analyzer for Model {
     type State = GameState;
     type Action = Action;
-    type Value = Value;
+    type Predictions = Value;
     type Analyzer = Analyzer;
 
     fn analyzer(&self) -> Self::Analyzer {
