@@ -1,3 +1,4 @@
+use common::{div_or_zero, PropagatedGameLength, PropagatedValue};
 use serde::de::SeqAccess;
 use serde::de::{Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeTuple, Serializer};
@@ -53,6 +54,20 @@ impl<A, PV> EdgeMetrics<A, PV> {
 
     pub fn propagatedValues(&self) -> &PV {
         &self.propagatedValues
+    }
+}
+
+#[allow(non_snake_case)]
+impl<A, PV> EdgeMetrics<A, PV> where PV: PropagatedValue {
+    pub fn avg_value(&self) -> f32 {
+        div_or_zero(self.propagatedValues().value(), self.visits() as f32)
+    }
+}
+
+#[allow(non_snake_case)]
+impl<A, PV> EdgeMetrics<A, PV> where PV: PropagatedGameLength {
+    pub fn avg_game_length(&self) -> f32 {
+        div_or_zero(self.propagatedValues().game_length(), self.visits() as f32)
     }
 }
 
