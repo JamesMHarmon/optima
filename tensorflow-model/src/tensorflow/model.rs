@@ -49,8 +49,7 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
-        + Clone
+        + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
         + Send
         + Sync
         + 'static,
@@ -126,7 +125,7 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
+        + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
         + Clone
         + Send
         + Sync
@@ -371,7 +370,7 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
-        + TranspositionMap<State = S, TranspositionEntry = Te, GameStateAnalysis = GameStateAnalysis<A, P>>
+        + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
         + Send
         + Sync
         + 'static,

@@ -62,17 +62,24 @@ impl Sample for QuoridorSampler {
     }
 }
 
-impl InputMap<GameState> for QuoridorSampler {
+impl InputMap for QuoridorSampler {
+    type State = GameState;
+
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         self.mapper.game_state_to_input(game_state, input, mode)
     }
 }
 
 impl PolicyMap<GameState, Action, Value> for QuoridorSampler {
+    type State = GameState;
+    type Action = Action;
+    type Predictions = Value;
+    type PropagatedValues = MovesLeftPropagatedValues;
+
     fn policy_metrics_to_expected_output(
         &self,
-        game_state: &GameState,
-        metric: &NodeMetrics<Action, Value>,
+        game_state: &Self::State,
+        metric: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> Vec<f32> {
         self.mapper
             .policy_metrics_to_expected_output(game_state, metric)

@@ -25,7 +25,7 @@ impl Temperature for TempTest {
 #[cfg(test)]
 mod tests {
     use crate::{
-        MovesLeftBackpropagationStrategy, MovesLeftPropagatedValue, MovesLeftSelectionStrategy,
+        MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy,
         MovesLeftStrategyOptions,
     };
 
@@ -37,6 +37,7 @@ mod tests {
     };
     use super::{CPUCTTest, TempTest};
     use assert_approx_eq::assert_approx_eq;
+    use common::MovesLeftPropagatedValue;
     use engine::GameState;
     use model::{EdgeMetrics, NodeMetrics};
 
