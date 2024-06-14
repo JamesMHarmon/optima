@@ -18,7 +18,7 @@ impl Default for Engine {
 impl engine::engine::GameEngine for Engine {
     type Action = Action;
     type State = GameState;
-    type Value = Value;
+    type Terminal = Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         game_state.take_action(action)
@@ -32,7 +32,7 @@ impl engine::engine::GameEngine for Engine {
         game_state.get_move_number()
     }
 
-    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
         game_state.is_terminal().map(|v| v.into()).or_else(|| {
             if game_state.get_move_number() > MAX_NUMBER_OF_MOVES {
                 Some([0.0, 0.0].into())

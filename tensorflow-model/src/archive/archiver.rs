@@ -44,8 +44,7 @@ where
 {
     type Action = An::Action;
     type State = An::State;
-    type Value = An::Value;
-    type GameStateAnalysis = An::GameStateAnalysis;
+    type Predictions = An::Predictions;
     type Future = An::Future;
 
     fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
@@ -56,7 +55,7 @@ where
 impl<M: Analyzer> Analyzer for Archive<M> {
     type State = M::State;
     type Action = M::Action;
-    type Value = M::Value;
+    type Predictions = M::Predictions;
     type Analyzer = ArchiveAnalyzer<M::Analyzer>;
 
     fn analyzer(&self) -> ArchiveAnalyzer<M::Analyzer> {

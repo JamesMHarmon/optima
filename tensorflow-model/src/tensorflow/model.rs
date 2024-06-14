@@ -37,7 +37,6 @@ pub struct TensorflowModel<S, A, P, E, Map, Te> {
     analysis_request_threads: usize,
     engine: Arc<E>,
     mapper: Arc<Map>,
-    options: TensorflowModelOptions,
     batch_size: usize,
     tt_cache_size: usize,
 }
@@ -59,7 +58,6 @@ where
 {
     pub fn load(
         model_dir: PathBuf,
-        options: TensorflowModelOptions,
         model_info: ModelInfo,
         engine: E,
         mapper: Map,
@@ -91,8 +89,7 @@ where
             batching_model,
             engine,
             mapper,
-            tt_cache_size,
-            options,
+            tt_cache_size
         })
     }
 
@@ -191,7 +188,7 @@ impl Predictor {
             });
 
         let input = OperationWithIndex::new(signature.inputs().iter().next().expect("Expected to find input"), &graph);
-        let outputs: HashMap<String, OperationWithIndex> = signature.outputs().into_iter().map(|signature| (signature.0.to_owned(), OperationWithIndex::new(signature, &graph))).collect::<HashMap<_, _>>();
+        let outputs: HashMap<String, OperationWithIndex> = signature.outputs().iter().map(|signature| (signature.0.to_owned(), OperationWithIndex::new(signature, &graph))).collect::<HashMap<_, _>>();
         let session = model.session;
 
         Self {
@@ -244,7 +241,7 @@ impl OperationWithIndex {
     fn new(signature: (&String, &TensorInfo), graph: &Graph) -> Self {
         let (name, tensor_info) = signature;
         let shape: Option<Vec<Option<i64>>> = tensor_info.shape().clone().into();
-        let size = shape.expect("Shape should be defined").into_iter().filter_map(|shape| shape).product::<i64>() as usize;
+        let size = shape.expect("Shape should be defined").into_iter().flatten().product::<i64>() as usize;
 
         Self {
             name: name.to_owned(),

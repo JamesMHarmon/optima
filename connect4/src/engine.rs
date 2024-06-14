@@ -203,7 +203,7 @@ impl Engine {
 impl GameEngine for Engine {
     type Action = Action;
     type State = GameState;
-    type Value = Value;
+    type Terminal = Value;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         match action {
@@ -211,7 +211,7 @@ impl GameEngine for Engine {
         }
     }
 
-    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Value> {
+    fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
         game_state.is_terminal()
     }
 

@@ -113,7 +113,7 @@ impl CountingAnalyzer {
     pub fn new(policy_scores: [f32; 3]) -> Self {
         let policy_scores = policy_scores
             .into_iter()
-            .map(|x| f16::from_f32(x))
+            .map(f16::from_f32)
             .collect::<Vec<f16>>();
 
         Self {

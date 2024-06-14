@@ -1,7 +1,8 @@
 use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
+use common::{div_or_zero, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
-use mcts::{DynamicCPUCT, MCTSOptions, NodeDetails, TemperatureConstant, MCTS, PUCT};
+use mcts::{BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -93,10 +94,12 @@ where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
 {
-    pub fn new<U, E, M>(
+    pub fn new<U, E, M, B, Sel>(
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
+        backpropagation_strategy: B,
+        selection_strategy: Sel,
     ) -> (Self, mpsc::UnboundedReceiver<Output>)
     where
         U: InitialGameState<State = S>
@@ -105,8 +108,12 @@ where
             + Sync
             + 'static,
         E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
-        M: Analyzer<State = S, Action = A, Value = E::Value> + Send + 'static,
+        M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
+        Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,
         M::Analyzer: Send,
+        B::PropagatedValues: PropagatedValue + Default + Ord,
+        E::Terminal: Clone,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
         let (output_tx, output_rx) = mpsc::unbounded_channel();
@@ -129,6 +136,8 @@ where
             ugi_mapper,
             engine,
             model,
+            backpropagation_strategy,
+            selection_strategy
         );
 
         let handle = tokio::runtime::Handle::current();
@@ -141,7 +150,7 @@ where
     }
 }
 
-pub struct GameManagerInner<S, A, U, E, M> {
+pub struct GameManagerInner<S, A, U, E, M, B, Sel> {
     command_rx: mpsc::Receiver<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
@@ -149,15 +158,22 @@ pub struct GameManagerInner<S, A, U, E, M> {
     ugi_mapper: Arc<U>,
     engine: E,
     model: M,
+    backpropagation_strategy: B,
+    selection_strategy: Sel,
 }
 
-impl<S, A, U, E, M> GameManagerInner<S, A, U, E, M>
+#[allow(clippy::too_many_arguments)]
+impl<S, A, U, E, M, B, Sel> GameManagerInner<S, A, U, E, M, B, Sel>
 where
     S: GameState + Clone + Display,
     A: Display + Debug + Eq + Clone,
     U: InitialGameState<State = S> + ActionsToMoveString<State = S, Action = A>,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A>,
-    M: Analyzer<State = S, Action = A, Value = E::Value>,
+    M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
+    B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>,
+    Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues>,
+    B::PropagatedValues: PropagatedValue + Default + Ord,
+    E::Terminal: Clone,
 {
     fn new(
         command_rx: mpsc::Receiver<CommandInner<S, A>>,
@@ -167,6 +183,8 @@ where
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
+        backpropagation_strategy: B,
+        selection_strategy: Sel,
     ) -> Self {
         Self {
             command_rx,
@@ -176,6 +194,8 @@ where
             ugi_mapper,
             engine,
             model,
+            backpropagation_strategy,
+            selection_strategy,
         }
     }
 
@@ -191,32 +211,38 @@ where
         while let Some(command) = self.command_rx.recv().await {
             if mcts_container.is_none() {
                 let options = options.lock().unwrap();
-                let cpuct = DynamicCPUCT::new(
-                    options.cpuct_base,
-                    options.cpuct_init,
-                    options.cpuct_factor,
-                    options.cpuct_root_scaling,
-                );
+
+                // @TODO: Verify settings
+                // let cpuct = DynamicCPUCT::new(
+                //     options.cpuct_base,
+                //     options.cpuct_init,
+                //     options.cpuct_factor,
+                //     options.cpuct_root_scaling,
+                // );
 
                 let temp = TemperatureConstant::new(0.0);
+
+                // @TODO: Verify settings
+                // MCTSOptions::new(
+                //     None,
+                //     options.fpu,
+                //     options.fpu_root,
+                //     0.0,
+                //     options.moves_left_threshold,
+                //     options.moves_left_scale,
+                //     options.moves_left_factor,
+                //     options.parallelism,
+                // ),
 
                 mcts_container = Some(MCTS::with_capacity(
                     game_state.clone(),
                     &self.engine,
                     &analyzer,
-                    MCTSOptions::new(
-                        None,
-                        options.fpu,
-                        options.fpu_root,
-                        0.0,
-                        options.moves_left_threshold,
-                        options.moves_left_scale,
-                        options.moves_left_factor,
-                        options.parallelism,
-                    ),
+                    &self.backpropagation_strategy,
+                    &self.selection_strategy,
                     options.visits,
-                    cpuct,
                     temp,
+                    options.parallelism
                 ));
             }
 
@@ -267,26 +293,25 @@ where
                                 .expect("There should have been at least one visit");
 
                             let num_top_moves = self.options.lock().unwrap().num_top_moves;
+                            let pv_depth = 10;
                             let pv = node_details
                                 .children
                                 .iter()
                                 .take(num_top_moves)
-                                .filter_map(|(a, _)| mcts.get_principal_variation(Some(a), 10).ok())
+                                .filter_map(|node| mcts.get_principal_variation(Some(&node.action), pv_depth).ok())
                                 .collect_vec();
 
-                            let (_, best_node_puct) = choose_action(&node_details.children, 0.0);
+                            let best_node = choose_action(&node_details.children, 0.0);
 
-                            let move_number = self.engine.move_number(&focus_game_state);
                             let player_to_move = self.engine.player_to_move(&focus_game_state);
-                            let moves_left = (best_node_puct.M - move_number as f32).max(0.0);
+
                             self.output_post_search_info(
                                 player_to_move,
                                 &pv,
                                 &focus_game_state,
                                 start_time,
-                                &[best_node_puct.Qsa],
+                                &[best_node.Qsa()],
                                 &[node_details.visits],
-                                &[moves_left],
                                 &[depth],
                                 &node_details,
                             );
@@ -374,7 +399,6 @@ where
                     let mut focus_game_state = focus_game_state.clone();
                     let focused_actions = mcts.get_focused_actions().to_vec();
                     let current_player = self.engine.player_to_move(&focus_game_state);
-                    let move_number = self.engine.move_number(&focus_game_state);
 
                     let (
                         options_visits,
@@ -395,7 +419,6 @@ where
                     let mut depths = Vec::new();
                     let mut visits = Vec::new();
                     let mut scores = Vec::new();
-                    let mut moves_left = Vec::new();
                     let mut node_details_container = None;
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
@@ -422,18 +445,17 @@ where
                             .unwrap()
                             .expect("There should have been at least one visit");
 
-                        let (action, best_node_puct) = choose_action(
+                        let best_node = choose_action(
                             &node_details.children,
                             options_alternative_action_threshold,
                         );
 
-                        scores.push(best_node_puct.Qsa);
-                        moves_left.push((best_node_puct.M - move_number as f32).max(0.0));
+                        scores.push(best_node.Qsa());
                         visits.push(node_details.visits);
-                        mcts.add_focus_to_action(action.clone());
+                        mcts.add_focus_to_action(best_node.action.clone());
 
-                        focus_game_state = self.engine.take_action(&focus_game_state, action);
-                        actions.push(action.clone());
+                        focus_game_state = self.engine.take_action(&focus_game_state, &best_node.action);
+                        actions.push(best_node.action.clone());
 
                         if node_details_container.is_none() {
                             node_details_container = Some(node_details);
@@ -460,7 +482,6 @@ where
                         search_start,
                         &scores,
                         &visits,
-                        &moves_left,
                         &depths,
                         &node_details,
                     );
@@ -475,17 +496,16 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn output_post_search_info(
+    fn output_post_search_info<PV: PropagatedValue>(
         &self,
         player_to_move: usize,
-        pv: &[Vec<(A, PUCT)>],
+        pv: &[Vec<EdgeDetails<A, PV>>],
         pre_action_game_state: &S,
         search_start: Instant,
         scores: &[f32],
         visits: &[usize],
-        moves_left: &[f32],
         depths: &[usize],
-        node_details: &NodeDetails<A>,
+        node_details: &NodeDetails<A, PV>,
     ) {
         self.output
             .info(&format!("playertomove {}", player_to_move));
@@ -499,10 +519,6 @@ where
         self.output
             .info_val("score", &format!("{:.3}", scores.last().unwrap_or(&0.5)));
 
-        self.output.info_val(
-            "moves_left",
-            &format!("{:.1}", moves_left.last().unwrap_or(&0.0)),
-        );
         self.output
             .info_val("visits", &visits.iter().max().unwrap_or(&0).to_string());
         self.output
@@ -512,25 +528,25 @@ where
         let num_top_moves = self.options.lock().unwrap().num_top_moves;
         let top_details = || children.iter().take(num_top_moves);
 
-        let top_moves = top_details().map(|(a, _)| a.to_string()).join(" ");
+        let top_moves = top_details().map(|edge| edge.action.to_string()).join(" ");
 
         self.output.info_val("topmoves", &top_moves);
 
-        let visits_sum = children.iter().map(|(_, d)| d.Nsa).sum::<usize>().max(1);
+        let visits_sum = children.iter().map(|edge| edge.Nsa).sum::<usize>().max(1);
         let top_moves_visits = top_details()
-            .map(|(_, d)| format!("{:.3}", d.Nsa as f32 / visits_sum as f32))
+            .map(|edge| format!("{:.3}", div_or_zero(edge.Nsa as f32, visits_sum as f32)))
             .join(" ");
 
         self.output.info_val("topmovesvisits", &top_moves_visits);
 
         let top_moves_values = top_details()
-            .map(|(_, d)| format!("{:.3}", d.Qsa))
+            .map(|edge| format!("{:.3}", edge.Qsa()))
             .join(" ");
 
         self.output.info_val("topmovesvalues", &top_moves_values);
 
         for (i, pv) in pv.iter().enumerate() {
-            let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
+            let pv_actions = pv.iter().map(|edge| &edge.action).cloned().collect::<Vec<_>>();
             let pv_string = self
                 .ugi_mapper
                 .actions_to_move_string(pre_action_game_state, &pv_actions);
@@ -579,17 +595,17 @@ impl OutputHandle {
     }
 }
 
-fn choose_action<A>(actions: &[(A, PUCT)], alternative_action_threshold: f32) -> &(A, PUCT) {
-    let max_visits = actions
+fn choose_action<A, PV>(edges: &[EdgeDetails<A, PV>], alternative_action_threshold: f32) -> &EdgeDetails<A, PV> {
+    let max_visits = edges
         .iter()
-        .map(|(_, puct)| puct.Nsa)
+        .map(|details| details.Nsa)
         .max()
         .expect("Expected at least one action");
     let visit_threshold = max_visits - (max_visits as f32 * alternative_action_threshold) as usize;
     let mut rng = thread_rng();
-    actions
+    edges
         .iter()
-        .filter(|(_, puct)| puct.Nsa >= visit_threshold)
+        .filter(|details| details.Nsa >= visit_threshold)
         .choose(&mut rng)
         .expect("Expected at least one action")
 }

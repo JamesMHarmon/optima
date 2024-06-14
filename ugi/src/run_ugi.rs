@@ -1,5 +1,7 @@
 use anyhow::Result;
+use common::PropagatedValue;
 use engine::{GameEngine, GameState, ValidActions};
+use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::Analyzer;
 
 use std::fmt::{Debug, Display};
@@ -10,7 +12,7 @@ use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output};
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
-pub async fn run_ugi<M, E, S, A, U>(ugi_mapper: U, engine: E, model: M) -> Result<()>
+pub async fn run_ugi<M, E, S, A, U, B, Sel>(ugi_mapper: U, engine: E, model: M, backpropagation_strategy: B, selection_strategy: Sel) -> Result<()>
 where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
@@ -22,12 +24,16 @@ where
         + Sync
         + 'static,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
-    M: Analyzer<State = S, Action = A, Value = E::Value> + Send + 'static,
+    M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
+    B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
+    B::PropagatedValues: PropagatedValue + Default + Ord,
+    Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,
+    E::Terminal: Clone
 {
     let ugi_mapper = Arc::new(ugi_mapper);
 
-    let (game_manager, mut output_rx) = GameManager::new(ugi_mapper.clone(), engine, model);
+    let (game_manager, mut output_rx) = GameManager::new(ugi_mapper.clone(), engine, model, backpropagation_strategy, selection_strategy);
     let input_parser = InputParser::new(&*ugi_mapper);
 
     tokio::spawn(async move {
