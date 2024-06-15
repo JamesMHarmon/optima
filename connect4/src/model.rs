@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::PathBuf;
 
@@ -31,6 +32,25 @@ impl ModelFactory {
 #[derive(Default)]
 pub struct Mapper {}
 
+pub struct Predictions {
+    value: Value,
+    moves_left: f32,
+}
+
+impl Predictions {
+    pub fn new(value: Value, moves_left: f32) -> Self {
+        Self { value, moves_left }
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+
+    pub fn moves_left(&self) -> f32 {
+        self.moves_left
+    }
+}
+
 impl Mapper {
     fn new() -> Self {
         Self {}
@@ -38,8 +58,8 @@ impl Mapper {
 
     pub fn symmetries(
         &self,
-        metrics: PositionMetrics<GameState, Action, Value, MovesLeftPropagatedValue>,
-    ) -> Vec<PositionMetrics<GameState, Action, Value, MovesLeftPropagatedValue>> {
+        metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
+    ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
         //@TODO: Add symmetries.
         vec![metrics]
     }
@@ -47,17 +67,20 @@ impl Mapper {
     fn metrics_to_policy_output(
         &self,
         _game_state: &GameState,
-        node_metrics: &NodeMetrics<Action, Value, MovesLeftPropagatedValue>,
+        node_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
     ) -> Vec<f16> {
         let total_visits = node_metrics.visits as f32 - 1.0;
-        let result: [f16; 7] = node_metrics.children.iter().fold([f16::ZERO; 7], |mut r, m| {
-            match m.action() {
-                Action::DropPiece(column) => {
-                    r[*column as usize - 1] = f16::from_f32(m.visits() as f32 / total_visits)
-                }
-            };
-            r
-        });
+        let result: [f16; 7] = node_metrics
+            .children
+            .iter()
+            .fold([f16::ZERO; 7], |mut r, m| {
+                match m.action() {
+                    Action::DropPiece(column) => {
+                        r[*column as usize - 1] = f16::from_f32(m.visits() as f32 / total_visits)
+                    }
+                };
+                r
+            });
 
         result.to_vec()
     }
@@ -92,8 +115,8 @@ impl Mapper {
         vec![f16::from_f32((val * 2.0) - 1.0)]
     }
 
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f16) -> Value {
+        let curr_val = (f16::to_f32(value_output) + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
         if game_state.p1_turn_to_move {
             Value([curr_val, opp_val])
@@ -136,15 +159,24 @@ impl InputMap for Mapper {
 impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
-    type Predictions = Value;
+    type Predictions = Predictions;
     type PropagatedValues = MovesLeftPropagatedValue;
-    
-    fn to_output(&self, game_state: &Self::State, node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>) -> std::collections::HashMap<String, Vec<f16>> {
+
+    fn to_output(
+        &self,
+        game_state: &Self::State,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+    ) -> std::collections::HashMap<String, Vec<f32>> {
         let mut output = std::collections::HashMap::with_capacity(2);
-        output.insert("policy".to_string(), self.metrics_to_policy_output(game_state, node_metrics));
-        output.insert("value".to_string(), self.metrics_to_value_output(game_state, node_metrics));
+        output.insert(
+            "policy".to_string(),
+            self.metrics_to_policy_output(game_state, node_metrics),
+        );
+        output.insert(
+            "value".to_string(),
+            self.metrics_to_value_output(game_state, node_metrics),
+        );
         output
-    
     }
 }
 
@@ -179,7 +211,7 @@ impl TranspositionEntry {
 impl TranspositionMap for Mapper {
     type State = GameState;
     type Action = Action;
-    type Predictions = Value;
+    type Predictions = Predictions;
     type TranspositionEntry = TranspositionEntry;
 
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
@@ -189,34 +221,48 @@ impl TranspositionMap for Mapper {
     fn map_output_to_transposition_entry(
         &self,
         _game_state: &GameState,
-        policy_scores: &[f16],
-        value: f16,
-        moves_left: f32,
+        outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
+        let policy_scores = *outputs
+            .get("policy")
+            .expect("Policy scores not found in output");
+
+        let value = outputs.get("value").expect("Value not found in output")[0];
+
+        // @TODO Map moves left
+        let moves_left = outputs
+            .get("moves_left")
+            .expect("Moves left not found in output")[0];
+
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        TranspositionEntry::new(policy_metrics, value, moves_left)
+        TranspositionEntry::new(policy_metrics, value, f16::to_f32(moves_left))
     }
 
     fn map_transposition_entry_to_analysis(
         &self,
         game_state: &GameState,
         transposition_entry: &TranspositionEntry,
-    ) -> GameStateAnalysis<Action, Value> {
-        GameStateAnalysis::new(
-            self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
-            self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
+    ) -> GameStateAnalysis<Action, Predictions> {
+        let predictions = Predictions::new(
+            self.map_value_output_to_value(game_state, transposition_entry.value()),
             transposition_entry.moves_left(),
+        );
+
+        GameStateAnalysis::new(
+            self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
+            predictions,
         )
     }
 }
 
 impl Load for ModelFactory {
     type MR = ModelRef;
-    type M =
-        ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>;
+    type M = ArchiveModel<
+        TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
+    >;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
         let table_size = get_env_usize("TABLE_SIZE").unwrap_or(0);
