@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use super::action::Action;
 use super::board::map_board_to_arr;
+use super::model::Predictions;
 use super::value::Value;
 use super::zobrist::Zobrist;
 
@@ -203,7 +204,7 @@ impl Engine {
 impl GameEngine for Engine {
     type Action = Action;
     type State = GameState;
-    type Terminal = Value;
+    type Terminal = Predictions;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         match action {
@@ -212,7 +213,7 @@ impl GameEngine for Engine {
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        game_state.is_terminal()
+        game_state.is_terminal().map(|v| Predictions::new(v, 0.0))
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {

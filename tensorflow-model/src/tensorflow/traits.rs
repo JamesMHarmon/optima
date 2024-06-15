@@ -24,12 +24,7 @@ pub trait Dimension {
 pub trait InputMap {
     type State;
 
-    fn game_state_to_input(
-        &self,
-        game_state: &Self::State,
-        inputs: &mut [f16],
-        mode: Mode,
-    );
+    fn game_state_to_input(&self, game_state: &Self::State, inputs: &mut [f16], mode: Mode);
 }
 
 pub trait PredictionsMap {
@@ -38,7 +33,11 @@ pub trait PredictionsMap {
     type Predictions;
     type PropagatedValues;
 
-    fn to_output(&self, game_state: &Self::State, node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>) -> HashMap<String, Vec<f16>>;
+    fn to_output(
+        &self,
+        game_state: &Self::State,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+    ) -> HashMap<String, Vec<f32>>;
 }
 
 pub trait TranspositionMap {
