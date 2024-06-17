@@ -4,7 +4,7 @@
 pub mod action;
 pub mod engine;
 pub mod value;
-pub mod prediction;
+pub mod predictions;
 pub mod game_state;
 
 mod board;
@@ -14,11 +14,12 @@ mod zobrist_values;
 
 use zobrist::*;
 use board::*;
+use constants::*;
 
 #[cfg(feature = "model")]
 pub mod model;
 
-pub use prediction::*;
+pub use predictions::*;
 pub use action::*;
 pub use value::*;
 pub use engine::*;

@@ -5,11 +5,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
-use super::board::set_board_bits_invertable;
-use super::constants::*;
-use super::game_state::GameState;
-use super::value::Value;
-use super::TranspositionEntry;
+use super::{constants::*, set_board_bits_invertable, GameState, Predictions, TranspositionEntry, Value};
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;
 use model::analytics::{ActionWithPolicy, GameStateAnalysis};
@@ -156,32 +152,6 @@ impl InputMap for Mapper {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Predictions {
-    value: Value,
-    game_length: f32,
-}
-
-impl Predictions {
-    pub fn new(value: Value, game_length: f32) -> Self {
-        Self { value, game_length }
-    }
-
-    pub fn value(&self) -> &Value {
-        &self.value
-    }
-
-    pub fn game_length(&self) -> f32 {
-        self.game_length
-    }
-}
-
-impl engine::Value for Predictions {
-    fn get_value_for_player(&self, player: usize) -> f32 {
-        self.value.get_value_for_player(player)
-    }
-}
-
 impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
@@ -230,15 +200,16 @@ impl TranspositionMap for Mapper {
             .get("policy")
             .expect("Policy scores not found in output");
 
-        let value = outputs.get("value").expect("Value not found in output")[0];
-
-        let moves_left = outputs
-            .get("moves_left")
-            .expect("Moves left not found in output")[0];
-
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
+
+        let value = outputs.get("value").expect("Value not found in output")[0];
+
+        // @TODO: Moves left is a vector, does this need to be EV?
+        let moves_left = outputs
+            .get("moves_left")
+            .expect("Moves left not found in output")[0];
 
         let game_length = game_state.get_move_number() as f32 + f16::to_f32(moves_left);
         TranspositionEntry::new(policy_metrics, value, game_length)

@@ -3,12 +3,7 @@ use model::ModelInfo;
 use tensorflow_model::Archive as ArchiveModel;
 use tensorflow_model::{GameAnalyzer, TensorflowModel};
 
-use crate::Predictions;
-
-use super::engine::Engine;
-use super::game_state::GameState;
-use super::mappings::Mapper;
-use super::TranspositionEntry;
+use super::{Engine, GameState, Mapper, Predictions, TranspositionEntry};
 
 pub type Analyzer =
     GameAnalyzer<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>;

@@ -1,41 +1,34 @@
-use model::position_metrics::PositionMetrics;
-use model::{node_metrics::NodeMetrics, EdgeMetrics};
-
-use super::{Action, GameState, Value};
+use common::MovesLeftPropagatedValue;
+use model::{node_metrics::NodeMetrics, EdgeMetrics, PositionMetrics};
+use super::{Action, GameState, Predictions};
 
 pub fn get_symmetries(
-    metrics: PositionMetrics<GameState, Action, Value>,
-) -> Vec<PositionMetrics<GameState, Action, Value>> {
+    metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
+) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
     let PositionMetrics {
         game_state,
         policy,
-        score,
-        moves_left,
     } = &metrics;
 
     let symmetrical_state = game_state.vertical_symmetry();
 
     let symmetrical_metrics = PositionMetrics {
         game_state: symmetrical_state,
-        policy: symmetrical_node_metrics(policy),
-        score: score.clone(),
-        moves_left: *moves_left,
+        policy: symmetrical_node_metrics(policy)
     };
 
     vec![metrics, symmetrical_metrics]
 }
 
-fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics<Action, Value> {
+fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
+        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.visits(), m.propagatedValues().clone()))
         .collect();
-
     NodeMetrics {
         visits: metrics.visits,
-        value: metrics.value.clone(),
-        moves_left: metrics.moves_left,
+        predictions: metrics.predictions.clone(),
         children: children_symmetry,
     }
 }
@@ -52,12 +45,9 @@ mod tests {
             game_state,
             policy: NodeMetrics {
                 visits: 0,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![],
-            },
-            score: Value::new([0.0, 0.0]),
-            moves_left: 0,
+            }
         });
 
         symmetries.into_iter().map(|s| s.game_state).collect()
@@ -253,21 +243,18 @@ mod tests {
             game_state,
             policy: NodeMetrics {
                 visits: 0,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new("a9".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("b9".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("h9".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("a1".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("a1v".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("a1h".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("h3h".parse().unwrap(), 0.0, 0.0, 0),
-                    EdgeMetrics::new("h3v".parse().unwrap(), 0.0, 0.0, 0),
+                    EdgeMetrics::new("a9".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("b9".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("h9".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("a1".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("a1v".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("a1h".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("h3h".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
+                    EdgeMetrics::new("h3v".parse().unwrap(),  0, MovesLeftPropagatedValue::new(0.0, 0.0)),
                 ],
-            },
-            score: Value::new([0.0, 0.0]),
-            moves_left: 0,
+            }
         });
 
         let node_metrics = &symmetries.last().unwrap().policy.children;
@@ -305,19 +292,16 @@ mod tests {
         let actions = || move_actions().chain(wall_actions());
 
         let children = actions()
-            .map(|action| EdgeMetrics::new(action, 0.0, 0.0, 0))
+            .map(|action| EdgeMetrics::new(action, 0, MovesLeftPropagatedValue::new(0.0, 0.0)))
             .collect_vec();
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
             policy: NodeMetrics {
                 visits: 0,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children,
-            },
-            score: Value::new([0.0, 0.0]),
-            moves_left: 0,
+            }
         });
 
         for (action, symmetrical_action) in actions().zip(
