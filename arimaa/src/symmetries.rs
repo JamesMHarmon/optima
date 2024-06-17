@@ -1,42 +1,38 @@
+use common::MovesLeftPropagatedValue;
+use itertools::Itertools;
 use model::position_metrics::PositionMetrics;
 use model::{node_metrics::NodeMetrics, EdgeMetrics};
 
-use super::{Action, GameState, Value};
+use super::Predictions;
+use super::{Action, GameState};
 
 pub fn get_symmetries(
-    metrics: PositionMetrics<GameState, Action, Value>,
-) -> Vec<PositionMetrics<GameState, Action, Value>> {
-    let PositionMetrics {
-        game_state,
-        policy,
-        score,
-        moves_left,
-    } = &metrics;
+    metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
+) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
+    let PositionMetrics { game_state, policy } = &metrics;
 
     let symmetrical_state = game_state.get_vertical_symmetry();
 
     let symmetrical_metrics = PositionMetrics {
         game_state: symmetrical_state,
         policy: symmetrical_node_metrics(policy),
-        score: score.clone(),
-        moves_left: *moves_left,
     };
 
     vec![metrics, symmetrical_metrics]
 }
 
-fn symmetrical_node_metrics(metrics: &NodeMetrics<Action, Value>) -> NodeMetrics<Action, Value> {
-    let children_symmetry = metrics
-        .children
-        .iter()
-        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.Q(), m.M(), m.visits()))
-        .collect();
+fn symmetrical_node_metrics(
+    metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
+) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
+    let children_symmetry = metrics.children.iter().map(|m| {
+        let symmetrical_action = m.action().vertical_symmetry();
+        EdgeMetrics::new(symmetrical_action, m.visits(), m.propagatedValues().clone())
+    });
 
     NodeMetrics {
         visits: metrics.visits,
-        value: metrics.value.clone(),
-        moves_left: metrics.moves_left,
-        children: children_symmetry,
+        predictions: metrics.predictions.clone(),
+        children: children_symmetry.collect_vec(),
     }
 }
 
@@ -53,12 +49,9 @@ mod tests {
             game_state,
             policy: NodeMetrics {
                 visits: 0,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![],
             },
-            score: Value::new([0.0, 0.0]),
-            moves_left: 0,
         });
 
         symmetries.into_iter().map(|s| s.game_state).collect()
@@ -274,23 +267,31 @@ mod tests {
         let game_state = game_state.take_action(&"b2e".parse().unwrap());
 
         let mut symmetries = get_symmetries(PositionMetrics {
-            score: [0.0, 1.0].into(),
             game_state,
             policy: NodeMetrics {
                 visits: 800,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new("c2n".parse().unwrap(), 0.0, 0.0, 500),
-                    EdgeMetrics::new("a2e".parse().unwrap(), 0.0, 0.0, 250),
-                    EdgeMetrics::new("c2w".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new(
+                        "c2n".parse().unwrap(),
+                        500,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "a2e".parse().unwrap(),
+                        250,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "c2w".parse().unwrap(),
+                        50,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
                 ],
             },
-            moves_left: 0,
         });
 
         let PositionMetrics {
-            score: symmetrical_score,
             game_state: symmetrical_game_state,
             policy:
                 NodeMetrics {
@@ -302,7 +303,6 @@ mod tests {
         } = symmetries.pop().unwrap();
 
         let PositionMetrics {
-            score: original_score,
             game_state: original_game_state,
             policy:
                 NodeMetrics {
@@ -313,7 +313,6 @@ mod tests {
             ..
         } = symmetries.pop().unwrap();
 
-        assert_eq!(symmetrical_score, original_score);
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
@@ -333,7 +332,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.Q(), symmetrical.Q());
+            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
         }
 
         assert_eq!(
@@ -378,23 +377,31 @@ mod tests {
         let game_state = take_actions!(game_state => a1, b2, e1);
 
         let mut symmetries = get_symmetries(PositionMetrics {
-            score: [0.0, 1.0].into(),
             game_state,
             policy: NodeMetrics {
                 visits: 800,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new("a2".parse().unwrap(), 0.0, 0.0, 500),
-                    EdgeMetrics::new("c2".parse().unwrap(), 0.0, 0.0, 250),
-                    EdgeMetrics::new("d1".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new(
+                        "a2".parse().unwrap(),
+                        500,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "c2".parse().unwrap(),
+                        250,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "d1".parse().unwrap(),
+                        50,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
                 ],
             },
-            moves_left: 0,
         });
 
         let PositionMetrics {
-            score: symmetrical_score,
             game_state: symmetrical_game_state,
             policy:
                 NodeMetrics {
@@ -406,7 +413,6 @@ mod tests {
         } = symmetries.pop().unwrap();
 
         let PositionMetrics {
-            score: original_score,
             game_state: original_game_state,
             policy:
                 NodeMetrics {
@@ -417,7 +423,6 @@ mod tests {
             ..
         } = symmetries.pop().unwrap();
 
-        assert_eq!(symmetrical_score, original_score);
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
@@ -433,7 +438,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.Q(), symmetrical.Q());
+            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
         }
 
         assert_eq!(
@@ -478,23 +483,31 @@ mod tests {
         let game_state = take_actions!(game_state => a1, b2, e1, c2, d2, e2, a2, f1, h7, d8, g7);
 
         let mut symmetries = get_symmetries(PositionMetrics {
-            score: [0.0, 1.0].into(),
             game_state,
             policy: NodeMetrics {
                 visits: 800,
-                value: Value::new([0.0, 0.0]),
-                moves_left: 0.0,
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new("g7".parse().unwrap(), 0.0, 0.0, 500),
-                    EdgeMetrics::new("d8".parse().unwrap(), 0.0, 0.0, 250),
-                    EdgeMetrics::new("e7".parse().unwrap(), 0.0, 0.0, 50),
+                    EdgeMetrics::new(
+                        "g7".parse().unwrap(),
+                        500,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "d8".parse().unwrap(),
+                        250,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
+                    EdgeMetrics::new(
+                        "e7".parse().unwrap(),
+                        50,
+                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                    ),
                 ],
             },
-            moves_left: 0,
         });
 
         let PositionMetrics {
-            score: symmetrical_score,
             game_state: symmetrical_game_state,
             policy:
                 NodeMetrics {
@@ -506,7 +519,6 @@ mod tests {
         } = symmetries.pop().unwrap();
 
         let PositionMetrics {
-            score: original_score,
             game_state: original_game_state,
             policy:
                 NodeMetrics {
@@ -517,7 +529,6 @@ mod tests {
             ..
         } = symmetries.pop().unwrap();
 
-        assert_eq!(symmetrical_score, original_score);
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
@@ -533,7 +544,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.Q(), symmetrical.Q());
+            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
         }
 
         assert_eq!(

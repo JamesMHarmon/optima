@@ -44,6 +44,8 @@ where
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
+    B: 'a,
+    Sel: 'a,
     T: Temperature<State = S>,
     PV: Default,
 {

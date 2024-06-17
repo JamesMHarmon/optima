@@ -34,20 +34,20 @@ pub struct Mapper {}
 
 pub struct Predictions {
     value: Value,
-    moves_left: f32,
+    game_length: f32,
 }
 
 impl Predictions {
-    pub fn new(value: Value, moves_left: f32) -> Self {
-        Self { value, moves_left }
+    pub fn new(value: Value, game_length: f32) -> Self {
+        Self { value, game_length }
     }
 
     pub fn value(&self) -> &Value {
         &self.value
     }
 
-    pub fn moves_left(&self) -> f32 {
-        self.moves_left
+    pub fn game_length(&self) -> f32 {
+        self.game_length
     }
 }
 
@@ -68,19 +68,13 @@ impl Mapper {
         &self,
         _game_state: &GameState,
         node_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
-    ) -> Vec<f16> {
+    ) -> Vec<f32> {
         let total_visits = node_metrics.visits as f32 - 1.0;
-        let result: [f16; 7] = node_metrics
-            .children
-            .iter()
-            .fold([f16::ZERO; 7], |mut r, m| {
-                match m.action() {
-                    Action::DropPiece(column) => {
-                        r[*column as usize - 1] = f16::from_f32(m.visits() as f32 / total_visits)
-                    }
-                };
-                r
-            });
+        let result: [f32; 7] = node_metrics.children.iter().fold([0.0; 7], |mut r, m| {
+            let column_idx = m.action().column() as usize - 1;
+            r[column_idx] = m.visits() as f32 / total_visits;
+            r
+        });
 
         result.to_vec()
     }
@@ -97,7 +91,7 @@ impl Mapper {
             .enumerate()
             .filter_map(|(i, (v, p))| {
                 if *v {
-                    Some(ActionWithPolicy::new(Action::DropPiece((i + 1) as u64), *p))
+                    Some(ActionWithPolicy::new(Action::DropPiece((i + 1) as u8), *p))
                 } else {
                     None
                 }
@@ -109,10 +103,10 @@ impl Mapper {
         valid_actions_with_policies
     }
 
-    fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f16> {
+    fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f32> {
         let player_to_move = if game_state.p1_turn_to_move { 1 } else { 2 };
         let val = value.get_value_for_player(player_to_move);
-        vec![f16::from_f32((val * 2.0) - 1.0)]
+        vec![(val * 2.0) - 1.0]
     }
 
     fn map_value_output_to_value(&self, game_state: &GameState, value_output: f16) -> Value {
@@ -167,31 +161,36 @@ impl PredictionsMap for Mapper {
         game_state: &Self::State,
         node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
-        let mut output = std::collections::HashMap::with_capacity(2);
+        let predictions = &node_metrics.predictions;
+        let mut output = std::collections::HashMap::with_capacity(3);
         output.insert(
             "policy".to_string(),
             self.metrics_to_policy_output(game_state, node_metrics),
         );
         output.insert(
             "value".to_string(),
-            self.metrics_to_value_output(game_state, node_metrics),
+            self.metrics_to_value_output(game_state, predictions.value()),
         );
+
+        let action_number = game_state.number_of_actions() as f32;
+        let moves_left = (predictions.game_length() - action_number).max(0.0);
+        output.insert("moves_left".to_string(), vec![moves_left]);
         output
     }
 }
 
-struct TranspositionEntry {
+pub struct TranspositionEntry {
     policy_metrics: [f16; OUTPUT_SIZE],
     value: f16,
-    moves_left: f32,
+    game_length: f32,
 }
 
 impl TranspositionEntry {
-    fn new(policy_metrics: [f16; OUTPUT_SIZE], value: f16, moves_left: f32) -> Self {
+    fn new(policy_metrics: [f16; OUTPUT_SIZE], value: f16, game_length: f32) -> Self {
         Self {
             policy_metrics,
             value,
-            moves_left,
+            game_length,
         }
     }
 
@@ -203,8 +202,8 @@ impl TranspositionEntry {
         self.value
     }
 
-    fn moves_left(&self) -> f32 {
-        self.moves_left
+    fn game_length(&self) -> f32 {
+        self.game_length
     }
 }
 
@@ -220,7 +219,7 @@ impl TranspositionMap for Mapper {
 
     fn map_output_to_transposition_entry(
         &self,
-        _game_state: &GameState,
+        game_state: &GameState,
         outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
         let policy_scores = *outputs
@@ -229,7 +228,6 @@ impl TranspositionMap for Mapper {
 
         let value = outputs.get("value").expect("Value not found in output")[0];
 
-        // @TODO Map moves left
         let moves_left = outputs
             .get("moves_left")
             .expect("Moves left not found in output")[0];
@@ -238,7 +236,8 @@ impl TranspositionMap for Mapper {
             .try_into()
             .expect("Slice does not match length of array");
 
-        TranspositionEntry::new(policy_metrics, value, f16::to_f32(moves_left))
+        let game_length = game_state.number_of_actions() as f32 + f16::to_f32(moves_left);
+        TranspositionEntry::new(policy_metrics, value, game_length)
     }
 
     fn map_transposition_entry_to_analysis(
@@ -248,7 +247,7 @@ impl TranspositionMap for Mapper {
     ) -> GameStateAnalysis<Action, Predictions> {
         let predictions = Predictions::new(
             self.map_value_output_to_value(game_state, transposition_entry.value()),
-            transposition_entry.moves_left(),
+            transposition_entry.game_length(),
         );
 
         GameStateAnalysis::new(

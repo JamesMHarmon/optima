@@ -9,7 +9,15 @@ use anyhow::anyhow;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Action {
-    DropPiece(u64),
+    DropPiece(u8),
+}
+
+impl Action {
+    pub fn column(&self) -> u8 {
+        match self {
+            Action::DropPiece(column) => *column,
+        }
+    }
 }
 
 impl FromStr for Action {
@@ -38,7 +46,7 @@ impl Serialize for Action {
     where
         S: Serializer,
     {
-        serializer.serialize_u64(match self {
+        serializer.serialize_u8(match self {
             Action::DropPiece(c) => *c,
         })
     }
@@ -61,7 +69,7 @@ impl<'de> Visitor<'de> for ActionVisitor {
         )
     }
 
-    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
         E: Error,
     {
@@ -74,6 +82,6 @@ impl<'de> Deserialize<'de> for Action {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_u64(ActionVisitor::new())
+        deserializer.deserialize_u8(ActionVisitor::new())
     }
 }
