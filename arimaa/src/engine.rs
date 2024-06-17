@@ -1,5 +1,7 @@
+use crate::Predictions;
+
 use super::MAX_NUMBER_OF_MOVES;
-use super::{Action, GameState, Value};
+use super::{Action, GameState};
 
 pub struct Engine {}
 
@@ -18,7 +20,7 @@ impl Default for Engine {
 impl engine::engine::GameEngine for Engine {
     type Action = Action;
     type State = GameState;
-    type Terminal = Value;
+    type Terminal = Predictions;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         game_state.take_action(action)
@@ -33,12 +35,14 @@ impl engine::engine::GameEngine for Engine {
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        game_state.is_terminal().map(|v| v.into()).or_else(|| {
+        let value = game_state.is_terminal().map(|v| v.into()).or_else(|| {
             if game_state.get_move_number() > MAX_NUMBER_OF_MOVES {
                 Some([0.0, 0.0].into())
             } else {
                 None
             }
-        })
+        });
+
+        value.map(|value| Predictions::new(value, game_state.get_move_number() as f32))
     }
 }

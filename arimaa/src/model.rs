@@ -3,22 +3,26 @@ use model::ModelInfo;
 use tensorflow_model::Archive as ArchiveModel;
 use tensorflow_model::{GameAnalyzer, TensorflowModel};
 
+use crate::Predictions;
+
 use super::engine::Engine;
 use super::game_state::GameState;
 use super::mappings::Mapper;
-use super::value::Value;
 use super::TranspositionEntry;
 
-pub type Analyzer = GameAnalyzer<GameState, Action, Value, Engine, Mapper, TranspositionEntry>;
+pub type Analyzer =
+    GameAnalyzer<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>;
 
 pub struct Model(
-    ArchiveModel<TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>>,
+    ArchiveModel<
+        TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
+    >,
 );
 
 impl Model {
     pub fn new(
         model: ArchiveModel<
-            TensorflowModel<GameState, Action, Value, Engine, Mapper, TranspositionEntry>,
+            TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
         >,
     ) -> Self {
         Self(model)
@@ -28,7 +32,7 @@ impl Model {
 impl model::Analyzer for Model {
     type State = GameState;
     type Action = Action;
-    type Predictions = Value;
+    type Predictions = Predictions;
     type Analyzer = Analyzer;
 
     fn analyzer(&self) -> Self::Analyzer {

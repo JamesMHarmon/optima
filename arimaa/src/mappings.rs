@@ -1,5 +1,7 @@
+use common::MovesLeftPropagatedValue;
 use half::f16;
 use once_cell::sync::OnceCell;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
@@ -10,10 +12,10 @@ use super::value::Value;
 use super::TranspositionEntry;
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;
-use model::analytics::{ActionWithPolicy, BasicGameStateAnalysis};
+use model::analytics::{ActionWithPolicy, GameStateAnalysis};
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
-use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
+use tensorflow_model::{InputMap, Mode, PredictionsMap, TranspositionMap};
 
 /*
     Layers:
@@ -31,40 +33,18 @@ use tensorflow_model::{InputMap, Mode, PolicyMap, TranspositionMap, ValueMap};
     1 pass bit
     1 setup squares (16 logits)
 */
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Mapper {}
 
 impl Mapper {
     pub fn new() -> Self {
         Self {}
     }
-}
 
-impl tensorflow_model::Dimension for Mapper {
-    fn dimensions(&self) -> [u64; 3] {
-        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
-    }
-}
-
-impl InputMap<GameState> for Mapper {
-    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
-        set_board_state_squares(input, game_state);
-
-        set_step_num_squares(input, game_state);
-
-        set_banned_piece_squares(input, game_state);
-
-        set_phase_squares(input, game_state);
-
-        set_trap_squares(input);
-    }
-}
-
-impl PolicyMap<GameState, Action, Value> for Mapper {
-    fn policy_metrics_to_expected_output(
+    fn metrics_to_policy_output(
         &self,
         game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action, Value>,
+        policy_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
     ) -> Vec<f32> {
         let move_map = static_sparse_piece_move_map().as_slice();
         let push_pull_map = static_sparse_push_pull_map().as_slice();
@@ -136,17 +116,15 @@ impl PolicyMap<GameState, Action, Value> for Mapper {
 
         valid_actions_with_policies
     }
-}
 
-impl ValueMap<GameState, Value> for Mapper {
-    fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
+    fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f32> {
         let player_to_move = game_state.player_to_move();
         let val = value.get_value_for_player(player_to_move);
-        (val * 2.0) - 1.0
+        vec![(val * 2.0) - 1.0]
     }
 
-    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f32) -> Value {
-        let curr_val = (value_output + 1.0) / 2.0;
+    fn map_value_output_to_value(&self, game_state: &GameState, value_output: f16) -> Value {
+        let curr_val = (f16::to_f32(value_output) + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
         if game_state.is_p1_turn_to_move() {
             [curr_val, opp_val].into()
@@ -156,34 +134,129 @@ impl ValueMap<GameState, Value> for Mapper {
     }
 }
 
-impl TranspositionMap<GameState, Action, Value, TranspositionEntry> for Mapper {
+impl tensorflow_model::Dimension for Mapper {
+    fn dimensions(&self) -> [u64; 3] {
+        [INPUT_H as u64, INPUT_W as u64, INPUT_C as u64]
+    }
+}
+
+impl InputMap for Mapper {
+    type State = GameState;
+
+    fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
+        set_board_state_squares(input, game_state);
+
+        set_step_num_squares(input, game_state);
+
+        set_banned_piece_squares(input, game_state);
+
+        set_phase_squares(input, game_state);
+
+        set_trap_squares(input);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Predictions {
+    value: Value,
+    game_length: f32,
+}
+
+impl Predictions {
+    pub fn new(value: Value, game_length: f32) -> Self {
+        Self { value, game_length }
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+
+    pub fn game_length(&self) -> f32 {
+        self.game_length
+    }
+}
+
+impl engine::Value for Predictions {
+    fn get_value_for_player(&self, player: usize) -> f32 {
+        self.value.get_value_for_player(player)
+    }
+}
+
+impl PredictionsMap for Mapper {
+    type State = GameState;
+    type Action = Action;
+    type Predictions = Predictions;
+    type PropagatedValues = MovesLeftPropagatedValue;
+
+    fn to_output(
+        &self,
+        game_state: &Self::State,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+    ) -> std::collections::HashMap<String, Vec<f32>> {
+        // @TODO: Verify if this should actually be predictions?
+        let predictions = &node_metrics.predictions;
+        let mut output = std::collections::HashMap::with_capacity(3);
+        output.insert(
+            "policy".to_string(),
+            self.metrics_to_policy_output(game_state, node_metrics),
+        );
+        output.insert(
+            "value".to_string(),
+            self.metrics_to_value_output(game_state, predictions.value()),
+        );
+        let move_number = game_state.get_move_number() as f32;
+        let moves_left = (predictions.game_length() - move_number).max(0.0);
+        output.insert("moves_left".to_string(), vec![moves_left]);
+        output
+    }
+}
+
+impl TranspositionMap for Mapper {
+    type State = GameState;
+    type Action = Action;
+    type TranspositionEntry = TranspositionEntry;
+    type Predictions = Predictions;
+
     fn get_transposition_key(&self, game_state: &GameState) -> u64 {
         game_state.get_transposition_hash() ^ game_state.get_banned_piece_mask()
     }
 
     fn map_output_to_transposition_entry(
         &self,
-        _game_state: &GameState,
-        policy_scores: &[f16],
-        value: f16,
-        moves_left: f32,
+        game_state: &GameState,
+        outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
+        let policy_scores = *outputs
+            .get("policy")
+            .expect("Policy scores not found in output");
+
+        let value = outputs.get("value").expect("Value not found in output")[0];
+
+        let moves_left = outputs
+            .get("moves_left")
+            .expect("Moves left not found in output")[0];
+
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        TranspositionEntry::new(policy_metrics, value, moves_left)
+        let game_length = game_state.get_move_number() as f32 + f16::to_f32(moves_left);
+        TranspositionEntry::new(policy_metrics, value, game_length)
     }
 
     fn map_transposition_entry_to_analysis(
         &self,
         game_state: &GameState,
         transposition_entry: &TranspositionEntry,
-    ) -> BasicGameStateAnalysis<Action, Value> {
-        BasicGameStateAnalysis::new(
-            self.map_value_output_to_value(game_state, transposition_entry.value().to_f32()),
+    ) -> GameStateAnalysis<Action, Predictions> {
+        let predictions = Predictions::new(
+            self.map_value_output_to_value(game_state, transposition_entry.value()),
+            transposition_entry.game_length(),
+        );
+
+        GameStateAnalysis::new(
             self.policy_to_valid_actions(game_state, transposition_entry.policy_metrics()),
-            transposition_entry.moves_left(),
+            predictions,
         )
     }
 }
@@ -376,7 +449,6 @@ fn static_sparse_push_pull_map() -> &'static Vec<u16> {
 #[allow(clippy::float_cmp)]
 #[cfg(test)]
 mod tests {
-    use super::super::value::Value;
     use super::*;
     use arimaa_engine::take_actions;
     use engine::GameState as GameStateTrait;
@@ -1500,16 +1572,27 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
-            value: Value::new([0.0, 0.0]),
-            moves_left: 0.0,
+            predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
             children: vec![
-                EdgeMetrics::new("a7n".parse().unwrap(), 0.0, 0.0, 7),
-                EdgeMetrics::new("pa7nn".parse().unwrap(), 0.0, 0.0, 2),
-                EdgeMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
+                EdgeMetrics::new(
+                    "a7n".parse().unwrap(),
+                    7,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
+                EdgeMetrics::new(
+                    "pa7nn".parse().unwrap(),
+                    2,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
+                EdgeMetrics::new(
+                    "p".parse().unwrap(),
+                    1,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
             ],
         };
 
-        let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
+        let output = Mapper::new().metrics_to_policy_output(&game_state, &policy_metrics);
         let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;
         assert_eq!(output.len(), OUTPUT_SIZE);
         assert_eq!(
@@ -1546,16 +1629,27 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
-            value: Value::new([0.0, 0.0]),
-            moves_left: 0.0,
+            predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
             children: vec![
-                EdgeMetrics::new("h2s".parse().unwrap(), 0.0, 0.0, 7),
-                EdgeMetrics::new("ph2ss".parse().unwrap(), 0.0, 0.0, 2),
-                EdgeMetrics::new("p".parse().unwrap(), 0.0, 0.0, 1),
+                EdgeMetrics::new(
+                    "h2s".parse().unwrap(),
+                    7,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
+                EdgeMetrics::new(
+                    "ph2ss".parse().unwrap(),
+                    2,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
+                EdgeMetrics::new(
+                    "p".parse().unwrap(),
+                    1,
+                    MovesLeftPropagatedValue::new(0.0, 0.0),
+                ),
             ],
         };
 
-        let output = Mapper::new().policy_metrics_to_expected_output(&game_state, &policy_metrics);
+        let output = Mapper::new().metrics_to_policy_output(&game_state, &policy_metrics);
         let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;
         assert_eq!(output.len(), OUTPUT_SIZE);
         assert_eq!(
