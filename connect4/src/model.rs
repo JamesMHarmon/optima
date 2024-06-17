@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::PathBuf;
 
+use crate::prediction::Predictions;
+
 use super::action::Action;
 use super::board::map_board_to_arr;
 use super::constants::{INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE};
 use super::engine::Engine;
-use super::engine::GameState;
+use super::GameState;
 use super::value::Value;
 use common::{get_env_usize, MovesLeftPropagatedValue};
 use engine::Value as ValueTrait;
@@ -31,25 +33,6 @@ impl ModelFactory {
 
 #[derive(Default)]
 pub struct Mapper {}
-
-pub struct Predictions {
-    value: Value,
-    game_length: f32,
-}
-
-impl Predictions {
-    pub fn new(value: Value, game_length: f32) -> Self {
-        Self { value, game_length }
-    }
-
-    pub fn value(&self) -> &Value {
-        &self.value
-    }
-
-    pub fn game_length(&self) -> f32 {
-        self.game_length
-    }
-}
 
 impl Mapper {
     fn new() -> Self {
