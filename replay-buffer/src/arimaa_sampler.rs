@@ -1,9 +1,9 @@
-use arimaa::{Action, GameState, Mapper, Value};
+use arimaa::{Action, GameState, Mapper, Predictions, Value};
 use arimaa::{INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::{ActionWithPolicy, NodeMetrics};
-use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
+use tensorflow_model::{Dimension, InputMap, Mode};
 
 use crate::q_mix::{QMix, ValueStore};
 
@@ -33,7 +33,8 @@ impl Dimension for ArimaaSampler {
 impl Sample for ArimaaSampler {
     type State = GameState;
     type Action = Action;
-    type Value = Value;
+    type Predictions = Predictions;
+    type PropagatedValues = MovesLeftPropagatedValues;
     type ValueStore = ArimaaVStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
@@ -64,7 +65,7 @@ impl Sample for ArimaaSampler {
     }
 }
 
-impl InputMap<GameState> for ArimaaSampler {
+impl InputMap<State = GameState> for ArimaaSampler {
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         self.mapper.game_state_to_input(game_state, input, mode)
     }

@@ -87,9 +87,9 @@ where
         analysis.push((action, metrics));
     }
 
-    let score = game_engine
+    let terminal_score = game_engine
         .terminal_state(&game_state)
         .ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
-    Ok((SelfPlayMetrics::<A, P, PV>::new(analysis, score), game_state))
+    Ok((SelfPlayMetrics::<A, P, PV>::new(analysis, terminal_score), game_state))
 }

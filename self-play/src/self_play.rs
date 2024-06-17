@@ -108,7 +108,7 @@ where
                     "Model: {}, Number of Actions: {}, Score: {:?}, Move: {:?}, Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
                     model_info.model_name_w_num(),
                     self_play_metric.analysis().len(),
-                    self_play_metric.score(),
+                    self_play_metric.terminal_score(),
                     engine.move_number(&game_state),
                     starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                     num_of_games_played,
