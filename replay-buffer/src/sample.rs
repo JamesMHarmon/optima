@@ -2,33 +2,33 @@ use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
-use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
+use tensorflow_model::{Dimension, InputMap, PredictionsMap, Mode};
 
 use super::deblunder;
 use super::q_mix::{QMix, ValueStore};
 
 pub trait Sample
 where
-    Self: InputMap<Self::State>,
-    Self: PolicyMap<Self::State, Self::Action, Self::Value>,
-    Self: ValueMap<Self::State, Self::Value>,
+    Self: InputMap<State = Self::State>,
+    Self: PredictionsMap<State = Self::State, Action = Self::Action, Predictions = Self::Predictions>,
     Self: Dimension,
-    Self: QMix<Self::State, Self::Value>,
+    Self: QMix<Self::State, Self::Predictions>,
     Self: Sized,
-    Self::ValueStore: ValueStore<Self::State, Self::Value>,
+    Self::ValueStore: ValueStore<Self::State, Self::Predictions>,
 {
     type State;
     type Action;
-    type Value;
+    type Predictions;
+    type PropagatedValues;
     type ValueStore;
 
     fn metrics_to_samples(
         &self,
-        metrics: SelfPlayMetrics<Self::Action, Self::Value>,
+        metrics: SelfPlayMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
         min_visits: usize,
         q_diff_threshold: f32,
         q_diff_width: f32,
-    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Value>>
+    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>>
     where
         Self::State: GameState,
         Self::Value: Clone,
@@ -57,14 +57,14 @@ where
 
     fn symmetries(
         &self,
-        metric: PositionMetrics<Self::State, Self::Action, Self::Value>,
-    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Value>> {
+        metric: PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
+    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>> {
         vec![metric]
     }
 
     fn sample_filter(
         &self,
-        _metric: &PositionMetrics<Self::State, Self::Action, Self::Value>,
+        _metric: &PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> bool {
         true
     }
@@ -81,7 +81,7 @@ where
 
     fn metric_to_input_and_targets(
         &self,
-        metric: &PositionMetrics<Self::State, Self::Action, Self::Value>,
+        metric: &PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> InputAndTargets {
         let policy_output =
             self.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);
@@ -123,20 +123,21 @@ pub struct InputAndTargets {
     pub moves_left_output: Vec<f32>,
 }
 
-pub struct PositionMetricsExtended<S, A, V> {
-    pub metrics: PositionMetrics<S, A, V>,
+pub struct PositionMetricsExtended<S, A, P, PV> {
+    pub metrics: PositionMetrics<S, A, P, PV>,
+    pub target_score: P,
     pub chosen_action: A,
     pub move_number: usize,
 }
 
-fn get_positions<S, A, V, FM, FA>(
-    metrics: SelfPlayMetrics<A, V>,
+fn get_positions<S, A, P, PV, FM, FA>(
+    metrics: SelfPlayMetrics<A, P, PV>,
     move_number: FM,
     take_action: FA,
-) -> Vec<PositionMetricsExtended<S, A, V>>
+) -> Vec<PositionMetricsExtended<S, A, P, PV>>
 where
     S: GameState,
-    V: Clone,
+    P: Clone,
     FM: Fn(&S) -> usize,
     FA: Fn(&S, &A) -> S,
 {
@@ -151,29 +152,21 @@ where
         samples.push(PositionMetricsExtended {
             metrics: PositionMetrics {
                 game_state: pre_action_game_state,
-                score: score.clone(),
                 policy: metrics,
-                moves_left: 0,
             },
             chosen_action: action,
             move_number,
+            target_score: score.clone(),
         });
 
         pre_action_game_state = post_action_game_state;
     }
 
-    let max_move = samples.iter().map(|m| m.move_number).max().unwrap();
-
-    for metrics in samples.iter_mut() {
-        let moves_left = max_move - metrics.move_number + 1;
-        metrics.metrics.moves_left = moves_left;
-    }
-
     samples
 }
 
-fn filter_full_visits<S, A, V>(
-    metrics: &mut Vec<PositionMetricsExtended<S, A, V>>,
+fn filter_full_visits<S, A, P, PV>(
+    metrics: &mut Vec<PositionMetricsExtended<S, A, P, PV>>,
     min_visits: usize,
 ) {
     metrics.retain(|m| m.metrics.policy.visits >= min_visits)

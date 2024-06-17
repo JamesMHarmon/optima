@@ -295,7 +295,7 @@ impl<S> SampleLoader<S> {
     fn load_samples(
         &self,
         metrics_path: impl AsRef<Path>,
-    ) -> Result<Vec<PositionMetrics<S::State, S::Action, S::Value>>>
+    ) -> Result<Vec<PositionMetrics<S::State, S::Action, S::Predictions, S::PropagatedValues>>>
     where
         S: Sample,
         S::State: GameState,
@@ -305,7 +305,7 @@ impl<S> SampleLoader<S> {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
         let file = GzDecoder::new(file);
-        let metrics: SelfPlayMetrics<<S as Sample>::Action, <S as Sample>::Value> =
+        let metrics: SelfPlayMetrics<S::Action, S::Predictions, S::PropagatedValues> =
             serde_json::from_reader(file)
                 .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 
