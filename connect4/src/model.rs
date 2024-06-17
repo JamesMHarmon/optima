@@ -2,14 +2,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::PathBuf;
 
-use crate::prediction::Predictions;
-
-use super::action::Action;
-use super::board::map_board_to_arr;
-use super::constants::{INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE};
-use super::engine::Engine;
-use super::GameState;
-use super::value::Value;
+use super::{map_board_to_arr, Action, Engine, GameState, Predictions, Value, INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE};
 use common::{get_env_usize, MovesLeftPropagatedValue};
 use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;

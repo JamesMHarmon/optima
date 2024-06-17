@@ -45,11 +45,10 @@ impl Load for ModelFactory {
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
         let table_size = get_env_usize("TABLE_SIZE").unwrap_or(0);
 
-        let (model_temp_dir, model_options, model_info) = unarchive(&model_ref.0)?;
+        let (model_temp_dir, _, model_info) = unarchive(&model_ref.0)?;
 
         let tensorflow_model = TensorflowModel::load(
             model_temp_dir.path().to_path_buf(),
-            model_options,
             model_info,
             Engine::new(),
             Mapper::new(),

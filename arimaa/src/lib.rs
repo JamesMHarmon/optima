@@ -4,12 +4,15 @@
 mod board;
 mod engine;
 
+use board::*;
+
 pub mod constants;
 pub mod game_state;
 pub mod mappings;
 pub mod symmetries;
 pub mod transposition_entry;
 // pub mod ugi;
+pub mod predictions;
 pub mod value;
 
 pub use crate::engine::Engine;
@@ -20,6 +23,7 @@ pub use mappings::*;
 pub use symmetries::*;
 pub use transposition_entry::*;
 // pub use ugi::*;
+pub use predictions::*;
 pub use value::*;
 
 #[cfg(feature = "model")]
