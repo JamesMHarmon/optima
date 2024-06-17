@@ -80,7 +80,7 @@ impl Mapper {
         })
     }
 
-    fn policy_to_valid_actions(
+    pub fn policy_to_valid_actions(
         &self,
         game_state: &GameState,
         policy_scores: &[f16],

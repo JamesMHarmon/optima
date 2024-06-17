@@ -4,7 +4,7 @@ use arimaa::{GameState, Mapper};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use tensorflow::{SessionRunArgs, Tensor};
-use tensorflow_model::{InputMap, Mode, PolicyMap, Predictor};
+use tensorflow_model::{InputMap, Mode, Predictor};
 
 criterion_group!(benches, bench_tensorflow_infer);
 criterion_main!(benches);
@@ -35,7 +35,6 @@ fn bench_tensorflow_infer(c: &mut Criterion) {
     let predictor = Predictor::new(Path::new(
         "/home/james/arimaa-client/Arimaa_runs/run-1/5b64f_00100",
     ));
-    let session = predictor.session;
 
     let batch_size = 4096;
     let dimensions = [8, 8, 18];
@@ -64,21 +63,21 @@ fn bench_tensorflow_infer(c: &mut Criterion) {
                 });
 
             let mut output_step = SessionRunArgs::new();
-            output_step.add_feed(&session.op_input.operation, session.op_input.index, &input);
+            output_step.add_feed(&predictor.input.operation, predictor.input.index, &input);
             let value_head_fetch_token = output_step.request_fetch(
-                &session.op_value_head.operation,
-                session.op_value_head.index,
+                &predictor.outputs["value_head"].operation,
+                predictor.outputs["value_head"].index,
             );
             let policy_head_fetch_token = output_step.request_fetch(
-                &session.op_policy_head.operation,
-                session.op_policy_head.index,
+                &predictor.outputs["policy_head"].operation,
+                predictor.outputs["policy_head"].index,
             );
-            let moves_left_head_fetch_token = session
-                .op_moves_left_head
-                .as_ref()
-                .map(|op| output_step.request_fetch(&op.operation, op.index));
+            let moves_left_head_fetch_token = output_step.request_fetch(
+                &predictor.outputs["moves_left_head"].operation,
+                predictor.outputs["moves_left_head"].index,
+            );
 
-            session
+            predictor
                 .session
                 .run(&mut output_step)
                 .expect("Expected to be able to run the model session");
@@ -90,7 +89,7 @@ fn bench_tensorflow_infer(c: &mut Criterion) {
                 .fetch(policy_head_fetch_token)
                 .expect("Expected to be able to load policy_head output");
             let moves_left_head_output: Tensor<half::f16> = output_step
-                .fetch(moves_left_head_fetch_token.unwrap())
+                .fetch(moves_left_head_fetch_token)
                 .expect("Expected to be able to load moves_left_head output");
 
             let mut value_head_output_vec: Vec<half::f16> =
