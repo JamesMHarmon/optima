@@ -1,6 +1,6 @@
 use model::NodeMetrics;
 
-use super::q_mix::{QMix, PredictionStore};
+use super::q_mix::{PredictionStore, QMix};
 use super::sample::PositionMetricsExtended;
 
 #[allow(non_snake_case)]
@@ -27,7 +27,8 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
 
         let max_visits_child = metric.metrics.policy.child_max_visits();
 
-        prediction_stack.set_if_not::<S, P, Qm>(game_state, max_visits_child.Q());
+        prediction_stack
+            .set_if_not::<S, P, PV, Qm>(game_state, max_visits_child.propagatedValues());
 
         let q_diff = q_diff(metric.metrics.policy, &metric.chosen_action);
         if q_diff >= q_diff_threshold {
@@ -39,14 +40,12 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
         }
 
         let (prediction, total_moves) = prediction_stack.latest::<_, P>(game_state);
-        metric.metrics.score = prediction.clone();
-        metric.metrics.moves_left =
-            (total_moves as isize - metric.move_number as isize).max(1) as usize;
+        metric.target_score = prediction.clone();
     }
 }
 
 struct PredictionStack<Ps> {
-    p_stores: Vec<(Ps, f32)>
+    p_stores: Vec<(Ps, f32)>,
 }
 
 #[allow(non_snake_case)]
@@ -56,7 +55,7 @@ impl<Ps> PredictionStack<Ps> {
         Ps: PredictionStore<S, P>,
     {
         Self {
-            p_stores: vec![(Ps::default(), 0.0)]
+            p_stores: vec![(Ps::default(), 0.0)],
         }
     }
 
@@ -94,7 +93,7 @@ impl<Ps> PredictionStack<Ps> {
         }
     }
 
-    fn set_if_not<S, P, Qm>(&mut self, game_state: &S, predictions: &P)
+    fn set_if_not<S, P, PV, Qm>(&mut self, game_state: &S, propagated_values: &PV)
     where
         Ps: PredictionStore<S, P>,
         Qm: QMix<S, P>,
@@ -105,7 +104,7 @@ impl<Ps> PredictionStack<Ps> {
                 let latest_p = self
                     .latest_set_p(game_state)
                     .expect("P should be set or provided");
-                let mixed_p = Qm::mix_q(game_state, latest_p, &predictions, q_mix_amt);
+                let mixed_p = Qm::mix_q(game_state, latest_p, &propagated_values, q_mix_amt);
                 self.set_p(game_state, mixed_p);
             } else {
                 return;
