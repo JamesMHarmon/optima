@@ -2,25 +2,26 @@ use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
-use tensorflow_model::{Dimension, InputMap, PredictionsMap, Mode};
+use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
 use super::deblunder;
-use super::q_mix::{QMix, ValueStore};
+use super::q_mix::{PredictionStore, QMix};
 
 pub trait Sample
 where
     Self: InputMap<State = Self::State>,
-    Self: PredictionsMap<State = Self::State, Action = Self::Action, Predictions = Self::Predictions>,
+    Self:
+        PredictionsMap<State = Self::State, Action = Self::Action, Predictions = Self::Predictions>,
     Self: Dimension,
     Self: QMix<Self::State, Self::Predictions>,
     Self: Sized,
-    Self::ValueStore: ValueStore<Self::State, Self::Predictions>,
+    Self::PredictionStore: PredictionStore<Self::State, Self::Predictions>,
 {
     type State;
     type Action;
     type Predictions;
     type PropagatedValues;
-    type ValueStore;
+    type PredictionStore;
 
     fn metrics_to_samples(
         &self,
@@ -40,7 +41,7 @@ where
             |s, a| self.take_action(s, a),
         );
 
-        deblunder::deblunder::<_, _, _, Self::ValueStore, Self>(
+        deblunder::deblunder::<_, _, _, Self::PredictionStore, Self>(
             &mut metrics,
             q_diff_threshold,
             q_diff_width,
@@ -57,14 +58,25 @@ where
 
     fn symmetries(
         &self,
-        metric: PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
-    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>> {
+        metric: PositionMetrics<
+            Self::State,
+            Self::Action,
+            Self::Predictions,
+            Self::PropagatedValues,
+        >,
+    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>>
+    {
         vec![metric]
     }
 
     fn sample_filter(
         &self,
-        _metric: &PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
+        _metric: &PositionMetrics<
+            Self::State,
+            Self::Action,
+            Self::Predictions,
+            Self::PropagatedValues,
+        >,
     ) -> bool {
         true
     }
@@ -81,7 +93,12 @@ where
 
     fn metric_to_input_and_targets(
         &self,
-        metric: &PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>,
+        metric: &PositionMetrics<
+            Self::State,
+            Self::Action,
+            Self::Predictions,
+            Self::PropagatedValues,
+        >,
     ) -> InputAndTargets {
         let policy_output =
             self.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);

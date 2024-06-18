@@ -1,10 +1,12 @@
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::{ActionWithPolicy, NodeMetrics};
-use quoridor::{Action, GameState, Mapper, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
-use tensorflow_model::{Dimension, InputMap, Mode, PolicyMap, ValueMap};
+use quoridor::{
+    Action, GameState, Mapper, Predictions, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE,
+};
+use tensorflow_model::{Dimension, InputMap, Mode};
 
-use crate::q_mix::{QMix, ValueStore};
+use crate::q_mix::{PredictionStore, QMix};
 
 use super::sample::Sample;
 
@@ -31,8 +33,9 @@ impl Dimension for QuoridorSampler {
 impl Sample for QuoridorSampler {
     type State = GameState;
     type Action = Action;
-    type Value = Value;
-    type ValueStore = QuoridorVStore;
+    type Predictions = Predictions;
+    type PropagatedValues = MovesLeftPropagatedValues;
+    type PredictionStore = QuoridorVStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         self.engine.take_action(game_state, action)
@@ -70,39 +73,39 @@ impl InputMap for QuoridorSampler {
     }
 }
 
-impl PolicyMap<GameState, Action, Value> for QuoridorSampler {
-    type State = GameState;
-    type Action = Action;
-    type Predictions = Value;
-    type PropagatedValues = MovesLeftPropagatedValues;
+// impl PolicyMap<GameState, Action, Value> for QuoridorSampler {
+//     type State = GameState;
+//     type Action = Action;
+//     type Predictions = Value;
+//     type PropagatedValues = MovesLeftPropagatedValues;
 
-    fn policy_metrics_to_expected_output(
-        &self,
-        game_state: &Self::State,
-        metric: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
-    ) -> Vec<f32> {
-        self.mapper
-            .policy_metrics_to_expected_output(game_state, metric)
-    }
+//     fn policy_metrics_to_expected_output(
+//         &self,
+//         game_state: &Self::State,
+//         metric: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+//     ) -> Vec<f32> {
+//         self.mapper
+//             .policy_metrics_to_expected_output(game_state, metric)
+//     }
 
-    fn policy_to_valid_actions(&self, _: &GameState, _: &[f16]) -> Vec<ActionWithPolicy<Action>> {
-        panic!("Not implemented")
-    }
-}
+//     fn policy_to_valid_actions(&self, _: &GameState, _: &[f16]) -> Vec<ActionWithPolicy<Action>> {
+//         panic!("Not implemented")
+//     }
+// }
 
-impl ValueMap<GameState, Value> for QuoridorSampler {
-    fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
-        self.mapper.map_value_to_value_output(game_state, value)
-    }
+// impl ValueMap<GameState, Value> for QuoridorSampler {
+//     fn map_value_to_value_output(&self, game_state: &GameState, value: &Value) -> f32 {
+//         self.mapper.map_value_to_value_output(game_state, value)
+//     }
 
-    fn map_value_output_to_value(&self, _: &GameState, _: f32) -> Value {
-        panic!("Not implemented")
-    }
-}
+//     fn map_value_output_to_value(&self, _: &GameState, _: f32) -> Value {
+//         panic!("Not implemented")
+//     }
+// }
 
 #[allow(non_snake_case)]
-impl QMix<GameState, Value> for QuoridorSampler {
-    fn mix_q(game_state: &GameState, value: &Value, q_mix: f32, Q: f32) -> Value {
+impl QMix<GameState, Predictions> for QuoridorSampler {
+    fn mix_q(game_state: &GameState, value: &Predictions, q_mix: f32, Q: f32) -> Predictions {
         if q_mix == 0.0 {
             return value.clone();
         }
@@ -134,7 +137,7 @@ impl QMix<GameState, Value> for QuoridorSampler {
 pub struct QuoridorVStore([Option<Value>; 2]);
 
 #[allow(non_snake_case)]
-impl ValueStore<GameState, Value> for QuoridorVStore {
+impl PredictionStore<GameState, Value> for QuoridorVStore {
     fn get_v_for_player(&self, game_state: &GameState) -> Option<&Value> {
         let player = game_state.player_to_move();
         self.0[player - 1].as_ref()
