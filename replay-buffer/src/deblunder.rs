@@ -11,8 +11,8 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
 ) where
     A: PartialEq,
     P: Clone,
-    Ps: PredictionStore<S, P>,
-    Qm: QMix<S, P>,
+    Ps: PredictionStore<State = S, Predictions = P>,
+    Qm: QMix<State = S, Predictions = P, PropagatedValues = PV>,
 {
     if q_diff_threshold == 0.0 {
         return;
@@ -52,7 +52,7 @@ struct PredictionStack<Ps> {
 impl<Ps> PredictionStack<Ps> {
     fn new<S, P>() -> Self
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         Self {
             p_stores: vec![(Ps::default(), 0.0)],
@@ -61,7 +61,7 @@ impl<Ps> PredictionStack<Ps> {
 
     fn latest<S, P>(&self, game_state: &S) -> (&P, usize)
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         let v = self
             .p_stores
@@ -76,14 +76,14 @@ impl<Ps> PredictionStack<Ps> {
 
     fn push<S, P>(&mut self, q_mix_amt: f32)
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         self.p_stores.push((Ps::default(), q_mix_amt))
     }
 
     fn set_initial<S, P>(&mut self, game_state: &S, predictions: &P)
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
         P: Clone,
     {
         if let Some((p_store, _)) = self.p_stores.first() {
@@ -95,8 +95,8 @@ impl<Ps> PredictionStack<Ps> {
 
     fn set_if_not<S, P, PV, Qm>(&mut self, game_state: &S, propagated_values: &PV)
     where
-        Ps: PredictionStore<S, P>,
-        Qm: QMix<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
+        Qm: QMix<State = S, Predictions = P, PropagatedValues = PV>,
     {
         loop {
             if let Some((_, q_mix_amt)) = self.earliest_unset_p(game_state) {
@@ -114,7 +114,7 @@ impl<Ps> PredictionStack<Ps> {
 
     fn earliest_unset_p<S, P>(&mut self, game_state: &S) -> Option<&mut (Ps, f32)>
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         self.p_stores
             .iter_mut()
@@ -125,7 +125,7 @@ impl<Ps> PredictionStack<Ps> {
 
     fn latest_set_p<S, P>(&self, game_state: &S) -> Option<&P>
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         self.p_stores
             .iter()
@@ -135,7 +135,7 @@ impl<Ps> PredictionStack<Ps> {
 
     fn set_p<S, P>(&mut self, game_state: &S, mixed_P: P)
     where
-        Ps: PredictionStore<S, P>,
+        Ps: PredictionStore<State = S, Predictions = P>,
     {
         self.earliest_unset_p(game_state)
             .unwrap()
@@ -146,12 +146,12 @@ impl<Ps> PredictionStack<Ps> {
 
 // @TODO: Was a method on the NodeMetrics struct
 /// Difference between the Q of the specified action and the child that would be played with no temp.
-fn q_diff<A, P, PV>(&metrics: NodeMetrics<A, P, PV>, action: &A) -> f32
+fn q_diff<A, P, PV>(metrics: &NodeMetrics<A, P, PV>, action: &A) -> f32
 where
     A: PartialEq,
 {
-    let max_visits_Q = metrics.child_max_visits().Q();
-    let chosen_Q = metrics.children.iter().find(|c| c.action() == action);
-    let chosen_Q = chosen_Q.expect("Specified action was not found").Q();
-    max_visits_Q - chosen_Q
+    let max_visits_q = metrics.child_max_visits().Q();
+    let chosen_q = metrics.children.iter().find(|c| c.action() == action);
+    let chosen_q = chosen_q.expect("Specified action was not found").Q();
+    max_visits_q - chosen_q
 }

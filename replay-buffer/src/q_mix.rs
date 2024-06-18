@@ -1,16 +1,23 @@
 #[allow(non_snake_case)]
-pub trait QMix<S, P, PV> {
+pub trait QMix {
+    type State;
+    type Predictions;
+    type PropagatedValues;
+
     fn mix_q(
-        game_state: &S,
-        post_blunder_prediction: &P,
-        pre_blunder_propagated_values: &PV,
+        game_state: &Self::State,
+        post_blunder_prediction: &Self::Predictions,
+        pre_blunder_propagated_values: &Self::PropagatedValues,
         q_mix: f32,
-    ) -> P;
+    ) -> Self::Predictions;
 }
 
 #[allow(non_snake_case)]
-pub trait PredictionStore<S, P>: Default {
-    fn get_v_for_player(&self, game_state: &S) -> Option<&P>;
+pub trait PredictionStore: Default {
+    type State;
+    type Predictions;
 
-    fn set_v_for_player(&mut self, game_state: &S, prediction: P);
+    fn get_p_for_player(&self, game_state: &Self::State) -> Option<&Self::Predictions>;
+
+    fn set_p_for_player(&mut self, game_state: &Self::State, prediction: Self::Predictions);
 }

@@ -2,24 +2,22 @@
 #[allow(non_snake_case)]
 mod test {
     use approx::assert_abs_diff_eq;
-    use std::fmt::Debug;
-    use std::str::FromStr;
-
-    use arimaa::{Action, GameState, Value};
+    use common::MovesLeftPropagatedValue;
+    use arimaa::{Action, GameState, Predictions, Value};
     use engine::{GameState as GameStateTrait, Value as ValueTrait};
     use model::{EdgeMetrics, NodeMetrics, PositionMetrics};
 
     use crate::{
-        arimaa_sampler::{ArimaaSampler, ArimaaVStore},
+        arimaa_sampler::{ArimaaSampler, ArimaaPStore},
         sample::PositionMetricsExtended,
     };
 
     fn deblunder(
-        metrics: &mut [PositionMetricsExtended<GameState, Action, Value>],
+        metrics: &mut [PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue>],
         q_diff_threshold: f32,
         q_diff_width: f32,
     ) {
-        crate::deblunder::deblunder::<_, _, _, ArimaaVStore, ArimaaSampler>(
+        crate::deblunder::deblunder::<_, _, _, ArimaaPStore, ArimaaSampler>(
             metrics,
             q_diff_threshold,
             q_diff_width,
@@ -35,21 +33,21 @@ mod test {
         game_state
     }
 
-    fn node_child<A, As>(action: As, Q: f32, M: f32, visits: usize) -> EdgeMetrics<A>
+    fn node_child<As>(action: As, Q: f32, M: f32, visits: usize) -> EdgeMetrics<Action, MovesLeftPropagatedValue>
     where
-        A: FromStr,
-        A::Err: Debug,
         As: AsRef<str>,
     {
-        let action = action.as_ref().parse::<A>().unwrap();
-        EdgeMetrics::new(action, Q, M, visits)
+        let action = action.as_ref().parse::<Action>().unwrap();
+        let propagated_values = MovesLeftPropagatedValue::new(Q, M);
+        EdgeMetrics::new(action, visits, propagated_values)
     }
 
-    fn node_metrics<A>(children: Vec<EdgeMetrics<A>>) -> NodeMetrics<A, Value> {
+    fn node_metrics(children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
+        let predictions = Predictions::new(Value::new([0.0, 0.0]), 0.0);
+
         NodeMetrics {
             visits: 0,
-            value: Value::new([0.0, 0.0]),
-            moves_left: 0.0,
+            predictions,
             children,
         }
     }
@@ -60,15 +58,16 @@ mod test {
         moves_left: usize,
         move_number: usize,
         chosen_action: impl AsRef<str>,
-        children: Vec<EdgeMetrics<Action>>,
-    ) -> PositionMetricsExtended<GameState, Action, Value> {
+        children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>,
+    ) -> PositionMetricsExtended<GameState, Action, Value, MovesLeftPropagatedValue> {
+        let target_score = Predictions::new(score, moves_left);
+
         PositionMetricsExtended {
             metrics: PositionMetrics {
                 game_state: game_state(is_player_one),
-                score,
-                policy: node_metrics(children),
-                moves_left,
+                policy: node_metrics(children)
             },
+            target_score,
             chosen_action: chosen_action.as_ref().parse().unwrap(),
             move_number,
         }
