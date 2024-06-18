@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 [dependencies]
 engine = { path = "../engine" }
 model = { path = "../model" }
+common = { path = "../common" }
 tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
     "traits",
 ] }

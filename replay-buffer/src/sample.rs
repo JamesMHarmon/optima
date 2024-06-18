@@ -9,13 +9,12 @@ use super::q_mix::{PredictionStore, QMix};
 
 pub trait Sample
 where
-    Self: InputMap<State = Self::State>,
-    Self:
-        PredictionsMap<State = Self::State, Action = Self::Action, Predictions = Self::Predictions>,
-    Self: Dimension,
-    Self: QMix<Self::State, Self::Predictions>,
     Self: Sized,
-    Self::PredictionStore: PredictionStore<Self::State, Self::Predictions>,
+    Self: Dimension,
+    Self: InputMap<State = <Self as Sample>::State>,
+    Self: PredictionsMap<State = <Self as Sample>::State, Action = <Self as Sample>::Action, Predictions = <Self as Sample>::Predictions>,
+    Self: QMix<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions, PropagatedValues = <Self as Sample>::PropagatedValues>,
+    Self::PredictionStore: PredictionStore<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions>,
 {
     type State;
     type Action;
@@ -25,15 +24,15 @@ where
 
     fn metrics_to_samples(
         &self,
-        metrics: SelfPlayMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        metrics: SelfPlayMetrics<<Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>,
         min_visits: usize,
         q_diff_threshold: f32,
         q_diff_width: f32,
-    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>>
+    ) -> Vec<PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>>
     where
-        Self::State: GameState,
-        Self::Value: Clone,
-        Self::Action: PartialEq,
+        <Self as Sample>::State: GameState,
+        <Self as Sample>::Action: PartialEq,
+        <Self as Sample>::Predictions: Clone,
     {
         let mut metrics = get_positions(
             metrics,
@@ -41,7 +40,7 @@ where
             |s, a| self.take_action(s, a),
         );
 
-        deblunder::deblunder::<_, _, _, Self::PredictionStore, Self>(
+        deblunder::deblunder::<_, _, _, _, <Self as Sample>::PredictionStore, Self>(
             &mut metrics,
             q_diff_threshold,
             q_diff_width,
@@ -59,12 +58,12 @@ where
     fn symmetries(
         &self,
         metric: PositionMetrics<
-            Self::State,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
         >,
-    ) -> Vec<PositionMetrics<Self::State, Self::Action, Self::Predictions, Self::PropagatedValues>>
+    ) -> Vec<PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>>
     {
         vec![metric]
     }
@@ -72,18 +71,18 @@ where
     fn sample_filter(
         &self,
         _metric: &PositionMetrics<
-            Self::State,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
         >,
     ) -> bool {
         true
     }
 
-    fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State;
+    fn take_action(&self, game_state: &<Self as Sample>::State, action: &<Self as Sample>::Action) -> <Self as Sample>::State;
 
-    fn move_number(&self, game_state: &Self::State) -> usize;
+    fn move_number(&self, game_state: &<Self as Sample>::State) -> usize;
 
     fn moves_left_size(&self) -> usize;
 
@@ -91,53 +90,47 @@ where
 
     fn policy_size(&self) -> usize;
 
-    fn metric_to_input_and_targets(
-        &self,
-        metric: &PositionMetrics<
-            Self::State,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
-        >,
-    ) -> InputAndTargets {
-        let policy_output =
-            self.policy_metrics_to_expected_output(&metric.game_state, &metric.policy);
-        let value_output = self.map_value_to_value_output(&metric.game_state, &metric.score);
-        let moves_left_output =
-            map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
-        let input_len = self.input_size();
+    // @TODO: Do this fun stuff.
+    // fn metric_to_input_and_targets(
+    //     &self,
+    //     metric: &PositionMetrics<
+    //         <Self as Sample>::State,
+    //         <Self as Sample>::Action,
+    //         <Self as Sample>::Predictions,
+    //         <Self as Sample>::PropagatedValues,
+    //     >,
+    // ) -> InputAndTargets {
+    //     let policy_output =
+    //         self.to_output(&metric.game_state, &metric.policy);
+    //     let value_output = self.to_output(&metric.game_state, &metric.score);
+    //     let moves_left_output =
+    //         map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
+    //     let input_len = self.input_size();
 
-        let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
-        assert!(
-            f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
-            "Policy output should sum to 1.0 but actual sum is {}",
-            sum_of_policy
-        );
+    //     let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+    //     assert!(
+    //         f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
+    //         "Policy output should sum to 1.0 but actual sum is {}",
+    //         sum_of_policy
+    //     );
 
-        let mut input = vec![f16::ZERO; input_len];
-        self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
-        let input = input.into_iter().map(f16::to_f32).collect();
+    //     let mut input = vec![f16::ZERO; input_len];
+    //     self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
+    //     let input = input.into_iter().map(f16::to_f32).collect();
 
-        assert!(
-            (-1.0..=1.0).contains(&value_output),
-            "Value output should be in range -1.0-1.0 but was {}",
-            &value_output
-        );
+    //     assert!(
+    //         (-1.0..=1.0).contains(&value_output),
+    //         "Value output should be in range -1.0-1.0 but was {}",
+    //         &value_output
+    //     );
 
-        InputAndTargets {
-            input,
-            policy_output,
-            value_output,
-            moves_left_output,
-        }
-    }
-}
-
-pub struct InputAndTargets {
-    pub input: Vec<f32>,
-    pub policy_output: Vec<f32>,
-    pub value_output: f32,
-    pub moves_left_output: Vec<f32>,
+    //     InputAndTargets {
+    //         input,
+    //         policy_output,
+    //         value_output,
+    //         moves_left_output,
+    //     }
+    // }
 }
 
 pub struct PositionMetricsExtended<S, A, P, PV> {

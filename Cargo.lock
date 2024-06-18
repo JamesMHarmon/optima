@@ -2340,6 +2340,7 @@ dependencies = [
  "arimaa",
  "bytemuck",
  "byteorder",
+ "common",
  "engine",
  "env_logger",
  "flate2",
