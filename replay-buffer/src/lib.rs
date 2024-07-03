@@ -199,9 +199,10 @@ impl<S> SampleLoader<S> {
     ) -> Result<Option<InputAndTargets>>
     where
         S: Sample,
-        S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize + PartialEq,
-        S::Value: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::State: GameState,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
     {
         let input_size = self.sampler.input_size();
         let policy_size = self.sampler.policy_size();
@@ -237,9 +238,10 @@ impl<S> SampleLoader<S> {
     ) -> Result<SampleFileReader<BufReader<File>>>
     where
         S: Sample,
-        S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize + PartialEq,
-        S::Value: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::State: GameState,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
@@ -295,17 +297,18 @@ impl<S> SampleLoader<S> {
     fn load_samples(
         &self,
         metrics_path: impl AsRef<Path>,
-    ) -> Result<Vec<PositionMetrics<S::State, S::Action, S::Predictions, S::PropagatedValues>>>
+    ) -> Result<Vec<PositionMetrics<<S as Sample>::State, <S as Sample>::Action, <S as Sample>::Predictions, <S as Sample>::PropagatedValues>>>
     where
         S: Sample,
-        S::State: GameState,
-        S::Action: de::DeserializeOwned + Serialize + PartialEq,
-        S::Value: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::State: GameState,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
     {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
         let file = GzDecoder::new(file);
-        let metrics: SelfPlayMetrics<S::Action, S::Predictions, S::PropagatedValues> =
+        let metrics: SelfPlayMetrics<<S as Sample>::Action, <S as Sample>::Predictions, <S as Sample>::PropagatedValues> =
             serde_json::from_reader(file)
                 .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 
