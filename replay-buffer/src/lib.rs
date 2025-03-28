@@ -219,6 +219,7 @@ impl<S> SampleLoader<S> {
 
         let inputs_and_targets = sample_reader.read_sample(rand_sample_idx)?.into_iter().collect();
 
+        // @TODO: Add back asserts
         // let input_size = self.sampler.input_size();
         // let policy_size = self.sampler.policy_size();
         // let moves_left_size = self.sampler.moves_left_size();

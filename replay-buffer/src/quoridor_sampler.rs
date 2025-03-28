@@ -1,4 +1,4 @@
-use common::MovesLeftPropagatedValue;
+use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::NodeMetrics;
@@ -38,18 +38,18 @@ impl Sample for QuoridorSampler {
     type PropagatedValues = MovesLeftPropagatedValue;
     type PredictionStore = QuoridorVStore;
 
-    fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
+    fn take_action(&self, game_state: &<Self as Sample>::State, action: &<Self as Sample>::Action) -> <Self as Sample>::State {
         self.engine.take_action(game_state, action)
     }
 
-    fn move_number(&self, game_state: &Self::State) -> usize {
+    fn move_number(&self, game_state: &<Self as Sample>::State) -> usize {
         self.engine.move_number(game_state)
     }
 
     fn symmetries(
         &self,
-        metric: model::PositionMetrics<Self::State, Self::Action, Self::Value>,
-    ) -> Vec<model::PositionMetrics<Self::State, Self::Action, Self::Value>> {
+        metric: model::PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>,
+    ) -> Vec<model::PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>> {
         quoridor::get_symmetries(metric)
     }
 
@@ -117,7 +117,7 @@ impl QMix for QuoridorSampler {
         );
 
         assert!(
-            &post_blunder_game_length >= 0 && pre_blunder_game_length >= 0,
+            post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,
             "blunder_game_length must be gte 0"
         );
 
