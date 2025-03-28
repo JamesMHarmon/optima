@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
@@ -14,7 +16,7 @@ where
     Self: InputMap<State = <Self as Sample>::State>,
     Self: PredictionsMap<State = <Self as Sample>::State, Action = <Self as Sample>::Action, Predictions = <Self as Sample>::Predictions>,
     Self: QMix<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions, PropagatedValues = <Self as Sample>::PropagatedValues>,
-    Self::PredictionStore: PredictionStore<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions>,
+    Self::PredictionStore: PredictionStore<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions>
 {
     type State;
     type Action;
@@ -90,47 +92,56 @@ where
 
     fn policy_size(&self) -> usize;
 
-    // @TODO: Do this fun stuff.
-    // fn metric_to_input_and_targets(
-    //     &self,
-    //     metric: &PositionMetrics<
-    //         <Self as Sample>::State,
-    //         <Self as Sample>::Action,
-    //         <Self as Sample>::Predictions,
-    //         <Self as Sample>::PropagatedValues,
-    //     >,
-    // ) -> InputAndTargets {
-    //     let policy_output =
-    //         self.to_output(&metric.game_state, &metric.policy);
-    //     let value_output = self.to_output(&metric.game_state, &metric.score);
-    //     let moves_left_output =
-    //         map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
-    //     let input_len = self.input_size();
+    fn metric_to_input_and_targets(
+        &self,
+        metric: &PositionMetrics<
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
+    ) -> InputAndTargets where
+        Self: PredictionsMap<State = <Self as Sample>::State, Action = <Self as Sample>::Action, Predictions = <Self as Sample>::Predictions, PropagatedValues = <Self as Sample>::PropagatedValues>,
+    {
+        let targets =
+            self.to_output(&metric.game_state, &metric.policy);
 
-    //     let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
-    //     assert!(
-    //         f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
-    //         "Policy output should sum to 1.0 but actual sum is {}",
-    //         sum_of_policy
-    //     );
+        
+        // let value_output = self.to_output(&metric.game_state, &metric.score);
+        // let moves_left_output =
+        //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
 
-    //     let mut input = vec![f16::ZERO; input_len];
-    //     self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
-    //     let input = input.into_iter().map(f16::to_f32).collect();
+        let input_len = self.input_size();
 
-    //     assert!(
-    //         (-1.0..=1.0).contains(&value_output),
-    //         "Value output should be in range -1.0-1.0 but was {}",
-    //         &value_output
-    //     );
+        // @TODO: Move this to where the policy output is generated
+        // let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+        // assert!(
+        //     f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
+        //     "Policy output should sum to 1.0 but actual sum is {}",
+        //     sum_of_policy
+        // );
 
-    //     InputAndTargets {
-    //         input,
-    //         policy_output,
-    //         value_output,
-    //         moves_left_output,
-    //     }
-    // }
+        let mut input = vec![f16::ZERO; input_len];
+        self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
+        let input = input.into_iter().map(f16::to_f32).collect();
+
+        // @TODO: Move this to where the value output is generated
+        // assert!(
+        //     (-1.0..=1.0).contains(&value_output),
+        //     "Value output should be in range -1.0-1.0 but was {}",
+        //     &value_output
+        // );
+
+        InputAndTargets {
+            input,
+            targets
+        }
+    }
+}
+
+pub struct InputAndTargets {
+    input: Vec<f32>,
+    targets: HashMap<String, Vec<f32>>,
 }
 
 pub struct PositionMetricsExtended<S, A, P, PV> {

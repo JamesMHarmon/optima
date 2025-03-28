@@ -118,7 +118,7 @@ impl ReplayBuffer {
                         }
                     }
 
-                    let num_failures = failures.fetch_add(1, Ordering::SeqCst);
+                    let num_failures: usize = failures.fetch_add(1, Ordering::SeqCst);
 
                     if num_failures > samples {
                         panic!("Failed too many times attempting to load samples");
@@ -193,20 +193,19 @@ struct SampleLoader<S> {
 }
 
 impl<S> SampleLoader<S> {
-    fn load_and_sample_metrics(
+    fn load_and_sample_metrics<I>(
         &self,
         metrics_path: impl AsRef<Path>,
     ) -> Result<Option<InputAndTargets>>
     where
         S: Sample,
+        I: FromIterator<f32>,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
     {
-        let input_size = self.sampler.input_size();
-        let policy_size = self.sampler.policy_size();
-        let moves_left_size = self.sampler.moves_left_size();
+
 
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
 
@@ -218,16 +217,20 @@ impl<S> SampleLoader<S> {
 
         let rand_sample_idx = rand::thread_rng().gen_range(0..num_samples);
 
-        let mut vals = sample_reader.read_sample(rand_sample_idx)?.into_iter();
+        let inputs_and_targets = sample_reader.read_sample(rand_sample_idx)?.into_iter().collect();
 
-        let inputs_and_targets = InputAndTargets {
-            input: vals.by_ref().take(input_size).collect(),
-            policy_output: vals.by_ref().take(policy_size).collect(),
-            value_output: vals.next().unwrap(),
-            moves_left_output: vals.by_ref().take(moves_left_size).collect(),
-        };
+        // let input_size = self.sampler.input_size();
+        // let policy_size = self.sampler.policy_size();
+        // let moves_left_size = self.sampler.moves_left_size();
 
-        assert!(vals.next().is_none(), "No more vals should be left");
+        // let inputs_and_targets = InputAndTargets {
+        //     input: vals.by_ref().take(input_size).collect(),
+        //     policy_output: vals.by_ref().take(policy_size).collect(),
+        //     value_output: vals.next().unwrap(),
+        //     moves_left_output: vals.by_ref().take(moves_left_size).collect(),
+        // };
+
+        // assert!(vals.next().is_none(), "No more vals should be left");
 
         Ok(Some(inputs_and_targets))
     }
