@@ -3,7 +3,7 @@ use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::NodeMetrics;
 use quoridor::{
-    Action, GameState, Mapper, Predictions, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE,
+    Action, GameState, Mapper, Predictions, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE,
 };
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
@@ -125,11 +125,11 @@ impl QMix for QuoridorSampler {
         let mixed_game_length = (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
 
         assert!(
-            (0.0..=1.0).contains(&q_mix) && (0.0..=1.0).contains(&pre_blunder_propagated_values),
+            (0.0..=1.0).contains(&q_mix),
             "Q mix must be between 0.0 and 1.0"
         );
 
-        let value = post_blunder_prediction.value().clone();
+        let mut value = post_blunder_prediction.value().clone();
         value.update_players_value(player_to_move, mixed_value);
         let predictions = Predictions::new(value, mixed_game_length);
 
@@ -137,9 +137,8 @@ impl QMix for QuoridorSampler {
     }
 }
 
-
 #[derive(Default)]
-pub struct QuoridorVStore([Option<Value>; 2]);
+pub struct QuoridorVStore([Option<Predictions>; 2]);
 
 #[allow(non_snake_case)]
 impl PredictionStore for QuoridorVStore {

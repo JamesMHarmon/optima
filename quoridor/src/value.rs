@@ -8,7 +8,7 @@ impl Value {
         Self(values)
     }
 
-    pub fn update_players_value(&mut self, value: f32, player: usize) {
+    pub fn update_players_value(&mut self, player: usize, value: f32) {
         self.0[player - 1] = value
     }
 }

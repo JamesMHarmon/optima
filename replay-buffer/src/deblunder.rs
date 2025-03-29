@@ -28,15 +28,15 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
         let max_visits_child = metric.metrics.policy.child_max_visits();
 
         prediction_stack
-            .set_if_not::<S, P, PV, Qm>(game_state, max_visits_child.propagatedValues());
+            .set_if_not(game_state, max_visits_child.propagatedValues());
 
-        let q_diff = q_diff(metric.metrics.policy, &metric.chosen_action);
+        let q_diff = q_diff(&metric.metrics.policy, &metric.chosen_action);
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 
             prediction_stack.push(q_mix_amt);
 
-            prediction_stack.set_if_not::<S, P, Qm>(game_state, max_visits_child.Q());
+            prediction_stack.set_if_not(game_state, max_visits_child.Q());
         }
 
         let (prediction, total_moves) = prediction_stack.latest::<_, P>(game_state);
