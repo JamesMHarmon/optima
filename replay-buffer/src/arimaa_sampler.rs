@@ -6,7 +6,7 @@ use half::f16;
 use model::NodeMetrics;
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
-use crate::q_mix::{QMix, PredictionStore};
+use crate::q_mix::{PredictionStore, QMix};
 
 use super::sample::Sample;
 
@@ -38,7 +38,11 @@ impl Sample for ArimaaSampler {
     type PropagatedValues = MovesLeftPropagatedValue;
     type PredictionStore = ArimaaPStore;
 
-    fn take_action(&self, game_state: &<Self as Sample>::State, action: &<Self as Sample>::Action) -> <Self as Sample>::State {
+    fn take_action(
+        &self,
+        game_state: &<Self as Sample>::State,
+        action: &<Self as Sample>::Action,
+    ) -> <Self as Sample>::State {
         self.engine.take_action(game_state, action)
     }
 
@@ -48,8 +52,20 @@ impl Sample for ArimaaSampler {
 
     fn symmetries(
         &self,
-        metric: model::PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>,
-    ) -> Vec<model::PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>> {
+        metric: model::PositionMetrics<
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
+    ) -> Vec<
+        model::PositionMetrics<
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
+    > {
         arimaa::get_symmetries(metric)
     }
 
@@ -71,7 +87,7 @@ impl InputMap for ArimaaSampler {
 
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], mode: Mode) {
         self.mapper.game_state_to_input(game_state, input, mode)
-    }    
+    }
 }
 
 impl PredictionsMap for ArimaaSampler {
@@ -104,9 +120,10 @@ impl QMix for ArimaaSampler {
             return post_blunder_prediction.clone();
         }
 
+        // @TODO: Fix this value and game_length. This may need to be divided by Nsa.
         let pre_blunder_value = pre_blunder_propagated_values.value();
         let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
-        
+
         let player_to_move = game_state.player_to_move();
         let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
         let post_blunder_game_length = post_blunder_prediction.game_length();
@@ -122,7 +139,8 @@ impl QMix for ArimaaSampler {
         );
 
         let mixed_value = ((1.0 - q_mix) * post_blunder_value) + (q_mix * pre_blunder_value);
-        let mixed_game_length = (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
+        let mixed_game_length =
+            (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
 
         assert!(
             (0.0..=1.0).contains(&q_mix),

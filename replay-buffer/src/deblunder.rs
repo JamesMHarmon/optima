@@ -1,3 +1,4 @@
+use common::PropagatedValue;
 use model::NodeMetrics;
 
 use super::q_mix::{PredictionStore, QMix};
@@ -13,6 +14,7 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
     P: Clone,
     Ps: PredictionStore<State = S, Predictions = P>,
     Qm: QMix<State = S, Predictions = P, PropagatedValues = PV>,
+    PV: PropagatedValue,
 {
     if q_diff_threshold == 0.0 {
         return;
@@ -28,7 +30,7 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
         let max_visits_child = metric.metrics.policy.child_max_visits();
 
         prediction_stack
-            .set_if_not(game_state, max_visits_child.propagatedValues());
+            .set_if_not::<S, P, PV, Qm>(game_state, max_visits_child.propagatedValues());
 
         let q_diff = q_diff(&metric.metrics.policy, &metric.chosen_action);
         if q_diff >= q_diff_threshold {
@@ -36,10 +38,11 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
 
             prediction_stack.push(q_mix_amt);
 
-            prediction_stack.set_if_not(game_state, max_visits_child.Q());
+            prediction_stack
+                .set_if_not::<S, P, PV, Qm>(game_state, max_visits_child.propagatedValues());
         }
 
-        let (prediction, total_moves) = prediction_stack.latest::<_, P>(game_state);
+        let prediction = prediction_stack.latest::<_, P>(game_state);
         metric.target_score = prediction.clone();
     }
 }
@@ -59,7 +62,7 @@ impl<Ps> PredictionStack<Ps> {
         }
     }
 
-    fn latest<S, P>(&self, game_state: &S) -> (&P, usize)
+    fn latest<S, P>(&self, game_state: &S) -> &P
     where
         Ps: PredictionStore<State = S, Predictions = P>,
     {
@@ -71,7 +74,7 @@ impl<Ps> PredictionStack<Ps> {
             .get_p_for_player(game_state)
             .expect("V should always be set before latest is called");
 
-        (v, self.total_moves)
+        v
     }
 
     fn push<S, P>(&mut self, q_mix_amt: f32)
@@ -81,6 +84,7 @@ impl<Ps> PredictionStack<Ps> {
         self.p_stores.push((Ps::default(), q_mix_amt))
     }
 
+    /// Set the initial predictions if they are not already set for the current player.
     fn set_initial<S, P>(&mut self, game_state: &S, predictions: &P)
     where
         Ps: PredictionStore<State = S, Predictions = P>,
@@ -100,11 +104,10 @@ impl<Ps> PredictionStack<Ps> {
     {
         loop {
             if let Some((_, q_mix_amt)) = self.earliest_unset_p(game_state) {
-                let q_mix_amt = *q_mix_amt;
                 let latest_p = self
                     .latest_set_p(game_state)
                     .expect("P should be set or provided");
-                let mixed_p = Qm::mix_q(game_state, latest_p, &propagated_values, q_mix_amt);
+                let mixed_p = Qm::mix_q(game_state, latest_p, &propagated_values, *q_mix_amt);
                 self.set_p(game_state, mixed_p);
             } else {
                 return;
@@ -149,9 +152,13 @@ impl<Ps> PredictionStack<Ps> {
 fn q_diff<A, P, PV>(metrics: &NodeMetrics<A, P, PV>, action: &A) -> f32
 where
     A: PartialEq,
+    PV: PropagatedValue,
 {
-    let max_visits_q = metrics.child_max_visits().Q();
+    // @TODO: Fix this value. This may need to be divided by Nsa.
+    let max_visits_q = metrics.child_max_visits().propagatedValues().value();
     let chosen_q = metrics.children.iter().find(|c| c.action() == action);
-    let chosen_q = chosen_q.expect("Specified action was not found").Q();
+    let chosen_q = chosen_q
+        .expect("Specified action was not found")
+        .avg_value();
     max_visits_q - chosen_q
 }
