@@ -69,14 +69,6 @@ impl Sample for ArimaaSampler {
         arimaa::get_symmetries(metric)
     }
 
-    fn moves_left_size(&self) -> usize {
-        MOVES_LEFT_SIZE
-    }
-
-    fn policy_size(&self) -> usize {
-        OUTPUT_SIZE
-    }
-
     fn input_size(&self) -> usize {
         INPUT_SIZE
     }

@@ -68,10 +68,7 @@ impl ReplayBuffer {
         let cache_dir = PathBuf::from(cache_dir);
 
         let sampler = Sampler::new(mode);
-        let input_size = sampler.input_size();
-        let policy_size = sampler.policy_size();
-        let moves_left_size = sampler.moves_left_size();
-        let num_values_in_sample = input_size + policy_size + 1 + moves_left_size;
+        let num_values_in_sample = sampler.sample_size();
         let index_res = Index::new(PathBuf::from(games_dir));
         let index = index_res
             .map_err(|_| PyErr::new::<PyFileNotFoundError, _>("Failed to index game files."))?;
@@ -128,27 +125,47 @@ impl ReplayBuffer {
             })
             .collect();
 
-        let mut x = Vec::with_capacity(num_samples * sampler.input_size());
-        let mut yp = Vec::with_capacity(num_samples * sampler.policy_size());
-        let mut yv = Vec::with_capacity(num_samples);
-        let mut ym = Vec::with_capacity(num_samples * sampler.moves_left_size());
+        let mut data: HashMap<String, Vec<f32>> = HashMap::new();
+        let targets = samples
+            .first()
+            .expect("At least one sample must exist.")
+            .targets();
 
-        for input_outputs in samples {
-            x.extend_from_slice(&input_outputs.input);
-            yp.extend_from_slice(&input_outputs.policy_output);
-            yv.push(input_outputs.value_output);
-            ym.extend_from_slice(&input_outputs.moves_left_output);
+        for (key, target) in targets.iter() {
+            let size = target.len();
+            data.insert(key.to_owned(), Vec::with_capacity(num_samples * size));
         }
 
-        let dict = Ok(HashMap::from([
-            ("X", x.into_pyarray(py)),
-            ("yp", yp.into_pyarray(py)),
-            ("yv", yv.into_pyarray(py)),
-            ("ym", ym.into_pyarray(py)),
-        ])
-        .into_py_dict(py));
+        let input_output_keys: Vec<String> =
+            targets.iter().map(|(key, _)| key.to_owned()).collect();
+        for input_outputs in samples {
+            let input_targets = input_outputs.targets();
+            for key in input_output_keys.iter() {
+                let value = input_targets
+                    .get(key)
+                    .unwrap_or_else(|| panic!("No matching key found in input_targets: {}", key));
+                data.get_mut(key).unwrap().extend_from_slice(value);
+            }
+        }
 
-        dict
+        for (key, target) in data.iter() {
+            let expected_size =
+                samples.first().unwrap().targets().get(key).unwrap().len() * num_samples;
+            let actual_size = target.len();
+            assert_eq!(
+                expected_size, actual_size,
+                "Samples must be fully filled with values. Expected size: {}, Actual size: {}",
+                expected_size, actual_size
+            );
+        }
+
+        let dict = data
+            .into_iter()
+            .map(|(k, v)| (k, v.into_pyarray(py)))
+            .collect::<HashMap<_, _>>()
+            .into_py_dict(py);
+
+        Ok(dict)
     }
 
     fn games(&mut self) -> PyResult<usize> {
@@ -194,13 +211,12 @@ struct SampleLoader<S> {
 }
 
 impl<S> SampleLoader<S> {
-    fn load_and_sample_metrics<I>(
+    fn load_and_sample_metrics(
         &self,
         metrics_path: impl AsRef<Path>,
     ) -> Result<Option<InputAndTargets>>
     where
         S: Sample,
-        I: FromIterator<f32>,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
@@ -216,24 +232,7 @@ impl<S> SampleLoader<S> {
 
         let rand_sample_idx = rand::thread_rng().gen_range(0..num_samples);
 
-        let inputs_and_targets = sample_reader
-            .read_sample(rand_sample_idx)?
-            .into_iter()
-            .collect();
-
-        // @TODO: Add back asserts
-        // let input_size = self.sampler.input_size();
-        // let policy_size = self.sampler.policy_size();
-        // let moves_left_size = self.sampler.moves_left_size();
-
-        // let inputs_and_targets = InputAndTargets {
-        //     input: vals.by_ref().take(input_size).collect(),
-        //     policy_output: vals.by_ref().take(policy_size).collect(),
-        //     value_output: vals.next().unwrap(),
-        //     moves_left_output: vals.by_ref().take(moves_left_size).collect(),
-        // };
-
-        // assert!(vals.next().is_none(), "No more vals should be left");
+        let inputs_and_targets = sample_reader.read_sample(rand_sample_idx)?.into();
 
         Ok(Some(inputs_and_targets))
     }

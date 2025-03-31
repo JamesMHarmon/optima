@@ -96,9 +96,7 @@ where
             <Self as Sample>::Predictions,
             <Self as Sample>::PropagatedValues,
         >,
-    > {
-        vec![metric]
-    }
+    >;
 
     fn sample_filter(
         &self,
@@ -120,11 +118,64 @@ where
 
     fn move_number(&self, game_state: &<Self as Sample>::State) -> usize;
 
-    fn moves_left_size(&self) -> usize;
-
     fn input_size(&self) -> usize;
 
-    fn policy_size(&self) -> usize;
+    fn outputs(&self) -> Vec<(String, usize)>;
+
+    fn output_values(&self, input_and_targets: &InputAndTargets, name: &str) -> &[f32] {
+        let (offset, size) = self.output_offset_and_size(name);
+        &input_and_targets.values[offset..offset + size]
+    }
+
+    fn output_offset_and_size(&self, name: &str) -> (usize, usize) {
+        let mut offset = self.input_size();
+        for (n, size) in self.outputs() {
+            if n == name {
+                return (offset, size);
+            }
+            offset += size;
+        }
+        panic!("Output not found");
+    }
+
+    fn sample_size(&self) -> usize {
+        self.input_size() + self.outputs().iter().map(|(_, size)| size).sum::<usize>()
+    }
+
+    // fn serialize(&self, input_and_targets: &InputAndTargets) -> Vec<f32> {
+    //     let input_size = self.input_size();
+    //     let output_size: usize = self.outputs().iter().map(|(_, size)| size).sum();
+    //     let total_size = input_size + output_size;
+
+    //     let mut serialized = Vec::with_capacity(total_size);
+    //     serialized.extend_from_slice(input_and_targets.input());
+
+    //     for (name, output) in self.outputs() {
+    //         serialized.extend_from_slice(input_and_targets.targets()[&name].as_slice());
+    //     }
+
+    //     serialized
+    // }
+
+    // fn deserialize(&self, serialized: &[f32]) -> InputAndTargets {
+    //     let mut vals = serialized.iter().map(|x| x.to_owned());
+    //     let input_size = self.input_size();
+
+    //     let input = vals.by_ref().take(input_size).collect();
+    //     let targets = self
+    //         .outputs()
+    //         .iter()
+    //         .map(|(name, size)| {
+    //             let output: Vec<f32> = vals.by_ref().take(*size).collect();
+    //             assert!(output.len() == *size, "Output size mismatch");
+    //             (name.clone(), output)
+    //         })
+    //         .collect();
+
+    //     assert!(vals.next().is_none(), "No more vals should be left");
+
+    //     InputAndTargets { input, targets }
+    // }
 
     fn metric_to_input_and_targets(
         &self,
@@ -145,6 +196,7 @@ where
     {
         let targets = self.to_output(&metric.game_state, &metric.policy);
 
+        // @TODO: Move this to where the policy output is generated
         // let value_output = self.to_output(&metric.game_state, &metric.score);
         // let moves_left_output =
         //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
@@ -175,8 +227,7 @@ where
 }
 
 pub struct InputAndTargets {
-    input: Vec<f32>,
-    targets: HashMap<String, Vec<f32>>,
+    values: Vec<f32>,
 }
 
 pub struct PositionMetricsExtended<S, A, P, PV> {
