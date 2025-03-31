@@ -147,9 +147,9 @@ impl QMix for QuoridorSampler {
 
         let mut value = post_blunder_prediction.value().clone();
         value.update_players_value(player_to_move, mixed_value);
-        let predictions = Predictions::new(value, mixed_game_length);
+        
 
-        predictions
+        Predictions::new(value, mixed_game_length)
     }
 }
 

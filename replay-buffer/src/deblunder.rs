@@ -104,10 +104,11 @@ impl<Ps> PredictionStack<Ps> {
     {
         loop {
             if let Some((_, q_mix_amt)) = self.earliest_unset_p(game_state) {
+                let q_mix_amt = *q_mix_amt;
                 let latest_p = self
                     .latest_set_p(game_state)
                     .expect("P should be set or provided");
-                let mixed_p = Qm::mix_q(game_state, latest_p, &propagated_values, *q_mix_amt);
+                let mixed_p = Qm::mix_q(game_state, latest_p, propagated_values, q_mix_amt);
                 self.set_p(game_state, mixed_p);
             } else {
                 return;

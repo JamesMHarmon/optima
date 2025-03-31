@@ -5,30 +5,13 @@ use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
 use self_play::SelfPlayMetrics;
-use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
+use tensorflow_model::{InputMap, Mode, PredictionsMap};
 
 use super::deblunder;
 use super::q_mix::{PredictionStore, QMix};
 
+#[allow(clippy::type_complexity)]
 pub trait Sample
-where
-    Self: Sized,
-    Self: Dimension,
-    Self: InputMap<State = <Self as Sample>::State>,
-    Self: PredictionsMap<
-        State = <Self as Sample>::State,
-        Action = <Self as Sample>::Action,
-        Predictions = <Self as Sample>::Predictions,
-    >,
-    Self: QMix<
-        State = <Self as Sample>::State,
-        Predictions = <Self as Sample>::Predictions,
-        PropagatedValues = <Self as Sample>::PropagatedValues,
-    >,
-    Self::PredictionStore: PredictionStore<
-        State = <Self as Sample>::State,
-        Predictions = <Self as Sample>::Predictions,
-    >,
 {
     type State;
     type Action;
@@ -55,10 +38,20 @@ where
         >,
     >
     where
+        Self: Sized,
         <Self as Sample>::State: GameState,
         <Self as Sample>::Action: PartialEq,
         <Self as Sample>::Predictions: Clone,
         <Self as Sample>::PropagatedValues: PropagatedValue,
+        Self::PredictionStore: PredictionStore<
+            State = <Self as Sample>::State,
+            Predictions = <Self as Sample>::Predictions,
+        >,
+        Self: QMix<
+            State = <Self as Sample>::State,
+            Predictions = <Self as Sample>::Predictions,
+            PropagatedValues = <Self as Sample>::PropagatedValues,
+        >,
     {
         let mut metrics = get_positions(
             metrics,
@@ -120,9 +113,13 @@ where
 
     fn input_size(&self) -> usize;
 
+    fn input_values<'a>(&self, input_and_targets: &'a InputAndTargets) -> &'a [f32] {
+        &input_and_targets.values[..self.input_size()]
+    }
+
     fn outputs(&self) -> Vec<(String, usize)>;
 
-    fn output_values(&self, input_and_targets: &InputAndTargets, name: &str) -> &[f32] {
+    fn output_values<'a>(&self, input_and_targets: &'a InputAndTargets, name: &str) -> &'a [f32] {
         let (offset, size) = self.output_offset_and_size(name);
         &input_and_targets.values[offset..offset + size]
     }
@@ -187,6 +184,7 @@ where
         >,
     ) -> InputAndTargets
     where
+        Self: InputMap<State = <Self as Sample>::State>,
         Self: PredictionsMap<
             State = <Self as Sample>::State,
             Action = <Self as Sample>::Action,
@@ -213,7 +211,7 @@ where
 
         let mut input = vec![f16::ZERO; input_len];
         self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
-        let input = input.into_iter().map(f16::to_f32).collect();
+        let input = input.into_iter().map(f16::to_f32).collect::<Vec<f32>>();
 
         // @TODO: Move this to where the value output is generated
         // assert!(
@@ -222,12 +220,39 @@ where
         //     &value_output
         // );
 
-        InputAndTargets { input, targets }
+        self.input_and_targets(&input, &targets)
+    }
+
+    fn input_and_targets(&self, input: &[f32], targets: &HashMap<String, Vec<f32>>) -> InputAndTargets {
+        let mut values = Vec::with_capacity(self.sample_size());
+
+        assert_eq!(input.len(), self.input_size(), "Input size mismatch");
+        values.extend_from_slice(input);
+
+        for (name, size) in self.outputs() {
+            let output_vals = targets.get(&name).expect("Target not found");
+            assert_eq!(output_vals.len(), size, "Target size mismatch");
+            values.extend_from_slice(output_vals);
+        }
+
+        InputAndTargets { values }
     }
 }
 
 pub struct InputAndTargets {
     values: Vec<f32>,
+}
+
+impl InputAndTargets {
+    pub fn as_slice(&self) -> &[f32] {
+        &self.values
+    }
+}
+
+impl From<Vec<f32>> for InputAndTargets {
+    fn from(values: Vec<f32>) -> Self {
+        InputAndTargets { values }
+    }
 }
 
 pub struct PositionMetricsExtended<S, A, P, PV> {

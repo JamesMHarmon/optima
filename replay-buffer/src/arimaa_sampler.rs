@@ -72,6 +72,14 @@ impl Sample for ArimaaSampler {
     fn input_size(&self) -> usize {
         INPUT_SIZE
     }
+
+    fn outputs(&self) -> Vec<(String, usize)> {
+        vec![
+            ("policy".to_string(), OUTPUT_SIZE),
+            ("value".to_string(), 1),
+            ("moves_left".to_string(), MOVES_LEFT_SIZE),
+        ]
+    }
 }
 
 impl InputMap for ArimaaSampler {
@@ -141,9 +149,9 @@ impl QMix for ArimaaSampler {
 
         let mut value = post_blunder_prediction.value().clone();
         value.update_players_value(player_to_move, mixed_value);
-        let predictions = Predictions::new(value, mixed_game_length);
+        
 
-        predictions
+        Predictions::new(value, mixed_game_length)
     }
 }
 

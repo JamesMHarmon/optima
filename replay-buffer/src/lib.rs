@@ -6,12 +6,14 @@ use flate2::read::GzDecoder;
 use log::warn;
 use model::PositionMetrics;
 use pyo3::types::{IntoPyDict, PyDict};
+use q_mix::{PredictionStore, QMix};
 use rand::Rng;
 use rayon::prelude::*;
 use sample::InputAndTargets;
 use sample_file::{SampleFile, SampleFileReader};
 use self_play::SelfPlayMetrics;
 use serde::{de, Serialize};
+use tensorflow_model::{InputMap, PredictionsMap};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
@@ -125,32 +127,21 @@ impl ReplayBuffer {
             })
             .collect();
 
-        let mut data: HashMap<String, Vec<f32>> = HashMap::new();
-        let targets = samples
-            .first()
-            .expect("At least one sample must exist.")
-            .targets();
+        let outputs = sampler.outputs();
+        let mut data: HashMap<String, Vec<f32>> = outputs
+            .iter()
+            .map(|(key, size)| (key.to_owned(), Vec::with_capacity(num_samples * size)))
+            .collect();
 
-        for (key, target) in targets.iter() {
-            let size = target.len();
-            data.insert(key.to_owned(), Vec::with_capacity(num_samples * size));
-        }
-
-        let input_output_keys: Vec<String> =
-            targets.iter().map(|(key, _)| key.to_owned()).collect();
-        for input_outputs in samples {
-            let input_targets = input_outputs.targets();
-            for key in input_output_keys.iter() {
-                let value = input_targets
-                    .get(key)
-                    .unwrap_or_else(|| panic!("No matching key found in input_targets: {}", key));
-                data.get_mut(key).unwrap().extend_from_slice(value);
+        for sample in samples.iter() {
+            for (name, _) in outputs.iter() {
+                let values = sampler.output_values(sample, name);
+                data.get_mut(name).expect("No output entry found.").extend_from_slice(values);
             }
         }
 
         for (key, target) in data.iter() {
-            let expected_size =
-                samples.first().unwrap().targets().get(key).unwrap().len() * num_samples;
+            let expected_size = sampler.output_offset_and_size(key).1 * num_samples;
             let actual_size = target.len();
             assert_eq!(
                 expected_size, actual_size,
@@ -158,6 +149,14 @@ impl ReplayBuffer {
                 expected_size, actual_size
             );
         }
+
+        let mut inputs = Vec::with_capacity(num_samples * sampler.input_size());
+        for sample in samples {
+            let input: &[f32] = sampler.input_values(&sample);
+            inputs.extend_from_slice(input);
+        }
+
+        data.insert("inputs".to_string(), inputs);
 
         let dict = data
             .into_iter()
@@ -217,10 +216,32 @@ impl<S> SampleLoader<S> {
     ) -> Result<Option<InputAndTargets>>
     where
         S: Sample,
+        S: Sized,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        S: InputMap<State = <S as Sample>::State>,
+        S: PredictionsMap<
+            State = <S as Sample>::State,
+            Action = <S as Sample>::Action,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
+        S: Sample,
+        <S as Sample>::State: GameState,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        S::PredictionStore: PredictionStore<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+        >,
+        S: QMix<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
     {
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
 
@@ -243,10 +264,32 @@ impl<S> SampleLoader<S> {
     ) -> Result<SampleFileReader<BufReader<File>>>
     where
         S: Sample,
+        S: Sized,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        S: InputMap<State = <S as Sample>::State>,
+        S: PredictionsMap<
+            State = <S as Sample>::State,
+            Action = <S as Sample>::Action,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
+        S: Sample,
+        <S as Sample>::State: GameState,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
+        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        S::PredictionStore: PredictionStore<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+        >,
+        S: QMix<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
@@ -276,10 +319,7 @@ impl<S> SampleLoader<S> {
                 let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
                 for metrics in samples {
                     let inputs_and_targets = self.sampler.metric_to_input_and_targets(&metrics);
-                    vals.extend(inputs_and_targets.input);
-                    vals.extend(inputs_and_targets.policy_output);
-                    vals.push(inputs_and_targets.value_output);
-                    vals.extend(inputs_and_targets.moves_left_output);
+                    vals.extend_from_slice(inputs_and_targets.as_slice());
                 }
 
                 let buff_writer = BufWriter::new(file);
@@ -314,10 +354,27 @@ impl<S> SampleLoader<S> {
     >
     where
         S: Sample,
+        S: Sized,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        S: InputMap<State = <S as Sample>::State>,
+        S: PredictionsMap<
+            State = <S as Sample>::State,
+            Action = <S as Sample>::Action,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
+        S::PredictionStore: PredictionStore<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+        >,
+        S: QMix<
+            State = <S as Sample>::State,
+            Predictions = <S as Sample>::Predictions,
+            PropagatedValues = <S as Sample>::PropagatedValues,
+        >,
     {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
