@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use common::PropagatedValue;
 use engine::GameState;
 use env_logger::Env;
 use flate2::read::GzDecoder;
@@ -203,10 +204,8 @@ impl<S> SampleLoader<S> {
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
+        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
     {
-
-
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
 
         let num_samples = sample_reader.num_samples()?;
@@ -217,7 +216,10 @@ impl<S> SampleLoader<S> {
 
         let rand_sample_idx = rand::thread_rng().gen_range(0..num_samples);
 
-        let inputs_and_targets = sample_reader.read_sample(rand_sample_idx)?.into_iter().collect();
+        let inputs_and_targets = sample_reader
+            .read_sample(rand_sample_idx)?
+            .into_iter()
+            .collect();
 
         // @TODO: Add back asserts
         // let input_size = self.sampler.input_size();
@@ -245,7 +247,7 @@ impl<S> SampleLoader<S> {
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
+        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
@@ -301,20 +303,32 @@ impl<S> SampleLoader<S> {
     fn load_samples(
         &self,
         metrics_path: impl AsRef<Path>,
-    ) -> Result<Vec<PositionMetrics<<S as Sample>::State, <S as Sample>::Action, <S as Sample>::Predictions, <S as Sample>::PropagatedValues>>>
+    ) -> Result<
+        Vec<
+            PositionMetrics<
+                <S as Sample>::State,
+                <S as Sample>::Action,
+                <S as Sample>::Predictions,
+                <S as Sample>::PropagatedValues,
+            >,
+        >,
+    >
     where
         S: Sample,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: de::DeserializeOwned + Serialize,
+        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
     {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
         let file = GzDecoder::new(file);
-        let metrics: SelfPlayMetrics<<S as Sample>::Action, <S as Sample>::Predictions, <S as Sample>::PropagatedValues> =
-            serde_json::from_reader(file)
-                .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
+        let metrics: SelfPlayMetrics<
+            <S as Sample>::Action,
+            <S as Sample>::Predictions,
+            <S as Sample>::PropagatedValues,
+        > = serde_json::from_reader(file)
+            .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 
         let samples = self.sampler.metrics_to_samples(
             metrics,

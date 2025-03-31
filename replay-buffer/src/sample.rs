@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use common::PropagatedValue;
 use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
@@ -14,9 +15,20 @@ where
     Self: Sized,
     Self: Dimension,
     Self: InputMap<State = <Self as Sample>::State>,
-    Self: PredictionsMap<State = <Self as Sample>::State, Action = <Self as Sample>::Action, Predictions = <Self as Sample>::Predictions>,
-    Self: QMix<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions, PropagatedValues = <Self as Sample>::PropagatedValues>,
-    Self::PredictionStore: PredictionStore<State = <Self as Sample>::State, Predictions = <Self as Sample>::Predictions>
+    Self: PredictionsMap<
+        State = <Self as Sample>::State,
+        Action = <Self as Sample>::Action,
+        Predictions = <Self as Sample>::Predictions,
+    >,
+    Self: QMix<
+        State = <Self as Sample>::State,
+        Predictions = <Self as Sample>::Predictions,
+        PropagatedValues = <Self as Sample>::PropagatedValues,
+    >,
+    Self::PredictionStore: PredictionStore<
+        State = <Self as Sample>::State,
+        Predictions = <Self as Sample>::Predictions,
+    >,
 {
     type State;
     type Action;
@@ -26,15 +38,27 @@ where
 
     fn metrics_to_samples(
         &self,
-        metrics: SelfPlayMetrics<<Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>,
+        metrics: SelfPlayMetrics<
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
         min_visits: usize,
         q_diff_threshold: f32,
         q_diff_width: f32,
-    ) -> Vec<PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>>
+    ) -> Vec<
+        PositionMetrics<
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
+    >
     where
         <Self as Sample>::State: GameState,
         <Self as Sample>::Action: PartialEq,
         <Self as Sample>::Predictions: Clone,
+        <Self as Sample>::PropagatedValues: PropagatedValue,
     {
         let mut metrics = get_positions(
             metrics,
@@ -65,8 +89,14 @@ where
             <Self as Sample>::Predictions,
             <Self as Sample>::PropagatedValues,
         >,
-    ) -> Vec<PositionMetrics<<Self as Sample>::State, <Self as Sample>::Action, <Self as Sample>::Predictions, <Self as Sample>::PropagatedValues>>
-    {
+    ) -> Vec<
+        PositionMetrics<
+            <Self as Sample>::State,
+            <Self as Sample>::Action,
+            <Self as Sample>::Predictions,
+            <Self as Sample>::PropagatedValues,
+        >,
+    > {
         vec![metric]
     }
 
@@ -82,7 +112,11 @@ where
         true
     }
 
-    fn take_action(&self, game_state: &<Self as Sample>::State, action: &<Self as Sample>::Action) -> <Self as Sample>::State;
+    fn take_action(
+        &self,
+        game_state: &<Self as Sample>::State,
+        action: &<Self as Sample>::Action,
+    ) -> <Self as Sample>::State;
 
     fn move_number(&self, game_state: &<Self as Sample>::State) -> usize;
 
@@ -100,13 +134,17 @@ where
             <Self as Sample>::Predictions,
             <Self as Sample>::PropagatedValues,
         >,
-    ) -> InputAndTargets where
-        Self: PredictionsMap<State = <Self as Sample>::State, Action = <Self as Sample>::Action, Predictions = <Self as Sample>::Predictions, PropagatedValues = <Self as Sample>::PropagatedValues>,
+    ) -> InputAndTargets
+    where
+        Self: PredictionsMap<
+            State = <Self as Sample>::State,
+            Action = <Self as Sample>::Action,
+            Predictions = <Self as Sample>::Predictions,
+            PropagatedValues = <Self as Sample>::PropagatedValues,
+        >,
     {
-        let targets =
-            self.to_output(&metric.game_state, &metric.policy);
+        let targets = self.to_output(&metric.game_state, &metric.policy);
 
-        
         // let value_output = self.to_output(&metric.game_state, &metric.score);
         // let moves_left_output =
         //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
@@ -132,10 +170,7 @@ where
         //     &value_output
         // );
 
-        InputAndTargets {
-            input,
-            targets
-        }
+        InputAndTargets { input, targets }
     }
 }
 

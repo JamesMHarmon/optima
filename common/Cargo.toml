@@ -12,3 +12,4 @@ name = "common"
 anyhow = "1.0"
 assert_approx_eq = "1.1"
 hocon = "0.9"
+serde = { version = "1.0", features = ["derive"] }

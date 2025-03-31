@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub trait PropagatedValue {
     fn value(&self) -> f32;
 }
@@ -6,7 +8,7 @@ pub trait PropagatedGameLength {
     fn game_length(&self) -> f32;
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct MovesLeftPropagatedValue {
     value: f32,
     game_length: f32,

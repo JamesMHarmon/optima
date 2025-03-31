@@ -1,6 +1,7 @@
 use super::Value;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Predictions {
     value: Value,
     game_length: f32,
