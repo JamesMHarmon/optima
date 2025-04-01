@@ -4,7 +4,7 @@ mod test {
     use approx::assert_abs_diff_eq;
     use common::MovesLeftPropagatedValue;
     use arimaa::{Action, GameState, Predictions, Value};
-    use engine::{GameState as GameStateTrait};
+    use engine::GameState as GameStateTrait;
     use model::{EdgeMetrics, NodeMetrics, PositionMetrics};
 
     use crate::{
@@ -55,12 +55,12 @@ mod test {
     fn position_metrics(
         is_player_one: bool,
         score: Value,
-        moves_left: usize,
+        game_length: f32,
         move_number: usize,
         chosen_action: impl AsRef<str>,
         children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>,
-    ) -> PositionMetricsExtended<GameState, Action, Value, MovesLeftPropagatedValue> {
-        let target_score = Predictions::new(score, moves_left);
+    ) -> PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue> {
+        let target_score = Predictions::new(score, game_length);
 
         PositionMetricsExtended {
             metrics: PositionMetrics {
