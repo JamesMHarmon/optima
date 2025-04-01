@@ -26,7 +26,7 @@ arimaa = { path = "../arimaa", default-features = false, features = [
     "mappings",
 ] }
 quoridor = { path = "../quoridor", default-features = false, features = [
-    "mappings"
+    "mappings",
 ] }
 
 anyhow = "1.0.57"

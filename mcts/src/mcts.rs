@@ -208,8 +208,8 @@ where
         let node = arena.node_mut(node_index);
         node.set_visits(1);
 
-        for child in node.iter_visited_edges_mut() {
-            child.clear();
+        for edge in node.iter_visited_edges_mut() {
+            edge.clear();
         }
 
         let child_indexes: Vec<_> = node

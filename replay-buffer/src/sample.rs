@@ -11,8 +11,7 @@ use super::deblunder;
 use super::q_mix::{PredictionStore, QMix};
 
 #[allow(clippy::type_complexity)]
-pub trait Sample
-{
+pub trait Sample {
     type State;
     type Action;
     type Predictions;
@@ -223,7 +222,11 @@ pub trait Sample
         self.input_and_targets(&input, &targets)
     }
 
-    fn input_and_targets(&self, input: &[f32], targets: &HashMap<String, Vec<f32>>) -> InputAndTargets {
+    fn input_and_targets(
+        &self,
+        input: &[f32],
+        targets: &HashMap<String, Vec<f32>>,
+    ) -> InputAndTargets {
         let mut values = Vec::with_capacity(self.sample_size());
 
         assert_eq!(input.len(), self.input_size(), "Input size mismatch");

@@ -35,10 +35,6 @@ impl<A, PV> MCTSEdge<A, PV> {
         self.visits
     }
 
-    pub fn set_visits(&mut self, visits: usize) {
-        self.visits = visits;
-    }
-
     pub fn increment_visits(&mut self) {
         self.visits += 1;
     }

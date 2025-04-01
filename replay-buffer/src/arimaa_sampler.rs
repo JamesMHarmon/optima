@@ -149,7 +149,6 @@ impl QMix for ArimaaSampler {
 
         let mut value = post_blunder_prediction.value().clone();
         value.update_players_value(player_to_move, mixed_value);
-        
 
         Predictions::new(value, mixed_game_length)
     }

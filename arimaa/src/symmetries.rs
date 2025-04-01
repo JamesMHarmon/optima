@@ -1,5 +1,4 @@
 use common::MovesLeftPropagatedValue;
-use itertools::Itertools;
 use model::position_metrics::PositionMetrics;
 use model::{node_metrics::NodeMetrics, EdgeMetrics};
 
@@ -32,7 +31,7 @@ fn symmetrical_node_metrics(
     NodeMetrics {
         visits: metrics.visits,
         predictions: metrics.predictions.clone(),
-        children: children_symmetry.collect_vec(),
+        children: children_symmetry.collect::<Vec<_>>(),
     }
 }
 

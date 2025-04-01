@@ -1,5 +1,6 @@
 use crate::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator, SelectionStrategy, CPUCT
+    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
+    SelectionStrategy, CPUCT,
 };
 use anyhow::Result;
 use common::{div_or_zero, MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
@@ -220,7 +221,8 @@ where
 
 #[allow(non_snake_case)]
 impl<A, PV> EdgeDetails<A, PV>
-    where PV: PropagatedGameLength
+where
+    PV: PropagatedGameLength,
 {
     pub fn game_length(&self) -> f32 {
         div_or_zero(self.propagated_values.game_length(), self.Nsa as f32)
@@ -287,6 +289,7 @@ where
 
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
+            // @TODO: Should game_length be affected by virtual visits?!
             *edge_to_update.propagated_values_mut().value_mut() += score;
             *edge_to_update.propagated_values_mut().game_length_mut() += estimated_game_length;
         }

@@ -18,7 +18,6 @@ pub mod mappings;
 pub mod predictions;
 pub mod symmetries;
 pub mod transposition_entry;
-pub mod ugi;
 pub mod value;
 
 pub use action::*;
@@ -30,7 +29,6 @@ pub use mappings::*;
 pub use predictions::*;
 pub use symmetries::*;
 pub use transposition_entry::*;
-pub use ugi::*;
 pub use value::*;
 
 use zobrist::*;
@@ -42,7 +40,13 @@ pub mod model;
 pub mod model_factory;
 
 #[cfg(feature = "model")]
+pub mod ugi;
+
+#[cfg(feature = "model")]
 pub use crate::model::*;
 
 #[cfg(feature = "model")]
 pub use crate::model_factory::*;
+
+#[cfg(feature = "model")]
+pub use ugi::*;
