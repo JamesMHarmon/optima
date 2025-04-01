@@ -53,7 +53,7 @@ mod tests {
 
         for (left, right) in left.children.iter().zip(right.children.iter()) {
             assert_eq!(left.action(), right.action());
-            assert_approx_eq!(left.avg_value(), right.avg_value(), ERROR_DIFF_W);
+            assert_approx_eq!(left.value(), right.value(), ERROR_DIFF_W);
             let max_visits = left.visits().max(right.visits());
             let allowed_diff = (max_visits as f32) * ERROR_DIFF + 0.9;
             assert_approx_eq!(left.visits() as f32, right.visits() as f32, allowed_diff);

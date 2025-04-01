@@ -160,6 +160,6 @@ where
     let chosen_q = metrics.children.iter().find(|c| c.action() == action);
     let chosen_q = chosen_q
         .expect("Specified action was not found")
-        .avg_value();
+        .value();
     max_visits_q - chosen_q
 }
