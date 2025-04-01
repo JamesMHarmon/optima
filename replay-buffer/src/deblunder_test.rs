@@ -4,7 +4,7 @@ mod test {
     use approx::assert_abs_diff_eq;
     use common::MovesLeftPropagatedValue;
     use arimaa::{Action, GameState, Predictions, Value};
-    use engine::{GameState as GameStateTrait, Value as ValueTrait};
+    use engine::{GameState as GameStateTrait};
     use model::{EdgeMetrics, NodeMetrics, PositionMetrics};
 
     use crate::{
@@ -17,7 +17,7 @@ mod test {
         q_diff_threshold: f32,
         q_diff_width: f32,
     ) {
-        crate::deblunder::deblunder::<_, _, _, ArimaaPStore, ArimaaSampler>(
+        crate::deblunder::deblunder::<_, _, _, _, ArimaaPStore, ArimaaSampler>(
             metrics,
             q_diff_threshold,
             q_diff_width,
