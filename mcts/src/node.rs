@@ -22,10 +22,6 @@ impl<A, P, PV> MCTSNode<A, P, PV> {
         }
     }
 
-    pub fn get_node_visits(&self) -> usize {
-        self.visits
-    }
-
     pub fn get_edge_by_index_mut(&mut self, index: usize) -> &mut MCTSEdge<A, PV> {
         &mut self.visited_edges[index]
     }
@@ -103,7 +99,7 @@ where
             return;
         }
 
-        let has_unvisited_edge = self.visited_edges.iter().any(|e| e.visits() + e.virtual_visits() == 0);
+        let has_unvisited_edge = self.visited_edges.iter().any(|e| e.visits() == 0);
 
         if has_unvisited_edge {
             return;

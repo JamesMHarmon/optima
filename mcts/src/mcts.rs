@@ -146,7 +146,7 @@ where
         self.get_focus_node_index()
             .ok()
             .flatten()
-            .map(|node_index| self.arena.get_mut().node(node_index).get_node_visits())
+            .map(|node_index| self.arena.get_mut().node(node_index).visits())
             .unwrap_or(0)
     }
 
@@ -454,7 +454,7 @@ where
         children.sort_by(|x_details, y_details| y_details.cmp(x_details));
 
         Ok(NodeDetails {
-            visits: node.get_node_visits(),
+            visits: node.visits(),
             children,
         })
     }
@@ -620,7 +620,6 @@ where
                     backpropagation_strategy,
                     &mut *arena_mut,
                 );
-                Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                 break;
             }
 
@@ -634,19 +633,20 @@ where
             };
 
             let node_info = backpropagation_strategy.node_info(&game_state);
+
+            node.increment_visits();
+            let selected_edge = node.get_edge_by_index_mut(selected_edge_index);
+            let edge_visits = selected_edge.visits();
+
             visited_nodes_stack.push(NodeUpdateInfo {
                 node_index: latest_index,
                 selected_edge_index,
                 node_info,
+                edge_visits_at_time_of_traversal: edge_visits
             });
 
-            node.increment_visits();
-            let selected_edge = node.get_edge_by_index_mut(selected_edge_index);
-
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
-
-            let edge_visits = selected_edge.visits();
-            selected_edge.increment_virtual_visits();
+            selected_edge.increment_visits();
 
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
@@ -661,8 +661,6 @@ where
                         backpropagation_strategy,
                         &mut *arena_mut,
                     );
-                    //@TODO: Ensure each virtual visit increment has a matching decrement
-                    Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                     break;
                 }
 
@@ -692,7 +690,6 @@ where
                     backpropagation_strategy,
                     &mut *arena_mut,
                 );
-                Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                 break;
             }
 
@@ -718,20 +715,8 @@ where
         backpropagation_strategy: &B,
         arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
     ) {
-        let node_iter = NodeIterator::new(&visited_node_info, arena);
+        let node_iter = NodeIterator::new(visited_node_info, arena);
         backpropagation_strategy.backpropagate(node_iter, predictions);
-    }
-
-    fn increment_virtual_to_actual_visit(
-        visited_node_info: &[NodeUpdateInfo<B::NodeInfo>],
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
-    ) {
-        for update_info in visited_node_info {
-            let node = arena.node_mut(update_info.node_index);
-            let edge_to_update = node.get_edge_by_index_mut(update_info.selected_edge_index);
-            edge_to_update.decrement_virtual_visits();
-            edge_to_update.increment_visits();
-        }
     }
 }
 
@@ -767,6 +752,7 @@ impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
             node: self.arena.node_mut(node.node_index),
             selected_edge_index: node.selected_edge_index,
             node_info: &node.node_info,
+            edge_visits_at_time_of_traversal: node.edge_visits_at_time_of_traversal,
         };
 
         self.iter_index += 1;
@@ -796,11 +782,11 @@ where
     P: Clone,
     PV: Clone + Default,
 {
-    fn from(val: &mut MCTSNode<A, P, PV>) -> Self {
+    fn from(node: &mut MCTSNode<A, P, PV>) -> Self {
         NodeMetrics {
-            visits: val.visits(),
-            predictions: val.predictions().clone(),
-            children: val.iter_all_edges().map(|e| e.deref().into()).collect_vec(),
+            visits: node.visits(),
+            predictions: node.predictions().clone(),
+            children: node.iter_all_edges().map(|e| e.deref().into()).collect_vec(),
         }
     }
 }
@@ -823,6 +809,7 @@ struct NodeUpdateInfo<I> {
     node_index: Index,
     selected_edge_index: usize,
     node_info: I,
+    edge_visits_at_time_of_traversal: usize,
 }
 
 struct NodeArena<T>(RefCell<NodeArenaInner<T>>);

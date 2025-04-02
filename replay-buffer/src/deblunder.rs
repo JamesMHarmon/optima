@@ -155,7 +155,6 @@ where
     A: PartialEq,
     PV: PropagatedValue,
 {
-    // @TODO: Fix this value. This may need to be divided by Nsa.
     let max_visits_q = metrics.child_max_visits().propagatedValues().value();
     let chosen_edge = metrics.children.iter().find(|c| c.action() == action);
     let chosen_q = chosen_edge.expect("Specified action was not found").value();

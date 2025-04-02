@@ -143,7 +143,7 @@ where
         } else {
             options.fpu
         };
-        let Nsb = node.get_node_visits();
+        let Nsb = node.visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
         let game_length_baseline = &Self::get_game_length_baseline(
@@ -189,7 +189,7 @@ where
         } else {
             options.fpu
         };
-        let Nsb = node.get_node_visits();
+        let Nsb = node.visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
 
@@ -291,7 +291,10 @@ where
 
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            let visits = edge_to_update.visits();
+            // The number of visits at the time of traversal acts like a pseudo virtual visit implementation.
+            // It is technically not completely mathematically correct as incremental average may be performed out of order, but it is a good approximation.
+            // In an ideal implementation we would force the backpropagation of nodes to be in the order of traversal when dealing with multiple thread searches.
+            let visits = node.edge_visits_at_time_of_traversal;
             let current_value = edge_to_update.propagated_values().value();
             let new_value = current_value + (score - current_value) / (visits + 1) as f32;
             *edge_to_update.propagated_values_mut().value_mut() = new_value;
