@@ -117,8 +117,6 @@ impl QMix for QuoridorSampler {
         if q_mix == 0.0 {
             return post_blunder_prediction.clone();
         }
-
-        // @TODO: Fix this value and game_length. This may need to be divided by Nsa.
         let pre_blunder_value = pre_blunder_propagated_values.value();
         let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
 

@@ -103,7 +103,7 @@ where
             return;
         }
 
-        let has_unvisited_edge = self.visited_edges.iter().any(|e| e.visits() == 0);
+        let has_unvisited_edge = self.visited_edges.iter().any(|e| e.visits() + e.virtual_visits() == 0);
 
         if has_unvisited_edge {
             return;

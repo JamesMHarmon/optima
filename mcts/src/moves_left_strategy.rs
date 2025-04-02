@@ -66,9 +66,8 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
             .filter(|n| n.visits() > 0)
             .map_or(GameLengthBaseline::None, |e| {
                 let pv = e.propagated_values();
-                // @TODO: Fix this.
-                let Qsa = pv.value() / e.visits() as f32;
-                let expected_game_length = pv.game_length() / e.visits() as f32;
+                let Qsa = pv.value();
+                let expected_game_length = pv.game_length();
 
                 if Qsa >= moves_left_threshold {
                     GameLengthBaseline::MinimizeGameLength(expected_game_length)
@@ -156,12 +155,11 @@ where
         let mut best_puct = std::f32::MIN;
 
         for (i, edge) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
-            // @TODO: Fix this.
             let W = edge.propagated_values().value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
+            let Qsa = if Nsa == 0 { fpu } else { W };
             let Msa = Self::Msa(edge, game_length_baseline, options);
 
             let PUCT = Msa + Qsa + Usa;
@@ -200,12 +198,12 @@ where
         for edge in node.iter_visited_edges() {
             let action = edge.action().clone();
             let propagated_values = edge.propagated_values().clone();
-            // @TODO: Fix this.
+
             let W = propagated_values.value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
-            let Qsa = if Nsa == 0 { fpu } else { W / Nsa as f32 };
+            let Qsa = if Nsa == 0 { fpu } else { W };
 
             let puct_score = Qsa + Usa;
             pucts.push(EdgeDetails {

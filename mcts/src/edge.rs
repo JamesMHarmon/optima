@@ -9,6 +9,7 @@ use model::ActionWithPolicy;
 pub struct MCTSEdge<A, PV> {
     action: A,
     visits: usize,
+    virtual_visits: usize,
     policy_score: f16,
     propagated_values: PV,
     node: MCTSNodeState,
@@ -35,8 +36,16 @@ impl<A, PV> MCTSEdge<A, PV> {
         self.visits
     }
 
+    pub fn virtual_visits(&self) -> usize {
+        self.virtual_visits
+    }
+
     pub fn increment_visits(&mut self) {
         self.visits += 1;
+    }
+
+    pub fn increment_virtual_visits(&mut self) {
+        self.virtual_visits += 1;
     }
 
     pub fn propagated_values(&self) -> &PV {
@@ -72,6 +81,7 @@ where
         Self {
             action,
             visits: 0,
+            virtual_visits: 0,
             policy_score,
             propagated_values: PV::default(),
             node: MCTSNodeState::Unexpanded,
@@ -80,6 +90,7 @@ where
 
     pub fn clear(&mut self) {
         self.visits = 0;
+        self.virtual_visits = 0;
         self.propagated_values = PV::default();
     }
 }

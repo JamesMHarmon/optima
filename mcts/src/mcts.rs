@@ -645,7 +645,7 @@ where
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
 
             let prev_visits = selected_edge.visits();
-            selected_edge.increment_visits();
+            selected_edge.increment_virtual_visits();
 
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
@@ -714,11 +714,7 @@ where
         backpropagation_strategy: &B,
         arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
     ) {
-        let node_iter = NodeIterator {
-            visited_node_info,
-            arena,
-        };
-
+        let node_iter = NodeIterator::new(visited_node_info, arena);
         backpropagation_strategy.backpropagate(node_iter, predictions);
     }
 }
@@ -726,6 +722,18 @@ where
 pub struct NodeIterator<'a, I, A, P, PV> {
     visited_node_info: Vec<NodeUpdateInfo<I>>,
     arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
+}
+
+impl <'a, I, A, P, PV> NodeIterator<'a, I, A, P, PV> {
+    fn new(
+        visited_node_info: Vec<NodeUpdateInfo<I>>,
+        arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
+    ) -> Self {
+        Self {
+            visited_node_info,
+            arena,
+        }
+    }
 }
 
 impl<'a, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
