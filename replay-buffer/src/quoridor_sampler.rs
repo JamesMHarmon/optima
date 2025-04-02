@@ -2,7 +2,7 @@ use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::NodeMetrics;
-use quoridor::{Action, GameState, Mapper, Predictions, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
+use quoridor::{Action, GameState, Value, Mapper, Predictions, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
 use crate::q_mix::{PredictionStore, QMix};
@@ -152,20 +152,33 @@ impl QMix for QuoridorSampler {
 }
 
 #[derive(Default)]
-pub struct QuoridorVStore([Option<Predictions>; 2]);
+pub struct QuoridorVStore {
+    player_value: [Option<Value>; 2],
+    game_length: Option<f32>
+}
+
 
 #[allow(non_snake_case)]
 impl PredictionStore for QuoridorVStore {
     type State = GameState;
     type Predictions = Predictions;
 
-    fn get_p_for_player(&self, game_state: &Self::State) -> Option<&Self::Predictions> {
+    fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
         let player = game_state.player_to_move();
-        self.0[player - 1].as_ref()
+        self.player_value[player - 1].as_ref().map(|value|
+            Predictions::new(
+                value.clone(),
+                self.game_length.expect("Game length should be set before getting predictions")
+            )
+        )   
     }
 
     fn set_p_for_player(&mut self, game_state: &Self::State, prediction: Self::Predictions) {
         let player = game_state.player_to_move();
-        self.0[player - 1] = Some(prediction);
+        self.player_value[player - 1] = Some(prediction.value().clone());
+        
+        if self.game_length.is_none() {
+            self.game_length = Some(prediction.game_length());
+        }
     }
 }

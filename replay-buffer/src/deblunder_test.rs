@@ -91,7 +91,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                8.0,
+                98.0,
                 90,
                 "a1n",
                 vec![
@@ -103,7 +103,7 @@ mod test {
             position_metrics(
                 false,
                 Value::new([1.0, 0.0]),
-                7.0,
+                98.0,
                 91,
                 "a1n",
                 vec![
@@ -118,11 +118,11 @@ mod test {
 
         assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 1.0);
         assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(2), 0.0);
-        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 2.0);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 98.0);
 
         assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(1), 1.0);
         assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(2), 0.0);
-        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 1.0);
+        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 98.0);
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                10.0,
+                100.0,
                 90,
                 "a1n",
                 vec![
@@ -143,7 +143,7 @@ mod test {
             position_metrics(
                 false,
                 Value::new([1.0, 0.0]),
-                9.0,
+                100.0,
                 91,
                 "a2n",
                 vec![
@@ -155,7 +155,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                8.0,
+                100.0,
                 92,
                 "a1n",
                 vec![
@@ -167,7 +167,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                1.0,
+                100.0,
                 99,
                 "a1n",
                 vec![
@@ -181,13 +181,13 @@ mod test {
         deblunder(&mut metrics, 0.1, 0.1);
 
         assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 0.6);
-        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 15.0);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 105.0);
 
         assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(2), 0.8);
-        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 14.0);
+        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 105.0);
 
         assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 1.0);
-        assert_abs_diff_eq!(metrics[2].target_score.game_length(), 8.0);
+        assert_abs_diff_eq!(metrics[2].target_score.game_length(), 100.0);
     }
 
     #[test]
@@ -196,7 +196,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                10.0,
+                100.0,
                 90,
                 "a1n",
                 vec![
@@ -208,7 +208,7 @@ mod test {
             position_metrics(
                 false,
                 Value::new([1.0, 0.0]),
-                9.0,
+                100.0,
                 91,
                 "a2n",
                 vec![
@@ -220,7 +220,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                8.0,
+                100.0,
                 92,
                 "a1n",
                 vec![
@@ -249,7 +249,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                10.0,
+                100.0,
                 90,
                 "a1n",
                 vec![
@@ -261,7 +261,7 @@ mod test {
             position_metrics(
                 false,
                 Value::new([1.0, 0.0]),
-                9.0,
+                100.0,
                 91,
                 "a2n",
                 vec![
@@ -273,7 +273,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                8.0,
+                100.0,
                 92,
                 "a1n",
                 vec![
@@ -285,7 +285,7 @@ mod test {
             position_metrics(
                 false,
                 Value::new([1.0, 0.0]),
-                7.0,
+                100.0,
                 93,
                 "a2n",
                 vec![
@@ -297,7 +297,7 @@ mod test {
             position_metrics(
                 true,
                 Value::new([1.0, 0.0]),
-                6.0,
+                100.0,
                 94,
                 "a1n",
                 vec![
@@ -314,25 +314,25 @@ mod test {
             metrics[0].target_score.value().get_value_for_player(1),
             0.775
         );
-        assert_eq!(metrics[0].target_score.game_length(), 1.0);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 70.00001);
 
         assert_abs_diff_eq!(
             metrics[1].target_score.value().get_value_for_player(2),
             0.525
         );
-        assert_eq!(metrics[1].target_score.game_length(), 1.0);
+        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 70.00001);
 
         assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 0.9);
-        assert_eq!(metrics[2].target_score.game_length(), 8.0);
+        assert_eq!(metrics[2].target_score.game_length(), 100.0);
 
         assert_abs_diff_eq!(
             metrics[3].target_score.value().get_value_for_player(2),
             0.35
         );
-        assert_eq!(metrics[3].target_score.game_length(), 7.0);
+        assert_abs_diff_eq!(metrics[3].target_score.game_length(), 100.0);
 
         assert_abs_diff_eq!(metrics[4].target_score.value().get_value_for_player(1), 1.0);
-        assert_eq!(metrics[4].target_score.game_length(), 1.0);
+        assert_abs_diff_eq!(metrics[4].target_score.game_length(), 100.0);
     }
 
     #[test]

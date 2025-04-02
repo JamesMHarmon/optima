@@ -307,6 +307,7 @@ fn filter_full_visits<S, A, P, PV>(
     metrics.retain(|m| m.metrics.policy.visits >= min_visits)
 }
 
+// @TODO: Put this wherever it should go
 fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
     if moves_left_size == 0 {
         return vec![];

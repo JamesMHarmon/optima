@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use common::{div_or_zero, PropagatedValue};
+use common::PropagatedValue;
 
 #[allow(non_snake_case)]
 pub struct NodeDetails<A, PV> {

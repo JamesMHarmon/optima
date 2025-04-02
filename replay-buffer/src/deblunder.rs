@@ -62,7 +62,7 @@ impl<Ps> PredictionStack<Ps> {
         }
     }
 
-    fn latest<S, P>(&self, game_state: &S) -> &P
+    fn latest<S, P>(&self, game_state: &S) -> P
     where
         Ps: PredictionStore<State = S, Predictions = P>,
     {
@@ -108,7 +108,7 @@ impl<Ps> PredictionStack<Ps> {
                 let latest_p = self
                     .latest_set_p(game_state)
                     .expect("P should be set or provided");
-                let mixed_p = Qm::mix_q(game_state, latest_p, propagated_values, q_mix_amt);
+                let mixed_p = Qm::mix_q(game_state, &latest_p, propagated_values, q_mix_amt);
                 self.set_p(game_state, mixed_p);
             } else {
                 return;
@@ -127,7 +127,7 @@ impl<Ps> PredictionStack<Ps> {
             .last()
     }
 
-    fn latest_set_p<S, P>(&self, game_state: &S) -> Option<&P>
+    fn latest_set_p<S, P>(&self, game_state: &S) -> Option<P>
     where
         Ps: PredictionStore<State = S, Predictions = P>,
     {
