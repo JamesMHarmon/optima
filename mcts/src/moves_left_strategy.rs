@@ -3,7 +3,7 @@ use crate::{
     SelectionStrategy, CPUCT,
 };
 use anyhow::Result;
-use common::{div_or_zero, MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
+use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value};
 
 pub struct MovesLeftSelectionStrategy<S, A, P, C> {
@@ -105,8 +105,8 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
                 panic!();
             };
 
-                    // @TODO: Fix this
-        let expected_game_length = edge.propagated_values().game_length() / edge.visits() as f32;
+        // @TODO: Verify correctness here between game_length and moves_left
+        let expected_game_length = edge.propagated_values().game_length();
         let moves_left_scale = options.moves_left_scale;
         let moves_left_clamped = (game_length_baseline - expected_game_length)
             .min(moves_left_scale)
@@ -227,8 +227,7 @@ where
     PV: PropagatedGameLength,
 {
     pub fn game_length(&self) -> f32 {
-            // @TODO: Fix this.
-        div_or_zero(self.propagated_values.game_length(), self.Nsa as f32)
+        self.propagated_values.game_length()
     }
 }
 
@@ -292,10 +291,15 @@ where
 
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            // @TODO: Should game_length be affected by virtual visits?!
-            // @TODO: Fix this.
-            *edge_to_update.propagated_values_mut().value_mut() += score;
-            *edge_to_update.propagated_values_mut().game_length_mut() += estimated_game_length;
+            let visits = edge_to_update.visits();
+            let current_value = edge_to_update.propagated_values().value();
+            let new_value = current_value + (score - current_value) / (visits + 1) as f32;
+            *edge_to_update.propagated_values_mut().value_mut() = new_value;
+
+            let current_game_length = edge_to_update.propagated_values().game_length();
+            let new_game_length = current_game_length
+                + (estimated_game_length - current_game_length) / (visits + 1) as f32;
+            *edge_to_update.propagated_values_mut().game_length_mut() += new_game_length;
         }
     }
 

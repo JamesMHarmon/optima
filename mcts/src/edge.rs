@@ -48,6 +48,11 @@ impl<A, PV> MCTSEdge<A, PV> {
         self.virtual_visits += 1;
     }
 
+    pub fn decrement_virtual_visits(&mut self) {
+        assert!(self.virtual_visits > 0, "Virtual visits cannot be negative");
+        self.virtual_visits -= 1;
+    }
+
     pub fn propagated_values(&self) -> &PV {
         &self.propagated_values
     }

@@ -616,10 +616,11 @@ where
                 // @TODO: Does this node have predictions?
                 Self::backpropagate(
                     &node.predictions().clone(),
-                    visited_nodes_stack,
+                    &visited_nodes_stack,
                     backpropagation_strategy,
                     &mut *arena_mut,
                 );
+                Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                 break;
             }
 
@@ -644,22 +645,24 @@ where
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
 
-            let prev_visits = selected_edge.visits();
+            let edge_visits = selected_edge.visits();
             selected_edge.increment_virtual_visits();
 
             if let Some(selected_child_node_index) = selected_edge.node_index() {
                 // If the node exists but visits was 0, then this node was cleared but the analysis was saved. Treat it as such by keeping the values.
-                if prev_visits == 0 {
+                if edge_visits == 0 {
                     let predictions = arena_mut
                         .node(selected_child_node_index)
                         .predictions()
                         .clone();
                     Self::backpropagate(
                         &predictions,
-                        visited_nodes_stack,
+                        &visited_nodes_stack,
                         backpropagation_strategy,
                         &mut *arena_mut,
                     );
+                    //@TODO: Ensure each virtual visit increment has a matching decrement
+                    Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                     break;
                 }
 
@@ -685,10 +688,11 @@ where
 
                 Self::backpropagate(
                     &predictions,
-                    visited_nodes_stack,
+                    &visited_nodes_stack,
                     backpropagation_strategy,
                     &mut *arena_mut,
                 );
+                Self::increment_virtual_to_actual_visit(&visited_nodes_stack, &mut *arena_mut);
                 break;
             }
 
@@ -710,42 +714,62 @@ where
 
     fn backpropagate(
         predictions: &P,
-        visited_node_info: Vec<NodeUpdateInfo<B::NodeInfo>>,
+        visited_node_info: &[NodeUpdateInfo<B::NodeInfo>],
         backpropagation_strategy: &B,
         arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
     ) {
-        let node_iter = NodeIterator::new(visited_node_info, arena);
+        let node_iter = NodeIterator::new(&visited_node_info, arena);
         backpropagation_strategy.backpropagate(node_iter, predictions);
     }
-}
 
-pub struct NodeIterator<'a, I, A, P, PV> {
-    visited_node_info: Vec<NodeUpdateInfo<I>>,
-    arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
-}
-
-impl <'a, I, A, P, PV> NodeIterator<'a, I, A, P, PV> {
-    fn new(
-        visited_node_info: Vec<NodeUpdateInfo<I>>,
-        arena: &'a mut NodeArenaInner<MCTSNode<A, P, PV>>,
-    ) -> Self {
-        Self {
-            visited_node_info,
-            arena,
+    fn increment_virtual_to_actual_visit(
+        visited_node_info: &[NodeUpdateInfo<B::NodeInfo>],
+        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
+    ) {
+        for update_info in visited_node_info {
+            let node = arena.node_mut(update_info.node_index);
+            let edge_to_update = node.get_edge_by_index_mut(update_info.selected_edge_index);
+            edge_to_update.decrement_virtual_visits();
+            edge_to_update.increment_visits();
         }
     }
 }
 
-impl<'a, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
-    for NodeIterator<'a, I, A, P, PV>
+pub struct NodeIterator<'arena, 'node, I, A, P, PV> {
+    visited_node_info: &'node [NodeUpdateInfo<I>],
+    arena: &'arena mut NodeArenaInner<MCTSNode<A, P, PV>>,
+    iter_index: usize,
+}
+
+impl<'arena, 'node, I, A, P, PV> NodeIterator<'arena, 'node, I, A, P, PV> {
+    fn new(
+        visited_node_info: &'node [NodeUpdateInfo<I>],
+        arena: &'arena mut NodeArenaInner<MCTSNode<A, P, PV>>,
+    ) -> Self {
+        Self {
+            visited_node_info,
+            arena,
+            iter_index: 0,
+        }
+    }
+}
+
+impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
+    for NodeIterator<'arena, 'node, I, A, P, PV>
 {
     fn next(&mut self) -> Option<SelectedNode<I, A, P, PV>> {
-        let node = self.visited_node_info.pop()?;
+        if self.iter_index >= self.visited_node_info.len() {
+            return None;
+        }
+
+        let node = &self.visited_node_info[self.iter_index];
         let selected_node = SelectedNode {
             node: self.arena.node_mut(node.node_index),
             selected_edge_index: node.selected_edge_index,
-            node_info: node.node_info,
+            node_info: &node.node_info,
         };
+
+        self.iter_index += 1;
 
         Some(selected_node)
     }

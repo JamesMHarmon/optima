@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 pub struct NodeMetrics<A, P, PV> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
     pub visits: usize,
-    /// Ancillery predictions by the neural network. Like score difference or moves left.
+    /// Ancillary predictions by the neural network. Like score difference or moves left.
     pub predictions: P,
     /// The valid actions of the current game_state of the node.
     pub children: Vec<EdgeMetrics<A, PV>>,
@@ -58,14 +58,20 @@ impl<A, PV> EdgeMetrics<A, PV> {
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeMetrics<A, PV> where PV: PropagatedValue {
+impl<A, PV> EdgeMetrics<A, PV>
+where
+    PV: PropagatedValue,
+{
     pub fn value(&self) -> f32 {
         self.propagatedValues().value()
     }
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeMetrics<A, PV> where PV: PropagatedGameLength {
+impl<A, PV> EdgeMetrics<A, PV>
+where
+    PV: PropagatedGameLength,
+{
     pub fn game_length(&self) -> f32 {
         self.propagatedValues().game_length()
     }

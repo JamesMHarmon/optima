@@ -3,7 +3,7 @@ use crate::MCTSNode;
 pub struct SelectedNode<'node, N, A, P, PV> {
     pub node: &'node mut MCTSNode<A, P, PV>,
     pub selected_edge_index: usize,
-    pub node_info: N,
+    pub node_info: &'node N,
 }
 
 pub trait NodeLendingIterator<'node, N, A, P, V> {
