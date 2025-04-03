@@ -616,6 +616,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "log",
+ "mcts",
  "model",
  "quoridor",
  "rand 0.8.5",

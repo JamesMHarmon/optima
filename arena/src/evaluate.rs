@@ -12,7 +12,7 @@ use std::time::Instant;
 use tokio::runtime::Handle;
 
 use engine::{GameEngine, GameState, Value};
-use mcts::{DynamicCPUCT, MCTSOptions, TemperatureMaxMoves, MCTS};
+use mcts::{BackpropagationStrategy, SelectionStrategy, TemperatureMaxMoves, MCTS};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 
@@ -45,18 +45,24 @@ pub struct MatchResult {
 }
 
 impl Arena {
-    pub fn evaluate<S, A, E, M, T>(
+    pub fn evaluate<S, P, E, M, T, B, Sel, PV>(
         models: &[M],
         engine: &E,
-        results: Sender<EvalResult<A>>,
+        backpropagation_strategy: &B,
+        selection_strategy: &Sel,
+        results: Sender<EvalResult<E::Action>>,
         options: &ArenaOptions,
     ) -> Result<MatchResult>
     where
         S: GameState,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-        E: GameEngine<State = S, Action = A> + Sync,
-        M: Analyzer<State = S, Action = A, Analyzer = T, Value = E::Value> + Info + Send + Sync,
-        T: GameAnalyzer<Action = A, State = S, Value = E::Value> + Send,
+        E::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+        E: GameEngine<State = S, Terminal = P> + Sync,
+        M: Analyzer<State = S, Action = E::Action, Analyzer = T, Predictions = P> + Info + Send + Sync,
+        T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send,
+        B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        P: Value,
+        PV: Default + Ord,
     {
         let num_players = models.len();
         let starting_time = Instant::now();
@@ -97,6 +103,8 @@ impl Arena {
                         game_results_tx,
                         engine,
                         models,
+                        backpropagation_strategy,
+                        selection_strategy,
                         options,
                     );
 
@@ -179,21 +187,28 @@ impl Arena {
             })
     }
 
-    async fn play_games<S, A, V, E, M, T>(
+    #[allow(clippy::too_many_arguments)]
+    async fn play_games<S, A, P, E, M, T, B, Sel, PV>(
         num_games_to_play: usize,
         num_players: usize,
         batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         engine: &E,
         models: &[M],
+        backpropagation_strategy: &B,
+        selection_strategy: &Sel,
         options: &ArenaOptions,
     ) -> Result<()>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-        E: GameEngine<State = S, Action = A, Value = T::Value> + Sync,
-        M: Analyzer<State = S, Action = A, Analyzer = T, Value = V> + Info + Send + Sync,
-        T: GameAnalyzer<Action = A, State = S> + Send,
+        E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+        M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
+        P: Value,
+        PV: Default + Ord,
     {
         let mut games_to_play_futures = FuturesUnordered::new();
         let repeated_models: Vec<_> = repeat_with(|| models.iter())
@@ -208,7 +223,7 @@ impl Arena {
 
         for _ in 0..batch_size {
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(engine, players, options);
+                let game_to_play = Self::play_game(engine, backpropagation_strategy,  selection_strategy, players, options);
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -221,7 +236,7 @@ impl Arena {
                 .map_err(|_| anyhow!("Failed to send game_result"))?;
 
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(engine, players, options);
+                let game_to_play = Self::play_game(engine, backpropagation_strategy,  selection_strategy, players, options);
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -230,17 +245,23 @@ impl Arena {
     }
 
     #[allow(non_snake_case)]
-    async fn play_game<S, A, V, E, T, M>(
+    async fn play_game<S, A, E, B, Sel, T, M, P, PV>(
         engine: &E,
+        backpropagation_strategy: &B,
+        selection_strategy: &Sel,
         players: Vec<&M>,
         options: &ArenaOptions,
     ) -> Result<GameResult<A>>
     where
         S: GameState,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
-        E: GameEngine<State = S, Action = A, Value = T::Value> + Sync,
-        M: Analyzer<State = S, Action = A, Analyzer = T, Value = V> + Info + Send + Sync,
-        T: GameAnalyzer<Action = A, State = S> + Send,
+        E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+        M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
+        P: Value,
+        PV: Default + Ord,
     {
         let play_options = &options.play_options;
         let visits = options.visits;
@@ -249,12 +270,6 @@ impl Arena {
         let mut mctss: Vec<_> = analyzers
             .iter()
             .map(|a| {
-                let cpuct = DynamicCPUCT::new(
-                    play_options.cpuct_base,
-                    play_options.cpuct_init,
-                    1.0,
-                    play_options.cpuct_root_scaling,
-                );
 
                 let temp = TemperatureMaxMoves::new(
                     play_options.temperature,
@@ -267,19 +282,11 @@ impl Arena {
                     S::initial(),
                     engine,
                     a,
-                    MCTSOptions::new(
-                        None,
-                        options.play_options.fpu,
-                        options.play_options.fpu_root,
-                        0.0,
-                        options.play_options.moves_left_threshold,
-                        options.play_options.moves_left_scale,
-                        options.play_options.moves_left_factor,
-                        options.play_options.parallelism,
-                    ),
+                    backpropagation_strategy,
+                    selection_strategy,
                     visits,
-                    cpuct,
                     temp,
+                    play_options.parallelism
                 )
             })
             .collect();

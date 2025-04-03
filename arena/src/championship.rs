@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use engine::{GameEngine, GameState};
+use engine::{GameEngine, GameState, Value};
 use log::{error, info, warn};
+use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
 use serde::{de::DeserializeOwned, Serialize};
 use std::path::Path;
@@ -12,24 +13,30 @@ use super::ArenaOptions;
 use super::{evaluate::EvalResult, EvaluatePersistance};
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship<S, A, F, E, M, MR, T>(
+pub fn championship<S, A, F, E, M, MR, T, B, Sel, P, PV>(
     champions: &F,
     champions_dir: &Path,
     candidates: &F,
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
+    backpropagation_strategy: &B,
+    selection_strategy: &Sel,
     run_dir: &Path,
     options: &ArenaOptions,
 ) -> Result<()>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A> + Sync,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
-    M: Analyzer<State = S, Action = A, Analyzer = T, Value = E::Value> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Value = E::Value> + Send,
+    M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
+    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
+    B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
     MR: Clone + Debug + Eq + Send + Sync,
+    P: Value,
+    PV: Default + Ord
 {
     let runtime_handle = Handle::current();
 
@@ -68,6 +75,8 @@ where
                                 certified_dir,
                                 evaluated_dir,
                                 engine,
+                                backpropagation_strategy,
+                                selection_strategy,
                                 run_dir,
                                 options,
                             );
@@ -100,7 +109,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship_single<S, A, F, E, M, MR, T>(
+pub fn championship_single<S, A, F, E, M, MR, T, B, Sel, P, PV>(
     candidate: &MR,
     champions: &F,
     champions_dir: &Path,
@@ -108,17 +117,23 @@ pub fn championship_single<S, A, F, E, M, MR, T>(
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
+    backpropagation_strategy: &B,
+    selection_strategy: &Sel,
     run_dir: &Path,
     options: &ArenaOptions,
 ) -> Result<()>
 where
     S: GameState,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A> + Sync,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
-    M: Analyzer<State = S, Action = A, Analyzer = T, Value = E::Value> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Value = E::Value> + Send,
+    M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
+    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
+    B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
     MR: Debug + Send + Sync,
+    P: Value,
+    PV: Default + Ord
 {
     let promote_candidate_to_champion = || {
         info!("Promoting {:?} to champion.", candidate);
@@ -185,7 +200,7 @@ where
                 Ok(())
             });
 
-            super::evaluate::Arena::evaluate(&[champion, candidate], engine, tx, options)
+            super::evaluate::Arena::evaluate(&[champion, candidate], engine, backpropagation_strategy, selection_strategy, tx, options)
         })
         .map_err(|e| {
             error!("{:?}", e);

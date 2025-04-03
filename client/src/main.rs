@@ -9,10 +9,13 @@ use env_logger::Env;
 use log::info;
 use model::Load;
 use quoridor::ModelRef;
-use self_play::{play_self, SelfPlayPersistance};
+use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use ugi::run_ugi;
+use mcts::{
+    DynamicCPUCT, MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy, MovesLeftStrategyOptions
+};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -44,7 +47,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let config_path = self_play_args.config.relative_to_cwd()?;
             let config = ConfigLoader::new(config_path, "self_play".to_string())?;
 
-            let self_play_options = config.load()?;
+            let self_play_options: SelfPlayOptions = config.load()?;
 
             let games_dir = config.get_relative_path("games_dir")?;
             let model_dir = config.get_relative_path("model_dir")?;
@@ -52,14 +55,34 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&games_dir)?;
             assert_dir_exists(&model_dir)?;
 
+            let cpuct = DynamicCPUCT::new(
+                self_play_options.play_options.cpuct_base,
+                self_play_options.play_options.cpuct_init,
+                1.0,
+                self_play_options.play_options.cpuct_root_scaling,
+            );
+
+            let selection_strategy_opts = MovesLeftStrategyOptions::new(
+                self_play_options.play_options.fpu,
+                self_play_options.play_options.fpu_root,
+                self_play_options.play_options.temperature_visit_offset,
+                self_play_options.play_options.moves_left_threshold,
+                self_play_options.play_options.moves_left_scale,
+                self_play_options.play_options.moves_left_factor,
+            );
+
             let model_factory = quoridor::ModelFactory::new(model_dir);
             let engine = quoridor::Engine::new();
+            let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&engine);
+            let selection_strategy = MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
 
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
             play_self(
                 &model_factory,
                 &engine,
+                &backpropagation_strategy,
+                &selection_strategy,
                 &mut self_play_persistance,
                 &self_play_options,
             )?
@@ -91,6 +114,8 @@ async fn async_main(cli: Cli) -> Result<()> {
                 &certified_dir,
                 &evaluated_dir,
                 &engine,
+                &backpropagation_strategy,
+                &selection_strategy,
                 &"./".relative_to_cwd()?,
                 &arena_options,
             )?
@@ -121,7 +146,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let model = model_factory.load(&ModelRef::new(model_path))?;
             let engine = quoridor::Engine::new();
 
-            run_ugi(ugi, engine, model).await?
+            run_ugi(ugi, engine, model, backpropagation_strategy, selection_strategy).await?
         }
     }
 
