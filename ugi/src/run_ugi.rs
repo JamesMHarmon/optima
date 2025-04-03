@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::PropagatedValue;
+use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::Analyzer;
@@ -27,7 +27,7 @@ where
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-    B::PropagatedValues: PropagatedValue + Default + Ord,
+    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
     Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,

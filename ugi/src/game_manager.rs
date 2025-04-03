@@ -1,5 +1,5 @@
 use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
-use common::{div_or_zero, PropagatedValue};
+use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
 use mcts::{
@@ -124,7 +124,7 @@ where
             > + Send
             + 'static,
         M::Analyzer: Send,
-        B::PropagatedValues: PropagatedValue + Default + Ord,
+        B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
         E::Terminal: Clone,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
@@ -191,7 +191,7 @@ where
         Predictions = E::Terminal,
         PropagatedValues = B::PropagatedValues,
     >,
-    B::PropagatedValues: PropagatedValue + Default + Ord,
+    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
     E::Terminal: Clone,
 {
     fn new(
@@ -301,7 +301,7 @@ where
                                 .children
                                 .iter()
                                 .take(multi_pv)
-                                .filter_map(|(a, _)| mcts.get_principal_variation(Some(a), 10).ok())
+                                .filter_map(|edge| mcts.get_principal_variation(Some(&edge.action), 10).ok())
                                 .collect_vec();
 
                             let best_node = choose_action(&node_details.children, 0.0);
@@ -315,6 +315,7 @@ where
                                 start_time,
                                 &[best_node.Qsa()],
                                 &[node_details.visits],
+                                &[best_node.propagated_values.game_length()],
                                 &[depth],
                                 &node_details,
                             );
@@ -421,6 +422,7 @@ where
                     let mut actions = Vec::new();
                     let mut depths = Vec::new();
                     let mut visits = Vec::new();
+                    let mut game_lengths = Vec::new();
                     let mut scores = Vec::new();
                     let mut node_details_container = None;
                     while self.engine.player_to_move(&focus_game_state) == current_player
@@ -454,6 +456,7 @@ where
                         );
 
                         scores.push(best_node.Qsa());
+                        game_lengths.push(best_node.propagated_values.game_length());
                         visits.push(node_details.visits);
                         mcts.add_focus_to_action(best_node.action.clone());
 
@@ -487,6 +490,7 @@ where
                         search_start,
                         &scores,
                         &visits,
+                        &game_lengths,
                         &depths,
                         &node_details,
                     );
@@ -501,7 +505,7 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn output_post_search_info<PV: PropagatedValue>(
+    fn output_post_search_info<PV: PropagatedValue + PropagatedGameLength>(
         &self,
         player_to_move: usize,
         pv: &[Vec<EdgeDetails<A, PV>>],
@@ -509,34 +513,35 @@ where
         search_start: Instant,
         scores: &[f32],
         visits: &[usize],
+        game_lengths: &[f32],
         depths: &[usize],
         node_details: &NodeDetails<A, PV>,
     ) {
         self.output.info(&format!(
-            "time {time} playertomove {playertomove} score {score:.3} visits {visits} movesleft {moves_left:.3} depth {depth}",
+            "time {time} playertomove {playertomove} score {score:.3} visits {visits} movesleft {game_length:.3} depth {depth}",
             time = search_start.elapsed().as_secs(),
             playertomove = player_to_move,
             score = scores.first().unwrap_or(&0.5),
             visits = visits.iter().max().unwrap_or(&0),
-            moves_left = moves_left.last().unwrap_or(&0.0),
+            game_length = game_lengths.last().unwrap_or(&0.0),
             depth = depths.iter().max().unwrap_or(&0)
         ));
 
         let visits_sum = (node_details.visits - 1).max(1);
 
-        for (i, ((_, edge), pv)) in node_details.children.iter().zip(pv).enumerate() {
-            let pv_actions = pv.iter().map(|(a, _)| a).cloned().collect::<Vec<_>>();
+        for (i, (edge, pv)) in node_details.children.iter().zip(pv).enumerate() {
+            let pv_actions = pv.iter().map(|edge| &edge.action).cloned().collect::<Vec<_>>();
             let pv_string = self
                 .ugi_mapper
                 .actions_to_move_string(pre_action_game_state, &pv_actions);
 
             self.output.info(&format!(
-                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} movesleft {moves_left:.3} pv {pv}",
+                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} movesleft {game_length:.3} pv {pv}",
                 pv_num = i + 1,
-                score = edge.Qsa,
+                score = edge.propagated_values.value(),
                 visits = edge.Nsa,
                 visitspct = edge.Nsa as f32 / visits_sum as f32,
-                moves_left = edge.M,
+                game_length = edge.propagated_values.game_length(),
                 pv = &pv_string,
             ));
         }
