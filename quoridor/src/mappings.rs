@@ -189,18 +189,18 @@ impl TranspositionMap for Mapper {
         outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
         let policy_scores = *outputs
-            .get("policy")
+            .get("policy_head")
             .expect("Policy scores not found in output");
 
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        let value = outputs.get("value").expect("Value not found in output")[0];
+        let value = outputs.get("value_head").expect("Value not found in output")[0];
 
         // @TODO: Moves left is a vector, does this need to be EV?
         let moves_left = outputs
-            .get("moves_left")
+            .get("moves_left_head")
             .expect("Moves left not found in output")[0];
 
         let game_length = game_state.move_number() as f32 + f16::to_f32(moves_left);
