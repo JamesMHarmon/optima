@@ -3,7 +3,7 @@ use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
 use mcts::{
-    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS,
+    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS
 };
 use model::Analyzer;
 use rand::seq::IteratorRandom;
@@ -307,6 +307,10 @@ where
                             let best_node = choose_action(&node_details.children, 0.0);
 
                             let player_to_move = self.engine.player_to_move(&focus_game_state);
+                            let game_length = best_node
+                                .propagated_values
+                                .game_length()
+                                .max(0.0);
 
                             self.output_post_search_info(
                                 player_to_move,
@@ -315,7 +319,7 @@ where
                                 start_time,
                                 &[best_node.Qsa()],
                                 &[node_details.visits],
-                                &[best_node.propagated_values.game_length()],
+                                &[game_length],
                                 &[depth],
                                 &node_details,
                             );
@@ -518,7 +522,7 @@ where
         node_details: &NodeDetails<A, PV>,
     ) {
         self.output.info(&format!(
-            "time {time} playertomove {playertomove} score {score:.3} visits {visits} movesleft {game_length:.3} depth {depth}",
+            "time {time} playertomove {playertomove} score {score:.3} visits {visits} game_length {game_length:.3} depth {depth}",
             time = search_start.elapsed().as_secs(),
             playertomove = player_to_move,
             score = scores.first().unwrap_or(&0.5),
@@ -536,7 +540,7 @@ where
                 .actions_to_move_string(pre_action_game_state, &pv_actions);
 
             self.output.info(&format!(
-                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} movesleft {game_length:.3} pv {pv}",
+                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} game_length {game_length:.3} pv {pv}",
                 pv_num = i + 1,
                 score = edge.propagated_values.value(),
                 visits = edge.Nsa,
