@@ -1,4 +1,5 @@
 use super::Value;
+use mcts::GameLength;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,5 +25,11 @@ impl Predictions {
 impl engine::Value for Predictions {
     fn get_value_for_player(&self, player: usize) -> f32 {
         self.value().get_value_for_player(player)
+    }
+}
+
+impl GameLength for Predictions {
+    fn game_length_score(&self) -> f32 {
+        self.game_length()
     }
 }

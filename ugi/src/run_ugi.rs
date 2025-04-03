@@ -8,11 +8,11 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output};
+use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGIOptions};
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
-pub async fn run_ugi<M, E, S, A, U, B, Sel>(ugi_mapper: U, engine: E, model: M, backpropagation_strategy: B, selection_strategy: Sel) -> Result<()>
+pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel>(ugi_mapper: U, engine: E, model: M, backpropagation_strategy: FnB, selection_strategy: FnSel) -> Result<()>
 where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
@@ -28,6 +28,8 @@ where
     M::Analyzer: Send,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     B::PropagatedValues: PropagatedValue + Default + Ord,
+    FnB: Fn(&UGIOptions) -> B + Send + 'static,
+    FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
     Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,
     E::Terminal: Clone
 {

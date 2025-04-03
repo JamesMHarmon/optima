@@ -2,7 +2,9 @@ use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOpt
 use common::{div_or_zero, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
-use mcts::{BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS};
+use mcts::{
+    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS,
+};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -94,12 +96,12 @@ where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
 {
-    pub fn new<U, E, M, B, Sel>(
+    pub fn new<U, E, M, FnB, B, FnSel, Sel>(
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
-        backpropagation_strategy: B,
-        selection_strategy: Sel,
+        backpropagation_strategy: FnB,
+        selection_strategy: FnSel,
     ) -> (Self, mpsc::UnboundedReceiver<Output>)
     where
         U: InitialGameState<State = S>
@@ -109,8 +111,18 @@ where
             + 'static,
         E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
         M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-        Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>
+            + Send
+            + 'static,
+        FnB: Fn(&UGIOptions) -> B + Send + 'static,
+        FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
+        Sel: SelectionStrategy<
+                State = S,
+                Action = A,
+                Predictions = E::Terminal,
+                PropagatedValues = B::PropagatedValues,
+            > + Send
+            + 'static,
         M::Analyzer: Send,
         B::PropagatedValues: PropagatedValue + Default + Ord,
         E::Terminal: Clone,
@@ -137,7 +149,7 @@ where
             engine,
             model,
             backpropagation_strategy,
-            selection_strategy
+            selection_strategy,
         );
 
         let handle = tokio::runtime::Handle::current();
@@ -150,7 +162,7 @@ where
     }
 }
 
-pub struct GameManagerInner<S, A, U, E, M, B, Sel> {
+pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel> {
     command_rx: mpsc::Receiver<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
@@ -158,12 +170,12 @@ pub struct GameManagerInner<S, A, U, E, M, B, Sel> {
     ugi_mapper: Arc<U>,
     engine: E,
     model: M,
-    backpropagation_strategy: B,
-    selection_strategy: Sel,
+    backpropagation_strategy: FnB,
+    selection_strategy: FnSel,
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<S, A, U, E, M, B, Sel> GameManagerInner<S, A, U, E, M, B, Sel>
+impl<S, A, U, E, M, B, FnB, FnSel, Sel> GameManagerInner<S, A, U, E, M, FnB, FnSel>
 where
     S: GameState + Clone + Display,
     A: Display + Debug + Eq + Clone,
@@ -171,7 +183,14 @@ where
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A>,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues>,
+    FnB: Fn(&UGIOptions) -> B,
+    FnSel: Fn(&UGIOptions) -> Sel,
+    Sel: SelectionStrategy<
+        State = S,
+        Action = A,
+        Predictions = E::Terminal,
+        PropagatedValues = B::PropagatedValues,
+    >,
     B::PropagatedValues: PropagatedValue + Default + Ord,
     E::Terminal: Clone,
 {
@@ -183,8 +202,8 @@ where
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
-        backpropagation_strategy: B,
-        selection_strategy: Sel,
+        backpropagation_strategy: FnB,
+        selection_strategy: FnSel,
     ) -> Self {
         Self {
             command_rx,
@@ -204,45 +223,30 @@ where
         let mut game_state = self.ugi_mapper.initial_game_state();
         let mut focus_game_state = game_state.clone();
 
-        let options = self.options.clone();
+        let options: Arc<Mutex<UGIOptions>> = self.options.clone();
         let ponder_active = self.ponder_active.clone();
         let analyzer = self.model.analyzer();
+
+        let mut backpropagation_strategy;
+        let mut selection_strategy;
 
         while let Some(command) = self.command_rx.recv().await {
             if mcts_container.is_none() {
                 let options = options.lock().unwrap();
-
-                // @TODO: Verify settings
-                // let cpuct = DynamicCPUCT::new(
-                //     options.cpuct_base,
-                //     options.cpuct_init,
-                //     options.cpuct_factor,
-                //     options.cpuct_root_scaling,
-                // );
-
                 let temp = TemperatureConstant::new(0.0);
 
-                // @TODO: Verify settings
-                // MCTSOptions::new(
-                //     None,
-                //     options.fpu,
-                //     options.fpu_root,
-                //     0.0,
-                //     options.moves_left_threshold,
-                //     options.moves_left_scale,
-                //     options.moves_left_factor,
-                //     options.parallelism,
-                // ),
+                backpropagation_strategy = Some((self.backpropagation_strategy)(&options));
+                selection_strategy = Some((self.selection_strategy)(&options));
 
                 mcts_container = Some(MCTS::with_capacity(
                     game_state.clone(),
                     &self.engine,
                     &analyzer,
-                    &self.backpropagation_strategy,
-                    &self.selection_strategy,
+                    backpropagation_strategy.as_ref().unwrap(),
+                    selection_strategy.as_ref().unwrap(),
                     options.visits,
                     temp,
-                    options.parallelism
+                    options.parallelism,
                 ));
             }
 
@@ -453,7 +457,9 @@ where
                         visits.push(node_details.visits);
                         mcts.add_focus_to_action(best_node.action.clone());
 
-                        focus_game_state = self.engine.take_action(&focus_game_state, &best_node.action);
+                        focus_game_state = self
+                            .engine
+                            .take_action(&focus_game_state, &best_node.action);
                         actions.push(best_node.action.clone());
 
                         if node_details_container.is_none() {
@@ -565,7 +571,10 @@ impl OutputHandle {
     }
 }
 
-fn choose_action<A, PV>(edges: &[EdgeDetails<A, PV>], alternative_action_threshold: f32) -> &EdgeDetails<A, PV> {
+fn choose_action<A, PV>(
+    edges: &[EdgeDetails<A, PV>],
+    alternative_action_threshold: f32,
+) -> &EdgeDetails<A, PV> {
     let max_visits = edges
         .iter()
         .map(|details| details.Nsa)

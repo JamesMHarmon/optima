@@ -1,21 +1,23 @@
 mod cli;
 
 use anyhow::{anyhow, Result};
+use arena::ArenaOptions;
 use clap::Parser;
 use cli::{Cli, Commands};
 use common::{get_env_usize, ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use log::info;
+use mcts::{
+    DynamicCPUCT, MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy,
+    MovesLeftStrategyOptions,
+};
 use model::Load;
 use quoridor::ModelRef;
 use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-use ugi::run_ugi;
-use mcts::{
-    DynamicCPUCT, MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy, MovesLeftStrategyOptions
-};
+use ugi::{run_ugi, UGIOptions};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -48,6 +50,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let config = ConfigLoader::new(config_path, "self_play".to_string())?;
 
             let self_play_options: SelfPlayOptions = config.load()?;
+            let play_options = &self_play_options.play_options;
 
             let games_dir = config.get_relative_path("games_dir")?;
             let model_dir = config.get_relative_path("model_dir")?;
@@ -56,25 +59,26 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&model_dir)?;
 
             let cpuct = DynamicCPUCT::new(
-                self_play_options.play_options.cpuct_base,
-                self_play_options.play_options.cpuct_init,
+                play_options.cpuct_base,
+                play_options.cpuct_init,
                 1.0,
-                self_play_options.play_options.cpuct_root_scaling,
+                play_options.cpuct_root_scaling,
             );
 
             let selection_strategy_opts = MovesLeftStrategyOptions::new(
-                self_play_options.play_options.fpu,
-                self_play_options.play_options.fpu_root,
-                self_play_options.play_options.temperature_visit_offset,
-                self_play_options.play_options.moves_left_threshold,
-                self_play_options.play_options.moves_left_scale,
-                self_play_options.play_options.moves_left_factor,
+                play_options.fpu,
+                play_options.fpu_root,
+                play_options.temperature_visit_offset,
+                play_options.moves_left_threshold,
+                play_options.moves_left_scale,
+                play_options.moves_left_factor,
             );
 
             let model_factory = quoridor::ModelFactory::new(model_dir);
             let engine = quoridor::Engine::new();
             let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&engine);
-            let selection_strategy = MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
+            let selection_strategy =
+                MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
 
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
@@ -91,7 +95,8 @@ async fn async_main(cli: Cli) -> Result<()> {
             let config_path = arena_args.config.relative_to_cwd()?;
             let config = ConfigLoader::new(config_path, "arena".to_string())?;
 
-            let arena_options = config.load()?;
+            let arena_options: ArenaOptions = config.load()?;
+            let play_options = &arena_options.play_options;
 
             let champions_dir = config.get_relative_path("champions_dir")?;
             let candidates_dir = config.get_relative_path("candidates_dir")?;
@@ -103,9 +108,28 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&certified_dir)?;
             assert_dir_exists(&evaluated_dir)?;
 
+            let cpuct = DynamicCPUCT::new(
+                play_options.cpuct_base,
+                play_options.cpuct_init,
+                1.0,
+                play_options.cpuct_root_scaling,
+            );
+
+            let selection_strategy_opts = MovesLeftStrategyOptions::new(
+                play_options.fpu,
+                play_options.fpu_root,
+                play_options.temperature_visit_offset,
+                play_options.moves_left_threshold,
+                play_options.moves_left_scale,
+                play_options.moves_left_factor,
+            );
+
             let champion_factory = quoridor::ModelFactory::new(champions_dir.clone());
             let candidate_factory = quoridor::ModelFactory::new(candidates_dir);
             let engine: quoridor::Engine = quoridor::Engine::new();
+            let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&engine);
+            let selection_strategy =
+                MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
 
             arena::championship(
                 &champion_factory,
@@ -145,6 +169,37 @@ async fn async_main(cli: Cli) -> Result<()> {
             let model_factory = quoridor::ModelFactory::new(model_dir);
             let model = model_factory.load(&ModelRef::new(model_path))?;
             let engine = quoridor::Engine::new();
+
+            fn leak_engine() -> &'static quoridor::Engine {
+                let engine = Box::new(quoridor::Engine::new());
+                Box::leak(engine)
+            }
+
+            let cpuct = |options: &UGIOptions|
+                DynamicCPUCT::new(
+                options.cpuct_base,
+                options.cpuct_init,
+                options.cpuct_factor,
+                options.cpuct_root_scaling,
+            );
+
+            let selection_strategy_opts = |options: &UGIOptions| MovesLeftStrategyOptions::new(
+                options.fpu,
+                options.fpu_root,
+                0.0,
+                options.moves_left_threshold,
+                options.moves_left_scale,
+                options.moves_left_factor,
+            );
+
+            let backpropagation_strategy = move |_options: &UGIOptions| {
+                MovesLeftBackpropagationStrategy::new(leak_engine())
+            };
+
+            let selection_strategy = move |options: &UGIOptions|  MovesLeftSelectionStrategy::new(
+                cpuct(options),
+                selection_strategy_opts(options),
+            );
 
             run_ugi(ugi, engine, model, backpropagation_strategy, selection_strategy).await?
         }

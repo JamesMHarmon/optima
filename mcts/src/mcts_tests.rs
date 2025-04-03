@@ -68,7 +68,7 @@ mod tests {
         EdgeMetrics::new(
             action,
             visits,
-            MovesLeftPropagatedValue::new(value * visits as f32, 0.0),
+            MovesLeftPropagatedValue::new(value, 0.0),
         )
     }
 
