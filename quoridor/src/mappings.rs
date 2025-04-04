@@ -209,13 +209,6 @@ impl TranspositionMap for Mapper {
 
         let game_length = game_state.move_number() as f32 + moves_left;
 
-        println!(
-            "Game length: {}. Move number: {}. Moves left: {}",
-            game_length,
-            game_state.move_number(),
-            moves_left
-        );
-
         TranspositionEntry::new(policy_metrics, value, game_length)
     }
 
