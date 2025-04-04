@@ -35,27 +35,6 @@ where
         epsilon: options.epsilon,
     });
 
-    // @TODO: Verify options
-    // let cpuct = DynamicCPUCT::new(
-    //     play_options.cpuct_base,
-    //     play_options.cpuct_init,
-    //     1.0,
-    //     play_options.cpuct_root_scaling,
-    // );
-
-    // MCTSOptions::new(
-    //     Some(DirichletOptions {
-    //         epsilon: options.epsilon,
-    //     }),
-    //     play_options.fpu,
-    //     play_options.fpu_root,
-    //     play_options.temperature_visit_offset,
-    //     play_options.moves_left_threshold,
-    //     play_options.moves_left_scale,
-    //     play_options.moves_left_factor,
-    //     play_options.parallelism,
-    // ),
-
     let temp = TemperatureConstant::new(play_options.temperature);
 
     let mut mcts = MCTS::with_capacity(

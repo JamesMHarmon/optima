@@ -148,7 +148,6 @@ impl<Ps> PredictionStack<Ps> {
     }
 }
 
-// @TODO: Was a method on the NodeMetrics struct
 /// Difference between the Q of the specified action and the child that would be played with no temp.
 fn q_diff<A, P, PV>(metrics: &NodeMetrics<A, P, PV>, action: &A) -> f32
 where
