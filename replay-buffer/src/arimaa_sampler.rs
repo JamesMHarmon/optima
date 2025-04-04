@@ -99,9 +99,10 @@ impl PredictionsMap for ArimaaSampler {
     fn to_output(
         &self,
         game_state: &Self::State,
+        targets: Self::Predictions,
         node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
-        self.mapper.to_output(game_state, node_metrics)
+        self.mapper.to_output(game_state, targets, node_metrics)
     }
 }
 

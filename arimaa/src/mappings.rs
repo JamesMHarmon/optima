@@ -164,45 +164,54 @@ impl PredictionsMap for Mapper {
     fn to_output(
         &self,
         game_state: &Self::State,
+        targets: Self::Predictions,
         node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
-        // @TODO: Verify if this should actually be predictions?
-        let predictions = &node_metrics.predictions;
-        let mut output = std::collections::HashMap::with_capacity(3);
-        output.insert(
-            "policy".to_string(),
-            self.metrics_to_policy_output(game_state, node_metrics),
-        );
-        output.insert(
-            "value".to_string(),
-            self.metrics_to_value_output(game_state, predictions.value()),
-        );
-
-        // @TODO: Move this to where the policy output is generated
-        // let value_output = self.to_output(&metric.game_state, &metric.score);
-        // let moves_left_output =
-        //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
-
-        // @TODO: Move this to where the policy output is generated
-        // let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
-        // assert!(
-        //     f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
-        //     "Policy output should sum to 1.0 but actual sum is {}",
-        //     sum_of_policy
-        // );
-
-        // @TODO: Move this to where the value output is generated
-        // assert!(
-        //     (-1.0..=1.0).contains(&value_output),
-        //     "Value output should be in range -1.0-1.0 but was {}",
-        //     &value_output
-        // );
+        let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
+        let value_output = self.metrics_to_value_output(game_state, targets.value());
 
         let move_number = game_state.get_move_number() as f32;
-        let moves_left = (predictions.game_length() - move_number).max(0.0);
+        let moves_left = (targets.game_length() - move_number).max(0.0);
         let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
-        output.insert("moves_left".to_string(), moves_left_one_hot);
-        output
+
+        /*
+            Validate the outputs to ensure values are in their appropriate ranges.
+        */
+        let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+        assert!(
+            f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
+            "Policy output should sum to 1.0 but actual sum is {}",
+            sum_of_policy
+        );
+
+        for policy in policy_output.iter() {
+            assert!(
+                (0.0..=1.0).contains(policy) || *policy == -1.0,
+                "Policy output should be in range 0.0-1.0 but was {}",
+                policy
+            );
+        }
+
+        for value in value_output.iter() {
+            assert!(
+                (-1.0..=1.0).contains(value),
+                "Value output should be in range -1.0-1.0 but was {}",
+                value
+            );
+        }
+
+        assert_eq!(policy_output.len(), OUTPUT_SIZE);
+        assert_eq!(value_output.len(), 1);
+        assert_eq!(moves_left_one_hot.len(), MOVES_LEFT_SIZE);
+
+        [
+            ("policy", policy_output),
+            ("value", value_output),
+            ("moves_left", moves_left_one_hot),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect()
     }
 }
 

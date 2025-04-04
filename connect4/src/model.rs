@@ -51,6 +51,7 @@ impl Mapper {
         _game_state: &GameState,
         node_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
     ) -> Vec<f32> {
+        //@TODO: Make invalid actions -1.0
         let total_visits = node_metrics.visits as f32 - 1.0;
         let result: [f32; 7] = node_metrics.children.iter().fold([0.0; 7], |mut r, m| {
             let column_idx = m.action().column() as usize - 1;
@@ -141,24 +142,55 @@ impl PredictionsMap for Mapper {
     fn to_output(
         &self,
         game_state: &Self::State,
+        targets: Self::Predictions,
         node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
-        let predictions = &node_metrics.predictions;
-        let mut output = std::collections::HashMap::with_capacity(3);
-        output.insert(
-            "policy".to_string(),
-            self.metrics_to_policy_output(game_state, node_metrics),
-        );
-        output.insert(
-            "value".to_string(),
-            self.metrics_to_value_output(game_state, predictions.value()),
+        let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
+        let value_output = self.metrics_to_value_output(game_state, targets.value());
+
+        // @TODO: Verify how number_of_actions relates to game_length.
+        let move_number = game_state.number_of_actions() as f32;
+        let moves_left = (targets.game_length() - move_number).max(0.0);
+        let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
+
+        /*
+            Validate the outputs to ensure values are in their appropriate ranges.
+        */
+        let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+        assert!(
+            f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
+            "Policy output should sum to 1.0 but actual sum is {}",
+            sum_of_policy
         );
 
-        let action_number = game_state.number_of_actions() as f32;
-        let moves_left = (predictions.game_length() - action_number).max(0.0);
-        let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
-        output.insert("moves_left".to_string(), moves_left_one_hot);
-        output
+        for policy in policy_output.iter() {
+            assert!(
+                (0.0..=1.0).contains(policy) || *policy == -1.0,
+                "Policy output should be in range 0.0-1.0 but was {}",
+                policy
+            );
+        }
+
+        for value in value_output.iter() {
+            assert!(
+                (-1.0..=1.0).contains(value),
+                "Value output should be in range -1.0-1.0 but was {}",
+                value
+            );
+        }
+
+        assert_eq!(policy_output.len(), OUTPUT_SIZE);
+        assert_eq!(value_output.len(), 1);
+        assert_eq!(moves_left_one_hot.len(), MOVES_LEFT_SIZE);
+
+        [
+            ("policy", policy_output),
+            ("value", value_output),
+            ("moves_left", moves_left_one_hot),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect()
     }
 }
 

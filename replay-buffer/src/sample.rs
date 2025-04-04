@@ -29,7 +29,7 @@ pub trait Sample {
         q_diff_threshold: f32,
         q_diff_width: f32,
     ) -> Vec<
-        PositionMetrics<
+        PositionMetricsExtended<
             <Self as Sample>::State,
             <Self as Sample>::Action,
             <Self as Sample>::Predictions,
@@ -39,7 +39,7 @@ pub trait Sample {
     where
         Self: Sized,
         <Self as Sample>::State: GameState,
-        <Self as Sample>::Action: PartialEq,
+        <Self as Sample>::Action: PartialEq + Clone,
         <Self as Sample>::Predictions: Clone,
         <Self as Sample>::PropagatedValues: PropagatedValue,
         Self::PredictionStore: PredictionStore<
@@ -70,7 +70,12 @@ pub trait Sample {
             .into_iter()
             .filter(|s| self.sample_filter(&s.metrics));
 
-        metrics.flat_map(|s| self.symmetries(s.metrics)).collect()
+        metrics.flat_map(|s| self.symmetries(s.metrics).into_iter().map(move |metrics| PositionMetricsExtended {
+            metrics,
+            target_score: s.target_score.clone(),
+            chosen_action: s.chosen_action.clone(),
+            move_number: s.move_number,
+        })).collect()
     }
 
     fn symmetries(
@@ -138,43 +143,9 @@ pub trait Sample {
         self.input_size() + self.outputs().iter().map(|(_, size)| size).sum::<usize>()
     }
 
-    // fn serialize(&self, input_and_targets: &InputAndTargets) -> Vec<f32> {
-    //     let input_size = self.input_size();
-    //     let output_size: usize = self.outputs().iter().map(|(_, size)| size).sum();
-    //     let total_size = input_size + output_size;
-
-    //     let mut serialized = Vec::with_capacity(total_size);
-    //     serialized.extend_from_slice(input_and_targets.input());
-
-    //     for (name, output) in self.outputs() {
-    //         serialized.extend_from_slice(input_and_targets.targets()[&name].as_slice());
-    //     }
-
-    //     serialized
-    // }
-
-    // fn deserialize(&self, serialized: &[f32]) -> InputAndTargets {
-    //     let mut vals = serialized.iter().map(|x| x.to_owned());
-    //     let input_size = self.input_size();
-
-    //     let input = vals.by_ref().take(input_size).collect();
-    //     let targets = self
-    //         .outputs()
-    //         .iter()
-    //         .map(|(name, size)| {
-    //             let output: Vec<f32> = vals.by_ref().take(*size).collect();
-    //             assert!(output.len() == *size, "Output size mismatch");
-    //             (name.clone(), output)
-    //         })
-    //         .collect();
-
-    //     assert!(vals.next().is_none(), "No more vals should be left");
-
-    //     InputAndTargets { input, targets }
-    // }
-
     fn metric_to_input_and_targets(
         &self,
+        targets: <Self as Sample>::Predictions,
         metric: &PositionMetrics<
             <Self as Sample>::State,
             <Self as Sample>::Action,
@@ -191,7 +162,7 @@ pub trait Sample {
             PropagatedValues = <Self as Sample>::PropagatedValues,
         >,
     {
-        let targets = self.to_output(&metric.game_state, &metric.policy);
+        let targets = self.to_output(&metric.game_state, targets, &metric.policy);
         let input_len = self.input_size();
 
         let mut input = vec![f16::ZERO; input_len];

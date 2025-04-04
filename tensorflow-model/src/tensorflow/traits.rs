@@ -36,6 +36,7 @@ pub trait PredictionsMap {
     fn to_output(
         &self,
         game_state: &Self::State,
+        targets: Self::Predictions,
         node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
     ) -> HashMap<String, Vec<f32>>;
 }

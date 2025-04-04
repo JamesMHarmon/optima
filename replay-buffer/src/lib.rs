@@ -4,7 +4,6 @@ use engine::GameState;
 use env_logger::Env;
 use flate2::read::GzDecoder;
 use log::warn;
-use model::PositionMetrics;
 use pyo3::types::{IntoPyDict, PyDict};
 use q_mix::{PredictionStore, QMix};
 use rand::Rng;
@@ -220,7 +219,7 @@ impl<S> SampleLoader<S> {
         S: Sample,
         S: Sized,
         <S as Sample>::State: GameState,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
@@ -266,7 +265,7 @@ impl<S> SampleLoader<S> {
         S: Sample,
         S: Sized,
         <S as Sample>::State: GameState,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
@@ -315,8 +314,8 @@ impl<S> SampleLoader<S> {
 
                 let samples = self.load_samples(metrics_path)?;
                 let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
-                for metrics in samples {
-                    let inputs_and_targets = self.sampler.metric_to_input_and_targets(&metrics);
+                for sample in samples {
+                    let inputs_and_targets = self.sampler.metric_to_input_and_targets(sample.target_score, &sample.metrics);
                     vals.extend_from_slice(inputs_and_targets.as_slice());
                 }
 
@@ -342,7 +341,7 @@ impl<S> SampleLoader<S> {
         metrics_path: impl AsRef<Path>,
     ) -> Result<
         Vec<
-            PositionMetrics<
+            PositionMetricsExtended<
                 <S as Sample>::State,
                 <S as Sample>::Action,
                 <S as Sample>::Predictions,
@@ -354,7 +353,7 @@ impl<S> SampleLoader<S> {
         S: Sample,
         S: Sized,
         <S as Sample>::State: GameState,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
+        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
