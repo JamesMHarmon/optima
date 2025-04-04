@@ -12,11 +12,16 @@ pub trait PropagatedGameLength {
 pub struct MovesLeftPropagatedValue {
     value: f32,
     game_length: f32,
+    num_updates: usize,
 }
 
 impl MovesLeftPropagatedValue {
     pub fn new(value: f32, game_length: f32) -> Self {
-        Self { value, game_length }
+        Self {
+            value,
+            game_length,
+            num_updates: 0,
+        }
     }
 
     pub fn value_mut(&mut self) -> &mut f32 {
@@ -25,6 +30,14 @@ impl MovesLeftPropagatedValue {
 
     pub fn game_length_mut(&mut self) -> &mut f32 {
         &mut self.game_length
+    }
+
+    pub fn num_updates(&self) -> usize {
+        self.num_updates
+    }
+
+    pub fn increment_num_updates(&mut self) {
+        self.num_updates += 1;
     }
 }
 

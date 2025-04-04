@@ -785,10 +785,3 @@ impl<T: TensorType> TensorPool<T> {
         tensor
     }
 }
-
-pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {
-    moves_left_scores
-        .enumerate()
-        .map(|(i, s)| (i + 1) as f32 * s)
-        .fold(0.0f32, |s, e| s + e)
-}

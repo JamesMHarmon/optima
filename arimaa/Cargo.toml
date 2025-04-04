@@ -49,6 +49,7 @@ model = { path = "../model" }
 tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
 ] }
 arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
+mcts = { path = "../mcts" }
 
 anyhow = { version = "1.0", optional = true }
 flate2 = { version = "1.0" }

@@ -4,7 +4,6 @@ pub struct SelectedNode<'node, N, A, P, PV> {
     pub node: &'node mut MCTSNode<A, P, PV>,
     pub selected_edge_index: usize,
     pub node_info: &'node N,
-    pub edge_visits_at_time_of_traversal: usize,
 }
 
 pub trait NodeLendingIterator<'node, N, A, P, V> {

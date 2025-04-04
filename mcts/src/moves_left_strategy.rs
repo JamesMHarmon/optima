@@ -116,6 +116,13 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
     }
 }
 
+pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {
+    moves_left_scores
+        .enumerate()
+        .map(|(i, s)| (i + 1) as f32 * s)
+        .fold(0.0f32, |s, e| s + e)
+}
+
 #[allow(non_snake_case)]
 impl<S, A, P, C> SelectionStrategy for MovesLeftSelectionStrategy<S, A, P, C>
 where
@@ -281,28 +288,28 @@ where
         >,
     {
         let mut visited_nodes = visited_nodes;
-        let estimated_game_length = predictions.game_length_score();
+        let game_length_score = predictions.game_length_score();
 
         while let Some(node) = visited_nodes.next() {
             // Update value of W from the parent node's perspective.
             // This is because the parent chooses which child node to select, and as such will want the one with the
             // highest V from its perspective. A child node (or edge) does not care what its value (W or Q) is from its own perspective.
-            let score = predictions.get_value_for_player(node.node_info.player_to_move);
-
+            let value_score = predictions.get_value_for_player(node.node_info.player_to_move);
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            // The number of visits at the time of traversal acts like a pseudo virtual visit implementation.
-            // It is technically not completely mathematically correct as incremental average may be performed out of order, but it is a good approximation.
-            // In an ideal implementation we would force the backpropagation of nodes to be in the order of traversal when dealing with multiple thread searches.
-            let visits = node.edge_visits_at_time_of_traversal;
-            let current_value = edge_to_update.propagated_values().value();
-            let new_value = current_value + (score - current_value) / (visits + 1) as f32;
-            *edge_to_update.propagated_values_mut().value_mut() = new_value;
+            let propagated_values = edge_to_update.propagated_values_mut();
+            let num_updates = propagated_values.num_updates();
 
-            let current_game_length = edge_to_update.propagated_values().game_length();
-            let new_game_length = current_game_length
-                + (estimated_game_length - current_game_length) / (visits + 1) as f32;
-            *edge_to_update.propagated_values_mut().game_length_mut() += new_game_length;
+            let value = propagated_values.value();
+            let new_value = value + (value_score - value) / (num_updates + 1) as f32;
+            *propagated_values.value_mut() = new_value;
+
+            let game_length = propagated_values.game_length();
+            let new_game_length =
+                game_length + (game_length_score - game_length) / (num_updates + 1) as f32;
+            *propagated_values.game_length_mut() = new_game_length;
+
+            propagated_values.increment_num_updates();
         }
     }
 

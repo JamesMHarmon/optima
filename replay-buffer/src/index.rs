@@ -63,7 +63,7 @@ pub struct Sampler<'a> {
 }
 
 impl<'a> Sampler<'a> {
-    pub fn new(range: Range<usize>, indexes: &'a mut Vec<DirIndex>) -> Result<Sampler> {
+    pub fn new(range: Range<usize>, indexes: &'a mut Vec<DirIndex>) -> Result<Sampler<'a>> {
         let start = Instant::now();
         let mut index_start = 0;
         let mut index_end = 0;

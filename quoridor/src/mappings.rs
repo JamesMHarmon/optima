@@ -3,6 +3,7 @@ use crate::{Predictions, BOARD_SIZE};
 use super::transposition_entry::TranspositionEntry;
 use common::MovesLeftPropagatedValue;
 use half::f16;
+use mcts::moves_left_expected_value;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tensorflow_model::{InputMap, PredictionsMap, TranspositionMap};
@@ -200,12 +201,21 @@ impl TranspositionMap for Mapper {
             .get("value_head")
             .expect("Value not found in output")[0];
 
-        // @TODO: Moves left is a vector, does this need to be EV?
-        let moves_left = outputs
+        let moves_left_vals = outputs
             .get("moves_left_head")
-            .expect("Moves left not found in output")[0];
+            .expect("Moves left not found in output");
 
-        let game_length = game_state.move_number() as f32 + f16::to_f32(moves_left);
+        let moves_left = moves_left_expected_value(moves_left_vals.iter().map(|x| x.to_f32()));
+
+        let game_length = game_state.move_number() as f32 + moves_left;
+
+        println!(
+            "Game length: {}. Move number: {}. Moves left: {}",
+            game_length,
+            game_state.move_number(),
+            moves_left
+        );
+
         TranspositionEntry::new(policy_metrics, value, game_length)
     }
 

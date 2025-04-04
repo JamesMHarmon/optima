@@ -642,7 +642,6 @@ where
                 node_index: latest_index,
                 selected_edge_index,
                 node_info,
-                edge_visits_at_time_of_traversal: edge_visits,
             });
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
@@ -752,7 +751,6 @@ impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
             node: self.arena.node_mut(node.node_index),
             selected_edge_index: node.selected_edge_index,
             node_info: &node.node_info,
-            edge_visits_at_time_of_traversal: node.edge_visits_at_time_of_traversal,
         };
 
         self.iter_index += 1;
@@ -812,7 +810,6 @@ struct NodeUpdateInfo<I> {
     node_index: Index,
     selected_edge_index: usize,
     node_info: I,
-    edge_visits_at_time_of_traversal: usize,
 }
 
 struct NodeArena<T>(RefCell<NodeArenaInner<T>>);
