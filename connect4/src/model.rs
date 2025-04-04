@@ -2,12 +2,15 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::PathBuf;
 
+use crate::constants::MOVES_LEFT_SIZE;
+
 use super::{
     map_board_to_arr, Action, Engine, GameState, Predictions, Value, INPUT_C, INPUT_H, INPUT_W,
     OUTPUT_SIZE,
 };
 use common::{get_env_usize, MovesLeftPropagatedValue};
 use engine::Value as ValueTrait;
+use mcts::map_moves_left_to_one_hot;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, GameStateAnalysis, Latest, Load, NodeMetrics, PositionMetrics};
 use tensorflow_model::{latest, unarchive, Archive as ArchiveModel};
@@ -153,7 +156,8 @@ impl PredictionsMap for Mapper {
 
         let action_number = game_state.number_of_actions() as f32;
         let moves_left = (predictions.game_length() - action_number).max(0.0);
-        output.insert("moves_left".to_string(), vec![moves_left]);
+        let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
+        output.insert("moves_left".to_string(), moves_left_one_hot);
         output
     }
 }

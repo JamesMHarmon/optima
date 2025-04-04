@@ -18,7 +18,9 @@ model = ["tensorflow-model/all"]
 common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
-tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [] }
+mcts = { path = "../mcts" }
+tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
+] }
 
 anyhow = "1.0"
 log = "0.4"

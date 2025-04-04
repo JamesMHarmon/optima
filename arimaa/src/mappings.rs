@@ -1,6 +1,6 @@
 use common::MovesLeftPropagatedValue;
 use half::f16;
-use mcts::moves_left_expected_value;
+use mcts::{map_moves_left_to_one_hot, moves_left_expected_value};
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -177,9 +177,31 @@ impl PredictionsMap for Mapper {
             "value".to_string(),
             self.metrics_to_value_output(game_state, predictions.value()),
         );
+
+        // @TODO: Move this to where the policy output is generated
+        // let value_output = self.to_output(&metric.game_state, &metric.score);
+        // let moves_left_output =
+        //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
+
+        // @TODO: Move this to where the policy output is generated
+        // let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
+        // assert!(
+        //     f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
+        //     "Policy output should sum to 1.0 but actual sum is {}",
+        //     sum_of_policy
+        // );
+
+        // @TODO: Move this to where the value output is generated
+        // assert!(
+        //     (-1.0..=1.0).contains(&value_output),
+        //     "Value output should be in range -1.0-1.0 but was {}",
+        //     &value_output
+        // );
+
         let move_number = game_state.get_move_number() as f32;
         let moves_left = (predictions.game_length() - move_number).max(0.0);
-        output.insert("moves_left".to_string(), vec![moves_left]);
+        let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
+        output.insert("moves_left".to_string(), moves_left_one_hot);
         output
     }
 }

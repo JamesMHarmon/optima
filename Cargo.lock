@@ -662,6 +662,7 @@ dependencies = [
  "engine",
  "half 1.8.3",
  "log",
+ "mcts",
  "model",
  "serde",
  "serde_json",

@@ -192,32 +192,11 @@ pub trait Sample {
         >,
     {
         let targets = self.to_output(&metric.game_state, &metric.policy);
-
-        // @TODO: Move this to where the policy output is generated
-        // let value_output = self.to_output(&metric.game_state, &metric.score);
-        // let moves_left_output =
-        //     map_moves_left_to_one_hot(metric.moves_left, self.moves_left_size());
-
         let input_len = self.input_size();
-
-        // @TODO: Move this to where the policy output is generated
-        // let sum_of_policy = policy_output.iter().filter(|&&x| x >= 0.0).sum::<f32>();
-        // assert!(
-        //     f32::abs(sum_of_policy - 1.0) <= f32::EPSILON * policy_output.len() as f32,
-        //     "Policy output should sum to 1.0 but actual sum is {}",
-        //     sum_of_policy
-        // );
 
         let mut input = vec![f16::ZERO; input_len];
         self.game_state_to_input(&metric.game_state, &mut input, Mode::Train);
         let input = input.into_iter().map(f16::to_f32).collect::<Vec<f32>>();
-
-        // @TODO: Move this to where the value output is generated
-        // assert!(
-        //     (-1.0..=1.0).contains(&value_output),
-        //     "Value output should be in range -1.0-1.0 but was {}",
-        //     &value_output
-        // );
 
         self.input_and_targets(&input, &targets)
     }
@@ -305,17 +284,4 @@ fn filter_full_visits<S, A, P, PV>(
     min_visits: usize,
 ) {
     metrics.retain(|m| m.metrics.policy.visits >= min_visits)
-}
-
-// @TODO: Put this wherever it should go
-fn map_moves_left_to_one_hot(moves_left: usize, moves_left_size: usize) -> Vec<f32> {
-    if moves_left_size == 0 {
-        return vec![];
-    }
-
-    let moves_left = moves_left.max(0).min(moves_left_size);
-    let mut moves_left_one_hot = vec![0f32; moves_left_size];
-    moves_left_one_hot[moves_left - 1] = 1.0;
-
-    moves_left_one_hot
 }

@@ -1,9 +1,9 @@
-use crate::{Predictions, BOARD_SIZE};
+use crate::{Predictions, BOARD_SIZE, MOVES_LEFT_SIZE};
 
 use super::transposition_entry::TranspositionEntry;
 use common::MovesLeftPropagatedValue;
 use half::f16;
-use mcts::moves_left_expected_value;
+use mcts::{map_moves_left_to_one_hot, moves_left_expected_value};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tensorflow_model::{InputMap, PredictionsMap, TranspositionMap};
@@ -169,7 +169,8 @@ impl PredictionsMap for Mapper {
         );
         let move_number = game_state.move_number() as f32;
         let moves_left = (predictions.game_length() - move_number).max(0.0);
-        output.insert("moves_left".to_string(), vec![moves_left]);
+        let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
+        output.insert("moves_left".to_string(), moves_left_one_hot);
         output
     }
 }
