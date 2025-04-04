@@ -13,12 +13,12 @@ use sample::InputAndTargets;
 use sample_file::{SampleFile, SampleFileReader};
 use self_play::SelfPlayMetrics;
 use serde::{de, Serialize};
-use tensorflow_model::{InputMap, PredictionsMap};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tensorflow_model::{InputMap, PredictionsMap};
 
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
@@ -136,7 +136,9 @@ impl ReplayBuffer {
         for sample in samples.iter() {
             for (name, _) in outputs.iter() {
                 let values = sampler.output_values(sample, name);
-                data.get_mut(name).expect("No output entry found.").extend_from_slice(values);
+                data.get_mut(name)
+                    .expect("No output entry found.")
+                    .extend_from_slice(values);
             }
         }
 
@@ -233,10 +235,8 @@ impl<S> SampleLoader<S> {
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
-        S::PredictionStore: PredictionStore<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-        >,
+        S::PredictionStore:
+            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
             State = <S as Sample>::State,
             Predictions = <S as Sample>::Predictions,
@@ -281,10 +281,8 @@ impl<S> SampleLoader<S> {
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
-        S::PredictionStore: PredictionStore<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-        >,
+        S::PredictionStore:
+            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
             State = <S as Sample>::State,
             Predictions = <S as Sample>::Predictions,
@@ -366,10 +364,8 @@ impl<S> SampleLoader<S> {
             Predictions = <S as Sample>::Predictions,
             PropagatedValues = <S as Sample>::PropagatedValues,
         >,
-        S::PredictionStore: PredictionStore<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-        >,
+        S::PredictionStore:
+            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
             State = <S as Sample>::State,
             Predictions = <S as Sample>::Predictions,

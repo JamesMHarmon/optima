@@ -65,7 +65,8 @@ pub struct EdgeDetails<A, PV> {
 
 #[allow(non_snake_case)]
 impl<A, PV> EdgeDetails<A, PV>
-    where PV: PropagatedValue
+where
+    PV: PropagatedValue,
 {
     pub fn Qsa(&self) -> f32 {
         self.propagated_values.value()

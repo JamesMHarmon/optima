@@ -25,8 +25,7 @@ impl Temperature for TempTest {
 #[cfg(test)]
 mod tests {
     use crate::{
-        MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy,
-        MovesLeftStrategyOptions,
+        MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy, MovesLeftStrategyOptions,
     };
 
     use super::super::MCTS;
@@ -65,11 +64,7 @@ mod tests {
         visits: usize,
         value: f32,
     ) -> EdgeMetrics<CountingAction, MovesLeftPropagatedValue> {
-        EdgeMetrics::new(
-            action,
-            visits,
-            MovesLeftPropagatedValue::new(value, 0.0),
-        )
+        EdgeMetrics::new(action, visits, MovesLeftPropagatedValue::new(value, 0.0))
     }
 
     #[tokio::test]

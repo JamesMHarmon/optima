@@ -642,7 +642,7 @@ where
                 node_index: latest_index,
                 selected_edge_index,
                 node_info,
-                edge_visits_at_time_of_traversal: edge_visits
+                edge_visits_at_time_of_traversal: edge_visits,
             });
 
             game_state = Cow::Owned(game_engine.take_action(&game_state, selected_edge.action()));
@@ -786,7 +786,10 @@ where
         NodeMetrics {
             visits: node.visits(),
             predictions: node.predictions().clone(),
-            children: node.iter_all_edges().map(|e| e.deref().into()).collect_vec(),
+            children: node
+                .iter_all_edges()
+                .map(|e| e.deref().into())
+                .collect_vec(),
         }
     }
 }

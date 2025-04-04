@@ -14,7 +14,7 @@ use super::constants::{
 use super::{Action, ActionType, Coordinate, GameState, Value};
 use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
-use model::{ActionWithPolicy, GameStateAnalysis, ConvInputBuilder, NodeMetrics};
+use model::{ActionWithPolicy, ConvInputBuilder, GameStateAnalysis, NodeMetrics};
 use tensorflow_model::Mode;
 
 #[derive(Clone, Default)]
@@ -107,7 +107,7 @@ impl tensorflow_model::Dimension for Mapper {
 }
 
 impl InputMap for Mapper {
-    type State = GameState; 
+    type State = GameState;
 
     fn game_state_to_input(&self, game_state: &GameState, input: &mut [f16], _mode: Mode) {
         let mut builder = ConvInputBuilder::new(BOARD_SIZE, input);
@@ -196,7 +196,9 @@ impl TranspositionMap for Mapper {
             .try_into()
             .expect("Slice does not match length of array");
 
-        let value = outputs.get("value_head").expect("Value not found in output")[0];
+        let value = outputs
+            .get("value_head")
+            .expect("Value not found in output")[0];
 
         // @TODO: Moves left is a vector, does this need to be EV?
         let moves_left = outputs

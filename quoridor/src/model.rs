@@ -4,11 +4,13 @@ use tensorflow_model::{GameAnalyzer, TensorflowModel};
 
 use super::{Action, Engine, GameState, Mapper, Predictions, TranspositionEntry};
 
-
-pub type Analyzer = GameAnalyzer<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>;
+pub type Analyzer =
+    GameAnalyzer<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>;
 
 pub struct Model(
-    ArchiveModel<TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>>,
+    ArchiveModel<
+        TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
+    >,
 );
 
 impl Model {

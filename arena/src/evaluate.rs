@@ -55,12 +55,24 @@ impl Arena {
     ) -> Result<MatchResult>
     where
         S: GameState,
-        E::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+        E::Action:
+            Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
         E: GameEngine<State = S, Terminal = P> + Sync,
-        M: Analyzer<State = S, Action = E::Action, Analyzer = T, Predictions = P> + Info + Send + Sync,
+        M: Analyzer<State = S, Action = E::Action, Analyzer = T, Predictions = P>
+            + Info
+            + Send
+            + Sync,
         T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send,
-        B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
-        Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        B: BackpropagationStrategy<
+                State = S,
+                Action = E::Action,
+                Predictions = P,
+                PropagatedValues = PV,
+            > + Send
+            + Sync,
+        Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
+            + Send
+            + Sync,
         P: Value,
         PV: Default + Ord,
     {
@@ -204,8 +216,12 @@ impl Arena {
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
-        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+            + Send
+            + Sync,
+        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+            + Send
+            + Sync,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
         P: Value,
         PV: Default + Ord,
@@ -223,7 +239,13 @@ impl Arena {
 
         for _ in 0..batch_size {
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(engine, backpropagation_strategy,  selection_strategy, players, options);
+                let game_to_play = Self::play_game(
+                    engine,
+                    backpropagation_strategy,
+                    selection_strategy,
+                    players,
+                    options,
+                );
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -236,7 +258,13 @@ impl Arena {
                 .map_err(|_| anyhow!("Failed to send game_result"))?;
 
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(engine, backpropagation_strategy,  selection_strategy, players, options);
+                let game_to_play = Self::play_game(
+                    engine,
+                    backpropagation_strategy,
+                    selection_strategy,
+                    players,
+                    options,
+                );
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -257,8 +285,12 @@ impl Arena {
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
-        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+            + Send
+            + Sync,
+        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+            + Send
+            + Sync,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
         P: Value,
         PV: Default + Ord,
@@ -270,7 +302,6 @@ impl Arena {
         let mut mctss: Vec<_> = analyzers
             .iter()
             .map(|a| {
-
                 let temp = TemperatureMaxMoves::new(
                     play_options.temperature,
                     play_options.temperature_post_max_moves,
@@ -286,7 +317,7 @@ impl Arena {
                     selection_strategy,
                     visits,
                     temp,
-                    play_options.parallelism
+                    play_options.parallelism,
                 )
             })
             .collect();

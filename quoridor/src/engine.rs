@@ -22,7 +22,9 @@ impl GameEngine for Engine {
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        game_state.is_terminal().map(|value| Predictions::new(value, game_state.move_number() as f32))
+        game_state
+            .is_terminal()
+            .map(|value| Predictions::new(value, game_state.move_number() as f32))
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {

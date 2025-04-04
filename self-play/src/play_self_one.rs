@@ -4,7 +4,9 @@ use std::fmt::Debug;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
-use mcts::{BackpropagationStrategy, DirichletOptions, SelectionStrategy, TemperatureConstant, MCTS};
+use mcts::{
+    BackpropagationStrategy, DirichletOptions, SelectionStrategy, TemperatureConstant, MCTS,
+};
 use model::GameAnalyzer;
 
 use super::{SelfPlayMetrics, SelfPlayOptions};
@@ -25,7 +27,7 @@ where
     B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     P: Clone,
-    PV: Default + Ord + Clone
+    PV: Default + Ord + Clone,
 {
     let mut game_state: S = S::initial();
     let play_options = &options.play_options;
@@ -64,7 +66,7 @@ where
         selection_strategy,
         options.visits,
         temp,
-        play_options.parallelism
+        play_options.parallelism,
     );
 
     let mut analysis = Vec::new();
@@ -91,5 +93,8 @@ where
         .terminal_state(&game_state)
         .ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
-    Ok((SelfPlayMetrics::<A, P, PV>::new(analysis, terminal_score), game_state))
+    Ok((
+        SelfPlayMetrics::<A, P, PV>::new(analysis, terminal_score),
+        game_state,
+    ))
 }

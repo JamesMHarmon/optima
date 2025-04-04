@@ -11,7 +11,10 @@ pub struct SelfPlayMetrics<A, P, PV> {
 
 impl<A, P, PV> SelfPlayMetrics<A, P, PV> {
     pub fn new(analysis: Vec<ActionAndMetrics<A, P, PV>>, terminal_score: P) -> Self {
-        Self { analysis, terminal_score }
+        Self {
+            analysis,
+            terminal_score,
+        }
     }
 
     pub fn into_inner(self) -> (Vec<ActionAndMetrics<A, P, PV>>, P) {

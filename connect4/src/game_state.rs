@@ -1,9 +1,11 @@
-use std::{fmt::{self, Display, Formatter}, hash::{Hash,Hasher}};
+use std::{
+    fmt::{self, Display, Formatter},
+    hash::{Hash, Hasher},
+};
 
 use crate::{map_board_to_arr, Value};
 
 use super::Zobrist;
-
 
 const TOP_ROW_MASK: u64 = 0b0100000_0100000_0100000_0100000_0100000_0100000_0100000;
 

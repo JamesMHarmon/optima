@@ -3,7 +3,7 @@ use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
 use mcts::{
-    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS
+    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS,
 };
 use model::Analyzer;
 use rand::seq::IteratorRandom;
@@ -301,16 +301,15 @@ where
                                 .children
                                 .iter()
                                 .take(multi_pv)
-                                .filter_map(|edge| mcts.get_principal_variation(Some(&edge.action), 10).ok())
+                                .filter_map(|edge| {
+                                    mcts.get_principal_variation(Some(&edge.action), 10).ok()
+                                })
                                 .collect_vec();
 
                             let best_node = choose_action(&node_details.children, 0.0);
 
                             let player_to_move = self.engine.player_to_move(&focus_game_state);
-                            let game_length = best_node
-                                .propagated_values
-                                .game_length()
-                                .max(0.0);
+                            let game_length = best_node.propagated_values.game_length().max(0.0);
 
                             self.output_post_search_info(
                                 player_to_move,
@@ -534,7 +533,11 @@ where
         let visits_sum = (node_details.visits - 1).max(1);
 
         for (i, (edge, pv)) in node_details.children.iter().zip(pv).enumerate() {
-            let pv_actions = pv.iter().map(|edge| &edge.action).cloned().collect::<Vec<_>>();
+            let pv_actions = pv
+                .iter()
+                .map(|edge| &edge.action)
+                .cloned()
+                .collect::<Vec<_>>();
             let pv_string = self
                 .ugi_mapper
                 .actions_to_move_string(pre_action_game_state, &pv_actions);

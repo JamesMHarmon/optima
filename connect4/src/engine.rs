@@ -2,7 +2,6 @@ use engine::GameEngine;
 
 use super::{Action, GameState, Predictions};
 
-
 #[derive(Default)]
 pub struct Engine {}
 
@@ -42,8 +41,8 @@ impl GameEngine for Engine {
 
 #[cfg(test)]
 mod tests {
-    use engine::GameState as GameStateTrait;
     use super::*;
+    use engine::GameState as GameStateTrait;
 
     #[test]
     fn test_new_state_is_correct() {

@@ -12,7 +12,13 @@ use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGI
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
-pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel>(ugi_mapper: U, engine: E, model: M, backpropagation_strategy: FnB, selection_strategy: FnSel) -> Result<()>
+pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel>(
+    ugi_mapper: U,
+    engine: E,
+    model: M,
+    backpropagation_strategy: FnB,
+    selection_strategy: FnSel,
+) -> Result<()>
 where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
@@ -30,12 +36,24 @@ where
     B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = E::Terminal, PropagatedValues = B::PropagatedValues> + Send + 'static,
-    E::Terminal: Clone
+    Sel: SelectionStrategy<
+            State = S,
+            Action = A,
+            Predictions = E::Terminal,
+            PropagatedValues = B::PropagatedValues,
+        > + Send
+        + 'static,
+    E::Terminal: Clone,
 {
     let ugi_mapper = Arc::new(ugi_mapper);
 
-    let (game_manager, mut output_rx) = GameManager::new(ugi_mapper.clone(), engine, model, backpropagation_strategy, selection_strategy);
+    let (game_manager, mut output_rx) = GameManager::new(
+        ugi_mapper.clone(),
+        engine,
+        model,
+        backpropagation_strategy,
+        selection_strategy,
+    );
     let input_parser = InputParser::new(&*ugi_mapper);
 
     tokio::spawn(async move {

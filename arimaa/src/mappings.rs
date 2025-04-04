@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
-use super::{constants::*, set_board_bits_invertable, GameState, Predictions, TranspositionEntry, Value};
+use super::{
+    constants::*, set_board_bits_invertable, GameState, Predictions, TranspositionEntry, Value,
+};
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;
 use model::analytics::{ActionWithPolicy, GameStateAnalysis};

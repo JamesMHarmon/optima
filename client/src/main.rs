@@ -175,33 +175,41 @@ async fn async_main(cli: Cli) -> Result<()> {
                 Box::leak(engine)
             }
 
-            let cpuct = |options: &UGIOptions|
+            let cpuct = |options: &UGIOptions| {
                 DynamicCPUCT::new(
-                options.cpuct_base,
-                options.cpuct_init,
-                options.cpuct_factor,
-                options.cpuct_root_scaling,
-            );
-
-            let selection_strategy_opts = |options: &UGIOptions| MovesLeftStrategyOptions::new(
-                options.fpu,
-                options.fpu_root,
-                0.0,
-                options.moves_left_threshold,
-                options.moves_left_scale,
-                options.moves_left_factor,
-            );
-
-            let backpropagation_strategy = move |_options: &UGIOptions| {
-                MovesLeftBackpropagationStrategy::new(leak_engine())
+                    options.cpuct_base,
+                    options.cpuct_init,
+                    options.cpuct_factor,
+                    options.cpuct_root_scaling,
+                )
             };
 
-            let selection_strategy = move |options: &UGIOptions|  MovesLeftSelectionStrategy::new(
-                cpuct(options),
-                selection_strategy_opts(options),
-            );
+            let selection_strategy_opts = |options: &UGIOptions| {
+                MovesLeftStrategyOptions::new(
+                    options.fpu,
+                    options.fpu_root,
+                    0.0,
+                    options.moves_left_threshold,
+                    options.moves_left_scale,
+                    options.moves_left_factor,
+                )
+            };
 
-            run_ugi(ugi, engine, model, backpropagation_strategy, selection_strategy).await?
+            let backpropagation_strategy =
+                move |_options: &UGIOptions| MovesLeftBackpropagationStrategy::new(leak_engine());
+
+            let selection_strategy = move |options: &UGIOptions| {
+                MovesLeftSelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
+            };
+
+            run_ugi(
+                ugi,
+                engine,
+                model,
+                backpropagation_strategy,
+                selection_strategy,
+            )
+            .await?
         }
     }
 

@@ -32,11 +32,19 @@ where
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
-    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+    B: BackpropagationStrategy<
+            State = S,
+            Action = E::Action,
+            Predictions = P,
+            PropagatedValues = PV,
+        > + Send
+        + Sync,
+    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
+        + Send
+        + Sync,
     MR: Clone + Debug + Eq + Send + Sync,
     P: Value,
-    PV: Default + Ord
+    PV: Default + Ord,
 {
     let runtime_handle = Handle::current();
 
@@ -129,11 +137,19 @@ where
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
-    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV> + Send + Sync,
+    B: BackpropagationStrategy<
+            State = S,
+            Action = E::Action,
+            Predictions = P,
+            PropagatedValues = PV,
+        > + Send
+        + Sync,
+    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
+        + Send
+        + Sync,
     MR: Debug + Send + Sync,
     P: Value,
-    PV: Default + Ord
+    PV: Default + Ord,
 {
     let promote_candidate_to_champion = || {
         info!("Promoting {:?} to champion.", candidate);
@@ -200,7 +216,14 @@ where
                 Ok(())
             });
 
-            super::evaluate::Arena::evaluate(&[champion, candidate], engine, backpropagation_strategy, selection_strategy, tx, options)
+            super::evaluate::Arena::evaluate(
+                &[champion, candidate],
+                engine,
+                backpropagation_strategy,
+                selection_strategy,
+                tx,
+                options,
+            )
         })
         .map_err(|e| {
             error!("{:?}", e);

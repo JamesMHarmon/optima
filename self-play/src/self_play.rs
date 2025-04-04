@@ -31,8 +31,12 @@ where
     M: Analyzer<State = S, Action = A, Predictions = P, Analyzer = T> + Info + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV> + Send + Sync,
+    B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+        + Send
+        + Sync,
+    Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
+        + Send
+        + Sync,
     P: Clone,
     PV: Default + Ord + Clone + Serialize + Send,
     S: GameState + Send,
@@ -140,15 +144,21 @@ where
     B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     P: Clone,
-    PV: Default + Ord + Clone
+    PV: Default + Ord + Clone,
 {
     let mut self_play_metric_stream = FuturesUnordered::new();
 
     let play_game = || async {
         let (analyzer, info) = latest_model_analyzer();
-        let results = play_self_one(game_engine, &analyzer, backpropagation_strategy, selection_strategy, self_play_options)
-            .await
-            .unwrap();
+        let results = play_self_one(
+            game_engine,
+            &analyzer,
+            backpropagation_strategy,
+            selection_strategy,
+            self_play_options,
+        )
+        .await
+        .unwrap();
         (results.0, results.1, info)
     };
 

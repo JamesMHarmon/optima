@@ -156,7 +156,7 @@ impl QMix for ArimaaSampler {
 #[derive(Default)]
 pub struct ArimaaPStore {
     player_value: [Option<Value>; 2],
-    game_length: Option<f32>
+    game_length: Option<f32>,
 }
 
 #[allow(non_snake_case)]
@@ -166,18 +166,19 @@ impl PredictionStore for ArimaaPStore {
 
     fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
         let player = game_state.player_to_move();
-        self.player_value[player - 1].as_ref().map(|value|
+        self.player_value[player - 1].as_ref().map(|value| {
             Predictions::new(
                 value.clone(),
-                self.game_length.expect("Game length should be set before getting predictions")
+                self.game_length
+                    .expect("Game length should be set before getting predictions"),
             )
-        )   
+        })
     }
 
     fn set_p_for_player(&mut self, game_state: &Self::State, prediction: Self::Predictions) {
         let player = game_state.player_to_move();
         self.player_value[player - 1] = Some(prediction.value().clone());
-        
+
         if self.game_length.is_none() {
             self.game_length = Some(prediction.game_length());
         }
