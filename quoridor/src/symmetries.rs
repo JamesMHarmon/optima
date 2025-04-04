@@ -5,13 +5,13 @@ use model::{node_metrics::NodeMetrics, EdgeMetrics, PositionMetrics};
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
 ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
-    let PositionMetrics { game_state, policy } = &metrics;
+    let PositionMetrics { game_state, node_metrics } = &metrics;
 
     let symmetrical_state = game_state.vertical_symmetry();
 
     let symmetrical_metrics = PositionMetrics {
         game_state: symmetrical_state,
-        policy: symmetrical_node_metrics(policy),
+        node_metrics: symmetrical_node_metrics(node_metrics),
     };
 
     vec![metrics, symmetrical_metrics]
@@ -48,7 +48,7 @@ mod tests {
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 0,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![],
@@ -246,7 +246,7 @@ mod tests {
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 0,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
@@ -294,7 +294,7 @@ mod tests {
             },
         });
 
-        let node_metrics = &symmetries.last().unwrap().policy.children;
+        let node_metrics = &symmetries.last().unwrap().node_metrics.children;
         assert_eq!(node_metrics[0].action(), &"i9".parse::<Action>().unwrap());
         assert_eq!(node_metrics[1].action(), &"h9".parse::<Action>().unwrap());
         assert_eq!(node_metrics[2].action(), &"b9".parse::<Action>().unwrap());
@@ -334,7 +334,7 @@ mod tests {
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 0,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children,
@@ -345,7 +345,7 @@ mod tests {
             symmetries
                 .last()
                 .unwrap()
-                .policy
+                .node_metrics
                 .children
                 .iter()
                 .map(|m| m.action()),

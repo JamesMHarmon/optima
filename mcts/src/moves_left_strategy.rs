@@ -102,7 +102,6 @@ impl<S, A, P, C> MovesLeftSelectionStrategy<S, A, P, C> {
                 panic!();
             };
 
-        // @TODO: Verify correctness here between game_length and moves_left
         let expected_game_length = edge.propagated_values().game_length();
         let moves_left_scale = options.moves_left_scale;
         let moves_left_clamped = (game_length_baseline - expected_game_length)

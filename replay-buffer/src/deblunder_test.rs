@@ -77,7 +77,7 @@ mod test {
         PositionMetricsExtended {
             metrics: PositionMetrics {
                 game_state: game_state(is_player_one),
-                policy: node_metrics(children),
+                node_metrics: node_metrics(children),
             },
             target_score,
             chosen_action: chosen_action.as_ref().parse().unwrap(),

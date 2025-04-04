@@ -27,12 +27,12 @@ pub fn deblunder<S, A, P, PV, Ps, Qm>(
 
         prediction_stack.set_initial(game_state, &metric.target_score);
 
-        let max_visits_child = metric.metrics.policy.child_max_visits();
+        let max_visits_child = metric.metrics.node_metrics.child_max_visits();
 
         prediction_stack
             .set_if_not::<S, P, PV, Qm>(game_state, max_visits_child.propagatedValues());
 
-        let q_diff = q_diff(&metric.metrics.policy, &metric.chosen_action);
+        let q_diff = q_diff(&metric.metrics.node_metrics, &metric.chosen_action);
         if q_diff >= q_diff_threshold {
             let q_mix_amt = ((q_diff - q_diff_threshold) / q_diff_width).min(1.0);
 

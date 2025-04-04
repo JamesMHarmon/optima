@@ -597,7 +597,6 @@ where
 
             if node.is_terminal() {
                 node.increment_visits();
-                // @TODO: Does this node have predictions?
                 Self::backpropagate(
                     &node.predictions().clone(),
                     &visited_nodes_stack,

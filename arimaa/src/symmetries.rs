@@ -8,13 +8,13 @@ use super::{Action, GameState};
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
 ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
-    let PositionMetrics { game_state, policy } = &metrics;
+    let PositionMetrics { game_state, node_metrics } = &metrics;
 
     let symmetrical_state = game_state.get_vertical_symmetry();
 
     let symmetrical_metrics = PositionMetrics {
         game_state: symmetrical_state,
-        policy: symmetrical_node_metrics(policy),
+        node_metrics: symmetrical_node_metrics(node_metrics),
     };
 
     vec![metrics, symmetrical_metrics]
@@ -46,7 +46,7 @@ mod tests {
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 0,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![],
@@ -267,7 +267,7 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
@@ -292,7 +292,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: symmetrical_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: symmetrical_visits,
                     children: symmetrical_children,
@@ -303,7 +303,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: original_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: original_visits,
                     children: original_children,
@@ -377,7 +377,7 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
@@ -402,7 +402,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: symmetrical_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: symmetrical_visits,
                     children: symmetrical_children,
@@ -413,7 +413,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: original_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: original_visits,
                     children: original_children,
@@ -483,7 +483,7 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            policy: NodeMetrics {
+            node_metrics: NodeMetrics {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
@@ -508,7 +508,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: symmetrical_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: symmetrical_visits,
                     children: symmetrical_children,
@@ -519,7 +519,7 @@ mod tests {
 
         let PositionMetrics {
             game_state: original_game_state,
-            policy:
+            node_metrics:
                 NodeMetrics {
                     visits: original_visits,
                     children: original_children,

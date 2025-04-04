@@ -162,7 +162,7 @@ pub trait Sample {
             PropagatedValues = <Self as Sample>::PropagatedValues,
         >,
     {
-        let targets = self.to_output(&metric.game_state, targets, &metric.policy);
+        let targets = self.to_output(&metric.game_state, targets, &metric.node_metrics);
         let input_len = self.input_size();
 
         let mut input = vec![f16::ZERO; input_len];
@@ -237,7 +237,7 @@ where
         samples.push(PositionMetricsExtended {
             metrics: PositionMetrics {
                 game_state: pre_action_game_state,
-                policy: metrics,
+                node_metrics: metrics,
             },
             chosen_action: action,
             move_number,
@@ -254,5 +254,5 @@ fn filter_full_visits<S, A, P, PV>(
     metrics: &mut Vec<PositionMetricsExtended<S, A, P, PV>>,
     min_visits: usize,
 ) {
-    metrics.retain(|m| m.metrics.policy.visits >= min_visits)
+    metrics.retain(|m| m.metrics.node_metrics.visits >= min_visits)
 }
