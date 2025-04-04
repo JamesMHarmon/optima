@@ -298,17 +298,17 @@ impl Arena {
         let play_options = &options.play_options;
         let visits = options.visits;
         let analyzers = players.iter().map(|m| m.analyzer()).collect::<Vec<_>>();
+        let temp = TemperatureMaxMoves::new(
+            play_options.temperature,
+            play_options.temperature_post_max_moves,
+            play_options.temperature_max_moves,
+            play_options.temperature_visit_offset,
+            engine,
+        );
 
         let mut mctss: Vec<_> = analyzers
             .iter()
             .map(|a| {
-                let temp = TemperatureMaxMoves::new(
-                    play_options.temperature,
-                    play_options.temperature_post_max_moves,
-                    play_options.temperature_max_moves,
-                    engine,
-                );
-
                 MCTS::with_capacity(
                     S::initial(),
                     engine,
@@ -316,7 +316,6 @@ impl Arena {
                     backpropagation_strategy,
                     selection_strategy,
                     visits,
-                    temp,
                     play_options.parallelism,
                 )
             })
@@ -329,7 +328,7 @@ impl Arena {
             let player_to_move = engine.player_to_move(&state);
             let player_to_move_mcts = &mut mctss[player_to_move - 1];
             player_to_move_mcts.search_visits(visits).await?;
-            let action = player_to_move_mcts.select_action()?;
+            let action = player_to_move_mcts.select_action(&temp)?;
 
             for mcts in &mut mctss {
                 mcts.advance_to_action(action.to_owned()).await?;

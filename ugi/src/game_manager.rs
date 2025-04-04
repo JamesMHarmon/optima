@@ -3,7 +3,7 @@ use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
 use mcts::{
-    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, TemperatureConstant, MCTS,
+    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, MCTS,
 };
 use model::Analyzer;
 use rand::seq::IteratorRandom;
@@ -233,7 +233,6 @@ where
         while let Some(command) = self.command_rx.recv().await {
             if mcts_container.is_none() {
                 let options = options.lock().unwrap();
-                let temp = TemperatureConstant::new(0.0);
 
                 backpropagation_strategy = Some((self.backpropagation_strategy)(&options));
                 selection_strategy = Some((self.selection_strategy)(&options));
@@ -245,7 +244,6 @@ where
                     backpropagation_strategy.as_ref().unwrap(),
                     selection_strategy.as_ref().unwrap(),
                     options.visits,
-                    temp,
                     options.parallelism,
                 ));
             }

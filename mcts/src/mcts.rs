@@ -1,4 +1,4 @@
-use crate::SelectedNode;
+use crate::{SelectedNode, TempAndOffset};
 
 use super::Temperature;
 use super::{BackpropagationStrategy, EdgeDetails, NodeLendingIterator, SelectionStrategy};
@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-pub struct MCTS<'a, S, A, E, M, B, Sel, P, T, PV> {
+pub struct MCTS<'a, S, A, E, M, B, Sel, P, PV> {
     game_engine: &'a E,
     analyzer: &'a M,
     backpropagation_strategy: &'a B,
@@ -33,12 +33,11 @@ pub struct MCTS<'a, S, A, E, M, B, Sel, P, T, PV> {
     root: Option<Index>,
     arena: NodeArena<MCTSNode<A, P, PV>>,
     focus_actions: Vec<A>,
-    temp: T,
     parallelism: usize,
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
+impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -46,7 +45,6 @@ where
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
     B: 'a,
     Sel: 'a,
-    T: Temperature<State = S>,
     PV: Default,
 {
     pub fn new(
@@ -55,7 +53,6 @@ where
         analyzer: &'a M,
         backpropagation_strategy: &'a B,
         selection_strategy: &'a Sel,
-        temp: T,
         parallelism: usize,
     ) -> Self {
         MCTS {
@@ -67,7 +64,6 @@ where
             root: None,
             arena: NodeArena::with_capacity(800 * 2),
             focus_actions: vec![],
-            temp,
             parallelism,
         }
     }
@@ -80,7 +76,6 @@ where
         backpropagation_strategy: &'a B,
         selection_strategy: &'a Sel,
         capacity: usize,
-        temp: T,
         parallelism: usize,
     ) -> Self {
         MCTS {
@@ -92,7 +87,6 @@ where
             root: None,
             arena: NodeArena::with_capacity(capacity * 2),
             focus_actions: vec![],
-            temp,
             parallelism,
         }
     }
@@ -242,13 +236,12 @@ where
 
     fn select_action_using_temperature(
         edge_details: &[EdgeDetails<A, PV>],
-        temp: f32,
-        temperature_visit_offset: f32,
+        tempAndOffset: TempAndOffset
     ) -> Result<A> {
         let normalized_visits = edge_details.iter().map(|edge_details| {
-            (edge_details.Nsa as f32 + temperature_visit_offset)
+            (edge_details.Nsa as f32 + tempAndOffset.temperature_visit_offset)
                 .max(0.0)
-                .powf(1.0 / temp)
+                .powf(1.0 / tempAndOffset.temperature)
         });
 
         let weighted_index = WeightedIndex::new(normalized_visits);
@@ -357,23 +350,50 @@ where
     }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
+impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
 where
     S: GameState,
     A: Clone + Eq + Debug,
     E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    T: Temperature<State = S>,
     PV: Default + Ord,
 {
-    // @TODO: Ensure that all calls to select action are using with no temp.
-    pub fn select_action(&mut self) -> Result<A> {
-        self._select_action(false, 0.0)
-    }
+    pub fn select_action<T>(&mut self, temp: &T) -> Result<A>
+        where T: Temperature<State = S>
+    {
+        if let Some(node_index) = &self.get_focus_node_index()? {
+            let game_state = self.get_focus_node_game_state();
 
-    pub fn select_action_with_temp(&mut self, temperature_visit_offset: f32) -> Result<A> {
-        self._select_action(true, temperature_visit_offset)
+            let child_node_details = self
+                .node_details(*node_index, &game_state, self.focus_actions.is_empty())?
+                .children;
+
+            if child_node_details.is_empty() {
+                return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
+            }
+
+            let temp_and_offset = temp.temp(&game_state);
+
+            let best_action = if temp_and_offset.temperature > 0.0 {
+                Self::select_action_using_temperature(
+                    &child_node_details,
+                    temp_and_offset,
+                )?
+            } else {
+                let best_action = child_node_details
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow!("No available actions"))?;
+                best_action.action
+            };
+
+            return Ok(best_action);
+        }
+
+        Err(anyhow!(
+            "Root or focused node does not exist. Run search first."
+        ))
     }
 
     pub fn get_focus_node_details(&mut self) -> Result<Option<NodeDetails<A, PV>>> {
@@ -458,44 +478,9 @@ where
             children,
         })
     }
-
-    fn _select_action(&mut self, use_temp: bool, temperature_visit_offset: f32) -> Result<A> {
-        if let Some(node_index) = &self.get_focus_node_index()? {
-            let game_state = self.get_focus_node_game_state();
-            let temp = self.temp.temp(&game_state);
-
-            let child_node_details = self
-                .node_details(*node_index, &game_state, self.focus_actions.is_empty())?
-                .children;
-
-            if child_node_details.is_empty() {
-                return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
-            }
-
-            let best_action = if temp == 0.0 || !use_temp {
-                let best_action = child_node_details
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| anyhow!("No available actions"))?;
-                best_action.action
-            } else {
-                Self::select_action_using_temperature(
-                    &child_node_details,
-                    temp,
-                    temperature_visit_offset,
-                )?
-            };
-
-            return Ok(best_action);
-        }
-
-        Err(anyhow!(
-            "Root or focused node does not exist. Run search first."
-        ))
-    }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
+impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
 where
     S: GameState,
     A: Clone + Eq + Debug,
@@ -503,7 +488,6 @@ where
     M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
     B: 'a + BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
     Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    T: Temperature<State = S>,
     P: Clone,
     PV: Default,
 {
@@ -759,7 +743,7 @@ impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
     }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, T, PV> MCTS<'a, S, A, E, M, B, Sel, P, T, PV>
+impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
 where
     A: Clone,
     P: Clone,

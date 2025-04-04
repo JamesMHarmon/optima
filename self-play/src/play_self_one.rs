@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use mcts::{
-    BackpropagationStrategy, DirichletOptions, SelectionStrategy, TemperatureConstant, MCTS,
+    BackpropagationStrategy, DirichletOptions, NoTemp, SelectionStrategy, TemperatureConstant, MCTS
 };
 use model::GameAnalyzer;
 
@@ -35,7 +35,8 @@ where
         epsilon: options.epsilon,
     });
 
-    let temp = TemperatureConstant::new(play_options.temperature);
+    let temp = TemperatureConstant::new(play_options.temperature, play_options.temperature_visit_offset);
+    let no_temp = NoTemp::new();
 
     let mut mcts = MCTS::with_capacity(
         game_state.clone(),
@@ -44,7 +45,6 @@ where
         backpropagation_strategy,
         selection_strategy,
         options.visits,
-        temp,
         play_options.parallelism,
     );
 
@@ -55,10 +55,10 @@ where
         let action = if rng.gen::<f32>() <= options.full_visits_probability {
             mcts.apply_noise_at_root(dirichlet_options.as_ref()).await;
             mcts.search_visits(options.visits).await?;
-            mcts.select_action_with_temp(play_options.temperature_visit_offset)?
+            mcts.select_action(&temp)?
         } else {
             mcts.search_visits(options.fast_visits).await?;
-            mcts.select_action()?
+            mcts.select_action(&no_temp)?
         };
 
         let metrics = mcts.get_root_node_metrics()?;

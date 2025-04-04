@@ -15,7 +15,6 @@ pub struct MovesLeftSelectionStrategy<S, A, P, C> {
 pub struct MovesLeftStrategyOptions {
     pub fpu: f32,
     pub fpu_root: f32,
-    pub temperature_visit_offset: f32,
     pub moves_left_threshold: f32,
     pub moves_left_scale: f32,
     pub moves_left_factor: f32,
@@ -26,7 +25,6 @@ impl MovesLeftStrategyOptions {
     pub fn new(
         fpu: f32,
         fpu_root: f32,
-        temperature_visit_offset: f32,
         moves_left_threshold: f32,
         moves_left_scale: f32,
         moves_left_factor: f32,
@@ -34,7 +32,6 @@ impl MovesLeftStrategyOptions {
         MovesLeftStrategyOptions {
             fpu,
             fpu_root,
-            temperature_visit_offset,
             moves_left_threshold,
             moves_left_scale,
             moves_left_factor,

@@ -68,7 +68,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             let selection_strategy_opts = MovesLeftStrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
-                play_options.temperature_visit_offset,
                 play_options.moves_left_threshold,
                 play_options.moves_left_scale,
                 play_options.moves_left_factor,
@@ -118,7 +117,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             let selection_strategy_opts = MovesLeftStrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
-                play_options.temperature_visit_offset,
                 play_options.moves_left_threshold,
                 play_options.moves_left_scale,
                 play_options.moves_left_factor,
@@ -188,7 +186,6 @@ async fn async_main(cli: Cli) -> Result<()> {
                 MovesLeftStrategyOptions::new(
                     options.fpu,
                     options.fpu_root,
-                    0.0,
                     options.moves_left_threshold,
                     options.moves_left_scale,
                     options.moves_left_factor,
