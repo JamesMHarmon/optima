@@ -41,7 +41,7 @@ use crate::sample::*;
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
 #[pymodule]
-fn replay_buffer(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn replay_buffer(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ReplayBuffer>()?;
     Ok(())
 }
@@ -93,7 +93,7 @@ impl ReplayBuffer {
         samples: usize,
         start_idx: usize,
         end_idx: usize,
-    ) -> PyResult<&'py PyDict> {
+    ) -> PyResult<Bound<'py, PyDict>> {
         let num_samples = samples;
         let sampler = &self.sample_loader.sampler;
 
@@ -165,7 +165,7 @@ impl ReplayBuffer {
             .collect::<HashMap<_, _>>()
             .into_py_dict(py);
 
-        Ok(dict)
+        dict
     }
 
     fn games(&mut self) -> PyResult<usize> {

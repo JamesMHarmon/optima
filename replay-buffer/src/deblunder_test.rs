@@ -68,7 +68,6 @@ mod test {
         is_player_one: bool,
         score: Value,
         game_length: f32,
-        move_number: usize,
         chosen_action: impl AsRef<str>,
         children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>,
     ) -> PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue> {
@@ -81,7 +80,6 @@ mod test {
             },
             target_score,
             chosen_action: chosen_action.as_ref().parse().unwrap(),
-            move_number,
         }
     }
 
@@ -92,7 +90,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 98.0,
-                90,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 25.0, 30),
@@ -104,7 +101,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 98.0,
-                91,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 25.0, 30),
@@ -132,7 +128,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                90,
                 "a1n",
                 vec![
                     node_child("a1n", 0.6, 100.0, 30),
@@ -144,7 +139,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 100.0,
-                91,
                 "a2n",
                 vec![
                     node_child("a1n", 0.8, 105.0, 30),
@@ -156,7 +150,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                92,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -168,7 +161,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                99,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -197,7 +189,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                90,
                 "a1n",
                 vec![
                     node_child("a1n", 0.6, 100.0, 30),
@@ -209,7 +200,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 100.0,
-                91,
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 100.0, 30),
@@ -221,7 +211,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                92,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -250,7 +239,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                90,
                 "a1n",
                 vec![
                     node_child("a1n", 0.65, 40.0, 30),
@@ -262,7 +250,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 100.0,
-                91,
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 40.0, 30),
@@ -274,7 +261,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                92,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -286,7 +272,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 100.0,
-                93,
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 100.0, 30),
@@ -298,7 +283,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 100.0,
-                94,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -342,7 +326,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 10.0,
-                90,
                 "a1n",
                 vec![
                     node_child("a1n", 0.65, 100.0, 30),
@@ -354,7 +337,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 9.0,
-                91,
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 100.0, 30),
@@ -366,7 +348,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 8.0,
-                92,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),
@@ -378,7 +359,6 @@ mod test {
                 false,
                 Value::new([1.0, 0.0]),
                 7.0,
-                93,
                 "a2n",
                 vec![
                     node_child("a1n", 0.7, 100.0, 30),
@@ -390,7 +370,6 @@ mod test {
                 true,
                 Value::new([1.0, 0.0]),
                 6.0,
-                94,
                 "a1n",
                 vec![
                     node_child("a1n", 0.8, 100.0, 30),

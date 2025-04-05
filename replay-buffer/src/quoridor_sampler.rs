@@ -46,10 +46,6 @@ impl Sample for QuoridorSampler {
         self.engine.take_action(game_state, action)
     }
 
-    fn move_number(&self, game_state: &<Self as Sample>::State) -> usize {
-        self.engine.move_number(game_state)
-    }
-
     fn symmetries(
         &self,
         metric: model::PositionMetrics<

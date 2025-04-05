@@ -236,7 +236,7 @@ where
 
     fn select_action_using_temperature(
         edge_details: &[EdgeDetails<A, PV>],
-        tempAndOffset: TempAndOffset
+        tempAndOffset: TempAndOffset,
     ) -> Result<A> {
         let normalized_visits = edge_details.iter().map(|edge_details| {
             (edge_details.Nsa as f32 + tempAndOffset.temperature_visit_offset)
@@ -360,7 +360,8 @@ where
     PV: Default + Ord,
 {
     pub fn select_action<T>(&mut self, temp: &T) -> Result<A>
-        where T: Temperature<State = S>
+    where
+        T: Temperature<State = S>,
     {
         if let Some(node_index) = &self.get_focus_node_index()? {
             let game_state = self.get_focus_node_game_state();
@@ -376,10 +377,7 @@ where
             let temp_and_offset = temp.temp(&game_state);
 
             let best_action = if temp_and_offset.temperature > 0.0 {
-                Self::select_action_using_temperature(
-                    &child_node_details,
-                    temp_and_offset,
-                )?
+                Self::select_action_using_temperature(&child_node_details, temp_and_offset)?
             } else {
                 let best_action = child_node_details
                     .into_iter()
@@ -492,8 +490,7 @@ where
     PV: Default,
 {
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
-        self.search_time_max_visits(duration, usize::max_value())
-            .await
+        self.search_time_max_visits(duration, usize::MAX).await
     }
 
     pub async fn search_time_max_visits(

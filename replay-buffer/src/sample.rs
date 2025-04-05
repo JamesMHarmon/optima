@@ -52,11 +52,7 @@ pub trait Sample {
             PropagatedValues = <Self as Sample>::PropagatedValues,
         >,
     {
-        let mut metrics = get_positions(
-            metrics,
-            |s| self.move_number(s),
-            |s, a| self.take_action(s, a),
-        );
+        let mut metrics = get_positions(metrics, |s, a| self.take_action(s, a));
 
         deblunder::deblunder::<_, _, _, _, <Self as Sample>::PredictionStore, Self>(
             &mut metrics,
@@ -70,12 +66,17 @@ pub trait Sample {
             .into_iter()
             .filter(|s| self.sample_filter(&s.metrics));
 
-        metrics.flat_map(|s| self.symmetries(s.metrics).into_iter().map(move |metrics| PositionMetricsExtended {
-            metrics,
-            target_score: s.target_score.clone(),
-            chosen_action: s.chosen_action.clone(),
-            move_number: s.move_number,
-        })).collect()
+        metrics
+            .flat_map(|s| {
+                self.symmetries(s.metrics)
+                    .into_iter()
+                    .map(move |metrics| PositionMetricsExtended {
+                        metrics,
+                        target_score: s.target_score.clone(),
+                        chosen_action: s.chosen_action.clone(),
+                    })
+            })
+            .collect()
     }
 
     fn symmetries(
@@ -112,8 +113,6 @@ pub trait Sample {
         game_state: &<Self as Sample>::State,
         action: &<Self as Sample>::Action,
     ) -> <Self as Sample>::State;
-
-    fn move_number(&self, game_state: &<Self as Sample>::State) -> usize;
 
     fn input_size(&self) -> usize;
 
@@ -212,18 +211,15 @@ pub struct PositionMetricsExtended<S, A, P, PV> {
     pub metrics: PositionMetrics<S, A, P, PV>,
     pub target_score: P,
     pub chosen_action: A,
-    pub move_number: usize,
 }
 
-fn get_positions<S, A, P, PV, FM, FA>(
+fn get_positions<S, A, P, PV, FA>(
     metrics: SelfPlayMetrics<A, P, PV>,
-    move_number: FM,
     take_action: FA,
 ) -> Vec<PositionMetricsExtended<S, A, P, PV>>
 where
     S: GameState,
     P: Clone,
-    FM: Fn(&S) -> usize,
     FA: Fn(&S, &A) -> S,
 {
     let (analysis, score) = metrics.into_inner();
@@ -232,7 +228,6 @@ where
     let mut samples = vec![];
     for (action, metrics) in analysis {
         let post_action_game_state = take_action(&pre_action_game_state, &action);
-        let move_number = move_number(&pre_action_game_state);
 
         samples.push(PositionMetricsExtended {
             metrics: PositionMetrics {
@@ -240,7 +235,6 @@ where
                 node_metrics: metrics,
             },
             chosen_action: action,
-            move_number,
             target_score: score.clone(),
         });
 
