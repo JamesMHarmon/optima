@@ -105,10 +105,10 @@ if __name__== '__main__':
             avg_num_samples_per_pos=avg_num_samples_per_pos,
             window_warmup=window_warmup,
             shapes={
-                'X': (input_h, input_w, input_c),
-                'yp': (policy_size,),
-                'yv': (value_size,),
-                'ym': (moves_left_size,)
+                'inputs': (input_h, input_w, input_c),
+                'policy': (policy_size,),
+                'value': (value_size,),
+                'moves_left': (moves_left_size,)
             })
 
         tensor_board = TensorBoardEnriched(log_dir=tensor_board_path, step_ratio=step_ratio)

@@ -54,14 +54,14 @@ class DataGenerator(Sequence):
 
         sample = self._replay_buffer.sample(self._batch_size, start_idx=start_idx, end_idx=end_idx)
 
-        input = self.to_tensor(sample['X'], self._shape['X'])
+        input = self.to_tensor(sample['inputs'], self._shape['inputs'])
         targets = {
-            'policy_head': self.to_tensor(sample['yp'], self._shape['yp']),
-            'value_head': self.to_tensor(sample['yv'], self._shape['yv'])
+            'policy_head': self.to_tensor(sample['policy'], self._shape['policy']),
+            'value_head': self.to_tensor(sample['value'], self._shape['value'])
         }
 
-        if 'ym' in self._shape:
-            targets['moves_left_head'] = self.to_tensor(sample['ym'], self._shape['ym'])
+        if 'moves_left' in self._shape:
+            targets['moves_left_head'] = self.to_tensor(sample['moves_left'], self._shape['moves_left'])
 
         return input, targets
 
