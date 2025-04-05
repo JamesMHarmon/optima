@@ -161,7 +161,7 @@ impl PredictionsMap for Mapper {
         let value_output = self.metrics_to_value_output(game_state, targets.value());
 
         let move_number = game_state.move_number() as f32;
-        let moves_left = (targets.game_length() - move_number).max(0.0);
+        let moves_left = (targets.game_length() - move_number + 1.0).max(1.0);
         let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
 
         /*
@@ -238,7 +238,7 @@ impl TranspositionMap for Mapper {
 
         let moves_left = moves_left_expected_value(moves_left_vals.iter().map(|x| x.to_f32()));
 
-        let game_length = game_state.move_number() as f32 + moves_left;
+        let game_length = (game_state.move_number() as f32 + moves_left - 1.0).max(1.0);
 
         TranspositionEntry::new(policy_metrics, value, game_length)
     }

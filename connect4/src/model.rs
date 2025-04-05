@@ -150,7 +150,7 @@ impl PredictionsMap for Mapper {
 
         // @TODO: Verify how number_of_actions relates to game_length.
         let move_number = game_state.number_of_actions() as f32;
-        let moves_left = (targets.game_length() - move_number).max(0.0);
+        let moves_left = (targets.game_length() - move_number + 1.0).max(1.0);
         let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
 
         /*
