@@ -60,7 +60,7 @@ mod tests {
             .unwrap();
 
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -76,7 +76,7 @@ mod tests {
 
         // Inverted
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
@@ -109,7 +109,7 @@ mod tests {
             .unwrap();
 
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -125,7 +125,7 @@ mod tests {
 
         // Inverted
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,
@@ -158,7 +158,7 @@ mod tests {
             .unwrap();
 
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         let rabbit_offset = 5;
         set_board_bits_invertable(
             &mut result,
@@ -174,7 +174,7 @@ mod tests {
 
         // Inverted
         let mut result: Vec<f16> = Vec::with_capacity(INPUT_SIZE);
-        result.extend(std::iter::repeat(f16::ZERO).take(INPUT_SIZE));
+        result.extend(std::iter::repeat_n(f16::ZERO, INPUT_SIZE));
         set_board_bits_invertable(
             &mut result,
             rabbit_offset,

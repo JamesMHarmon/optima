@@ -155,7 +155,7 @@ where
         );
 
         let mut best_child_index = 0;
-        let mut best_puct = std::f32::MIN;
+        let mut best_puct = f32::MIN;
 
         for (i, edge) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
             let W = edge.propagated_values().value();
@@ -262,7 +262,7 @@ pub trait GameLength {
     fn game_length_score(&self) -> f32;
 }
 
-impl<'a, E, S, A, P> BackpropagationStrategy for MovesLeftBackpropagationStrategy<'a, E, S, A, P>
+impl<E, S, A, P> BackpropagationStrategy for MovesLeftBackpropagationStrategy<'_, E, S, A, P>
 where
     P: Value + GameLength,
     E: GameEngine<State = S, Action = A>,

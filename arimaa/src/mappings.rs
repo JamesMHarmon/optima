@@ -959,9 +959,9 @@ mod tests {
 
         let assert_steps_set = |input: &Vec<f16>, first: bool, second: bool, third: bool| {
             let expected_step_channel_set =
-                std::iter::repeat(1.0).take(BOARD_SIZE).collect::<Vec<_>>();
+                std::iter::repeat_n(1.0, BOARD_SIZE).collect::<Vec<_>>();
             let expected_step_channel_not_set =
-                std::iter::repeat(0.0).take(BOARD_SIZE).collect::<Vec<_>>();
+                std::iter::repeat_n(0.0, BOARD_SIZE).collect::<Vec<_>>();
 
             let actual_step_channel_1 = get_channel_as_vec(input, STEP_NUM_CHANNEL_IDX);
             let actual_step_channel_2 = get_channel_as_vec(input, STEP_NUM_CHANNEL_IDX + 1);

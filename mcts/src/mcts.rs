@@ -718,8 +718,8 @@ impl<'arena, 'node, I, A, P, PV> NodeIterator<'arena, 'node, I, A, P, PV> {
     }
 }
 
-impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
-    for NodeIterator<'arena, 'node, I, A, P, PV>
+impl<'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
+    for NodeIterator<'_, 'node, I, A, P, PV>
 {
     fn next(&mut self) -> Option<SelectedNode<I, A, P, PV>> {
         if self.iter_index >= self.visited_node_info.len() {
@@ -739,7 +739,7 @@ impl<'arena, 'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
     }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
+impl<S, A, E, M, B, Sel, P, PV> MCTS<'_, S, A, E, M, B, Sel, P, PV>
 where
     A: Clone,
     P: Clone,

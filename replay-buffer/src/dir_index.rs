@@ -44,7 +44,7 @@ impl DirIndex {
             }
             info!(
                 "Cache is up to date for {:?}",
-                self.path.components().last()
+                self.path.components().next_back()
             );
             return Ok(());
         }
@@ -163,7 +163,7 @@ impl Files {
             return Ok(entries);
         }
 
-        info!("Expanding {:?}", path.components().last());
+        info!("Expanding {:?}", path.components().next_back());
 
         let mut entries = path
             .read_dir()?

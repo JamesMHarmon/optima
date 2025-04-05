@@ -6,7 +6,7 @@ use permutohedron::Heap as Permute;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::Debug;
-use std::iter::{repeat, repeat_with};
+use std::iter::repeat_with;
 use std::sync::mpsc;
 use std::time::Instant;
 use tokio::runtime::Handle;
@@ -132,7 +132,7 @@ impl Arena {
                 let mut num_of_games_played: usize = 0;
                 let mut model_scores: Vec<_> =
                     model_info.iter().map(|m| (m.to_owned(), 0.0)).collect();
-                let mut player_scores: Vec<_> = repeat(0.0).take(num_players).collect();
+                let mut player_scores: Vec<_> = std::iter::repeat_n(0.0, num_players).collect();
 
                 while let Ok(game_result) = game_results_rx.recv() {
                     num_of_games_played += 1;

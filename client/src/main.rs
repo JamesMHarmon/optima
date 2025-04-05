@@ -16,7 +16,7 @@ use model::Load;
 use quoridor::ModelRef;
 use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use ugi::{run_ugi, UGIOptions};
 
 fn main() -> Result<()> {
@@ -148,9 +148,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 .as_ref()
                 .or(ugi_args.dir.as_ref())
                 .map(|dir| dir.relative_to_cwd())
-                .transpose()?
-                .map(PathBuf::from)
-                .or_else(|| std::env::current_dir().ok())
+                .transpose()?.or_else(|| std::env::current_dir().ok())
                 .expect("Could not determine model directory");
 
             let model_name = std::env::var("BOT_MODEL_NAME")

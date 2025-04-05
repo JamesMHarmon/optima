@@ -93,7 +93,7 @@ impl<'e, E> TemperatureMaxMoves<'e, E> {
     }
 }
 
-impl<'e, E> Temperature for TemperatureMaxMoves<'e, E>
+impl<E> Temperature for TemperatureMaxMoves<'_, E>
 where
     E: GameEngine,
 {

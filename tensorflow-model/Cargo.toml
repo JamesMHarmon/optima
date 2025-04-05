@@ -9,6 +9,7 @@ publish = false
 default = ["all"]
 all = ["dep:tensorflow"]
 traits = []
+tensorflow_system_alloc = []
 
 [dev-dependencies]
 criterion = "0.3"

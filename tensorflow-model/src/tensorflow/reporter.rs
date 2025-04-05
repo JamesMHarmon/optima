@@ -92,7 +92,7 @@ impl<Te> ReporterInner<Te> {
     fn new(transposition_table: Arc<Option<TranspositionTable<Te>>>) -> Self {
         let last_report_had_nodes = AtomicBool::new(false);
         let num_nodes_analysed = AtomicUsize::new(0);
-        let min_batch_size = AtomicUsize::new(std::usize::MAX);
+        let min_batch_size = AtomicUsize::new(usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
         let cache_misses = AtomicUsize::new(0);
         let cache_hits = AtomicUsize::new(0);
@@ -152,7 +152,7 @@ impl<Te> ReporterInner<Te> {
 
     fn take_min_max_batch_size(&self) -> (usize, usize) {
         (
-            self.min_batch_size.swap(std::usize::MAX, Ordering::Relaxed),
+            self.min_batch_size.swap(usize::MAX, Ordering::Relaxed),
             self.max_batch_size.swap(0, Ordering::Relaxed),
         )
     }
