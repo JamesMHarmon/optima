@@ -3,8 +3,10 @@ use mcts::{
     SelectionStrategy, CPUCT,
 };
 use anyhow::Result;
-use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
+use common::PropagatedValue;
 use engine::{GameEngine, Value};
+
+use crate::QuoridorPropagatedValue;
 
 pub struct QuoridorSelectionStrategy<S, A, P, C> {
     cpuct: C,
@@ -15,9 +17,9 @@ pub struct QuoridorSelectionStrategy<S, A, P, C> {
 pub struct QuoridorStrategyOptions {
     pub fpu: f32,
     pub fpu_root: f32,
-    pub moves_left_threshold: f32,
-    pub moves_left_scale: f32,
-    pub moves_left_factor: f32,
+    pub victory_margin_threshold: f32,
+    pub victory_margin_scale: f32,
+    pub victory_margin_factor: f32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -25,16 +27,16 @@ impl QuoridorStrategyOptions {
     pub fn new(
         fpu: f32,
         fpu_root: f32,
-        moves_left_threshold: f32,
-        moves_left_scale: f32,
-        moves_left_factor: f32,
+        victory_margin_threshold: f32,
+        victory_margin_scale: f32,
+        victory_margin_factor: f32,
     ) -> Self {
         QuoridorStrategyOptions {
             fpu,
             fpu_root,
-            moves_left_threshold,
-            moves_left_scale,
-            moves_left_factor,
+            victory_margin_threshold,
+            victory_margin_scale,
+            victory_margin_factor,
         }
     }
 }
@@ -49,74 +51,54 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
         }
     }
 
-    fn get_game_length_baseline<'b, I>(edges: I, moves_left_threshold: f32) -> GameLengthBaseline
+    fn get_victory_margin_baseline<'b, I>(edges: I, victory_margin_threshold: f32) -> VictoryMarginDirective
     where
-        I: Iterator<Item = &'b MCTSEdge<A, MovesLeftPropagatedValue>>,
+        I: Iterator<Item = &'b MCTSEdge<A, QuoridorPropagatedValue>>,
         A: 'b,
     {
-        if moves_left_threshold >= 1.0 {
-            return GameLengthBaseline::None;
+        if victory_margin_threshold >= 1.0 {
+            return VictoryMarginDirective::None;
         }
 
         edges
             .max_by_key(|n| n.visits())
             .filter(|n| n.visits() > 0)
-            .map_or(GameLengthBaseline::None, |e| {
+            .map_or(VictoryMarginDirective::None, |e| {
                 let pv = e.propagated_values();
                 let Qsa = pv.value();
-                let expected_game_length = pv.game_length();
-
-                if Qsa >= moves_left_threshold {
-                    GameLengthBaseline::MinimizeGameLength(expected_game_length)
-                } else if Qsa <= (1.0 - moves_left_threshold) {
-                    GameLengthBaseline::MaximizeGameLength(expected_game_length)
+                if Qsa >= victory_margin_threshold {
+                    VictoryMarginDirective::MaximizeVictoryMargin
+                } else if Qsa <= (1.0 - victory_margin_threshold) {
+                    VictoryMarginDirective::MinimizeVictoryMargin
                 } else {
-                    GameLengthBaseline::None
+                    VictoryMarginDirective::None
                 }
             })
     }
 
-    fn Msa(
-        edge: &MCTSEdge<A, MovesLeftPropagatedValue>,
-        game_length_baseline: &GameLengthBaseline,
+    fn VMsa(
+        edge: &MCTSEdge<A, QuoridorPropagatedValue>,
+        victory_margin_baseline: &VictoryMarginDirective,
         options: &QuoridorStrategyOptions,
     ) -> f32 {
         if edge.visits() == 0 {
             return 0.0;
         }
 
-        if let GameLengthBaseline::None = game_length_baseline {
+        if let VictoryMarginDirective::None = victory_margin_baseline {
             return 0.0;
         }
 
-        let (direction, game_length_baseline) =
-            if let GameLengthBaseline::MinimizeGameLength(game_length_baseline) =
-                game_length_baseline
-            {
-                (1.0f32, game_length_baseline)
-            } else if let GameLengthBaseline::MaximizeGameLength(game_length_baseline) =
-                game_length_baseline
-            {
-                (-1.0, game_length_baseline)
-            } else {
-                panic!();
-            };
+        let direction = match victory_margin_baseline {
+            VictoryMarginDirective::MaximizeVictoryMargin => 1.0,
+            VictoryMarginDirective::MinimizeVictoryMargin => -1.0,
+            _ => 0.0,
+        };
 
-        let expected_game_length = edge.propagated_values().game_length();
-        let moves_left_scale = options.moves_left_scale;
-        let moves_left_clamped = (game_length_baseline - expected_game_length)
-            .min(moves_left_scale)
-            .max(-moves_left_scale);
-        let moves_left_scaled = moves_left_clamped / moves_left_scale;
-        moves_left_scaled * options.moves_left_factor * direction
+        let expected_victory_margin = edge.propagated_values().victory_margin();
+        let victory_margin_clamped = expected_victory_margin.clamp(0.0, 10.0);
+        victory_margin_clamped * options.victory_margin_factor * direction
     }
-}
-
-pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {
-    moves_left_scores
-        .enumerate()
-        .map(|(i, s)| (i + 1) as f32 * s)
-        .fold(0.0f32, |s, e| s + e)
 }
 
 #[allow(non_snake_case)]
@@ -128,11 +110,11 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type PropagatedValues = QuoridorPropagatedValue;
 
     fn select_path(
         &self,
-        node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
+        node: &mut MCTSNode<A, P, QuoridorPropagatedValue>,
         game_state: &S,
         is_root: bool,
     ) -> Result<usize>
@@ -149,9 +131,9 @@ where
         let Nsb = node.visits();
         let root_Nsb = (Nsb as f32).sqrt();
         let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
-        let game_length_baseline = &Self::get_game_length_baseline(
+        let victory_margin_baseline = &Self::get_victory_margin_baseline(
             node.iter_visited_edges_and_top_unvisited_edge(),
-            options.moves_left_threshold,
+            options.victory_margin_threshold,
         );
 
         let mut best_child_index = 0;
@@ -163,9 +145,9 @@ where
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
             let Qsa = if Nsa == 0 { fpu } else { W };
-            let Msa = Self::Msa(edge, game_length_baseline, options);
+            let VMsa = Self::VMsa(edge, victory_margin_baseline, options);
 
-            let PUCT = Msa + Qsa + Usa;
+            let PUCT = VMsa + Qsa + Usa;
 
             if PUCT > best_puct {
                 best_puct = PUCT;
@@ -178,10 +160,10 @@ where
 
     fn node_details(
         &self,
-        node: &mut MCTSNode<A, P, MovesLeftPropagatedValue>,
+        node: &mut MCTSNode<A, P, QuoridorPropagatedValue>,
         game_state: &S,
         is_root: bool,
-    ) -> Vec<EdgeDetails<A, MovesLeftPropagatedValue>>
+    ) -> Vec<EdgeDetails<A, QuoridorPropagatedValue>>
     where
         C: CPUCT<State = S>,
     {
@@ -224,28 +206,18 @@ where
     }
 }
 
-// #[allow(non_snake_case)]
-// impl<A, PV> EdgeDetails<A, PV>
-// where
-//     PV: PropagatedGameLength,
-// {
-//     pub fn game_length(&self) -> f32 {
-//         self.propagated_values.game_length()
-//     }
-// }
-
-enum GameLengthBaseline {
-    MinimizeGameLength(f32),
-    MaximizeGameLength(f32),
+enum VictoryMarginDirective {
+    MinimizeVictoryMargin,
+    MaximizeVictoryMargin,
     None,
 }
 
-pub struct MovesLeftBackpropagationStrategy<'a, E, S, A, P> {
+pub struct QuoridorBackpropagationStrategy<'a, E, S, A, P> {
     engine: &'a E,
     _phantom: std::marker::PhantomData<(S, A, P)>,
 }
 
-impl<'e, E, S, A, P> MovesLeftBackpropagationStrategy<'e, E, S, A, P> {
+impl<'e, E, S, A, P> QuoridorBackpropagationStrategy<'e, E, S, A, P> {
     pub fn new(engine: &'e E) -> Self {
         Self {
             engine,
@@ -254,24 +226,24 @@ impl<'e, E, S, A, P> MovesLeftBackpropagationStrategy<'e, E, S, A, P> {
     }
 }
 
-pub struct MovesLeftNodeInfo {
+pub struct VictoryMarginNodeInfo {
     pub player_to_move: usize,
 }
 
-pub trait GameLength {
-    fn game_length_score(&self) -> f32;
+pub trait VictoryMargin {
+    fn victory_margin_score(&self) -> f32;
 }
 
-impl<E, S, A, P> BackpropagationStrategy for MovesLeftBackpropagationStrategy<'_, E, S, A, P>
+impl<E, S, A, P> BackpropagationStrategy for QuoridorBackpropagationStrategy<'_, E, S, A, P>
 where
-    P: Value + GameLength,
+    P: Value + VictoryMargin,
     E: GameEngine<State = S, Action = A>,
 {
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PropagatedValues = MovesLeftPropagatedValue;
-    type NodeInfo = MovesLeftNodeInfo;
+    type PropagatedValues = QuoridorPropagatedValue;
+    type NodeInfo = VictoryMarginNodeInfo;
 
     fn backpropagate<'node, I>(&self, visited_nodes: I, predictions: &Self::Predictions)
     where
@@ -284,7 +256,7 @@ where
         >,
     {
         let mut visited_nodes = visited_nodes;
-        let game_length_score = predictions.game_length_score();
+        let victory_margin_score = predictions.victory_margin_score();
 
         while let Some(node) = visited_nodes.next() {
             // Update value of W from the parent node's perspective.
@@ -300,40 +272,18 @@ where
             let new_value = value + (value_score - value) / (num_updates + 1) as f32;
             *propagated_values.value_mut() = new_value;
 
-            let game_length = propagated_values.game_length();
-            let new_game_length =
-                game_length + (game_length_score - game_length) / (num_updates + 1) as f32;
-            *propagated_values.game_length_mut() = new_game_length;
+            let victory_margin = propagated_values.victory_margin();
+            let new_victory_margin =
+                victory_margin + (victory_margin_score - victory_margin) / (num_updates + 1) as f32;
+            *propagated_values.victory_margin_mut() = new_victory_margin;
 
             propagated_values.increment_num_updates();
         }
     }
 
     fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo {
-        MovesLeftNodeInfo {
+        VictoryMarginNodeInfo {
             player_to_move: self.engine.player_to_move(game_state),
         }
     }
 }
-
-pub fn map_moves_left_to_one_hot(moves_left: f32, moves_left_size: usize) -> Vec<f32> {
-    if moves_left_size == 0 {
-        return vec![];
-    }
-
-    assert!(
-        moves_left.is_finite(),
-        "Value must be finite (not NaN or infinity)."
-    );
-    assert!(moves_left >= 0.0, "Value must not be negative.");
-    assert!(moves_left <= usize::MAX as f32, "Value must fit in usize.");
-
-    let moves_left = moves_left.round() as usize;
-    let moves_left = moves_left.max(1).min(moves_left_size);
-    let mut moves_left_one_hot = vec![0f32; moves_left_size];
-    moves_left_one_hot[moves_left - 1] = 1.0;
-
-    moves_left_one_hot
-}
-
-//@TODO: Update to take in victory margin 

@@ -1,7 +1,7 @@
 use common::{PropagatedGameLength, PropagatedValue};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuoridorPropagatedValue {
     value: f32,
     game_length: f32,
