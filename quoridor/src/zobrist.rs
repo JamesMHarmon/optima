@@ -14,14 +14,16 @@ impl Zobrist {
         Zobrist { hash: INITIAL }
     }
 
+    #[must_use]
     pub fn move_pawn(&self, prev_game_state: &GameState, new_pawn_board: u128) -> Self {
         let move_piece_value = get_move_pawn_value(prev_game_state, new_pawn_board);
 
-        let hash = self.hash ^ PLAYER_TO_MOVE ^ move_piece_value;
+        let hash = self.hash ^ move_piece_value;
 
         Zobrist { hash }
     }
 
+    #[must_use]
     pub fn place_wall(
         &self,
         prev_game_state: &GameState,
@@ -34,11 +36,26 @@ impl Zobrist {
         );
         let walls_remaining_value = get_num_walls_placed_value(prev_game_state);
 
-        let hash = self.hash ^ PLAYER_TO_MOVE ^ wall_value ^ walls_remaining_value;
+        let hash = self.hash ^ wall_value ^ walls_remaining_value;
 
         Zobrist { hash }
     }
 
+    #[must_use]
+    pub fn toggle_player_turn(&self) -> Self {
+        let hash = self.hash ^ PLAYER_TO_MOVE;
+
+        Zobrist { hash }
+    }
+
+    #[must_use]
+    pub fn set_is_final(&self) -> Self {
+        let hash = self.hash ^ IS_FINAL;
+
+        Zobrist { hash }
+    }
+
+    #[must_use]
     pub fn board_state_hash(&self) -> u64 {
         self.hash
     }

@@ -282,7 +282,7 @@ impl GameState {
             // Do not flip the player to move since the player is the losing player.
             // Margin of victory is 0 if the losing player was able to reach the goal.
             self.victory_margin = 0;
-            self.is_final = true;
+            self.set_is_final();
 
             return true;
         }
@@ -300,9 +300,9 @@ impl GameState {
         // Or if the winning player is at their goal and has no walls remaining, the game is over.
         if action.is_pass() || player_at_goal_with_no_walls {
             // Change the player to move since the victor is always the last player to have moved.
-            self.p1_turn_to_move = !self.p1_turn_to_move;
+            self.toggle_player_turn();
             self.victory_margin = self.curr_player_distance_to_goal();
-            self.is_final = true;
+            self.set_is_final();
 
             assert!(
                 self.victory_margin > 0,
@@ -320,6 +320,11 @@ impl GameState {
         false
     }
 
+    fn set_is_final(&mut self) {
+        self.is_final = true;
+        self.zobrist = self.zobrist.set_is_final();
+    }
+
     fn increment_turn(&mut self) {
         let curr_player = if self.p1_turn_to_move { 1 } else { 2 };
         let is_scoring_phase = self.is_scoring_phase();
@@ -328,7 +333,12 @@ impl GameState {
             self.move_number += 1;
         }
 
+        self.toggle_player_turn();
+    }
+
+    fn toggle_player_turn(&mut self) {
         self.p1_turn_to_move = !self.p1_turn_to_move;
+        self.zobrist = self.zobrist.toggle_player_turn();
     }
 
     fn curr_player_distance_to_goal(&self) -> u8 {
