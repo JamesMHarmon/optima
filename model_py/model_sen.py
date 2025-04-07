@@ -104,6 +104,15 @@ def ValueHead(x, filters):
 
     return out
 
+def VictoryMarginHead(x, filters):
+    out = ConvBlock(filters=filters // 8, kernel_size=1, name='victory_margin_head')(x)
+
+    out = Flatten()(out)
+    out = Dense(filters, activation='relu', name='victory_margin_head/1')(out)
+    out = Dense(1, activation=None, name='', full_name='victory_margin_head')(out)
+
+    return out
+
 def PolicyHeadFullyConnected(x, filters, output_size):
     out = ConvBlock(filters=filters // 8, kernel_size=1, name='policy_head')(x)
 
@@ -118,8 +127,15 @@ def MovesLeftHead(x, filters, moves_left_size):
     out = Dense(moves_left_size, name='', full_name='moves_left_head', activation='softmax')(out)
     return out
 
-def create_model(model_dims: ModelDimensions, policy_head=None):
-    num_filters, num_blocks, input_dims, output_size, moves_left_size = model_dims.num_filters, model_dims.num_blocks, model_dims.input_dims, model_dims.policy_size, model_dims.moves_left_size
+def create_model(model_dims: ModelDimensions, policy_head=None, victory_margin_head=false):
+    num_filters, num_blocks, input_dims, output_size, moves_left_size = (
+        model_dims.num_filters,
+        model_dims.num_blocks,
+        model_dims.input_dims,
+        model_dims.policy_size,
+        model_dims.moves_left_size
+    )
+
     input_shape = (input_dims.input_h, input_dims.input_w, input_dims.input_c)
     state_input = Input(shape=input_shape)
     net = ConvBlock(filters=num_filters, kernel_size=3, batch_scale=True, name='input')(state_input)
@@ -134,11 +150,15 @@ def create_model(model_dims: ModelDimensions, policy_head=None):
 
     policy_head = policy_head(net, num_filters)
 
+    outputs = [value_head, policy_head]
+
     if moves_left_size > 0:
         moves_left_head = MovesLeftHead(net, num_filters, moves_left_size)
-        outputs = [value_head, policy_head, moves_left_head]
-    else:
-        outputs = [value_head, policy_head]
+        outputs.append(moves_left_head)
+
+    if victory_margin_head:
+        victory_margin_head = VictoryMarginHead(net, num_filters)
+        outputs.append(victory_margin_head)
 
     model = Model(inputs=state_input,outputs=outputs)
 

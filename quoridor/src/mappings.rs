@@ -34,7 +34,6 @@ impl Mapper {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let rotate: bool = !game_state.p1_turn_to_move();
 
-        // @TODO: Increase OUTPUT_SIZE
         let inputs = vec![-1f32; OUTPUT_SIZE];
 
         policy_metrics.children.iter().fold(inputs, |mut r, m| {

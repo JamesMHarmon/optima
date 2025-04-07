@@ -4,6 +4,7 @@ from tensorflow.keras.optimizers import SGD
 from tensorflow.keras import backend as K
 from tensorflow.keras.losses import categorical_crossentropy as keras_categorical_crossentropy
 from tensorflow.keras.losses import mean_squared_error
+from tensorflow.keras.losses import Huber
 import os
 import tempfile
 from compress import compress, decompress
@@ -16,6 +17,7 @@ class LossWeights:
     model_loss_weight: int
     policy_loss_weight: int
     value_loss_weight: int
+    victory_margin_loss_weight: int
     moves_left_loss_weight: int
 
 def create(model_dims: ModelDimensions):
@@ -44,14 +46,25 @@ def save(model, model_path):
 
         compress(tmp_model_path, model_path)
 
-def compile(model, learning_rate, loss_weights: LossWeights):
-    model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight = loss_weights.model_loss_weight, loss_weights.policy_loss_weight, loss_weights.value_loss_weight, loss_weights.moves_left_loss_weight
+def compile(model, learning_rate, loss_weights: LossWeights, huber_delta=4.0):
+    model_loss_weight, policy_loss_weight, value_loss_weight, victory_margin_loss_weight, moves_left_loss_weight = (
+        loss_weights.model_loss_weight,
+        loss_weights.policy_loss_weight,
+        loss_weights.value_loss_weight,
+        loss_weights.victory_margin_loss_weight,
+        loss_weights.moves_left_loss_weight,
+    )
+
     loss_funcs = { "value_head": mean_squared_error, "policy_head": crossentropy_with_policy_mask_loss }
     loss_weights = { "value_head": value_loss_weight, "policy_head": policy_loss_weight, "model_loss": model_loss_weight }
 
     if any("moves_left" in output.name for output in model.outputs):
         loss_funcs['moves_left_head'] = keras_categorical_crossentropy
         loss_weights['moves_left_head'] = moves_left_loss_weight
+
+    if any("victory_margin" in output.name for output in model.outputs):
+        loss_funcs['victory_margin_head'] = Huber(delta=huber_delta)
+        loss_weights['victory_margin_head'] = victory_margin_loss_weight
 
     model.compile(
         optimizer=SGD(lr=learning_rate, momentum=0.9, nesterov=True),

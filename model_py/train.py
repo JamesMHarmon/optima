@@ -24,7 +24,7 @@ if __name__== '__main__':
     tensor_board_path       = os.path.join(model_dir, './tensorboard')
     
     def load_config():
-        global conf, export_dir, cache_dir, games_dir, model_name, mode, min_visits, q_diff_threshold, q_diff_width, games_per_epoch, window_size, avg_num_samples_per_pos, window_warmup, warmup_steps, max_grad_norm, batch_size, learning_rate, model_loss_weight, policy_loss_weight, value_loss_weight, moves_left_loss_weight, step_ratio, input_h, input_w, input_c, policy_size, moves_left_size, num_filters, num_blocks, min_visits
+        global conf, export_dir, cache_dir, games_dir, model_name, mode, min_visits, q_diff_threshold, q_diff_width, games_per_epoch, window_size, avg_num_samples_per_pos, window_warmup, warmup_steps, max_grad_norm, batch_size, learning_rate, model_loss_weight, policy_loss_weight, value_loss_weight, victory_margin_loss_weight, moves_left_loss_weight, step_ratio, input_h, input_w, input_c, policy_size, moves_left_size, num_filters, num_blocks, min_visits
         conf = ConfigFactory.parse_file(config_path)
 
         export_dir              = conf.get_string('export_dir', None)
@@ -48,6 +48,7 @@ if __name__== '__main__':
         model_loss_weight       = conf.get_float('model_loss_weight')
         policy_loss_weight      = conf.get_float('policy_loss_weight')
         value_loss_weight       = conf.get_float('value_loss_weight')
+        victory_margin_weight   = conf.get_float('victory_margin_weight')
         moves_left_loss_weight  = conf.get_float('moves_left_loss_weight')
         step_ratio              = conf.get_float('step_ratio')
         input_h                 = conf.get_int('input_h')
@@ -74,6 +75,7 @@ if __name__== '__main__':
 
     input_size = input_h * input_w * input_c
     value_size = 1
+    victory_margin_size = 1
     train_ratio = 1.0
 
     initial_step, epoch = load_train_state(train_state_path)
@@ -108,6 +110,7 @@ if __name__== '__main__':
                 'inputs': (input_h, input_w, input_c),
                 'policy': (policy_size,),
                 'value': (value_size,),
+                'victory_margin': (victory_margin_size,),
                 'moves_left': (moves_left_size,)
             })
 
@@ -118,6 +121,7 @@ if __name__== '__main__':
             model_loss_weight=model_loss_weight,
             policy_loss_weight=policy_loss_weight,
             value_loss_weight=value_loss_weight,
+            victory_margin_loss_weight=victory_margin_weight,
             moves_left_loss_weight=moves_left_loss_weight,
         )
 

@@ -63,6 +63,9 @@ class DataGenerator(Sequence):
         if 'moves_left' in self._shape:
             targets['moves_left_head'] = self.to_tensor(sample['moves_left'], self._shape['moves_left'])
 
+        if 'victory_margin' in self._shape:
+            targets['victory_margin_head'] = self.to_tensor(sample['victory_margin'], self._shape['victory_margin'])
+
         return input, targets
 
     def _curr_epochs_window_size(self):
