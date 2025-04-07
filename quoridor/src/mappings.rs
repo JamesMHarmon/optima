@@ -273,6 +273,7 @@ fn map_action_to_output_idx(action: &Action) -> usize {
         ActionType::HorizontalWall => {
             map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
         }
+        ActionType::Pass => panic!("TODO: Pass action is not yet implemented"),
     }
 }
 

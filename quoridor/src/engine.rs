@@ -44,10 +44,15 @@ impl ValidActions for Engine {
         let valid_pawn_moves = game_state.valid_pawn_move_actions();
         let valid_vert_walls = game_state.valid_vertical_wall_actions();
         let valid_horiz_walls = game_state.valid_horizontal_wall_actions();
-        let actions = valid_pawn_moves
+        let mut actions: Vec<_> = valid_pawn_moves
             .chain(valid_vert_walls)
-            .chain(valid_horiz_walls);
+            .chain(valid_horiz_walls)
+            .collect();
 
-        actions.collect()
+        if game_state.can_pass() {
+            actions.push(Action::pass());
+        }
+
+        actions
     }
 }
