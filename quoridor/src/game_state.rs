@@ -96,8 +96,9 @@ impl GameState {
         }
 
         let is_final = self.try_finalize(action);
+        let is_goaling_action = self.is_goaling_action(action);
 
-        if !is_final {
+        if !is_final && !is_goaling_action {
             self.increment_turn();
         }
     }
@@ -158,7 +159,7 @@ impl GameState {
             horizontal_wall_board: vertical_symmetry_bit_board(self.horizontal_wall_board, true),
             move_number: self.move_number,
             is_final: self.is_final,
-            victory_margin: self.victory_margin.clone(),
+            victory_margin: self.victory_margin,
             p1_num_walls: self.p1_num_walls,
             p2_num_walls: self.p2_num_walls,
             p1_turn_to_move: self.p1_turn_to_move,
@@ -364,6 +365,18 @@ impl GameState {
 
     fn is_player_two_at_goal(&self) -> bool {
         self.p2_pawn_board & P2_OBJECTIVE_MASK != 0
+    }
+
+    fn is_goaling_action(&self, action: &Action) -> bool {
+        if action.is_move() {
+            if self.p1_turn_to_move {
+                self.is_player_one_at_goal()
+            } else {
+                self.is_player_two_at_goal()
+            }
+        } else {
+            false
+        }
     }
 
     fn valid_pawn_moves(&self) -> u128 {
