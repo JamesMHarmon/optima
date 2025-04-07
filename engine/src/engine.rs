@@ -13,5 +13,5 @@ pub trait ValidActions {
     type Action;
     type State;
 
-    fn valid_actions(&self, game_state: &Self::State) -> Vec<Self::Action>;
+    fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action>;
 }

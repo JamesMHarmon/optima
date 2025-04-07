@@ -5,16 +5,21 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Predictions {
     value: Value,
+    victory_margin: f32,
     game_length: f32,
 }
 
 impl Predictions {
-    pub fn new(value: Value, game_length: f32) -> Self {
-        Self { value, game_length }
+    pub fn new(value: Value, victory_margin: f32, game_length: f32) -> Self {
+        Self { value, victory_margin, game_length }
     }
 
     pub fn value(&self) -> &Value {
         &self.value
+    }
+
+    pub fn victory_margin(&self) -> f32 {
+        self.victory_margin
     }
 
     pub fn game_length(&self) -> f32 {

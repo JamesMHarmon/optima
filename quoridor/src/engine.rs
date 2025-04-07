@@ -24,7 +24,7 @@ impl GameEngine for Engine {
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
         game_state
             .is_terminal()
-            .map(|value| Predictions::new(value, game_state.move_number() as f32))
+            .map(|value| Predictions::new(value, game_state.victory_margin() as f32, game_state.move_number() as f32))
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
@@ -40,19 +40,7 @@ impl ValidActions for Engine {
     type Action = Action;
     type State = GameState;
 
-    fn valid_actions(&self, game_state: &Self::State) -> Vec<Self::Action> {
-        let valid_pawn_moves = game_state.valid_pawn_move_actions();
-        let valid_vert_walls = game_state.valid_vertical_wall_actions();
-        let valid_horiz_walls = game_state.valid_horizontal_wall_actions();
-        let mut actions: Vec<_> = valid_pawn_moves
-            .chain(valid_vert_walls)
-            .chain(valid_horiz_walls)
-            .collect();
-
-        if game_state.can_pass() {
-            actions.push(Action::pass());
-        }
-
-        actions
+    fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
+        game_state.valid_actions()
     }
 }

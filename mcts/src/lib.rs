@@ -13,6 +13,7 @@ pub mod temp;
 
 pub use backpropagation_strategy::*;
 pub use cpuct::*;
+pub use edge::*;
 pub use mcts::*;
 pub use moves_left_strategy::*;
 pub use node::*;
@@ -20,5 +21,3 @@ pub use node_details::*;
 pub use options::*;
 pub use selection_strategy::*;
 pub use temp::*;
-
-pub(crate) use edge::*;

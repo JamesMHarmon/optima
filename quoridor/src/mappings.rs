@@ -1,11 +1,11 @@
-use crate::{Predictions, BOARD_SIZE, MOVES_LEFT_SIZE};
+use crate::{Predictions, QuoridorPropagatedValue, BOARD_SIZE, MOVES_LEFT_SIZE};
 
 use super::transposition_entry::TranspositionEntry;
-use common::MovesLeftPropagatedValue;
 use half::f16;
 use mcts::{map_moves_left_to_one_hot, moves_left_expected_value};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::vec;
 use tensorflow_model::{InputMap, PredictionsMap, TranspositionMap};
 
 use super::constants::{
@@ -29,10 +29,12 @@ impl Mapper {
     fn metrics_to_policy_output(
         &self,
         game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
+        policy_metrics: &NodeMetrics<Action, Predictions, QuoridorPropagatedValue>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let rotate: bool = !game_state.p1_turn_to_move();
+
+        // @TODO: Increase OUTPUT_SIZE
         let inputs = vec![-1f32; OUTPUT_SIZE];
 
         policy_metrics.children.iter().fold(inputs, |mut r, m| {
@@ -54,15 +56,10 @@ impl Mapper {
         game_state: &GameState,
         policy_scores: &[f16],
     ) -> Vec<ActionWithPolicy<Action>> {
-        let valid_pawn_moves = game_state.valid_pawn_move_actions();
-        let valid_vert_walls = game_state.valid_vertical_wall_actions();
-        let valid_horiz_walls = game_state.valid_horizontal_wall_actions();
-        let actions = valid_pawn_moves
-            .chain(valid_vert_walls)
-            .chain(valid_horiz_walls);
+        let valid_actions = game_state.valid_actions();
 
         let rotate = !game_state.p1_turn_to_move();
-        let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = actions
+        let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = valid_actions
             .map(|a| {
                 // Policy scores coming from the quoridor model are always from the perspective of player 1.
                 // This means that if we are p2, we need to flip the actions coming back and translate them
@@ -149,7 +146,7 @@ impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type PropagatedValues = QuoridorPropagatedValue;
 
     fn to_output(
         &self,
@@ -159,6 +156,7 @@ impl PredictionsMap for Mapper {
     ) -> std::collections::HashMap<String, Vec<f32>> {
         let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
         let value_output = self.metrics_to_value_output(game_state, targets.value());
+        let victory_margin_output = vec![targets.victory_margin()];
 
         let move_number = game_state.move_number() as f32;
         let moves_left = (targets.game_length() - move_number + 1.0).max(1.0);
@@ -190,13 +188,23 @@ impl PredictionsMap for Mapper {
             );
         }
 
+        for value in value_output.iter() {
+            assert!(
+                *value >= 0.0 && *value <= BOARD_SIZE as f32 * BOARD_SIZE as f32,
+                "Victory Margin output should be >= 0.0 but was {}",
+                value
+            );
+        }
+
         assert_eq!(policy_output.len(), OUTPUT_SIZE);
         assert_eq!(value_output.len(), 1);
+        assert_eq!(victory_margin_output.len(), 1);
         assert_eq!(moves_left_one_hot.len(), MOVES_LEFT_SIZE);
 
         [
             ("policy", policy_output),
             ("value", value_output),
+            ("victory_margin", victory_margin_output),
             ("moves_left", moves_left_one_hot),
         ]
         .into_iter()
@@ -232,6 +240,10 @@ impl TranspositionMap for Mapper {
             .get("value_head")
             .expect("Value not found in output")[0];
 
+        let victory_margin = outputs
+            .get("victory_margin_head")
+            .expect("Victory margin not found in output")[0];
+
         let moves_left_vals = outputs
             .get("moves_left_head")
             .expect("Moves left not found in output");
@@ -240,7 +252,7 @@ impl TranspositionMap for Mapper {
 
         let game_length = (game_state.move_number() as f32 + moves_left - 1.0).max(1.0);
 
-        TranspositionEntry::new(policy_metrics, value, game_length)
+        TranspositionEntry::new(policy_metrics, value, victory_margin, game_length)
     }
 
     fn map_transposition_entry_to_analysis(
@@ -250,6 +262,7 @@ impl TranspositionMap for Mapper {
     ) -> GameStateAnalysis<Action, Predictions> {
         let predictions = Predictions::new(
             self.map_value_output_to_value(game_state, transposition_entry.value()),
+            f16::to_f32(transposition_entry.victory_margin()),
             transposition_entry.game_length(),
         );
 
@@ -263,7 +276,7 @@ impl TranspositionMap for Mapper {
 fn map_action_to_output_idx(action: &Action) -> usize {
     let len_moves_inputs = PAWN_BOARD_SIZE;
     let len_wall_inputs = WALL_BOARD_SIZE;
-    let coord = action.coord();
+    let coord: Coordinate = action.coord();
 
     match action.action_type() {
         ActionType::PawnMove => map_coord_to_output_idx_nine_by_nine(&coord),
@@ -273,7 +286,7 @@ fn map_action_to_output_idx(action: &Action) -> usize {
         ActionType::HorizontalWall => {
             map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
         }
-        ActionType::Pass => panic!("TODO: Pass action is not yet implemented"),
+        ActionType::Pass => len_moves_inputs + len_wall_inputs * 2,
     }
 }
 

@@ -1,9 +1,9 @@
-use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
+use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::NodeMetrics;
 use quoridor::{
-    Action, GameState, Mapper, Predictions, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE,
+    Action, GameState, Mapper, Predictions, QuoridorPropagatedValue, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE
 };
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
@@ -35,7 +35,7 @@ impl Sample for QuoridorSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type PropagatedValues = QuoridorPropagatedValue;
     type PredictionStore = QuoridorVStore;
 
     fn take_action(
@@ -73,6 +73,7 @@ impl Sample for QuoridorSampler {
         vec![
             ("policy".to_string(), OUTPUT_SIZE),
             ("value".to_string(), 1),
+            ("victory_margin".to_string(), 1),
             ("moves_left".to_string(), MOVES_LEFT_SIZE),
         ]
     }
@@ -90,7 +91,7 @@ impl PredictionsMap for QuoridorSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type PropagatedValues = QuoridorPropagatedValue;
 
     fn to_output(
         &self,
@@ -105,7 +106,7 @@ impl PredictionsMap for QuoridorSampler {
 impl QMix for QuoridorSampler {
     type State = GameState;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type PropagatedValues = QuoridorPropagatedValue;
 
     fn mix_q(
         game_state: &Self::State,
@@ -116,42 +117,49 @@ impl QMix for QuoridorSampler {
         if q_mix == 0.0 {
             return post_blunder_prediction.clone();
         }
-        let pre_blunder_value = pre_blunder_propagated_values.value();
-        let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
-
-        let player_to_move = game_state.player_to_move();
-        let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
-        let post_blunder_game_length = post_blunder_prediction.game_length();
-
-        assert!(
-            (0.0..=1.0).contains(&pre_blunder_value) && (0.0..=1.0).contains(&post_blunder_value),
-            "blunder_value must be between 0.0 and 1.0"
-        );
-
-        assert!(
-            post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,
-            "blunder_game_length must be gte 0"
-        );
-
-        let mixed_value = ((1.0 - q_mix) * post_blunder_value) + (q_mix * pre_blunder_value);
-        let mixed_game_length =
-            (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
 
         assert!(
             (0.0..=1.0).contains(&q_mix),
             "Q mix must be between 0.0 and 1.0"
         );
 
-        let mut value = post_blunder_prediction.value().clone();
-        value.update_players_value(player_to_move, mixed_value);
+        let pre_blunder_value = pre_blunder_propagated_values.value();
+        let pre_blunder_victory_margin = pre_blunder_propagated_values.victory_margin();
+        let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
 
-        Predictions::new(value, mixed_game_length)
+        let player_to_move = game_state.player_to_move();
+        let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
+        let post_blunder_victory_margin = post_blunder_prediction.victory_margin();
+        let post_blunder_game_length = post_blunder_prediction.game_length();
+
+        let mixed_value = ((1.0 - q_mix) * post_blunder_value) + (q_mix * pre_blunder_value);
+        let mut new_mixed_value = post_blunder_prediction.value().clone();
+        new_mixed_value.update_players_value(player_to_move, mixed_value);
+
+        assert!(
+            (0.0..=1.0).contains(&pre_blunder_value) && (0.0..=1.0).contains(&post_blunder_value),
+            "blunder_value must be between 0.0 and 1.0"
+        );
+
+        let mixed_victory_margin = ((1.0 - q_mix) * post_blunder_victory_margin)
+            + (q_mix * pre_blunder_victory_margin);
+
+        assert!(
+            post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,
+            "blunder_game_length must be gte 0"
+        );
+
+        let mixed_game_length =
+            (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
+
+        Predictions::new(new_mixed_value, mixed_victory_margin, mixed_game_length)
     }
 }
 
 #[derive(Default)]
 pub struct QuoridorVStore {
     player_value: [Option<Value>; 2],
+    victory_margin: Option<f32>,
     game_length: Option<f32>,
 }
 
@@ -165,6 +173,8 @@ impl PredictionStore for QuoridorVStore {
         self.player_value[player - 1].as_ref().map(|value| {
             Predictions::new(
                 value.clone(),
+                self.victory_margin
+                    .expect("Victory margin should be set before getting predictions"),
                 self.game_length
                     .expect("Game length should be set before getting predictions"),
             )
@@ -177,6 +187,10 @@ impl PredictionStore for QuoridorVStore {
 
         if self.game_length.is_none() {
             self.game_length = Some(prediction.game_length());
+        }
+
+        if self.victory_margin.is_none() {
+            self.victory_margin = Some(prediction.victory_margin());
         }
     }
 }

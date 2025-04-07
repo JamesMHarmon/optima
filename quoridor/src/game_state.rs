@@ -103,18 +103,35 @@ impl GameState {
         }
     }
 
-    pub fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
+    pub fn valid_actions(&self) -> impl Iterator<Item = Action> {
+        let pawn_moves = self.valid_pawn_move_actions();
+        let vertical_walls = self.valid_vertical_wall_actions();
+        let horizontal_walls = self.valid_horizontal_wall_actions();
+
+        let pass_action = if self.can_pass() {
+            Some(Action::pass()).into_iter()
+        } else {
+            None.into_iter()
+        };
+
+        pawn_moves
+            .chain(vertical_walls)
+            .chain(horizontal_walls)
+            .chain(pass_action)
+    }
+
+    fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_actions(self.valid_pawn_moves(), ActionType::PawnMove)
     }
 
-    pub fn valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
+    fn valid_horizontal_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_actions(
             self.valid_horizontal_wall_placement(),
             ActionType::HorizontalWall,
         )
     }
 
-    pub fn valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
+    fn valid_vertical_wall_actions(&self) -> impl Iterator<Item = Action> {
         Self::bit_board_actions(
             self.valid_vertical_wall_placement(),
             ActionType::VerticalWall,

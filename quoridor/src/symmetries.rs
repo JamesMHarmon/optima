@@ -1,10 +1,11 @@
+use crate::QuoridorPropagatedValue;
+
 use super::{Action, GameState, Predictions};
-use common::MovesLeftPropagatedValue;
 use model::{node_metrics::NodeMetrics, EdgeMetrics, PositionMetrics};
 
 pub fn get_symmetries(
-    metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
-) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
+    metrics: PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>,
+) -> Vec<PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>> {
     let PositionMetrics { game_state, node_metrics } = &metrics;
 
     let symmetrical_state = game_state.vertical_symmetry();
@@ -18,8 +19,8 @@ pub fn get_symmetries(
 }
 
 fn symmetrical_node_metrics(
-    metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
-) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
+    metrics: &NodeMetrics<Action, Predictions, QuoridorPropagatedValue>,
+) -> NodeMetrics<Action, Predictions, QuoridorPropagatedValue> {
     let children_symmetry = metrics
         .children
         .iter()
@@ -50,7 +51,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
                 children: vec![],
             },
         });
@@ -248,47 +249,47 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
                 children: vec![
                     EdgeMetrics::new(
                         "a9".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "b9".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "h9".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "a1".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "a1v".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "a1h".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "h3h".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                     EdgeMetrics::new(
                         "h3v".parse().unwrap(),
                         0,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
+                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
                     ),
                 ],
             },
@@ -329,14 +330,14 @@ mod tests {
         let actions = || move_actions().chain(wall_actions());
 
         let children = actions()
-            .map(|action| EdgeMetrics::new(action, 0, MovesLeftPropagatedValue::new(0.0, 0.0)))
+            .map(|action| EdgeMetrics::new(action, 0, QuoridorPropagatedValue::new(0.0, 0.0, 0.0)))
             .collect_vec();
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
                 children,
             },
         });
