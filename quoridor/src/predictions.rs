@@ -1,4 +1,4 @@
-use super::Value;
+use super::{Value, VictoryMargin};
 use mcts::GameLength;
 use serde::{Deserialize, Serialize};
 
@@ -36,5 +36,11 @@ impl engine::Value for Predictions {
 impl GameLength for Predictions {
     fn game_length_score(&self) -> f32 {
         self.game_length()
+    }
+}
+
+impl VictoryMargin for Predictions {
+    fn victory_margin_score(&self) -> f32 {
+        self.victory_margin()
     }
 }

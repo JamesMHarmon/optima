@@ -99,14 +99,10 @@ where
                         "cpuct_root_scaling",
                         option_value,
                     )?)),
-                    "moves_left_threshold" => Some(UGIOption::MovesLeftThreshold(
-                        parse_option_value("moves_left_threshold", option_value)?,
+                    "victory_margin_threshold" => Some(UGIOption::VictoryMarginThreshold(
+                        parse_option_value("victory_margin_threshold", option_value)?,
                     )),
-                    "moves_left_scale" => Some(UGIOption::MovesLeftScale(parse_option_value(
-                        "moves_left_scale",
-                        option_value,
-                    )?)),
-                    "moves_left_factor" => Some(UGIOption::MovesLeftFactor(parse_option_value(
+                    "victory_margin_factor" => Some(UGIOption::VictoryMarginFactor(parse_option_value(
                         "moves_left_factor",
                         option_value,
                     )?)),

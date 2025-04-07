@@ -8,12 +8,9 @@ use common::{get_env_usize, ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use log::info;
-use mcts::{
-    DynamicCPUCT, MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy,
-    MovesLeftStrategyOptions,
-};
+use mcts::DynamicCPUCT;
 use model::Load;
-use quoridor::ModelRef;
+use quoridor::{ModelRef, QuoridorBackpropagationStrategy, QuoridorSelectionStrategy, QuoridorStrategyOptions};
 use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
 use std::path::Path;
@@ -65,19 +62,18 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            let selection_strategy_opts = MovesLeftStrategyOptions::new(
+            let selection_strategy_opts = QuoridorStrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
-                play_options.moves_left_threshold,
-                play_options.moves_left_scale,
-                play_options.moves_left_factor,
+                play_options.victory_margin_threshold,
+                play_options.victory_margin_factor,
             );
 
             let model_factory = quoridor::ModelFactory::new(model_dir);
             let engine = quoridor::Engine::new();
-            let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&engine);
+            let backpropagation_strategy = QuoridorBackpropagationStrategy::new(&engine);
             let selection_strategy =
-                MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
+                QuoridorSelectionStrategy::new(cpuct, selection_strategy_opts);
 
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
@@ -114,20 +110,19 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            let selection_strategy_opts = MovesLeftStrategyOptions::new(
+            let selection_strategy_opts = QuoridorStrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
-                play_options.moves_left_threshold,
-                play_options.moves_left_scale,
-                play_options.moves_left_factor,
+                play_options.victory_margin_threshold,
+                play_options.victory_margin_factor,
             );
 
             let champion_factory = quoridor::ModelFactory::new(champions_dir.clone());
             let candidate_factory = quoridor::ModelFactory::new(candidates_dir);
             let engine: quoridor::Engine = quoridor::Engine::new();
-            let backpropagation_strategy = MovesLeftBackpropagationStrategy::new(&engine);
+            let backpropagation_strategy = QuoridorBackpropagationStrategy::new(&engine);
             let selection_strategy =
-                MovesLeftSelectionStrategy::new(cpuct, selection_strategy_opts);
+                QuoridorSelectionStrategy::new(cpuct, selection_strategy_opts);
 
             arena::championship(
                 &champion_factory,
@@ -181,20 +176,19 @@ async fn async_main(cli: Cli) -> Result<()> {
             };
 
             let selection_strategy_opts = |options: &UGIOptions| {
-                MovesLeftStrategyOptions::new(
+                QuoridorStrategyOptions::new(
                     options.fpu,
                     options.fpu_root,
-                    options.moves_left_threshold,
-                    options.moves_left_scale,
-                    options.moves_left_factor,
+                    options.victory_margin_threshold,
+                    options.victory_margin_factor,
                 )
             };
 
             let backpropagation_strategy =
-                move |_options: &UGIOptions| MovesLeftBackpropagationStrategy::new(leak_engine());
+                move |_options: &UGIOptions| QuoridorBackpropagationStrategy::new(leak_engine());
 
             let selection_strategy = move |options: &UGIOptions| {
-                MovesLeftSelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
+                QuoridorSelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
             };
 
             run_ugi(

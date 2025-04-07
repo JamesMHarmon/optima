@@ -275,15 +275,14 @@ impl TranspositionMap for Mapper {
 fn map_action_to_output_idx(action: &Action) -> usize {
     let len_moves_inputs = PAWN_BOARD_SIZE;
     let len_wall_inputs = WALL_BOARD_SIZE;
-    let coord: Coordinate = action.coord();
 
     match action.action_type() {
-        ActionType::PawnMove => map_coord_to_output_idx_nine_by_nine(&coord),
+        ActionType::PawnMove => map_coord_to_output_idx_nine_by_nine(&action.coord()),
         ActionType::VerticalWall => {
-            map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs
+            map_coord_to_output_idx_eight_by_eight(&action.coord()) + len_moves_inputs
         }
         ActionType::HorizontalWall => {
-            map_coord_to_output_idx_eight_by_eight(&coord) + len_moves_inputs + len_wall_inputs
+            map_coord_to_output_idx_eight_by_eight(&action.coord()) + len_moves_inputs + len_wall_inputs
         }
         ActionType::Pass => len_moves_inputs + len_wall_inputs * 2,
     }
@@ -507,6 +506,7 @@ mod tests {
         let all_actions = pawn_actions()
             .chain(horizontal_wall_actions())
             .chain(vertical_wall_actions())
+            .chain(std::iter::once(Action::pass()))
             .collect_vec();
 
         assert_eq!(all_actions.len(), OUTPUT_SIZE);

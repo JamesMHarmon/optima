@@ -57,9 +57,8 @@ pub struct PlayOptions {
     pub cpuct_base: f32,
     pub cpuct_init: f32,
     pub cpuct_root_scaling: f32,
-    pub moves_left_threshold: f32,
-    pub moves_left_scale: f32,
-    pub moves_left_factor: f32,
+    pub victory_margin_threshold: f32,
+    pub victory_margin_factor: f32
 }
 
 impl Config for PlayOptions {
@@ -102,16 +101,12 @@ impl Config for PlayOptions {
                 .get("cpuct_root_scaling")
                 .and_then(|v| v.as_f32())
                 .unwrap_or(1.0),
-            moves_left_threshold: config
-                .get("moves_left_threshold")
+            victory_margin_threshold: config
+                .get("victory_margin_threshold")
                 .and_then(|v| v.as_f32())
                 .unwrap_or(0.95),
-            moves_left_scale: config
-                .get("moves_left_scale")
-                .and_then(|v| v.as_f32())
-                .unwrap_or(10.0),
-            moves_left_factor: config
-                .get("moves_left_factor")
+            victory_margin_factor: config
+                .get("victory_margin_factor")
                 .and_then(|v| v.as_f32())
                 .unwrap_or(0.05),
         })

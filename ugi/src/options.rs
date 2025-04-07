@@ -7,9 +7,8 @@ pub struct UGIOptions {
     pub cpuct_root_scaling: f32,
     pub eee_mode: bool,
     pub eee_reflective_symmetry: bool,
-    pub moves_left_threshold: f32,
-    pub moves_left_scale: f32,
-    pub moves_left_factor: f32,
+    pub victory_margin_threshold: f32,
+    pub victory_margin_factor: f32,
     pub parallelism: usize,
     pub visits: usize,
     pub max_visits: usize,
@@ -35,9 +34,8 @@ pub enum UGIOption {
     CpuctRootScaling(f32),
     EEEMode(bool),
     EEEReflectiveSymmetry(bool),
-    MovesLeftThreshold(f32),
-    MovesLeftScale(f32),
-    MovesLeftFactor(f32),
+    VictoryMarginThreshold(f32),
+    VictoryMarginFactor(f32),
     Parallelism(usize),
     Visits(usize),
     MaxVisits(usize),
@@ -65,9 +63,8 @@ impl UGIOptions {
             cpuct_root_scaling: 1.0,
             eee_mode: false,
             eee_reflective_symmetry: false,
-            moves_left_threshold: 0.95,
-            moves_left_scale: 10.0,
-            moves_left_factor: 0.05,
+            victory_margin_threshold: 0.95,
+            victory_margin_factor: 0.05,
             parallelism: 512,
             visits: 0,
             max_visits: 10_000_000,
@@ -99,12 +96,11 @@ impl UGIOptions {
             UGIOption::EEEReflectiveSymmetry(eee_reflective_symmetry) => {
                 self.eee_reflective_symmetry = eee_reflective_symmetry
             }
-            UGIOption::MovesLeftThreshold(moves_left_threshold) => {
-                self.moves_left_threshold = moves_left_threshold
+            UGIOption::VictoryMarginThreshold(victory_margin_threshold) => {
+                self.victory_margin_threshold = victory_margin_threshold
             }
-            UGIOption::MovesLeftScale(moves_left_scale) => self.moves_left_scale = moves_left_scale,
-            UGIOption::MovesLeftFactor(moves_left_factor) => {
-                self.moves_left_factor = moves_left_factor
+            UGIOption::VictoryMarginFactor(victory_margin_factor) => {
+                self.victory_margin_factor = victory_margin_factor
             }
             UGIOption::Parallelism(parallelism) => self.parallelism = parallelism,
             UGIOption::Visits(visits) => self.visits = visits,

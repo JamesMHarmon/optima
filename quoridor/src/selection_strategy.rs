@@ -18,7 +18,6 @@ pub struct QuoridorStrategyOptions {
     pub fpu: f32,
     pub fpu_root: f32,
     pub victory_margin_threshold: f32,
-    pub victory_margin_scale: f32,
     pub victory_margin_factor: f32,
 }
 
@@ -28,14 +27,12 @@ impl QuoridorStrategyOptions {
         fpu: f32,
         fpu_root: f32,
         victory_margin_threshold: f32,
-        victory_margin_scale: f32,
         victory_margin_factor: f32,
     ) -> Self {
         QuoridorStrategyOptions {
             fpu,
             fpu_root,
             victory_margin_threshold,
-            victory_margin_scale,
             victory_margin_factor,
         }
     }
