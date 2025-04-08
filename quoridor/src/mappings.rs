@@ -187,11 +187,11 @@ impl PredictionsMap for Mapper {
             );
         }
 
-        for value in value_output.iter() {
+        for victory_margin in victory_margin_output.iter() {
             assert!(
-                *value >= 0.0 && *value <= BOARD_SIZE as f32 * BOARD_SIZE as f32,
+                *victory_margin >= 0.0 && *victory_margin <= BOARD_SIZE as f32 * BOARD_SIZE as f32,
                 "Victory Margin output should be >= 0.0 but was {}",
-                value
+                victory_margin
             );
         }
 
