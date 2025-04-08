@@ -127,7 +127,7 @@ def MovesLeftHead(x, filters, moves_left_size):
     out = Dense(moves_left_size, name='', full_name='moves_left_head', activation='softmax')(out)
     return out
 
-def create_model(model_dims: ModelDimensions, policy_head=None, victory_margin_head=false):
+def create_model(model_dims: ModelDimensions, policy_head=None, victory_margin_head=False):
     num_filters, num_blocks, input_dims, output_size, moves_left_size = (
         model_dims.num_filters,
         model_dims.num_blocks,

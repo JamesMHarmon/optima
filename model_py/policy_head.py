@@ -60,7 +60,7 @@ def QuoridorPolicyHeadConvolutional(x, filters):
         out = Dense(filters, activation='relu', name='policy_head/pass/dense')(out)
         out = Dense(1, activation=None, name='', full_name='policy_head/pass/logit')(out)
 
-    return out
+        return out
 
     def create_action_out(cropping, name):
         action_conv = Conv2D(1, kernel_size=3, use_bias=True, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name=name)(conv_block)
