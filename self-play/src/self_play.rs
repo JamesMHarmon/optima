@@ -1,12 +1,12 @@
 use anyhow::Result;
 use common::get_env_usize;
-use crossbeam::channel::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use log::warn;
 use mcts::BackpropagationStrategy;
 use mcts::SelectionStrategy;
 use serde::Serialize;
+use tokio::sync::mpsc::Sender;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -46,7 +46,7 @@ where
 {
     let starting_run_time = Instant::now();
     let writer_channel_size = get_env_usize("WRITER_CHANNEL_SIZE").unwrap_or(1000);
-    let (game_results_tx, game_results_rx) = crossbeam::channel::bounded(writer_channel_size);
+    let (game_results_tx, mut game_results_rx) = tokio::sync::mpsc::channel(writer_channel_size);
     let runtime_handle = tokio::runtime::Handle::current();
 
     let latest_model_ref = model_factory.latest()?;
@@ -104,7 +104,7 @@ where
         s.spawn(move |_| -> Result<()> {
             let mut num_of_games_played: usize = 0;
 
-            while let Ok((self_play_metric, game_state, model_info)) = game_results_rx.recv() {
+            while let Some((self_play_metric, game_state, model_info)) = game_results_rx.blocking_recv() {
                 self_play_persistance.write(&self_play_metric, &model_info).unwrap();
                 num_of_games_played += 1;
 
@@ -167,7 +167,7 @@ where
     }
 
     while let Some(self_play_metric) = self_play_metric_stream.next().await {
-        let result = results_channel.try_send(self_play_metric);
+        let result = results_channel.send(self_play_metric).await;
 
         if let Err(e) = result {
             warn!("Failed to send game results through writer channel. {}", e);
