@@ -251,6 +251,11 @@ impl TranspositionMap for Mapper {
 
         let game_length = (game_state.move_number() as f32 + moves_left - 1.0).max(1.0);
 
+        let victory_margin = victory_margin.clamp(
+            f16::ZERO,
+            f16::from_f32(BOARD_SIZE as f32 * BOARD_SIZE as f32),
+        );
+
         TranspositionEntry::new(policy_metrics, value, victory_margin, game_length)
     }
 
@@ -282,7 +287,9 @@ fn map_action_to_output_idx(action: &Action) -> usize {
             map_coord_to_output_idx_eight_by_eight(&action.coord()) + len_moves_inputs
         }
         ActionType::HorizontalWall => {
-            map_coord_to_output_idx_eight_by_eight(&action.coord()) + len_moves_inputs + len_wall_inputs
+            map_coord_to_output_idx_eight_by_eight(&action.coord())
+                + len_moves_inputs
+                + len_wall_inputs
         }
         ActionType::Pass => len_moves_inputs + len_wall_inputs * 2,
     }
