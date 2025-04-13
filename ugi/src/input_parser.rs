@@ -30,6 +30,7 @@ pub enum UGICommand<S, A> {
     Stop,
     SetOption(UGIOption),
     Noop,
+    Details,
 }
 
 static MAKE_MOVE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^makemove\s+(.+)").unwrap());
@@ -102,10 +103,9 @@ where
                     "victory_margin_threshold" => Some(UGIOption::VictoryMarginThreshold(
                         parse_option_value("victory_margin_threshold", option_value)?,
                     )),
-                    "victory_margin_factor" => Some(UGIOption::VictoryMarginFactor(parse_option_value(
-                        "moves_left_factor",
-                        option_value,
-                    )?)),
+                    "victory_margin_factor" => Some(UGIOption::VictoryMarginFactor(
+                        parse_option_value("moves_left_factor", option_value)?,
+                    )),
                     "fixed_time" => Some(UGIOption::FixedTime(Some(parse_option_value(
                         "fixed_time",
                         option_value,
@@ -188,6 +188,7 @@ where
                     None => Ok(UGICommand::Noop),
                 }
             }
+            "details" => Ok(UGICommand::Details),
             "" => Ok(UGICommand::Noop),
             _ => {
                 anyhow::bail!("Command is unknown or not implemented");

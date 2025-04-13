@@ -33,7 +33,7 @@ where
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
+    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
     Sel: SelectionStrategy<
