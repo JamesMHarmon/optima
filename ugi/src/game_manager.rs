@@ -2,9 +2,7 @@ use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOpt
 use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, ValidActions};
 use itertools::Itertools;
-use mcts::{
-    BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, MCTS,
-};
+use mcts::{BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, MCTS};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -32,6 +30,7 @@ enum CommandInner<S, A> {
     FocusActions(Vec<A>),
     ClearFocus,
     SetPosition(S),
+    Details,
 }
 
 pub enum Output {
@@ -81,6 +80,7 @@ impl<S, A> GameManager<S, A> {
             }
             UGICommand::SetOption(option) => self.set_option(option),
             UGICommand::Noop => {}
+            UGICommand::Details => self.send_command(CommandInner::Details).await,
         }
     }
 
@@ -124,7 +124,7 @@ where
             > + Send
             + 'static,
         M::Analyzer: Send,
-        B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
+        B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
         E::Terminal: Clone,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
@@ -191,7 +191,7 @@ where
         Predictions = E::Terminal,
         PropagatedValues = B::PropagatedValues,
     >,
-    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord,
+    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
     E::Terminal: Clone,
 {
     fn new(
@@ -294,6 +294,10 @@ where
                                 .unwrap()
                                 .expect("There should have been at least one visit");
 
+                            if node_details.children.len() == 0 {
+                                continue;
+                            }
+
                             let multi_pv = self.options.lock().unwrap().multi_pv;
                             let pv = node_details
                                 .children
@@ -329,6 +333,18 @@ where
                     } else {
                         self.output
                             .info("skipping ponder as options are fixed visits.");
+                    }
+                }
+                CommandInner::Details => {
+                    let node_details = mcts
+                        .get_focus_node_details()
+                        .unwrap()
+                        .expect("There should have been at least one visit");
+
+                    let sorted_children = node_details.children.iter().sorted().rev().collect_vec();
+
+                    for child in sorted_children {
+                        self.output.info(&format!("{:?}", &child));
                     }
                 }
                 CommandInner::MakeMove(actions) => {
