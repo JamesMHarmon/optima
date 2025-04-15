@@ -3134,6 +3134,7 @@ dependencies = [
  "model",
  "once_cell",
  "rand 0.8.5",
+ "rayon",
  "regex",
  "tokio",
 ]

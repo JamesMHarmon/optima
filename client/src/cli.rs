@@ -14,6 +14,7 @@ pub enum Commands {
     SelfPlay(SelfPlayCommand),
     Arena(ArenaCommand),
     Ugi(UgiCommand),
+    Perft(PerftCommand),
 }
 
 #[derive(Args)]
@@ -37,4 +38,10 @@ pub struct UgiCommand {
 
     #[clap(short, long)]
     pub model: Option<String>,
+}
+
+#[derive(Args)]
+pub struct PerftCommand {
+    #[clap(short, long)]
+    pub depth: usize,
 }

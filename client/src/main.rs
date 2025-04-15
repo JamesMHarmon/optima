@@ -14,7 +14,7 @@ use quoridor::{ModelRef, QuoridorBackpropagationStrategy, QuoridorSelectionStrat
 use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
 use std::path::Path;
-use ugi::{run_ugi, UGIOptions};
+use ugi::{run_perft, run_ugi, UGIOptions};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -199,6 +199,12 @@ async fn async_main(cli: Cli) -> Result<()> {
                 selection_strategy,
             )
             .await?
+        },
+        Commands::Perft(perft_args) => {
+            let engine = quoridor::Engine::new();
+
+            let count = run_perft(perft_args.depth, &engine);
+            println!("Depth {depth}: {count}", depth = depth, count = count);
         }
     }
 
