@@ -1,4 +1,4 @@
-use super::transposition_table::TranspositionTable;
+use common::TranspositionTable;
 use log::info;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},

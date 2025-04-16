@@ -5,6 +5,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 const BYTES_PER_KB: usize = 1000;
 const BYTES_PER_MB: usize = BYTES_PER_KB * 1000;
 
+pub trait TranspositionHash {
+    fn transposition_hash(&self) -> u64;
+}
+
 pub struct TranspositionTable<Te> {
     table: Vec<TranspositionRow<Te>>,
     entries: AtomicUsize,
@@ -13,12 +17,12 @@ pub struct TranspositionTable<Te> {
 }
 
 impl<Te> TranspositionTable<Te> {
-    pub fn new(tt_cache_size: usize) -> TranspositionTable<Te> {
-        let power = calculate_tt_capacity_power::<TranspositionRow<Te>>(tt_cache_size);
+    pub fn new(tt_cache_size_mb: usize) -> TranspositionTable<Te> {
+        let power = calculate_tt_capacity_power::<TranspositionRow<Te>>(tt_cache_size_mb);
         let capacity = 2u128.pow(power as u32) as usize;
 
         info!(
-            "Initializing cache with a power of {}, a capacity of {}, and entries taking up {}MB",
+            "Initializing cache with a power of {}, a capacity of {}, and entries taking up {} MB",
             power,
             capacity,
             (std::mem::size_of::<TranspositionRow<Te>>() * capacity) / BYTES_PER_MB

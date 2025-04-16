@@ -2,13 +2,11 @@ pub mod channel;
 pub mod latest;
 pub mod mode;
 pub mod traits;
-pub mod transposition_table;
 
 pub use channel::*;
 pub use latest::*;
 pub use mode::*;
 pub use traits::*;
-pub use transposition_table::*;
 
 #[cfg(feature = "all")]
 mod constants;

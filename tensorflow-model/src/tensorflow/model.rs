@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::get_env_usize;
+use common::{get_env_usize, TranspositionTable};
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
 use engine::game_state::GameState;
 use engine::GameEngine;
@@ -13,7 +13,6 @@ use rayon::iter::{
 };
 use std::collections::{BinaryHeap, HashMap};
 use std::future::Future;
-use std::hash::Hash;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -45,7 +44,7 @@ pub struct TensorflowModel<S, A, P, E, Map, Te> {
 
 impl<S, A, P, E, Map, Te> TensorflowModel<S, A, P, E, Map, Te>
 where
-    S: Hash + Send + Sync + 'static,
+    S: Send + Sync + 'static,
     A: Clone + Send + Sync + 'static,
     P: Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
@@ -325,7 +324,7 @@ where
 
 impl<S, A, P, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, E, Map, Te>
 where
-    S: Clone + Hash + Unpin,
+    S: Clone + Unpin,
     A: Clone,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Te: Send + Sync + 'static,
@@ -409,7 +408,7 @@ struct BatchingModel<E, Map, Te> {
 
 impl<S, A, P, E, Map, Te> BatchingModel<E, Map, Te>
 where
-    S: Hash + Send + Sync + 'static,
+    S: Send + Sync + 'static,
     A: Clone + Send + 'static,
     P: Send + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,

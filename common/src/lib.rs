@@ -6,6 +6,7 @@ pub mod linked_list;
 pub mod math;
 pub mod propagated_values;
 pub mod softmax;
+pub mod transposition;
 
 pub use bits::*;
 pub use config::*;
@@ -15,3 +16,4 @@ pub use linked_list::*;
 pub use math::*;
 pub use propagated_values::*;
 pub use softmax::*;
+pub use transposition::*;

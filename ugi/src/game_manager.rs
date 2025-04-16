@@ -294,7 +294,7 @@ where
                                 .unwrap()
                                 .expect("There should have been at least one visit");
 
-                            if node_details.children.len() == 0 {
+                            if node_details.children.is_empty() {
                                 continue;
                             }
 

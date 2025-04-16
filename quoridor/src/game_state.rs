@@ -2,6 +2,7 @@ use crate::{ActionType, BOARD_SIZE};
 
 use super::constants::{MAX_NUMBER_OF_MOVES, NUM_WALLS_PER_PLAYER};
 use super::{Action, Coordinate, Value, Zobrist};
+use common::TranspositionHash;
 use engine::game_state;
 
 const LEFT_COLUMN_MASK: u128 =                                  0b__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000__100000000;
@@ -19,7 +20,7 @@ const HORIZONTAL_WALL_RIGHT_EDGE_TOUCHING_BOARD_MASK: u128 =    0b__000000010__0
 const VERTICAL_WALL_TOP_EDGE_TOUCHING_BOARD_MASK: u128 =        0b__111111110__000000000__000000000__000000000__000000000__000000000__000000000__000000000__000000000;
 const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__000000000__000000000__000000000__000000000__000000000__000000000__111111110__000000000;
 
-#[derive(Hash, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct GameState {
     move_number: usize,
     victory_margin: u8,
@@ -742,5 +743,11 @@ impl game_state::GameState for GameState {
             is_final: false,
             zobrist: Zobrist::initial(),
         }
+    }
+}
+
+impl TranspositionHash for GameState {
+    fn transposition_hash(&self) -> u64 {
+        self.transposition_hash()
     }
 }

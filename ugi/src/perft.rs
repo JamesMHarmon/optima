@@ -1,11 +1,12 @@
+use common::{TranspositionHash, TranspositionTable};
 use engine::{GameEngine, GameState, ValidActions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{atomic::{AtomicU64, Ordering}, Arc};
 
 pub fn run_perft<S, A, E>(depth: usize, engine: &E) -> u64
 where
-    S: GameState + Send + Sync + 'static,
+    S: GameState + TranspositionHash + Send + Sync + 'static,
     A: Send + Sync + 'static,
     E: GameEngine<State = S, Action = A>
         + ValidActions<State = S, Action = A>
@@ -13,16 +14,22 @@ where
         + Sync
         + 'static,
 {
+    let transpo_table = Arc::new(TranspositionTable::new(17_000));
     let game_state = S::initial();
-    count_moves_par(&game_state, engine, depth)
+    count_moves_par(&game_state, engine, transpo_table, depth)
 }
 
-fn count_moves_par<S, A, E>(game_state: &S, engine: &E, depth: usize) -> u64
+fn count_moves_par<S, A, E>(game_state: &S, engine: &E, transpo_table: Arc<TranspositionTable<u64>>, depth: usize) -> u64
 where
-    S: GameState + Sync + 'static,
+    S: GameState + TranspositionHash  + Sync + 'static,
     A: Sync + 'static,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Sync + 'static,
 {    
+    let key = game_state.transposition_hash() ^ depth as u64;
+    if let Some(move_count) = transpo_table.get(key) {
+        return *move_count;
+    }
+
     if depth <= 2 {
         return count_moves(game_state, engine, depth);
     }
@@ -35,12 +42,17 @@ where
         .into_par_iter()
         .for_each(|action| {
             let next_game_state = engine.take_action(game_state, action);
-            let count = count_moves_par(&next_game_state, engine, depth - 1);
+            let count = count_moves_par(&next_game_state, engine, transpo_table.clone(), depth - 1);
 
             num_moves.fetch_add(count, Ordering::Relaxed);
         });
 
-    num_moves.load(Ordering::Relaxed)
+    let move_count = num_moves.load(Ordering::Relaxed);
+
+    transpo_table.set(key, move_count);
+
+    move_count
+
 }
 
 fn count_moves<S, A, E>(game_state: &S, engine: &E, depth: usize) -> u64

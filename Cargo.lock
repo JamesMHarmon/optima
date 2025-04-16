@@ -641,6 +641,8 @@ dependencies = [
  "anyhow",
  "assert_approx_eq",
  "hocon",
+ "log",
+ "parking_lot",
  "serde",
 ]
 

@@ -204,7 +204,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let engine = quoridor::Engine::new();
 
             let count = run_perft(perft_args.depth, &engine);
-            println!("Depth {depth}: {count}", depth = depth, count = count);
+            println!("Depth {depth}: {count}", depth = perft_args.depth, count = count);
         }
     }
 
