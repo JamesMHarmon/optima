@@ -24,14 +24,17 @@ where
     S: GameState + TranspositionHash  + Sync + 'static,
     A: Sync + 'static,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Sync + 'static,
-{    
-    let key = game_state.transposition_hash() ^ depth as u64;
-    if let Some(move_count) = transpo_table.get(key) {
-        return *move_count;
-    }
-
+{
     if depth <= 2 {
         return count_moves(game_state, engine, depth);
+    }
+
+    let mut key = 0;
+    if depth > 3 {
+        key = game_state.transposition_hash() ^ depth as u64;
+        if let Some(move_count) = transpo_table.get(key) {
+            return *move_count;
+        }
     }
 
     let num_moves = AtomicU64::new(0);
@@ -49,7 +52,9 @@ where
 
     let move_count = num_moves.load(Ordering::Relaxed);
 
-    transpo_table.set(key, move_count);
+    if depth > 3 {
+        transpo_table.set(key, move_count);
+    }
 
     move_count
 
