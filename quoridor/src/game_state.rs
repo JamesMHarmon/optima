@@ -256,6 +256,10 @@ impl GameState {
         self.victory_margin
     }
 
+    pub fn is_scoring_phase(&self) -> bool {
+        self.is_player_one_at_goal() || self.is_player_two_at_goal()
+    }
+
     fn move_pawn(&mut self, coord: Coordinate) {
         let pawn_board = coord.as_bit_board();
         self.zobrist = self.zobrist.move_pawn(self, pawn_board);
@@ -381,10 +385,6 @@ impl GameState {
         );
 
         path.distance
-    }
-
-    fn is_scoring_phase(&self) -> bool {
-        self.is_player_one_at_goal() || self.is_player_two_at_goal()
     }
 
     fn is_player_one_at_goal(&self) -> bool {
