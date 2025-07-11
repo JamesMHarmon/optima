@@ -1,6 +1,6 @@
 use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
 use common::{PropagatedGameLength, PropagatedValue};
-use engine::{GameEngine, GameState, ValidActions};
+use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use mcts::{BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, MCTS};
 use model::Analyzer;
@@ -31,6 +31,7 @@ enum CommandInner<S, A> {
     ClearFocus,
     SetPosition(S),
     Details,
+    Status,
 }
 
 pub enum Output {
@@ -81,6 +82,7 @@ impl<S, A> GameManager<S, A> {
             UGICommand::SetOption(option) => self.set_option(option),
             UGICommand::Noop => {}
             UGICommand::Details => self.send_command(CommandInner::Details).await,
+            UGICommand::Status => self.send_command(CommandInner::Status).await,
         }
     }
 
@@ -96,7 +98,7 @@ where
     S: GameState + Clone + Display + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
 {
-    pub fn new<U, E, M, FnB, B, FnSel, Sel>(
+    pub fn new<U, E, M, FnB, B, FnSel, Sel, Pr, Ps>(
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
@@ -109,7 +111,13 @@ where
             + Send
             + Sync
             + 'static,
-        E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
+        E: GameEngine<State = S, Action = A>
+            + ValidActions<State = S, Action = A>
+            + Players<State = S>
+            + PlayerScore<State = S, PlayerScore = Ps>
+            + PlayerResult<State = S, PlayerResult = Pr>
+            + Send
+            + 'static,
         M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
         B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>
             + Send
@@ -126,6 +134,8 @@ where
         M::Analyzer: Send,
         B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
         E::Terminal: Clone,
+        Ps: Display,
+        Pr: Display,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
         let (output_tx, output_rx) = mpsc::unbounded_channel();
@@ -175,12 +185,16 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel> {
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<S, A, U, E, M, B, FnB, FnSel, Sel> GameManagerInner<S, A, U, E, M, FnB, FnSel>
+impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr> GameManagerInner<S, A, U, E, M, FnB, FnSel>
 where
     S: GameState + Clone + Display,
     A: Display + Debug + Eq + Clone,
     U: InitialGameState<State = S> + ActionsToMoveString<State = S, Action = A>,
-    E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A>,
+    E: GameEngine<State = S, Action = A>
+        + ValidActions<State = S, Action = A>
+        + Players<State = S>
+        + PlayerScore<State = S, PlayerScore = Ps>
+        + PlayerResult<State = S, PlayerResult = Pr>,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>,
     FnB: Fn(&UGIOptions) -> B,
@@ -193,6 +207,8 @@ where
     >,
     B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
     E::Terminal: Clone,
+    Ps: Display,
+    Pr: Display,
 {
     fn new(
         command_rx: mpsc::Receiver<CommandInner<S, A>>,
@@ -516,6 +532,37 @@ where
                         .ugi_mapper
                         .actions_to_move_string(&pre_action_game_state, &actions);
                     self.output.cmd("bestmove", &move_string);
+                }
+                CommandInner::Status => {
+                    let terminal_state = self.engine.terminal_state(&focus_game_state);
+                    let status = if terminal_state.is_none() {
+                        "inprogress"
+                    } else {
+                        "complete"
+                    };
+                    let player_to_move = self.engine.player_to_move(&focus_game_state);
+                    let player_to_move_output = terminal_state.map_or_else(
+                        || format!(" playertomove {}", player_to_move),
+                        |_| "".to_string(),
+                    );
+
+                    self.output
+                        .info(&format!("gamestatus {}{}", status, player_to_move_output));
+
+                    for player_id in self.engine.players(&focus_game_state).iter() {
+                        let score = self
+                            .engine
+                            .score(&focus_game_state, *player_id)
+                            .map_or("none".to_string(), |s| s.to_string());
+                        let result = self
+                            .engine
+                            .result(&focus_game_state, *player_id)
+                            .map_or("none".to_string(), |s| s.to_string());
+                        self.output.info(&format!(
+                            "player {} score {} result {}",
+                            player_id, score, result
+                        ));
+                    }
                 }
             }
         }

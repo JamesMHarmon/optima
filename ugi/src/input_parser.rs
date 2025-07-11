@@ -26,6 +26,7 @@ pub enum UGICommand<S, A> {
     MakeMove(Vec<A>),
     Focus(Vec<A>),
     ClearFocus,
+    Status,
     Quit,
     Stop,
     SetOption(UGIOption),
@@ -189,6 +190,7 @@ where
                 }
             }
             "details" => Ok(UGICommand::Details),
+            "status" => Ok(UGICommand::Status),
             "" => Ok(UGICommand::Noop),
             _ => {
                 anyhow::bail!("Command is unknown or not implemented");

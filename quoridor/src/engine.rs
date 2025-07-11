@@ -1,5 +1,5 @@
 use super::{Action, GameState, Predictions};
-use engine::{engine::GameEngine, ValidActions};
+use engine::{engine::GameEngine, PlayerResult, PlayerScore, Players, ValidActions, Value};
 
 #[derive(Default)]
 pub struct Engine {}
@@ -42,5 +42,44 @@ impl ValidActions for Engine {
 
     fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
         game_state.valid_actions()
+    }
+}
+
+impl Players for Engine {
+    type State = GameState;
+
+    fn players(&self, _state: &Self::State) -> &[usize] {
+        static PLAYERS: [usize; 2] = [1, 2];
+        &PLAYERS
+    }
+}
+
+impl PlayerScore for Engine {
+    type State = GameState;
+    type PlayerScore = usize;
+
+    fn score(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerScore> {
+        state.is_terminal().map(|value| {
+            if value.get_value_for_player(player_id) > 0.5 {
+                state.victory_margin() as usize
+            } else {
+                0
+            }
+        })
+    }
+}
+
+impl PlayerResult for Engine {
+    type State = GameState;
+    type PlayerResult = &'static str;
+
+    fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
+        state.is_terminal().map(|value| {
+            match value.get_value_for_player(player_id) {
+                v if v > 0.5 => "win",
+                v if v < 0.5 => "loss",
+                _ => "draw",
+            }
+        })
     }
 }

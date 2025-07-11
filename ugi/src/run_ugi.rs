@@ -1,6 +1,6 @@
 use anyhow::Result;
 use common::{PropagatedGameLength, PropagatedValue};
-use engine::{GameEngine, GameState, ValidActions};
+use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::Analyzer;
 
@@ -12,7 +12,7 @@ use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGI
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
-pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel>(
+pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps>(
     ugi_mapper: U,
     engine: E,
     model: M,
@@ -29,7 +29,13 @@ where
         + Send
         + Sync
         + 'static,
-    E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Send + 'static,
+    E: GameEngine<State = S, Action = A>
+        + ValidActions<State = S, Action = A>
+        + Players<State = S>
+        + PlayerScore<State = S, PlayerScore = Ps>
+        + PlayerResult<State = S, PlayerResult = Pr>
+        + Send
+        + 'static,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
     B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
@@ -44,6 +50,8 @@ where
         > + Send
         + 'static,
     E::Terminal: Clone,
+    Ps: Display,
+    Pr: Display,
 {
     let ugi_mapper = Arc::new(ugi_mapper);
 
