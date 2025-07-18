@@ -106,14 +106,4 @@ mod tests {
             "d1v".parse::<Action>().unwrap(),
         );
     }
-
-    #[test]
-    fn test_action_pass() {
-        let json = "\"p\"";
-
-        assert_eq!(
-            serde_json::from_str::<Action>(json).unwrap(),
-            "p".parse::<Action>().unwrap(),
-        );
-    }
 }

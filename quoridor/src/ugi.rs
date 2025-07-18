@@ -34,20 +34,8 @@ impl ActionsToMoveString for UGI {
     type State = GameState;
     type Action = Action;
 
-    fn actions_to_move_string(&self, game_state: &GameState, actions: &[Action]) -> String {
-        let mut game_state = game_state.clone();
-        let mut pre_post_game_actions = Vec::new();
-
-        for action in actions {
-            if game_state.is_scoring_phase() {
-                break;
-            }
-
-            pre_post_game_actions.push(action);
-            game_state.take_action(action);
-        }
-
-        pre_post_game_actions
+    fn actions_to_move_string(&self, _: &GameState, actions: &[Action]) -> String {
+        actions
             .iter()
             .map(|a| a.to_string())
             .join(" ")

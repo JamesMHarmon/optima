@@ -8,7 +8,7 @@ ARIMAA_PUSH_PULL_MOVES = ['NN','NE','NW','EN','EE','ES','SE','SS','SW','WN','WS'
 def get_policy_head_fn_by_policy_size(policy_size):
     if policy_size == 2261:
         policy_head_fn = lambda net, num_filters: ArimaaPolicyHeadConvolutional(net, num_filters)
-    elif policy_size == 210:
+    elif policy_size == 209:
         policy_head_fn = lambda net, num_filters: QuoridorPolicyHeadConvolutional(net, num_filters)
     else:
         policy_head_fn = None
@@ -53,15 +53,6 @@ def ArimaaPolicyHeadConvolutional(x, filters):
 def QuoridorPolicyHeadConvolutional(x, filters):
     conv_block = ConvBlock(filters=filters, kernel_size=3, name='policy_head')(x)
 
-    def pass_action_out():
-        out = ConvBlock(filters=filters // 8, kernel_size=1, name='policy_head/pass')(conv_block)
-
-        out = Flatten()(out)
-        out = Dense(filters, activation='relu', name='policy_head/pass/dense')(out)
-        out = Dense(1, activation=None, name='', full_name='policy_head/pass/logit')(out)
-
-        return out
-
     def create_action_out(cropping, name):
         action_conv = Conv2D(1, kernel_size=3, use_bias=True, bias_regularizer=l2_reg_policy(), kernel_regularizer=l2_reg_policy(), name=name)(conv_block)
         action_cropped = action_conv if cropping is None else Cropping2D(cropping, data_format=DATA_FORMAT, name=name + '/cropping_2d')(action_conv)
@@ -75,8 +66,7 @@ def QuoridorPolicyHeadConvolutional(x, filters):
     out = Concatenate(name='policy_head')([
         pawn_move,
         place_vertical,
-        place_horizontal,
-        pass_action
+        place_horizontal
     ])
 
     return out
