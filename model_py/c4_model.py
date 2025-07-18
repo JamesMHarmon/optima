@@ -22,7 +22,7 @@ class LossWeights:
 
 def create(model_dims: ModelDimensions):
     policy_head = get_policy_head_fn_by_policy_size(model_dims.policy_size)
-    use_victory_margin_head = model_dims.policy_size == 210
+    use_victory_margin_head = model_dims.policy_size == 209
 
     model = create_model(
         model_dims=model_dims,
