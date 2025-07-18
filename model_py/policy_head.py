@@ -61,7 +61,6 @@ def QuoridorPolicyHeadConvolutional(x, filters):
     pawn_move = create_action_out(None, name='policy_head/pawn_move')
     place_vertical = create_action_out(cropping=((0, 1), (0, 1)), name='policy_head/place_wall_vertical')
     place_horizontal = create_action_out(cropping=((0, 1), (0, 1)), name='policy_head/place_wall_horizontal')
-    pass_action = pass_action_out()
 
     out = Concatenate(name='policy_head')([
         pawn_move,
