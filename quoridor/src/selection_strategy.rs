@@ -92,9 +92,8 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
             _ => 0.0,
         };
 
-        let expected_victory_margin = edge.propagated_values().victory_margin();
-        let victory_margin_clamped = expected_victory_margin.clamp(0.0, 10.0);
-        victory_margin_clamped * options.victory_margin_factor * direction
+        let victory_margin = edge.propagated_values().victory_margin();
+        victory_margin * options.victory_margin_factor * direction
     }
 }
 

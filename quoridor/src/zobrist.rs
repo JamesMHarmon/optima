@@ -49,13 +49,6 @@ impl Zobrist {
     }
 
     #[must_use]
-    pub fn set_is_final(&self) -> Self {
-        let hash = self.hash ^ IS_FINAL;
-
-        Zobrist { hash }
-    }
-
-    #[must_use]
     pub fn board_state_hash(&self) -> u64 {
         self.hash
     }

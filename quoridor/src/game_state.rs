@@ -23,8 +23,6 @@ const VERTICAL_WALL_BOTTOM_EDGE_TOUCHING_BOARD_MASK: u128 =     0b__000000000__0
 #[derive(Clone, Debug)]
 pub struct GameState {
     move_number: usize,
-    victory_margin: u8,
-    is_final: bool,
     p1_turn_to_move: bool,
     p1_pawn_board: u128,
     p2_pawn_board: u128,
@@ -71,8 +69,6 @@ impl GameState {
 
         let mut game_state = Self {
             move_number: 0,
-            victory_margin: 0,
-            is_final: false,
             p1_turn_to_move,
             p1_pawn_board,
             p2_pawn_board,
@@ -92,16 +88,10 @@ impl GameState {
         match action.action_type() {
             ActionType::PawnMove => self.move_pawn(action.coord()),
             ActionType::VerticalWall => self.place_wall(action.coord(), true),
-            ActionType::HorizontalWall => self.place_wall(action.coord(), false),
-            ActionType::Pass => (),
+            ActionType::HorizontalWall => self.place_wall(action.coord(), false)
         }
 
-        let is_final = self.try_finalize(action);
-        let is_goaling_action = self.is_goaling_action(action);
-
-        if !is_final && !is_goaling_action {
-            self.increment_turn();
-        }
+        self.increment_turn();
     }
 
     pub fn valid_actions(&self) -> impl Iterator<Item = Action> {
@@ -109,16 +99,9 @@ impl GameState {
         let vertical_walls = self.valid_vertical_wall_actions();
         let horizontal_walls = self.valid_horizontal_wall_actions();
 
-        let pass_action = if self.can_pass() {
-            Some(Action::pass()).into_iter()
-        } else {
-            None.into_iter()
-        };
-
         pawn_moves
             .chain(vertical_walls)
             .chain(horizontal_walls)
-            .chain(pass_action)
     }
 
     fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
@@ -139,22 +122,11 @@ impl GameState {
         )
     }
 
-    pub fn can_pass(&self) -> bool {
-        if !self.is_scoring_phase() {
-            return false;
-        }
-
-        self.p1_turn_to_move && self.is_player_one_at_goal()
-            || !self.p1_turn_to_move && self.is_player_two_at_goal()
-    }
-
     pub fn is_terminal(&self) -> Option<Value> {
-        if self.is_final {
-            Some(if self.p1_turn_to_move {
-                Value([0.0, 1.0])
-            } else {
-                Value([1.0, 0.0])
-            })
+        if self.is_player_one_at_goal() {
+            Some(Value([1.0, 0.0]))
+        } else if self.is_player_two_at_goal() {
+            Some(Value([0.0, 1.0]))
         } else if self.move_number > MAX_NUMBER_OF_MOVES {
             Some(Value([0.5, 0.5]))
         } else {
@@ -176,8 +148,6 @@ impl GameState {
             vertical_wall_board: vertical_symmetry_bit_board(self.vertical_wall_board, true),
             horizontal_wall_board: vertical_symmetry_bit_board(self.horizontal_wall_board, true),
             move_number: self.move_number,
-            is_final: self.is_final,
-            victory_margin: self.victory_margin,
             p1_num_walls: self.p1_num_walls,
             p2_num_walls: self.p2_num_walls,
             p1_turn_to_move: self.p1_turn_to_move,
@@ -253,11 +223,7 @@ impl GameState {
     }
 
     pub fn victory_margin(&self) -> u8 {
-        self.victory_margin
-    }
-
-    pub fn is_scoring_phase(&self) -> bool {
-        self.is_player_one_at_goal() || self.is_player_two_at_goal()
+        self.curr_player_distance_to_goal()
     }
 
     fn move_pawn(&mut self, coord: Coordinate) {
@@ -288,70 +254,10 @@ impl GameState {
         }
     }
 
-    /// Finalize the game state and calculate the victory margin.
-    /// The game is finalized when either both players have reached their respective goals.
-    /// Or when one player is at their goal and that player has no walls remaining.
-    /// Or when the winning player chooses to pass.
-    fn try_finalize(&mut self, action: &Action) -> bool {
-        let player_one_at_goal = self.is_player_one_at_goal();
-        let player_two_at_goal = self.is_player_two_at_goal();
-
-        // If both players have reached their goal, the game is over.
-        // This means that the victory margin is 0.
-        if player_one_at_goal && player_two_at_goal {
-            assert!(action.is_move(), "Player must have made a move action.");
-
-            // Do not flip the player to move since the player is the losing player.
-            // Margin of victory is 0 if the losing player was able to reach the goal.
-            self.victory_margin = 0;
-            self.set_is_final();
-
-            return true;
-        }
-
-        let p1_at_goal_with_no_walls = self.is_player_one_at_goal() && self.p1_num_walls == 0;
-        let p2_at_goal_with_no_walls = self.is_player_two_at_goal() && self.p2_num_walls == 0;
-        let player_at_goal_with_no_walls = p1_at_goal_with_no_walls || p2_at_goal_with_no_walls;
-
-        assert!(
-            !(p1_at_goal_with_no_walls && p2_at_goal_with_no_walls),
-            "Both players cannot be at their goal with no walls remaining."
-        );
-
-        // If the winning player is passing, the game is over.
-        // Or if the winning player is at their goal and has no walls remaining, the game is over.
-        if action.is_pass() || player_at_goal_with_no_walls {
-            // Change the player to move since the victor is always the last player to have moved.
-            self.toggle_player_turn();
-            self.victory_margin = self.curr_player_distance_to_goal();
-            self.set_is_final();
-
-            assert!(
-                self.victory_margin > 0,
-                "Victory margin must be greater than 0."
-            );
-
-            assert!(
-                self.victory_margin < (BOARD_SIZE as u8),
-                "Victory margin must be less than or equal to the board size."
-            );
-
-            return true;
-        }
-
-        false
-    }
-
-    fn set_is_final(&mut self) {
-        self.is_final = true;
-        self.zobrist = self.zobrist.set_is_final();
-    }
-
     fn increment_turn(&mut self) {
         let curr_player = if self.p1_turn_to_move { 1 } else { 2 };
-        let is_scoring_phase = self.is_scoring_phase();
 
-        if curr_player == 2 && !is_scoring_phase {
+        if curr_player == 2 {
             self.move_number += 1;
         }
 
@@ -393,18 +299,6 @@ impl GameState {
 
     fn is_player_two_at_goal(&self) -> bool {
         self.p2_pawn_board & P2_OBJECTIVE_MASK != 0
-    }
-
-    fn is_goaling_action(&self, action: &Action) -> bool {
-        if action.is_move() {
-            if self.p1_turn_to_move {
-                self.is_player_one_at_goal()
-            } else {
-                self.is_player_two_at_goal()
-            }
-        } else {
-            false
-        }
     }
 
     fn valid_pawn_moves(&self) -> u128 {
@@ -739,8 +633,6 @@ impl game_state::GameState for GameState {
             p2_num_walls: NUM_WALLS_PER_PLAYER,
             vertical_wall_board: 0,
             horizontal_wall_board: 0,
-            victory_margin: 0,
-            is_final: false,
             zobrist: Zobrist::initial(),
         }
     }

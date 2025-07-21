@@ -241,7 +241,8 @@ impl TranspositionMap for Mapper {
 
         let victory_margin = outputs
             .get("victory_margin_head")
-            .expect("Victory margin not found in output")[0];
+            .map(|v| v[0])
+            .unwrap_or(f16::ZERO);
 
         let moves_left_vals = outputs
             .get("moves_left_head")
@@ -291,7 +292,6 @@ fn map_action_to_output_idx(action: &Action) -> usize {
                 + len_moves_inputs
                 + len_wall_inputs
         }
-        ActionType::Pass => len_moves_inputs + len_wall_inputs * 2,
     }
 }
 
@@ -513,7 +513,6 @@ mod tests {
         let all_actions = pawn_actions()
             .chain(horizontal_wall_actions())
             .chain(vertical_wall_actions())
-            .chain(std::iter::once(Action::pass()))
             .collect_vec();
 
         assert_eq!(all_actions.len(), OUTPUT_SIZE);
