@@ -8,7 +8,9 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGIOptions};
+use crate::{
+    log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGICommand, UGIOptions,
+};
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 
@@ -80,11 +82,19 @@ where
         let buffer = buffer.trim();
         let command = input_parser.parse_line(buffer);
 
+        let is_quit = matches!(command, Ok(UGICommand::Quit));
+
         match command {
             Ok(command) => game_manager.command(command).await,
             Err(e) => {
                 log_warning(&e.to_string());
             }
         }
+
+        if is_quit {
+            break;
+        }
     }
+
+    Ok(())
 }

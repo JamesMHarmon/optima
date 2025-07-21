@@ -75,8 +75,7 @@ impl<S, A> GameManager<S, A> {
             UGICommand::Focus(actions) => {
                 self.send_command(CommandInner::FocusActions(actions)).await
             }
-            UGICommand::Quit => panic!("Quit command is not implemented"),
-            UGICommand::Stop => {
+            UGICommand::Quit | UGICommand::Stop => {
                 self.ponder_active.store(false, Ordering::SeqCst);
             }
             UGICommand::SetOption(option) => self.set_option(option),
