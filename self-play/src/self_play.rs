@@ -1,16 +1,18 @@
 use anyhow::Result;
 use common::get_env_usize;
+use common::TranspositionHash;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use log::warn;
 use mcts::BackpropagationStrategy;
 use mcts::SelectionStrategy;
 use serde::Serialize;
-use tokio::sync::mpsc::Sender;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc::Sender;
 
 use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
 use engine::engine::GameEngine;
@@ -39,9 +41,9 @@ where
         + Sync,
     P: Clone,
     PV: Default + Ord + Clone + Serialize + Send,
-    S: GameState + Send,
+    S: GameState + TranspositionHash + Send,
     A: Serialize + Debug + Eq + Clone + Send,
-    P: Serialize + Debug + Send,
+    P: Serialize + Display + Send,
     <F as Latest>::MR: Debug + Eq + Send,
 {
     let starting_run_time = Instant::now();
@@ -109,11 +111,12 @@ where
                 num_of_games_played += 1;
 
                 info!(
-                    "Model: {}, Number of Actions: {}, Score: {:?}, Move: {:?}, Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
+                    "Model: {}, Number of Actions: {}, Score: {}, Move: {}, Transposition: {:X}, Elapsed: {:.2}h, Number of Games Played: {}, GPM: {:.2}",
                     model_info.model_name_w_num(),
                     self_play_metric.analysis().len(),
                     self_play_metric.terminal_score(),
                     engine.move_number(&game_state),
+                    game_state.transposition_hash(),
                     starting_run_time.elapsed().as_secs() as f32 / (60 * 60) as f32,
                     num_of_games_played,
                     num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60_f32

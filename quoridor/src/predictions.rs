@@ -11,7 +11,11 @@ pub struct Predictions {
 
 impl Predictions {
     pub fn new(value: Value, victory_margin: f32, game_length: f32) -> Self {
-        Self { value, victory_margin, game_length }
+        Self {
+            value,
+            victory_margin,
+            game_length,
+        }
     }
 
     pub fn value(&self) -> &Value {
@@ -42,5 +46,17 @@ impl GameLength for Predictions {
 impl VictoryMargin for Predictions {
     fn victory_margin_score(&self) -> f32 {
         self.victory_margin()
+    }
+}
+
+impl std::fmt::Display for Predictions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Predictions(value: {}, victory_margin: {}, game_length: {})",
+            self.value(),
+            self.victory_margin(),
+            self.game_length()
+        )
     }
 }
