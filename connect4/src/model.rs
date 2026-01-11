@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::constants::MOVES_LEFT_SIZE;
 
@@ -13,7 +14,8 @@ use engine::Value as ValueTrait;
 use mcts::map_moves_left_to_one_hot;
 use model::logits::update_logit_policies_to_softmax;
 use model::{
-    ActionWithPolicy, GameStateAnalysis, Latest, Load, ModelInfo, NodeMetrics, PositionMetrics,
+    ActionWithPolicy, GameStateAnalysis, Latest, Load, ModelInfo, Move, NodeMetrics,
+    PositionMetrics,
 };
 use tensorflow_model::{Archive as ArchiveModel, latest, unarchive};
 use tensorflow_model::{
@@ -337,13 +339,39 @@ impl Load for ModelFactory {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
+
+impl ModelRef {
+    pub fn new(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
 
 impl Latest for ModelFactory {
     type MR = ModelRef;
 
     fn latest(&self) -> Result<Self::MR> {
         latest(&self.model_dir).map(ModelRef)
+    }
+}
+
+impl Move for ModelFactory {
+    type MR = ModelRef;
+
+    fn move_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
+        let file_name = model.0.file_name().expect("Model has no file name");
+        let file_path = path.join(file_name);
+        fs::rename(&model.0, &file_path)?;
+
+        Ok(ModelRef(file_path))
+    }
+
+    fn copy_to(&self, model: &Self::MR, path: &Path) -> Result<Self::MR> {
+        let file_name = model.0.file_name().expect("Model has no file name");
+        let file_path = path.join(file_name);
+        fs::copy(&model.0, &file_path)?;
+
+        Ok(ModelRef(file_path))
     }
 }

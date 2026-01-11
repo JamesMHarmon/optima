@@ -8,3 +8,9 @@ impl engine::value::Value for Value {
         self.0[player - 1]
     }
 }
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Value({}, {})", self.0[0], self.0[1])
+    }
+}
