@@ -2,12 +2,29 @@
 name = "self-play"
 version = "0.1.0"
 authors = ["James Harmon <JamesMHarmon@gmail.com>"]
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [features]
 default = ["all"]
-all = ["traits", "dep:engine", "dep:common", "dep:mcts", "dep:anyhow", "dep:async-scoped", "dep:bson", "dep:crossbeam", "dep:flate2", "dep:futures", "dep:log", "dep:rand", "dep:serde_json", "dep:uuid", "dep:uuid-b64", "dep:tokio"]
+all = [
+    "traits",
+    "dep:engine",
+    "dep:common",
+    "dep:mcts",
+    "dep:anyhow",
+    "dep:async-scoped",
+    "dep:bson",
+    "dep:crossbeam",
+    "dep:flate2",
+    "dep:futures",
+    "dep:log",
+    "dep:rand",
+    "dep:serde_json",
+    "dep:uuid",
+    "dep:uuid-b64",
+    "dep:tokio",
+]
 traits = []
 
 [dependencies]
@@ -23,9 +40,12 @@ crossbeam = { version = "0.8", optional = true }
 flate2 = { version = "1.0", optional = true }
 futures = { version = "0.3", optional = true }
 log = { version = "0.4", optional = true }
-rand = { version = "0.8", optional = true }
+rand = { version = "0.9", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
 uuid = { version = "1.1.1", features = ["v4"], optional = true }
 uuid-b64 = { version = "0.1.1", optional = true }
-tokio = { version = "1.37", features = ["parking_lot", "rt-multi-thread"], optional = true }
+tokio = { version = "1.37", features = [
+    "parking_lot",
+    "rt-multi-thread",
+], optional = true }

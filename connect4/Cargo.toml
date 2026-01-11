@@ -2,7 +2,7 @@
 name = "connect4"
 version = "0.1.0"
 authors = ["James Harmon <JamesMHarmon@gmail.com>"]
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [lib]

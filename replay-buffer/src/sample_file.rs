@@ -113,7 +113,7 @@ impl<R> SampleFileReader<R> {
 
 #[cfg(test)]
 mod test {
-    use rand::{prelude::SliceRandom, Rng};
+    use rand::{Rng, prelude::SliceRandom};
     use std::{
         fs::File,
         io::{BufReader, BufWriter, Write},
@@ -137,10 +137,10 @@ mod test {
         let num_samples = rng.gen_range(500..1000);
         let sample_len = rng.gen_range(1..((8 * 8 * 17) + 2245 + 1 + 128));
 
-        let data = std::iter::repeat_with(|| (0..sample_len))
+        let data = std::iter::repeat_with(|| 0..sample_len)
             .take(num_samples)
             .flatten()
-            .map(|_| rng.gen())
+            .map(|_| rng.r#gen())
             .collect::<Vec<f32>>();
 
         let file = File::create(test_file_path).unwrap();

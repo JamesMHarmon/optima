@@ -1,11 +1,11 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rand::Rng;
 use std::fmt::Debug;
 
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use mcts::{
-    BackpropagationStrategy, DirichletOptions, NoTemp, SelectionStrategy, TemperatureConstant, MCTS
+    BackpropagationStrategy, DirichletOptions, MCTS, NoTemp, SelectionStrategy, TemperatureConstant,
 };
 use model::GameAnalyzer;
 
@@ -35,7 +35,10 @@ where
         epsilon: options.epsilon,
     });
 
-    let temp = TemperatureConstant::new(play_options.temperature, play_options.temperature_visit_offset);
+    let temp = TemperatureConstant::new(
+        play_options.temperature,
+        play_options.temperature_visit_offset,
+    );
     let no_temp = NoTemp::new();
 
     let mut mcts = MCTS::with_capacity(
@@ -49,10 +52,10 @@ where
     );
 
     let mut analysis = Vec::new();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     while game_engine.terminal_state(&game_state).is_none() {
-        let action = if rng.gen::<f32>() <= options.full_visits_probability {
+        let action = if rng.random::<f32>() <= options.full_visits_probability {
             mcts.apply_noise_at_root(dirichlet_options.as_ref()).await;
             mcts.search_visits(options.visits).await?;
             mcts.select_action(&temp)?

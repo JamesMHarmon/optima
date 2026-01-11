@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 
 members = [
     "arena",
@@ -15,6 +16,9 @@ members = [
     "connect4",
     "quoridor",
 ]
+
+[workspace.package]
+edition = "2024"
 
 [profile.release]
 opt-level = 3

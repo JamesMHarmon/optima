@@ -1,9 +1,9 @@
 use anyhow::Result;
-use common::{get_env_usize, TranspositionTable};
+use common::{TranspositionTable, get_env_usize};
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
-use engine::game_state::GameState;
 use engine::GameEngine;
 use engine::Value;
+use engine::game_state::GameState;
 use half::f16;
 use itertools::Itertools;
 use log::{debug, info};
@@ -16,15 +16,15 @@ use std::future::Future;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::*;
 use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::*;
-use ::model::{analytics, Analyzer, GameStateAnalysis, Info, ModelInfo};
+use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
 #[cfg(feature = "tensorflow_system_alloc")]
@@ -69,7 +69,9 @@ where
             get_env_usize("ANALYSIS_REQUEST_THREADS").unwrap_or(ANALYSIS_REQUEST_THREADS);
 
         if std::env::var("TF_CPP_MIN_LOG_LEVEL").is_err() {
-            std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
+            unsafe {
+                std::env::set_var("TF_CPP_MIN_LOG_LEVEL", "2");
+            }
         }
 
         info!(
