@@ -1,4 +1,4 @@
-use engine::GameEngine;
+use engine::{GameEngine, PlayerResult, PlayerScore, Players, Value};
 
 use super::{Action, GameState, Predictions};
 
@@ -27,15 +27,50 @@ impl GameEngine for Engine {
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.p1_turn_to_move {
-            1
-        } else {
-            2
-        }
+        if game_state.p1_turn_to_move { 1 } else { 2 }
     }
 
     fn move_number(&self, game_state: &Self::State) -> usize {
         game_state.p2_piece_board.count_ones() as usize + 1
+    }
+}
+
+impl Players for Engine {
+    type State = GameState;
+
+    fn players(&self, _state: &Self::State) -> &[usize] {
+        static PLAYERS: [usize; 2] = [1, 2];
+        &PLAYERS
+    }
+}
+
+impl PlayerScore for Engine {
+    type State = GameState;
+    type PlayerScore = usize;
+
+    fn score(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerScore> {
+        state.is_terminal().map(|value| {
+            if value.get_value_for_player(player_id) > 0.5 {
+                1
+            } else {
+                0
+            }
+        })
+    }
+}
+
+impl PlayerResult for Engine {
+    type State = GameState;
+    type PlayerResult = &'static str;
+
+    fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
+        state
+            .is_terminal()
+            .map(|value| match value.get_value_for_player(player_id) {
+                v if v > 0.5 => "win",
+                v if v < 0.5 => "loss",
+                _ => "draw",
+            })
     }
 }
 

@@ -28,8 +28,14 @@ pub use quoridor::{
 
 // Arimaa exports
 #[cfg(feature = "arimaa")]
-compile_error!("Arimaa support is not yet fully implemented. Missing: BackpropagationStrategy, SelectionStrategy, StrategyOptions, UGI. Use --features quoridor instead.");
+compile_error!(
+    "Arimaa support is not yet fully implemented. Missing: BackpropagationStrategy, SelectionStrategy, StrategyOptions, UGI. Use --features quoridor instead."
+);
 
 // Connect4 exports
 #[cfg(feature = "connect4")]
-compile_error!("Connect4 support is not yet fully implemented. Missing: BackpropagationStrategy, SelectionStrategy, StrategyOptions, UGI, ModelFactory. Use --features quoridor instead.");
+pub use connect4::{
+    Connect4BackpropagationStrategy as BackpropagationStrategy,
+    Connect4SelectionStrategy as SelectionStrategy, Connect4StrategyOptions as StrategyOptions,
+    Engine, ModelFactory, ModelRef, UGI,
+};

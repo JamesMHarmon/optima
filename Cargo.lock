@@ -642,12 +642,14 @@ dependencies = [
  "common",
  "engine",
  "half 1.8.3",
+ "itertools 0.12.1",
  "log",
  "mcts",
  "model",
  "serde",
  "serde_json",
  "tensorflow-model",
+ "ugi",
 ]
 
 [[package]]
