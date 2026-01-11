@@ -3,7 +3,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::{map_board_to_arr, Value};
+use common::TranspositionHash;
+
+use crate::{Value, map_board_to_arr};
 
 use super::Zobrist;
 
@@ -187,5 +189,11 @@ impl Display for GameState {
         writeln!(f, "     1   2   3   4   5   6   7  ")?;
 
         Ok(())
+    }
+}
+
+impl TranspositionHash for GameState {
+    fn transposition_hash(&self) -> u64 {
+        self.get_transposition_hash()
     }
 }

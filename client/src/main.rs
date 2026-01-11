@@ -1,11 +1,11 @@
 mod cli;
 mod game;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arena::ArenaOptions;
 use clap::Parser;
 use cli::{Cli, Commands};
-use common::{get_env_usize, ConfigLoader, FsExt};
+use common::{ConfigLoader, FsExt, get_env_usize};
 use dotenv::dotenv;
 use env_logger::Env;
 use game::{
@@ -15,10 +15,10 @@ use game::{
 use log::info;
 use mcts::DynamicCPUCT;
 use model::Load;
-use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
+use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
 use std::borrow::Cow;
 use std::path::Path;
-use ugi::{run_perft, run_ugi, UGIOptions};
+use ugi::{UGIOptions, run_perft, run_ugi};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -66,11 +66,21 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
+            #[cfg(feature = "quoridor")]
             let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
                 play_options.victory_margin_threshold,
                 play_options.victory_margin_factor,
+            );
+
+            #[cfg(feature = "connect4")]
+            let selection_strategy_opts = StrategyOptions::new(
+                play_options.fpu,
+                play_options.fpu_root,
+                play_options.moves_left_threshold,
+                play_options.moves_left_scale,
+                play_options.moves_left_factor,
             );
 
             let model_factory = ModelFactory::new(model_dir);
@@ -113,11 +123,21 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
+            #[cfg(feature = "quoridor")]
             let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
                 play_options.victory_margin_threshold,
                 play_options.victory_margin_factor,
+            );
+
+            #[cfg(feature = "connect4")]
+            let selection_strategy_opts = StrategyOptions::new(
+                play_options.fpu,
+                play_options.fpu_root,
+                play_options.moves_left_threshold,
+                play_options.moves_left_scale,
+                play_options.moves_left_factor,
             );
 
             let champion_factory = ModelFactory::new(champions_dir.clone());
@@ -178,12 +198,24 @@ async fn async_main(cli: Cli) -> Result<()> {
                 )
             };
 
+            #[cfg(feature = "quoridor")]
             let selection_strategy_opts = |options: &UGIOptions| {
                 StrategyOptions::new(
                     options.fpu,
                     options.fpu_root,
                     options.victory_margin_threshold,
                     options.victory_margin_factor,
+                )
+            };
+
+            #[cfg(feature = "connect4")]
+            let selection_strategy_opts = |options: &UGIOptions| {
+                StrategyOptions::new(
+                    options.fpu,
+                    options.fpu_root,
+                    options.moves_left_threshold,
+                    options.moves_left_scale,
+                    options.moves_left_factor,
                 )
             };
 
