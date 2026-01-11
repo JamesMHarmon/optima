@@ -5,19 +5,59 @@ use std::path::PathBuf;
 use crate::constants::MOVES_LEFT_SIZE;
 
 use super::{
-    map_board_to_arr, Action, Engine, GameState, Predictions, Value, INPUT_C, INPUT_H, INPUT_W,
-    OUTPUT_SIZE,
+    Action, Engine, GameState, INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE, Predictions, Value,
+    map_board_to_arr,
 };
-use common::{get_env_usize, MovesLeftPropagatedValue};
+use common::{MovesLeftPropagatedValue, get_env_usize};
 use engine::Value as ValueTrait;
 use mcts::map_moves_left_to_one_hot;
 use model::logits::update_logit_policies_to_softmax;
-use model::{ActionWithPolicy, GameStateAnalysis, Latest, Load, NodeMetrics, PositionMetrics};
-use tensorflow_model::{latest, unarchive, Archive as ArchiveModel};
-use tensorflow_model::{InputMap, Mode, PredictionsMap, TensorflowModel, TranspositionMap};
+use model::{
+    ActionWithPolicy, GameStateAnalysis, Latest, Load, ModelInfo, NodeMetrics, PositionMetrics,
+};
+use tensorflow_model::{Archive as ArchiveModel, latest, unarchive};
+use tensorflow_model::{
+    GameAnalyzer, InputMap, Mode, PredictionsMap, TensorflowModel, TranspositionMap,
+};
 
 use anyhow::Result;
 use half::f16;
+
+pub type Analyzer =
+    GameAnalyzer<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>;
+
+pub struct Model(
+    ArchiveModel<
+        TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
+    >,
+);
+
+impl Model {
+    pub fn new(
+        model: ArchiveModel<
+            TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
+        >,
+    ) -> Self {
+        Self(model)
+    }
+}
+
+impl model::Analyzer for Model {
+    type State = GameState;
+    type Action = Action;
+    type Predictions = Predictions;
+    type Analyzer = Analyzer;
+
+    fn analyzer(&self) -> Self::Analyzer {
+        self.0.inner().analyzer()
+    }
+}
+
+impl model::Info for Model {
+    fn info(&self) -> &ModelInfo {
+        self.0.inner().info()
+    }
+}
 
 #[derive(Default)]
 pub struct ModelFactory {
@@ -30,7 +70,7 @@ impl ModelFactory {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Mapper {}
 
 impl Mapper {
@@ -274,9 +314,7 @@ impl TranspositionMap for Mapper {
 
 impl Load for ModelFactory {
     type MR = ModelRef;
-    type M = ArchiveModel<
-        TensorflowModel<GameState, Action, Predictions, Engine, Mapper, TranspositionEntry>,
-    >;
+    type M = Model;
 
     fn load(&self, model_ref: &Self::MR) -> Result<Self::M> {
         let table_size = get_env_usize("TABLE_SIZE").unwrap_or(0);
@@ -285,7 +323,7 @@ impl Load for ModelFactory {
 
         let mapper = Mapper::new();
 
-        let model = TensorflowModel::load(
+        let tensorflow_model = TensorflowModel::load(
             model_temp_dir.path().to_path_buf(),
             model_info,
             Engine::new(),
@@ -293,7 +331,9 @@ impl Load for ModelFactory {
             table_size,
         )?;
 
-        Ok(ArchiveModel::new(model, model_temp_dir))
+        let archive_model = ArchiveModel::new(tensorflow_model, model_temp_dir);
+
+        Ok(Model::new(archive_model))
     }
 }
 
