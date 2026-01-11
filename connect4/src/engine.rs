@@ -1,4 +1,4 @@
-use engine::{GameEngine, PlayerResult, PlayerScore, Players, Value};
+use engine::{GameEngine, PlayerResult, PlayerScore, Players, ValidActions, Value};
 
 use super::{Action, GameState, Predictions};
 
@@ -32,6 +32,25 @@ impl GameEngine for Engine {
 
     fn move_number(&self, game_state: &Self::State) -> usize {
         game_state.p2_piece_board.count_ones() as usize + 1
+    }
+}
+
+impl ValidActions for Engine {
+    type Action = Action;
+    type State = GameState;
+
+    fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
+        game_state
+            .get_valid_actions()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, valid)| {
+                if valid {
+                    Some(Action::DropPiece((i + 1) as u8))
+                } else {
+                    None
+                }
+            })
     }
 }
 
