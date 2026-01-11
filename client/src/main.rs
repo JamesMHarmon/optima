@@ -1,4 +1,5 @@
 mod cli;
+mod game;
 
 use anyhow::{anyhow, Result};
 use arena::ArenaOptions;
@@ -7,10 +8,13 @@ use cli::{Cli, Commands};
 use common::{get_env_usize, ConfigLoader, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
+use game::{
+    BackpropagationStrategy, Engine, ModelFactory, ModelRef, SelectionStrategy, StrategyOptions,
+    UGI,
+};
 use log::info;
 use mcts::DynamicCPUCT;
 use model::Load;
-use quoridor::{ModelRef, QuoridorBackpropagationStrategy, QuoridorSelectionStrategy, QuoridorStrategyOptions};
 use self_play::{play_self, SelfPlayOptions, SelfPlayPersistance};
 use std::borrow::Cow;
 use std::path::Path;
@@ -62,18 +66,17 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            let selection_strategy_opts = QuoridorStrategyOptions::new(
+            let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
                 play_options.victory_margin_threshold,
                 play_options.victory_margin_factor,
             );
 
-            let model_factory = quoridor::ModelFactory::new(model_dir);
-            let engine = quoridor::Engine::new();
-            let backpropagation_strategy = QuoridorBackpropagationStrategy::new(&engine);
-            let selection_strategy =
-                QuoridorSelectionStrategy::new(cpuct, selection_strategy_opts);
+            let model_factory = ModelFactory::new(model_dir);
+            let engine = Engine::new();
+            let backpropagation_strategy = BackpropagationStrategy::new(&engine);
+            let selection_strategy = SelectionStrategy::new(cpuct, selection_strategy_opts);
 
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
@@ -110,19 +113,18 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            let selection_strategy_opts = QuoridorStrategyOptions::new(
+            let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
                 play_options.victory_margin_threshold,
                 play_options.victory_margin_factor,
             );
 
-            let champion_factory = quoridor::ModelFactory::new(champions_dir.clone());
-            let candidate_factory = quoridor::ModelFactory::new(candidates_dir);
-            let engine: quoridor::Engine = quoridor::Engine::new();
-            let backpropagation_strategy = QuoridorBackpropagationStrategy::new(&engine);
-            let selection_strategy =
-                QuoridorSelectionStrategy::new(cpuct, selection_strategy_opts);
+            let champion_factory = ModelFactory::new(champions_dir.clone());
+            let candidate_factory = ModelFactory::new(candidates_dir);
+            let engine = Engine::new();
+            let backpropagation_strategy = BackpropagationStrategy::new(&engine);
+            let selection_strategy = SelectionStrategy::new(cpuct, selection_strategy_opts);
 
             arena::championship(
                 &champion_factory,
@@ -143,7 +145,8 @@ async fn async_main(cli: Cli) -> Result<()> {
                 .as_ref()
                 .or(ugi_args.dir.as_ref())
                 .map(|dir| dir.relative_to_cwd())
-                .transpose()?.or_else(|| std::env::current_dir().ok())
+                .transpose()?
+                .or_else(|| std::env::current_dir().ok())
                 .expect("Could not determine model directory");
 
             let model_name = std::env::var("BOT_MODEL_NAME")
@@ -156,13 +159,13 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             assert!(model_path.is_file(), "Model not found. {:?}", &model_path);
 
-            let ugi = quoridor::UGI::new();
-            let model_factory = quoridor::ModelFactory::new(model_dir);
+            let ugi = UGI::new();
+            let model_factory = ModelFactory::new(model_dir);
             let model = model_factory.load(&ModelRef::new(model_path))?;
-            let engine = quoridor::Engine::new();
+            let engine = Engine::new();
 
-            fn leak_engine() -> &'static quoridor::Engine {
-                let engine = Box::new(quoridor::Engine::new());
+            fn leak_engine() -> &'static Engine {
+                let engine = Box::new(Engine::new());
                 Box::leak(engine)
             }
 
@@ -176,7 +179,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             };
 
             let selection_strategy_opts = |options: &UGIOptions| {
-                QuoridorStrategyOptions::new(
+                StrategyOptions::new(
                     options.fpu,
                     options.fpu_root,
                     options.victory_margin_threshold,
@@ -185,10 +188,10 @@ async fn async_main(cli: Cli) -> Result<()> {
             };
 
             let backpropagation_strategy =
-                move |_options: &UGIOptions| QuoridorBackpropagationStrategy::new(leak_engine());
+                move |_options: &UGIOptions| BackpropagationStrategy::new(leak_engine());
 
             let selection_strategy = move |options: &UGIOptions| {
-                QuoridorSelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
+                SelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
             };
 
             run_ugi(
@@ -199,12 +202,16 @@ async fn async_main(cli: Cli) -> Result<()> {
                 selection_strategy,
             )
             .await?
-        },
+        }
         Commands::Perft(perft_args) => {
-            let engine = quoridor::Engine::new();
+            let engine = Engine::new();
 
             let count = run_perft(perft_args.depth, &engine);
-            println!("Depth {depth}: {count}", depth = perft_args.depth, count = count);
+            println!(
+                "Depth {depth}: {count}",
+                depth = perft_args.depth,
+                count = count
+            );
         }
     }
 
