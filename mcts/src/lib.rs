@@ -1,8 +1,10 @@
 pub mod backpropagation_strategy;
+#[cfg(test)]
 mod counting_game;
 pub mod cpuct;
 mod edge;
 pub mod mcts;
+#[cfg(test)]
 mod mcts_tests;
 pub mod moves_left_strategy;
 mod node;

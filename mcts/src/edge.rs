@@ -24,7 +24,7 @@ impl<A, PV> MCTSEdge<A, PV> {
     }
 
     pub fn policy_score(&self) -> f32 {
-        self.policy_score.to_f32()
+        self.policy_score.to_f32().max(0.01)
     }
 
     pub fn set_policy_score(&mut self, policy_score: f32) {

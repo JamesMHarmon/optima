@@ -674,7 +674,7 @@ impl<A, P> Ord for StateToTransmit<A, P> {
 
 impl<A, P> PartialOrd for StateToTransmit<A, P> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(other.id.cmp(&self.id))
+        Some(self.cmp(other))
     }
 }
 

@@ -15,7 +15,8 @@ impl CPUCT for CPUCTTest {
 #[cfg(test)]
 mod tests {
     use crate::{
-        MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy, MovesLeftStrategyOptions, NoTemp,
+        MovesLeftBackpropagationStrategy, MovesLeftSelectionStrategy, MovesLeftStrategyOptions,
+        NoTemp,
     };
 
     use super::super::MCTS;
