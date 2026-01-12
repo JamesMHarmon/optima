@@ -1,8 +1,8 @@
 use common::TranspositionTable;
 use log::info;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::Duration;
 use tokio::time;
@@ -122,10 +122,10 @@ impl<Te> ReporterInner<Te> {
         if self.last_report_had_nodes.load(Ordering::Relaxed) || total_nps > 0.0 {
             info!(
                 "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
-                total_nps=total_nps,
-                infer_nps=infer_nps,
-                min_batch_size=min_batch_size,
-                max_batch_size=max_batch_size
+                total_nps = total_nps,
+                infer_nps = infer_nps,
+                min_batch_size = min_batch_size,
+                max_batch_size = max_batch_size
             );
             if let Some((entries, capacity, hits, misses)) = transposition_hits {
                 info!(

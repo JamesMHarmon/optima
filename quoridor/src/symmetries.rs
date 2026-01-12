@@ -1,12 +1,15 @@
 use crate::QuoridorPropagatedValue;
 
 use super::{Action, GameState, Predictions};
-use model::{node_metrics::NodeMetrics, EdgeMetrics, PositionMetrics};
+use model::{EdgeMetrics, PositionMetrics, node_metrics::NodeMetrics};
 
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>,
 ) -> Vec<PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>> {
-    let PositionMetrics { game_state, node_metrics } = &metrics;
+    let PositionMetrics {
+        game_state,
+        node_metrics,
+    } = &metrics;
 
     let symmetrical_state = game_state.vertical_symmetry();
 

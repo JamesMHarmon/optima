@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use crossbeam::channel::Sender;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::{error, info};
 use permutohedron::Heap as Permute;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::iter::repeat_with;
 use std::sync::mpsc;
@@ -12,7 +12,7 @@ use std::time::Instant;
 use tokio::runtime::Handle;
 
 use engine::{GameEngine, GameState, Value};
-use mcts::{BackpropagationStrategy, SelectionStrategy, TemperatureMaxMoves, MCTS};
+use mcts::{BackpropagationStrategy, MCTS, SelectionStrategy, TemperatureMaxMoves};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 

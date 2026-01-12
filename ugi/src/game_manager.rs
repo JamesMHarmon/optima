@@ -2,7 +2,7 @@ use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOpt
 use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
-use mcts::{BackpropagationStrategy, EdgeDetails, NodeDetails, SelectionStrategy, MCTS};
+use mcts::{BackpropagationStrategy, EdgeDetails, MCTS, NodeDetails, SelectionStrategy};
 use model::Analyzer;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
@@ -199,11 +199,11 @@ where
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
     Sel: SelectionStrategy<
-        State = S,
-        Action = A,
-        Predictions = E::Terminal,
-        PropagatedValues = B::PropagatedValues,
-    >,
+            State = S,
+            Action = A,
+            Predictions = E::Terminal,
+            PropagatedValues = B::PropagatedValues,
+        >,
     B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
     E::Terminal: Clone,
     Ps: Display,

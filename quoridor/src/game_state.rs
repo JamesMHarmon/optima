@@ -88,7 +88,7 @@ impl GameState {
         match action.action_type() {
             ActionType::PawnMove => self.move_pawn(action.coord()),
             ActionType::VerticalWall => self.place_wall(action.coord(), true),
-            ActionType::HorizontalWall => self.place_wall(action.coord(), false)
+            ActionType::HorizontalWall => self.place_wall(action.coord(), false),
         }
 
         self.increment_turn();
@@ -99,9 +99,7 @@ impl GameState {
         let vertical_walls = self.valid_vertical_wall_actions();
         let horizontal_walls = self.valid_horizontal_wall_actions();
 
-        pawn_moves
-            .chain(vertical_walls)
-            .chain(horizontal_walls)
+        pawn_moves.chain(vertical_walls).chain(horizontal_walls)
     }
 
     fn valid_pawn_move_actions(&self) -> impl Iterator<Item = Action> {
@@ -184,11 +182,7 @@ impl GameState {
     }
 
     pub fn player_to_move(&self) -> usize {
-        if self.p1_turn_to_move() {
-            1
-        } else {
-            2
-        }
+        if self.p1_turn_to_move() { 1 } else { 2 }
     }
 
     pub fn player_info(&self, player: usize) -> PlayerInfo {

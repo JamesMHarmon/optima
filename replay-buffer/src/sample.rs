@@ -43,14 +43,14 @@ pub trait Sample {
         <Self as Sample>::Predictions: Clone,
         <Self as Sample>::PropagatedValues: PropagatedValue,
         Self::PredictionStore: PredictionStore<
-            State = <Self as Sample>::State,
-            Predictions = <Self as Sample>::Predictions,
-        >,
+                State = <Self as Sample>::State,
+                Predictions = <Self as Sample>::Predictions,
+            >,
         Self: QMix<
-            State = <Self as Sample>::State,
-            Predictions = <Self as Sample>::Predictions,
-            PropagatedValues = <Self as Sample>::PropagatedValues,
-        >,
+                State = <Self as Sample>::State,
+                Predictions = <Self as Sample>::Predictions,
+                PropagatedValues = <Self as Sample>::PropagatedValues,
+            >,
     {
         let mut metrics = get_positions(metrics, |s, a| self.take_action(s, a));
 
@@ -155,11 +155,11 @@ pub trait Sample {
     where
         Self: InputMap<State = <Self as Sample>::State>,
         Self: PredictionsMap<
-            State = <Self as Sample>::State,
-            Action = <Self as Sample>::Action,
-            Predictions = <Self as Sample>::Predictions,
-            PropagatedValues = <Self as Sample>::PropagatedValues,
-        >,
+                State = <Self as Sample>::State,
+                Action = <Self as Sample>::Action,
+                Predictions = <Self as Sample>::Predictions,
+                PropagatedValues = <Self as Sample>::PropagatedValues,
+            >,
     {
         let targets = self.to_output(&metric.game_state, targets, &metric.node_metrics);
         let input_len = self.input_size();

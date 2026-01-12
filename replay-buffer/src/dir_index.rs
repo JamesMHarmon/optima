@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::info;
 use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -119,7 +119,10 @@ impl DirIndex {
             let cache_file = File::create(cache_path)?;
 
             if num_cache_entries > num_files {
-                info!("Cache file is mtime is out of date but has more vals than in directory. Updating cache entry {:?}", self.cache_path());
+                info!(
+                    "Cache file is mtime is out of date but has more vals than in directory. Updating cache entry {:?}",
+                    self.cache_path()
+                );
             }
 
             serde_json::to_writer_pretty(

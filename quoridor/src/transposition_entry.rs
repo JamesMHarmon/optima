@@ -9,7 +9,12 @@ pub struct TranspositionEntry {
 }
 
 impl TranspositionEntry {
-    pub fn new(policy_metrics: [f16; OUTPUT_SIZE], value: f16, victory_margin: f16, game_length: f32) -> Self {
+    pub fn new(
+        policy_metrics: [f16; OUTPUT_SIZE],
+        value: f16,
+        victory_margin: f16,
+        game_length: f32,
+    ) -> Self {
         Self {
             policy_metrics,
             value,

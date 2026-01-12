@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use log::info;
 use serde::Serialize;
 use std::fs::File;
@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use tar::Header;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use super::super::tensorflow::TensorflowModelOptions;
 use ::model::{Analyzer, GameAnalyzer, ModelInfo};

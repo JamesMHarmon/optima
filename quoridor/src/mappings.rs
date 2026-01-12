@@ -1,4 +1,4 @@
-use crate::{Predictions, QuoridorPropagatedValue, BOARD_SIZE, MOVES_LEFT_SIZE};
+use crate::{BOARD_SIZE, MOVES_LEFT_SIZE, Predictions, QuoridorPropagatedValue};
 
 use super::transposition_entry::TranspositionEntry;
 use half::f16;

@@ -1,9 +1,9 @@
 use anyhow::Result;
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;

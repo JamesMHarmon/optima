@@ -1,10 +1,10 @@
-use mcts::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
-    SelectionStrategy, CPUCT,
-};
 use anyhow::Result;
 use common::PropagatedValue;
 use engine::{GameEngine, Value};
+use mcts::{
+    BackpropagationStrategy, CPUCT, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
+    SelectionStrategy,
+};
 
 use crate::QuoridorPropagatedValue;
 
@@ -48,7 +48,10 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
         }
     }
 
-    fn get_victory_margin_baseline<'b, I>(edges: I, victory_margin_threshold: f32) -> VictoryMarginDirective
+    fn get_victory_margin_baseline<'b, I>(
+        edges: I,
+        victory_margin_threshold: f32,
+    ) -> VictoryMarginDirective
     where
         I: Iterator<Item = &'b MCTSEdge<A, QuoridorPropagatedValue>>,
         A: 'b,
@@ -244,12 +247,12 @@ where
     fn backpropagate<'node, I>(&self, visited_nodes: I, predictions: &Self::Predictions)
     where
         I: NodeLendingIterator<
-            'node,
-            Self::NodeInfo,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
-        >,
+                'node,
+                Self::NodeInfo,
+                Self::Action,
+                Self::Predictions,
+                Self::PropagatedValues,
+            >,
     {
         let mut visited_nodes = visited_nodes;
         let victory_margin_score = predictions.victory_margin_score();

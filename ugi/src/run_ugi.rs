@@ -8,11 +8,11 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{
-    log_debug, log_warning, output_ugi_cmd, output_ugi_info, Output, UGICommand, UGIOptions,
-};
 use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
+use crate::{
+    Output, UGICommand, UGIOptions, log_debug, log_warning, output_ugi_cmd, output_ugi_info,
+};
 
 pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps>(
     ugi_mapper: U,

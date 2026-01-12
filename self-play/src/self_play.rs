@@ -1,6 +1,6 @@
 use anyhow::Result;
-use common::get_env_usize;
 use common::TranspositionHash;
+use common::get_env_usize;
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use log::warn;
@@ -14,7 +14,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 
-use super::{play_self_one, SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance};
+use super::{SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance, play_self_one};
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
 use model::analytics::GameAnalyzer;

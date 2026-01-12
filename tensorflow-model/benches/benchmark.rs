@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use arimaa::{GameState, Mapper};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use tensorflow::{SessionRunArgs, Tensor};
 use tensorflow_model::{InputMap, Mode, Predictor};

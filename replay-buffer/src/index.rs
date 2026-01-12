@@ -100,7 +100,10 @@ impl<'a> Sampler<'a> {
             }
         }
 
-        warn!("Sample Index: {} is beyond available number of indexes: {}. There are not as many games as indicated by the index.", sample_idx, index_end);
+        warn!(
+            "Sample Index: {} is beyond available number of indexes: {}. There are not as many games as indicated by the index.",
+            sample_idx, index_end
+        );
 
         self.indexes
             .iter()

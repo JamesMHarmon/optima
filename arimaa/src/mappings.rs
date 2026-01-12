@@ -7,7 +7,7 @@ use std::convert::TryInto;
 use tinyvec::ArrayVec;
 
 use super::{
-    constants::*, set_board_bits_invertable, GameState, Predictions, TranspositionEntry, Value,
+    GameState, Predictions, TranspositionEntry, Value, constants::*, set_board_bits_invertable,
 };
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
 use engine::value::Value as ValueTrait;

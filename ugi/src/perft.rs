@@ -2,7 +2,10 @@ use common::{TranspositionHash, TranspositionTable};
 use engine::{GameEngine, GameState, ValidActions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use std::sync::{atomic::{AtomicU64, Ordering}, Arc};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 pub fn run_perft<S, A, E>(depth: usize, engine: &E) -> u64
 where
@@ -19,9 +22,14 @@ where
     count_moves_par(&game_state, engine, transpo_table, depth)
 }
 
-fn count_moves_par<S, A, E>(game_state: &S, engine: &E, transpo_table: Arc<TranspositionTable<u64>>, depth: usize) -> u64
+fn count_moves_par<S, A, E>(
+    game_state: &S,
+    engine: &E,
+    transpo_table: Arc<TranspositionTable<u64>>,
+    depth: usize,
+) -> u64
 where
-    S: GameState + TranspositionHash  + Sync + 'static,
+    S: GameState + TranspositionHash + Sync + 'static,
     A: Sync + 'static,
     E: GameEngine<State = S, Action = A> + ValidActions<State = S, Action = A> + Sync + 'static,
 {
@@ -57,7 +65,6 @@ where
     }
 
     move_count
-
 }
 
 fn count_moves<S, A, E>(game_state: &S, engine: &E, depth: usize) -> u64

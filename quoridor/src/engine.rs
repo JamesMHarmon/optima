@@ -1,5 +1,5 @@
 use super::{Action, GameState, Predictions};
-use engine::{engine::GameEngine, PlayerResult, PlayerScore, Players, ValidActions, Value};
+use engine::{PlayerResult, PlayerScore, Players, ValidActions, Value, engine::GameEngine};
 
 #[derive(Default)]
 pub struct Engine {}
@@ -22,9 +22,13 @@ impl GameEngine for Engine {
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        game_state
-            .is_terminal()
-            .map(|value| Predictions::new(value, game_state.victory_margin() as f32, game_state.move_number() as f32))
+        game_state.is_terminal().map(|value| {
+            Predictions::new(
+                value,
+                game_state.victory_margin() as f32,
+                game_state.move_number() as f32,
+            )
+        })
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
@@ -74,12 +78,12 @@ impl PlayerResult for Engine {
     type PlayerResult = &'static str;
 
     fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
-        state.is_terminal().map(|value| {
-            match value.get_value_for_player(player_id) {
+        state
+            .is_terminal()
+            .map(|value| match value.get_value_for_player(player_id) {
                 v if v > 0.5 => "win",
                 v if v < 0.5 => "loss",
                 _ => "draw",
-            }
-        })
+            })
     }
 }

@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::{Coordinate, GameState, ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH};
+use crate::{ASCII_LETTER_A, BOARD_HEIGHT, BOARD_WIDTH, Coordinate, GameState};
 
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {

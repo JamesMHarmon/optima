@@ -79,7 +79,9 @@ where
     PV: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}",
+        write!(
+            f,
+            "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}",
             action = self.action,
             Nsa = self.Nsa,
             puct_score = self.puct_score,
@@ -97,15 +99,17 @@ where
     PV: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}",
-        action = self.action,
-        Nsa = self.Nsa,
-        puct_score = self.puct_score,
-        Psa = self.Psa,
-        Usa = self.Usa,
-        propagated_values = self.propagated_values,
-        cpuct = self.cpuct
-    )
+        write!(
+            f,
+            "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}",
+            action = self.action,
+            Nsa = self.Nsa,
+            puct_score = self.puct_score,
+            Psa = self.Psa,
+            Usa = self.Usa,
+            propagated_values = self.propagated_values,
+            cpuct = self.cpuct
+        )
     }
 }
 

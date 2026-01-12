@@ -1,4 +1,4 @@
-use crate::{counting_game::CountingGameState, CPUCT};
+use crate::{CPUCT, counting_game::CountingGameState};
 
 struct CPUCTTest {
     cpuct: f32,

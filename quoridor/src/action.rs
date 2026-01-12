@@ -1,4 +1,4 @@
-use super::{Coordinate, BOARD_SIZE};
+use super::{BOARD_SIZE, Coordinate};
 
 use anyhow::anyhow;
 use std::fmt::{self, Debug, Display};
@@ -66,7 +66,7 @@ impl From<(ActionType, Coordinate)> for Action {
         let action_type_offset = match action_type {
             ActionType::PawnMove => 0,
             ActionType::HorizontalWall => BOARD_SIZE,
-            ActionType::VerticalWall => BOARD_SIZE * 2
+            ActionType::VerticalWall => BOARD_SIZE * 2,
         };
 
         Self {
@@ -101,7 +101,7 @@ impl Display for Action {
         let action_type = match self.action_type() {
             ActionType::PawnMove => "",
             ActionType::HorizontalWall => "h",
-            ActionType::VerticalWall => "v"
+            ActionType::VerticalWall => "v",
         };
 
         let coordinate = self.coord();

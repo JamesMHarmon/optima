@@ -3,8 +3,8 @@ use engine::game_state::GameState;
 use futures::future;
 use half::f16;
 use model::{
-    analytics::{ActionWithPolicy, GameAnalyzer},
     GameStateAnalysis,
+    analytics::{ActionWithPolicy, GameAnalyzer},
 };
 
 use crate::GameLength;
@@ -92,11 +92,7 @@ impl GameEngine for CountingGameEngine {
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
-        if game_state.p1_turn {
-            1
-        } else {
-            2
-        }
+        if game_state.p1_turn { 1 } else { 2 }
     }
 
     fn move_number(&self, _game_state: &Self::State) -> usize {

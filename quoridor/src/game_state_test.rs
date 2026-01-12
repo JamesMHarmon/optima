@@ -242,8 +242,9 @@ mod tests {
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
             .collect::<Vec<_>>();
-        let excludes_actions =
-            actions!["a3h", "a4h", "a5h", "b3h", "b4h", "c3h", "d3h", "e3h", "e2h", "f3h"];
+        let excludes_actions = actions![
+            "a3h", "a4h", "a5h", "b3h", "b4h", "c3h", "d3h", "e3h", "e2h", "f3h"
+        ];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
         assert!(!intersects);
@@ -341,7 +342,9 @@ mod tests {
         let mut game_state = GameState::initial();
         take_actions![
             game_state,
-            ["e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8"]
+            [
+                "e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8"
+            ]
         ];
 
         let is_terminal = game_state.is_terminal();
@@ -359,7 +362,9 @@ mod tests {
         let mut game_state = GameState::initial();
         take_actions![
             game_state,
-            ["e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8"]
+            [
+                "e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8"
+            ]
         ];
 
         let is_terminal = game_state.is_terminal();
@@ -395,7 +400,9 @@ mod tests {
         let mut game_state = GameState::initial();
         take_actions!(
             game_state,
-            ["e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8", "e3"]
+            [
+                "e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8", "e3"
+            ]
         );
 
         assert!(
@@ -418,7 +425,10 @@ mod tests {
         let mut game_state = GameState::initial();
         take_actions!(
             game_state,
-            ["e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8", "e3", "e9"]
+            [
+                "e2", "e8", "e3", "e7", "e4", "e6", "e5", "e4", "e6", "e3", "e7", "e2", "e8", "e3",
+                "e9"
+            ]
         );
 
         assert!(
@@ -427,6 +437,10 @@ mod tests {
         );
 
         assert_eq!(game_state.is_terminal(), Some(Value([1.0, 0.0])));
-        assert_eq!(game_state.victory_margin(), 2, "p1 should win with a victory margin of 2 as p2 is two moves away from the goal.");
+        assert_eq!(
+            game_state.victory_margin(),
+            2,
+            "p1 should win with a victory margin of 2 as p2 is two moves away from the goal."
+        );
     }
 }

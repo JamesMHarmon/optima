@@ -3,7 +3,7 @@ use crate::{SelectedNode, TempAndOffset};
 use super::Temperature;
 use super::{BackpropagationStrategy, EdgeDetails, NodeLendingIterator, SelectionStrategy};
 use super::{DirichletOptions, MCTSEdge, MCTSNode, NodeDetails};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use engine::{GameEngine, GameState};
 use futures::stream::{FuturesUnordered, StreamExt};
 use generational_arena::{Arena, Index};
@@ -13,14 +13,14 @@ use model::EdgeMetrics;
 use model::{GameAnalyzer, NodeMetrics};
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use rand_distr::Dirichlet;
 use std::borrow::Cow;
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -371,7 +371,10 @@ where
                 .children;
 
             if child_node_details.is_empty() {
-                return Err(anyhow!("Node has no children. This node should have been designated as a terminal node. {:?}", game_state));
+                return Err(anyhow!(
+                    "Node has no children. This node should have been designated as a terminal node. {:?}",
+                    game_state
+                ));
             }
 
             let temp_and_offset = temp.temp(&game_state);

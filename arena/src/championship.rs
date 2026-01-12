@@ -1,16 +1,16 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use engine::{GameEngine, GameState, Value};
 use log::{error, info, warn};
 use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fmt::Debug, time::Duration};
 use tokio::runtime::Handle;
 
 use super::ArenaOptions;
-use super::{evaluate::EvalResult, EvaluatePersistance};
+use super::{EvaluatePersistance, evaluate::EvalResult};
 
 #[allow(clippy::too_many_arguments)]
 pub fn championship<S, A, F, E, M, MR, T, B, Sel, P, PV>(

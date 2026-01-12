@@ -1,6 +1,6 @@
 use common::MovesLeftPropagatedValue;
 use model::position_metrics::PositionMetrics;
-use model::{node_metrics::NodeMetrics, EdgeMetrics};
+use model::{EdgeMetrics, node_metrics::NodeMetrics};
 
 use super::Predictions;
 use super::{Action, GameState};
@@ -8,7 +8,10 @@ use super::{Action, GameState};
 pub fn get_symmetries(
     metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
 ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
-    let PositionMetrics { game_state, node_metrics } = &metrics;
+    let PositionMetrics {
+        game_state,
+        node_metrics,
+    } = &metrics;
 
     let symmetrical_state = game_state.get_vertical_symmetry();
 
@@ -39,7 +42,7 @@ fn symmetrical_node_metrics(
 mod tests {
     use super::*;
     use crate::value::Value;
-    use arimaa_engine::{take_actions, Action};
+    use arimaa_engine::{Action, take_actions};
     use engine::GameState as GameStateTrait;
     use model::EdgeMetrics;
 

@@ -3,7 +3,8 @@ use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::NodeMetrics;
 use quoridor::{
-    Action, GameState, Mapper, Predictions, QuoridorPropagatedValue, Value, INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE
+    Action, GameState, INPUT_SIZE, MOVES_LEFT_SIZE, Mapper, OUTPUT_SIZE, Predictions,
+    QuoridorPropagatedValue, Value,
 };
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
@@ -141,8 +142,8 @@ impl QMix for QuoridorSampler {
             "blunder_value must be between 0.0 and 1.0"
         );
 
-        let mixed_victory_margin = ((1.0 - q_mix) * post_blunder_victory_margin)
-            + (q_mix * pre_blunder_victory_margin);
+        let mixed_victory_margin =
+            ((1.0 - q_mix) * post_blunder_victory_margin) + (q_mix * pre_blunder_victory_margin);
 
         assert!(
             post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,

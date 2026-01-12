@@ -3,12 +3,12 @@ use common::get_env_usize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::Model;
 use super::engine::Engine;
 use super::mappings::Mapper;
-use super::Model;
 use model::{Latest, Load, Move};
 use tensorflow_model::TensorflowModel;
-use tensorflow_model::{latest, unarchive, Archive as ArchiveModel};
+use tensorflow_model::{Archive as ArchiveModel, latest, unarchive};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);

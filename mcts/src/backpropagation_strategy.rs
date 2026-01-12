@@ -22,10 +22,10 @@ pub trait BackpropagationStrategy {
     fn backpropagate<'node, I>(&'node self, visited_nodes: I, predictions: &Self::Predictions)
     where
         I: NodeLendingIterator<
-            'node,
-            Self::NodeInfo,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
-        >;
+                'node,
+                Self::NodeInfo,
+                Self::Action,
+                Self::Predictions,
+                Self::PropagatedValues,
+            >;
 }

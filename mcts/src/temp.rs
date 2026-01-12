@@ -8,7 +8,7 @@ pub trait Temperature {
 
 pub struct TempAndOffset {
     pub temperature: f32,
-    pub temperature_visit_offset: f32
+    pub temperature_visit_offset: f32,
 }
 
 pub struct NoTemp<S> {
@@ -35,7 +35,7 @@ impl<S> Temperature for NoTemp<S> {
     fn temp(&self, _: &Self::State) -> TempAndOffset {
         TempAndOffset {
             temperature: 0.0,
-            temperature_visit_offset: 0.0
+            temperature_visit_offset: 0.0,
         }
     }
 }
@@ -62,7 +62,7 @@ impl<S> Temperature for TemperatureConstant<S> {
     fn temp(&self, _: &Self::State) -> TempAndOffset {
         TempAndOffset {
             temperature: self.temperature,
-            temperature_visit_offset: self.temperature_visit_offset
+            temperature_visit_offset: self.temperature_visit_offset,
         }
     }
 }
@@ -109,7 +109,7 @@ where
 
         TempAndOffset {
             temperature,
-            temperature_visit_offset: self.temperature_visit_offset
+            temperature_visit_offset: self.temperature_visit_offset,
         }
     }
 }

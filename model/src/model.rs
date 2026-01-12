@@ -10,11 +10,7 @@ pub trait Analyzer {
     type State;
     type Action;
     type Predictions;
-    type Analyzer: GameAnalyzer<
-        Action = Self::Action,
-        State = Self::State,
-        Predictions = Self::Predictions,
-    >;
+    type Analyzer: GameAnalyzer<Action = Self::Action, State = Self::State, Predictions = Self::Predictions>;
 
     fn analyzer(&self) -> Self::Analyzer;
 }

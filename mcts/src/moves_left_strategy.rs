@@ -1,6 +1,6 @@
 use crate::{
-    BackpropagationStrategy, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
-    SelectionStrategy, CPUCT,
+    BackpropagationStrategy, CPUCT, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
+    SelectionStrategy,
 };
 use anyhow::Result;
 use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
@@ -276,12 +276,12 @@ where
     fn backpropagate<'node, I>(&self, visited_nodes: I, predictions: &Self::Predictions)
     where
         I: NodeLendingIterator<
-            'node,
-            Self::NodeInfo,
-            Self::Action,
-            Self::Predictions,
-            Self::PropagatedValues,
-        >,
+                'node,
+                Self::NodeInfo,
+                Self::Action,
+                Self::Predictions,
+                Self::PropagatedValues,
+            >,
     {
         let mut visited_nodes = visited_nodes;
         let game_length_score = predictions.game_length_score();

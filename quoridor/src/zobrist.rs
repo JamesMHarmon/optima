@@ -1,8 +1,8 @@
-use super::zobrist_values::*;
 use super::GameState;
+use super::zobrist_values::*;
+use crate::Coordinate;
 use crate::constants::BOARD_SIZE;
 use crate::constants::PAWN_BOARD_SIZE;
-use crate::Coordinate;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub struct Zobrist {
