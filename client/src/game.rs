@@ -18,7 +18,6 @@ compile_error!("Features 'arimaa' and 'connect4' are mutually exclusive. Choose 
 #[cfg(not(any(feature = "quoridor", feature = "arimaa", feature = "connect4")))]
 compile_error!("At least one game feature must be enabled: 'quoridor', 'arimaa', or 'connect4'.");
 
-// Quoridor exports
 #[cfg(feature = "quoridor")]
 pub use quoridor::{
     Engine, ModelFactory, ModelRef, QuoridorBackpropagationStrategy as BackpropagationStrategy,
@@ -26,13 +25,13 @@ pub use quoridor::{
     UGI,
 };
 
-// Arimaa exports
 #[cfg(feature = "arimaa")]
-compile_error!(
-    "Arimaa support is not yet fully implemented. Missing: BackpropagationStrategy, SelectionStrategy, StrategyOptions, UGI. Use --features quoridor instead."
-);
+pub use arimaa::{
+    ArimaaBackpropagationStrategy as BackpropagationStrategy,
+    ArimaaSelectionStrategy as SelectionStrategy, ArimaaStrategyOptions as StrategyOptions, Engine,
+    ModelFactory, ModelRef, UGI,
+};
 
-// Connect4 exports
 #[cfg(feature = "connect4")]
 pub use connect4::{
     Connect4BackpropagationStrategy as BackpropagationStrategy,

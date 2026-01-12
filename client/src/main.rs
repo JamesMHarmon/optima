@@ -74,7 +74,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.victory_margin_factor,
             );
 
-            #[cfg(feature = "connect4")]
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
@@ -131,7 +131,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.victory_margin_factor,
             );
 
-            #[cfg(feature = "connect4")]
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let selection_strategy_opts = StrategyOptions::new(
                 play_options.fpu,
                 play_options.fpu_root,
@@ -208,7 +208,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 )
             };
 
-            #[cfg(feature = "connect4")]
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let selection_strategy_opts = |options: &UGIOptions| {
                 StrategyOptions::new(
                     options.fpu,

@@ -9,21 +9,23 @@ use board::*;
 pub mod constants;
 pub mod game_state;
 pub mod mappings;
+pub mod predictions;
+pub mod selection_strategy;
 pub mod symmetries;
 pub mod transposition_entry;
-// pub mod ugi;
-pub mod predictions;
+pub mod ugi;
 pub mod value;
 
 pub use crate::engine::Engine;
-pub use arimaa_engine::{convert_piece_to_letter, Action, Direction, Piece, Square};
+pub use arimaa_engine::{Action, Direction, Piece, Square, convert_piece_to_letter};
 pub use constants::*;
 pub use game_state::*;
 pub use mappings::*;
+pub use predictions::*;
+pub use selection_strategy::*;
 pub use symmetries::*;
 pub use transposition_entry::*;
-// pub use ugi::*;
-pub use predictions::*;
+pub use ugi::*;
 pub use value::*;
 
 #[cfg(feature = "model")]

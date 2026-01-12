@@ -165,6 +165,7 @@ dependencies = [
  "tempfile",
  "tensorflow-model",
  "tinyvec",
+ "ugi",
 ]
 
 [[package]]

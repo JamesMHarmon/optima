@@ -8,6 +8,7 @@ pub mod mappings;
 pub mod predictions;
 pub mod selection_strategy;
 pub mod transposition_entry;
+pub mod ugi;
 pub mod value;
 
 mod board;
@@ -23,22 +24,17 @@ use zobrist::*;
 #[cfg(feature = "model")]
 pub mod model;
 
-#[cfg(feature = "model")]
-pub mod ugi;
-
 pub use action::*;
 pub use engine::*;
 pub use game_state::*;
 pub use mappings::*;
 pub use predictions::*;
 pub use selection_strategy::*;
+pub use ugi::*;
 pub use value::*;
 
 #[cfg(feature = "model")]
 pub use crate::model::*;
-
-#[cfg(feature = "model")]
-pub use ugi::*;
 
 #[cfg(feature = "model")]
 pub mod model_factory;

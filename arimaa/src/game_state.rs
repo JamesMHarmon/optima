@@ -59,11 +59,7 @@ impl GameState {
 
     // Returns either 1 or 2 depending on the player to move.
     pub fn player_to_move(&self) -> usize {
-        if self.0.is_p1_turn_to_move() {
-            1
-        } else {
-            2
-        }
+        if self.0.is_p1_turn_to_move() { 1 } else { 2 }
     }
 
     pub fn get_vertical_symmetry(&self) -> Self {
@@ -92,6 +88,12 @@ impl FromStr for GameState {
 impl engine::game_state::GameState for GameState {
     fn initial() -> Self {
         GameState(ArimaaGameState::initial())
+    }
+}
+
+impl common::TranspositionHash for GameState {
+    fn transposition_hash(&self) -> u64 {
+        self.get_transposition_hash()
     }
 }
 
