@@ -53,6 +53,12 @@ impl<S, A> GameManager<S, A> {
                 self.output.cmd("id author", AUTHOR);
                 self.output.cmd("ugiok", "");
             }
+            UGICommand::AEI => {
+                self.output.cmd("protocol-version", "1");
+                self.output.cmd("id name", NAME);
+                self.output.cmd("id author", AUTHOR);
+                self.output.cmd("aeiok", "");
+            }
             UGICommand::IsReady => {
                 self.output.cmd("readyok", "");
             }

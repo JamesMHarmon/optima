@@ -19,6 +19,7 @@ impl<'a, M> InputParser<'a, M> {
 
 pub enum UGICommand<S, A> {
     UGI,
+    AEI,
     IsReady,
     SetPosition(S),
     Go,
@@ -47,6 +48,7 @@ where
     pub fn parse_line(&self, line: &str) -> Result<UGICommand<S, A>> {
         match line {
             "ugi" => Ok(UGICommand::UGI),
+            "aei" => Ok(UGICommand::AEI),
             "isready" => Ok(UGICommand::IsReady),
             "newgame" => {
                 let game_state = self.ugi_mapper.initial_game_state();

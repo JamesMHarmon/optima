@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 #[cfg(feature = "model")]
 use std::path::PathBuf;
 
 #[cfg(feature = "model")]
 use crate::ModelFactory;
 use crate::{Action, Engine, GameState};
+use arimaa_engine::{Direction, Piece, Square, convert_piece_to_letter};
 use engine::GameState as GameStateTrait;
 
 use anyhow::Result;
@@ -37,8 +39,8 @@ impl ActionsToMoveString for UGI {
     type State = GameState;
     type Action = Action;
 
-    fn actions_to_move_string(&self, _: &GameState, actions: &[Action]) -> String {
-        actions.iter().map(|a| a.to_string()).join(" ")
+    fn actions_to_move_string(&self, game_state: &GameState, actions: &[Action]) -> String {
+        convert_actions_to_move_string(game_state.clone(), actions)
     }
 }
 
@@ -46,9 +48,7 @@ impl MoveStringToActions for UGI {
     type Action = Action;
 
     fn move_string_to_actions(&self, str: &str) -> Result<Vec<Action>> {
-        let actions = str.split(' ').filter(|s| !s.is_empty()).map(|s| s.parse());
-
-        actions.collect()
+        convert_move_string_to_step_actions(str)
     }
 }
 
@@ -145,248 +145,159 @@ impl ConvertToValidCompositeActions for UGI {
 //     std::time::Duration::from_secs_f32(0f32.max(search_time))
 // }
 
-// fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> String {
-//     let mut game_state = game_state;
-//     let mut actions_as_string = Vec::new();
-//     let actions_last_idx = actions.len() - 1;
+fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> String {
+    let mut game_state = game_state;
+    let mut actions_as_string = Vec::new();
+    let actions_last_idx = actions.len() - 1;
 
-//     add_placements(&game_state, actions, &mut actions_as_string);
+    add_placements(&game_state, actions, &mut actions_as_string);
 
-//     for (i, action) in actions.iter().enumerate() {
-//         match action {
-//             Action::Move(_, _) | Action::PushPull(_, _) => {
-//                 let mut tracking_game_state = Cow::Borrowed(&game_state);
-//                 for (square, direction) in action.get_steps() {
-//                     let piece_board = tracking_game_state.get_piece_board();
+    for (i, action) in actions.iter().enumerate() {
+        match action {
+            Action::Move(_, _) | Action::PushPull(_, _) => {
+                let mut tracking_game_state = Cow::Borrowed(&game_state);
+                for (square, direction) in action.get_steps() {
+                    let piece_board = tracking_game_state.get_piece_board();
 
-//                     let piece = &piece_board.get_piece_type_at_square(&square).unwrap();
-//                     let is_p1_piece =
-//                         piece_board.get_bits_for_piece(*piece, true) & square.as_bit_board() != 0;
+                    let piece = &piece_board.get_piece_type_at_square(&square).unwrap();
+                    let is_p1_piece =
+                        piece_board.get_bits_for_piece(*piece, true) & square.as_bit_board() != 0;
 
-//                     actions_as_string.push(format!(
-//                         "{}{}{}",
-//                         convert_piece_to_letter(piece, is_p1_piece),
-//                         square,
-//                         direction
-//                     ));
+                    actions_as_string.push(format!(
+                        "{}{}{}",
+                        convert_piece_to_letter(piece, is_p1_piece),
+                        square,
+                        direction
+                    ));
 
-//                     let trapped_animal_square =
-//                         &tracking_game_state.get_trapped_animal_for_move(square, direction);
-//                     if let Some((square, piece, is_p1_piece)) = trapped_animal_square {
-//                         actions_as_string.push(format!(
-//                             "{}{}x",
-//                             convert_piece_to_letter(piece, *is_p1_piece),
-//                             square
-//                         ));
-//                     }
+                    let trapped_animal_square =
+                        &tracking_game_state.get_trapped_animal_for_move(square, direction);
+                    if let Some((square, piece, is_p1_piece)) = trapped_animal_square {
+                        actions_as_string.push(format!(
+                            "{}{}x",
+                            convert_piece_to_letter(piece, *is_p1_piece),
+                            square
+                        ));
+                    }
 
-//                     tracking_game_state =
-//                         Cow::Owned((*tracking_game_state).take_action(&Action::Move(
-//                             square,
-//                             std::iter::once(direction).collect(),
-//                         )));
-//                 }
-//             }
-//             Action::Place(_) => {}
-//             Action::Pass => {}
-//         }
+                    tracking_game_state =
+                        Cow::Owned((*tracking_game_state).take_action(&Action::Move(
+                            square,
+                            std::iter::once(direction).collect(),
+                        )));
+                }
+            }
+            Action::Place(_) => {}
+            Action::Pass => {}
+        }
 
-//         let was_p1_move = game_state.is_p1_turn_to_move();
-//         game_state = game_state.take_action(action);
-//         let is_p1_move = game_state.is_p1_turn_to_move();
+        let was_p1_move = game_state.is_p1_turn_to_move();
+        game_state = game_state.take_action(action);
+        let is_p1_move = game_state.is_p1_turn_to_move();
 
-//         // Double space move strings when switching between players
-//         if i != actions_last_idx && is_p1_move != was_p1_move {
-//             actions_as_string.push("".to_string());
-//         }
-//     }
+        // Double space move strings when switching between players
+        if i != actions_last_idx && is_p1_move != was_p1_move {
+            actions_as_string.push("".to_string());
+        }
+    }
 
-//     actions_as_string.iter().join(" ")
-// }
+    actions_as_string.iter().join(" ")
+}
 
-// fn add_placements(game_state: &GameState, actions: &[Action], actions_string: &mut Vec<String>) {
-//     if actions.iter().all(|a| !matches!(a, Action::Place(_))) {
-//         return;
-//     }
+fn add_placements(game_state: &GameState, actions: &[Action], actions_string: &mut Vec<String>) {
 
-//     assert_eq!(actions.len(), 8, "Placement actions should always be 8");
+    let rows = if game_state.is_p1_turn_to_move() {
+        [2, 1]
+    } else {
+        [7, 8]
+    };
 
-//     let rows = if game_state.is_p1_turn_to_move() {
-//         [2, 1]
-//     } else {
-//         [7, 8]
-//     };
+    let all_placement_squares: Vec<_> = rows
+        .iter()
+        .cartesian_product('a'..='h')
+        .map(|(row, col)| Square::new(col, *row))
+        .collect();
 
-//     let placement_squares: Vec<_> = rows
-//         .iter()
-//         .cartesian_product('a'..='h')
-//         .map(|(row, col)| Square::new(col, *row))
-//         .collect();
+    // Extract placed squares from actions and pair with their piece types based on order
+    let placed_squares: Vec<_> = actions
+        .iter()
+        .take(8)
+        .enumerate()
+        .filter_map(|(i, action)| match action {
+            Action::Place(square) => {
+                let piece = match i {
+                    0 => Piece::Elephant,
+                    1 => Piece::Camel,
+                    2..=3 => Piece::Horse,
+                    4..=5 => Piece::Dog,
+                    6..=7 => Piece::Cat,
+                    _ => unreachable!(),
+                };
+                Some((*square, piece))
+            }
+            _ => None,
+        })
+        .collect();
 
-//     for square in placement_squares {
-//         let pos = actions
-//             .iter()
-//             .find_position(|a| match a {
-//                 Action::Place(s) => square == *s,
-//                 _ => false,
-//             })
-//             .map(|(p, _)| p);
+    // Output all placement squares in order
+    for square in all_placement_squares {
+        let piece = placed_squares
+            .iter()
+            .find(|(s, _)| *s == square)
+            .map(|(_, p)| *p)
+            .unwrap_or(Piece::Rabbit);
 
-//         let piece = match pos {
-//             Some(0) => Piece::Elephant,
-//             Some(1) => Piece::Camel,
-//             Some(2..=3) => Piece::Horse,
-//             Some(4..=5) => Piece::Dog,
-//             Some(6..=7) => Piece::Cat,
-//             _ => Piece::Rabbit,
-//         };
+        actions_string.push(format!(
+            "{}{}",
+            convert_piece_to_letter(&piece, game_state.is_p1_turn_to_move()),
+            square
+        ));
+    }
+}
 
-//         actions_string.push(format!(
-//             "{}{}",
-//             convert_piece_to_letter(&piece, game_state.is_p1_turn_to_move()),
-//             square
-//         ));
-//     }
-// }
+fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Action>> {
+    let actions = actions_as_string
+        .split(' ')
+        .filter(|s| !s.contains('x'))
+        .collect::<Vec<_>>();
 
-// fn convert_move_string_to_step_actions(actions_as_string: &str) -> Vec<StepAction> {
-//     let actions = actions_as_string
-//         .split(' ')
-//         .filter(|s| !s.contains('x'))
-//         .collect::<Vec<_>>();
+    if actions.len() > 4 {
+        let mut placements: Vec<(Piece, Square)> = actions
+            .iter()
+            .map(|s| {
+                let square = s[1..=2].to_string().parse::<Square>().unwrap();
+                let piece = s[0..1].to_string().parse::<Piece>().unwrap();
+                (piece, square)
+            })
+            .filter(|(piece, _)| *piece != Piece::Rabbit)
+            .collect();
 
-//     if actions.len() > 4 {
-//         actions
-//             .iter()
-//             .map(|s| {
-//                 let square = s[1..=2].to_string().parse::<Square>().unwrap();
-//                 let piece = s[0..1].to_string().parse::<Piece>().unwrap();
-//                 StepAction::Place(square, piece)
-//             })
-//             .collect::<Vec<_>>()
-//     } else {
-//         let mut actions = actions
-//             .iter()
-//             .map(|s| {
-//                 let square = s[1..3].parse::<Square>().unwrap();
-//                 let direction = s[3..4].parse::<Direction>().unwrap();
-//                 StepAction::Move(square, direction)
-//             })
-//             .collect::<Vec<_>>();
+        // Sort by piece type to match expected order: Elephant, Camel, Horse, Horse, Dog, Dog, Cat, Cat
+        placements.sort_by_key(|(piece, _)| std::cmp::Reverse(*piece));
 
-//         if actions.len() <= 3 {
-//             actions.push(StepAction::Pass);
-//         }
+        // Return actions in the sorted order
+        Ok(placements
+            .into_iter()
+            .map(|(_, square)| Action::Place(square))
+            .collect())
+            
+    } else {
+        let mut actions = actions
+            .iter()
+            .map(|s| {
+                let square = s[1..3].parse::<Square>().unwrap();
+                let direction = s[3..4].parse::<Direction>().unwrap();
+                Action::Move(square, std::iter::once(direction).collect())
+            })
+            .collect::<Vec<_>>();
 
-//         actions
-//     }
-// }
+        if actions.len() <= 3 {
+            actions.push(Action::Pass);
+        }
 
-// fn mirror_actions(actions: &[Action], reflective_symmetry: bool) -> Vec<Action> {
-//     actions
-//         .iter()
-//         .map(|action| match action {
-//             Action::Place(_) | Action::Move(_, _) | Action::PushPull(_, _) | Action::Pass => {
-//                 let rotated_action = action.invert();
-//                 if reflective_symmetry {
-//                     rotated_action.vertical_symmetry()
-//                 } else {
-//                     rotated_action
-//                 }
-//             }
-//         })
-//         .collect()
-// }
-
-// fn is_setup_terminating_actions(actions: &[Action]) -> bool {
-//     let num_move_steps: usize = actions
-//         .iter()
-//         .filter(|action| matches!(action, Action::Move(_, _)))
-//         .map(|action| action.get_steps().len())
-//         .sum();
-
-//     num_move_steps > 0 && num_move_steps <= 2
-// }
-
-// fn find_transpositions<C, T>(
-//     actions: &[Action],
-//     game_state: &GameState,
-//     mcts: &MCTS<GameState, Action, Engine, Analyzer, C, T, Value>,
-// ) -> Vec<(Vec<Action>, usize)>
-// where
-//     C: Fn(&GameState, usize, bool) -> f32,
-//     T: Fn(&GameState) -> f32,
-// {
-//     mcts.get_root_node()
-//         .ok()
-//         .map(|root_node| {
-//             let is_p1_turn_to_move = game_state.is_p1_turn_to_move();
-//             let target_hash = actions
-//                 .iter()
-//                 .fold(game_state.clone(), |game_state, action| {
-//                     game_state.take_action(action)
-//                 })
-//                 .get_transposition_hash();
-
-//             most_visited_transposition_actions(
-//                 &root_node,
-//                 game_state,
-//                 is_p1_turn_to_move,
-//                 target_hash,
-//                 mcts,
-//             )
-//         })
-//         .unwrap_or_default()
-// }
-
-// fn most_visited_transposition_actions<C, T>(
-//     node: &MCTSNode<Action, Value>,
-//     game_state: &GameState,
-//     is_p1_turn_to_move: bool,
-//     target_hash: u64,
-//     mcts: &MCTS<GameState, Action, Engine, Analyzer, C, T, Value>,
-// ) -> Vec<(Vec<Action>, usize)>
-// where
-//     C: Fn(&GameState, usize, bool) -> f32,
-//     T: Fn(&GameState) -> f32,
-// {
-//     let mut transpositions = vec![];
-//     for edge in node.iter_edges() {
-//         if let Some(node) = mcts.get_node_of_edge(edge) {
-//             let game_state = game_state.take_action(edge.action());
-//             if game_state.get_transposition_hash() == target_hash {
-//                 transpositions.push((vec![edge.action().clone()], edge.visits()));
-//                 continue;
-//             }
-
-//             if node.is_terminal() || game_state.is_p1_turn_to_move() != is_p1_turn_to_move {
-//                 continue;
-//             }
-
-//             let child_transpositions = most_visited_transposition_actions(
-//                 &node,
-//                 &game_state,
-//                 is_p1_turn_to_move,
-//                 target_hash,
-//                 mcts,
-//             );
-
-//             for (mut actions, visits) in child_transpositions {
-//                 actions.insert(0, edge.action().clone());
-//                 transpositions.push((actions, visits));
-//             }
-//         }
-//     }
-
-//     transpositions
-// }
-
-// #[derive(Clone, Copy, Debug)]
-// enum StepAction {
-//     Place(Square, Piece),
-//     Move(Square, Direction),
-//     Pass,
-// }
+        Ok(actions)
+    }
+}
 
 // fn convert_to_valid_composite_actions(
 //     step_actions: &[StepAction],
