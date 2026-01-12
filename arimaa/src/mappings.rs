@@ -231,14 +231,16 @@ impl TranspositionMap for Mapper {
         outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
         let policy_scores = *outputs
-            .get("policy")
+            .get("policy_head")
             .expect("Policy scores not found in output");
 
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        let value = outputs.get("value").expect("Value not found in output")[0];
+        let value = outputs
+            .get("value_head")
+            .expect("Value not found in output")[0];
 
         let moves_left_vals = outputs
             .get("moves_left_head")
