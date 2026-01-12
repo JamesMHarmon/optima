@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use sample::InputAndTargets;
 use sample_file::{SampleFile, SampleFileReader};
 use self_play::SelfPlayMetrics;
-use serde::{de, Serialize};
+use serde::{Serialize, de};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
@@ -22,17 +22,22 @@ use tensorflow_model::{InputMap, PredictionsMap};
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
+#[cfg(feature = "arimaa")]
 mod arimaa_sampler;
+#[cfg(feature = "connect4")]
+mod connect4_sampler;
 mod deblunder;
 mod deblunder_test;
 mod dir_index;
+mod game;
 mod index;
 mod q_mix;
+#[cfg(feature = "quoridor")]
 mod quoridor_sampler;
 mod sample;
 mod sample_file;
 
-use quoridor_sampler::QuoridorSampler as Sampler;
+use game::Sampler;
 
 use crate::index::*;
 use crate::sample::*;
@@ -224,11 +229,11 @@ impl<S> SampleLoader<S> {
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
-            State = <S as Sample>::State,
-            Action = <S as Sample>::Action,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Action = <S as Sample>::Action,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
         S: Sample,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
@@ -237,10 +242,10 @@ impl<S> SampleLoader<S> {
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
     {
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
 
@@ -270,11 +275,11 @@ impl<S> SampleLoader<S> {
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
-            State = <S as Sample>::State,
-            Action = <S as Sample>::Action,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Action = <S as Sample>::Action,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
         S: Sample,
         <S as Sample>::State: GameState,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
@@ -283,10 +288,10 @@ impl<S> SampleLoader<S> {
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
@@ -315,7 +320,9 @@ impl<S> SampleLoader<S> {
                 let samples = self.load_samples(metrics_path)?;
                 let mut vals = Vec::with_capacity(samples.len() * self.num_values_in_sample);
                 for sample in samples {
-                    let inputs_and_targets = self.sampler.metric_to_input_and_targets(sample.target_score, &sample.metrics);
+                    let inputs_and_targets = self
+                        .sampler
+                        .metric_to_input_and_targets(sample.target_score, &sample.metrics);
                     vals.extend_from_slice(inputs_and_targets.as_slice());
                 }
 
@@ -358,18 +365,18 @@ impl<S> SampleLoader<S> {
         <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
-            State = <S as Sample>::State,
-            Action = <S as Sample>::Action,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Action = <S as Sample>::Action,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
-            State = <S as Sample>::State,
-            Predictions = <S as Sample>::Predictions,
-            PropagatedValues = <S as Sample>::PropagatedValues,
-        >,
+                State = <S as Sample>::State,
+                Predictions = <S as Sample>::Predictions,
+                PropagatedValues = <S as Sample>::PropagatedValues,
+            >,
     {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;

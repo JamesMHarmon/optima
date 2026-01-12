@@ -2,6 +2,7 @@ use crate::Predictions;
 
 use super::MAX_NUMBER_OF_MOVES;
 use super::{Action, GameState};
+use engine::{PlayerResult, PlayerScore, Players, ValidActions};
 
 pub struct Engine {}
 
@@ -44,5 +45,49 @@ impl engine::engine::GameEngine for Engine {
         });
 
         value.map(|value| Predictions::new(value, game_state.get_move_number() as f32))
+    }
+}
+
+impl ValidActions for Engine {
+    type Action = Action;
+    type State = GameState;
+
+    fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
+        game_state.valid_actions().into_iter()
+    }
+}
+
+impl Players for Engine {
+    type State = GameState;
+
+    fn players(&self, _state: &Self::State) -> &[usize] {
+        static PLAYERS: [usize; 2] = [1, 2];
+        &PLAYERS
+    }
+}
+
+impl PlayerScore for Engine {
+    type State = GameState;
+    type PlayerScore = usize;
+
+    fn score(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerScore> {
+        state
+            .is_terminal()
+            .map(|value| if value.0[player_id - 1] > 0.5 { 1 } else { 0 })
+    }
+}
+
+impl PlayerResult for Engine {
+    type State = GameState;
+    type PlayerResult = &'static str;
+
+    fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
+        state
+            .is_terminal()
+            .map(|value| match value.0[player_id - 1] {
+                v if v > 0.5 => "win",
+                v if v < 0.5 => "loss",
+                _ => "draw",
+            })
     }
 }

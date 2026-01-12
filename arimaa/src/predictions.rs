@@ -1,9 +1,11 @@
+use std::fmt::{Display, Formatter};
+
 use mcts::GameLength;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::Value;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Predictions {
     value: Value,
     game_length: f32,
@@ -20,6 +22,16 @@ impl Predictions {
 
     pub fn game_length(&self) -> f32 {
         self.game_length
+    }
+}
+
+impl Display for Predictions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "value: {:?}, game_length: {}",
+            self.value, self.game_length
+        )
     }
 }
 

@@ -45,6 +45,10 @@ impl PartialEq for GameState {
 impl Eq for GameState {}
 
 impl GameState {
+    pub fn player_to_move(&self) -> usize {
+        if self.p1_turn_to_move { 1 } else { 2 }
+    }
+
     pub fn drop_piece(&self, column: usize) -> Self {
         let column_adder = 1 << (7 * (column - 1));
         let all_pieces = self.p1_piece_board | self.p2_piece_board;

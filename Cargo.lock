@@ -2512,6 +2512,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "common",
+ "connect4",
  "engine",
  "env_logger",
  "flate2",

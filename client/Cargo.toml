@@ -8,8 +8,8 @@ publish = false
 [features]
 default = ["quoridor"]
 quoridor = ["dep:quoridor"]
-arimaa = ["dep:arimaa"]
-connect4 = ["dep:connect4"]
+arimaa = ["dep:arimaa", "arimaa/model"]
+connect4 = ["dep:connect4", "connect4/model"]
 
 [dependencies]
 self-play = { path = "../self-play" }

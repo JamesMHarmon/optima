@@ -1,15 +1,18 @@
 use anyhow::Result;
-use common::get_env_usize;
 use std::path::PathBuf;
 use std::{fs, path::Path};
 
-use model::{Latest, Load, Move};
-use tensorflow_model::unarchive;
-use tensorflow_model::{latest, Archive as ArchiveModel};
+use model::{Latest, Move};
+use tensorflow_model::latest;
 
-use super::engine::Engine;
-use super::mappings::Mapper;
-use super::Model;
+#[cfg(feature = "model")]
+use crate::{Engine, Mapper, Model};
+#[cfg(feature = "model")]
+use common::get_env_usize;
+#[cfg(feature = "model")]
+use model::Load;
+#[cfg(feature = "model")]
+use tensorflow_model::{Archive as ArchiveModel, unarchive};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelRef(PathBuf);
@@ -39,7 +42,7 @@ impl Latest for ModelFactory {
     }
 }
 
-#[cfg(feature = "all")]
+#[cfg(feature = "model")]
 impl Load for ModelFactory {
     type MR = ModelRef;
     type M = Model;

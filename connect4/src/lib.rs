@@ -12,12 +12,12 @@ pub mod ugi;
 pub mod value;
 
 mod board;
-mod constants;
+pub mod constants;
 mod zobrist;
 mod zobrist_values;
 
 use board::*;
-use constants::*;
+pub use constants::*;
 use transposition_entry::*;
 use zobrist::*;
 

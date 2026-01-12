@@ -12,6 +12,12 @@ name = "replay_buffer"
 # "cdylib" is necessary to produce a shared library for Python to import from.
 crate-type = ["cdylib"]
 
+[features]
+default = ["quoridor"]
+quoridor = ["dep:quoridor"]
+arimaa = ["dep:arimaa"]
+connect4 = ["dep:connect4"]
+
 [dependencies]
 engine = { path = "../engine" }
 model = { path = "../model" }
@@ -22,12 +28,11 @@ tensorflow-model = { path = "../tensorflow-model", default-features = false, fea
 self-play = { path = "../self-play", default-features = false, features = [
     "traits",
 ] }
-arimaa = { path = "../arimaa", default-features = false, features = [
-    "mappings",
-] }
+arimaa = { path = "../arimaa", default-features = false, optional = true }
 quoridor = { path = "../quoridor", default-features = false, features = [
     "mappings",
-] }
+], optional = true }
+connect4 = { path = "../connect4", optional = true }
 
 anyhow = "1.0.57"
 approx = "0.5.1"

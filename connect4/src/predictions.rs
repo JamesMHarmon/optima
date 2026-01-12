@@ -1,10 +1,10 @@
 use engine::Value as ValueTrait;
 use mcts::GameLength;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::Value;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Predictions {
     value: Value,
     game_length: f32,
