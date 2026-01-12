@@ -6,9 +6,7 @@ pub fn softmax(logits: &[f32], temperature: f32) -> Vec<f32> {
         .map(|&p| ((p - max_p) / temperature).exp())
         .collect::<Vec<_>>();
     let sum = softmaxed.iter().sum::<f32>();
-    let reduced = softmaxed.iter().map(|p| p / sum).collect::<Vec<_>>();
-
-    reduced
+    softmaxed.iter().map(|p| p / sum).collect::<Vec<_>>()
 }
 
 #[cfg(test)]

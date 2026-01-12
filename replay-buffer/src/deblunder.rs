@@ -66,15 +66,12 @@ impl<Ps> PredictionStack<Ps> {
     where
         Ps: PredictionStore<State = S, Predictions = P>,
     {
-        let v = self
-            .p_stores
+        self.p_stores
             .last()
             .expect("There should always be at least one V set")
             .0
             .get_p_for_player(game_state)
-            .expect("V should always be set before latest is called");
-
-        v
+            .expect("V should always be set before latest is called")
     }
 
     fn push<S, P>(&mut self, q_mix_amt: f32)
@@ -90,10 +87,10 @@ impl<Ps> PredictionStack<Ps> {
         Ps: PredictionStore<State = S, Predictions = P>,
         P: Clone,
     {
-        if let Some((p_store, _)) = self.p_stores.first() {
-            if p_store.get_p_for_player(game_state).is_none() {
-                self.set_p(game_state, predictions.clone());
-            }
+        if let Some((p_store, _)) = self.p_stores.first()
+            && p_store.get_p_for_player(game_state).is_none()
+        {
+            self.set_p(game_state, predictions.clone());
         }
     }
 

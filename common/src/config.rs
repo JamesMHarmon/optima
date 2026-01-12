@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use hocon::{Hocon, HoconLoader};
 
 #[derive(Debug)]
@@ -30,10 +30,10 @@ impl ConfigLoader {
             return Err(anyhow!("Top level of config {:?} must be an object", path));
         }
 
-        if let Hocon::Hash(ref hash) = hocon {
-            if hash.is_empty() {
-                return Err(anyhow!("Configurations not found in file {:?}", path));
-            }
+        if let Hocon::Hash(ref hash) = hocon
+            && hash.is_empty()
+        {
+            return Err(anyhow!("Configurations not found in file {:?}", path));
         }
 
         Ok(Self {
@@ -50,10 +50,10 @@ impl ConfigLoader {
         }
 
         let scope = &self.hocon[self.scope.as_str()];
-        if matches!(scope, Hocon::Hash(_)) {
-            if let Some(value) = Self::map_hocon(scope, name) {
-                return Some(value);
-            }
+        if matches!(scope, Hocon::Hash(_))
+            && let Some(value) = Self::map_hocon(scope, name)
+        {
+            return Some(value);
         }
 
         Self::map_hocon(&self.hocon, name)

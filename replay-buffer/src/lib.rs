@@ -163,13 +163,10 @@ impl ReplayBuffer {
 
         data.insert("inputs".to_string(), inputs);
 
-        let dict = data
-            .into_iter()
+        data.into_iter()
             .map(|(k, v)| (k, v.into_pyarray(py)))
             .collect::<HashMap<_, _>>()
-            .into_py_dict(py);
-
-        dict
+            .into_py_dict(py)
     }
 
     fn games(&mut self) -> PyResult<usize> {
