@@ -22,7 +22,6 @@ use tensorflow_model::{InputMap, PredictionsMap};
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
-#[cfg(feature = "arimaa")]
 mod arimaa_sampler;
 #[cfg(feature = "connect4")]
 mod connect4_sampler;

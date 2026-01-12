@@ -15,7 +15,7 @@ crate-type = ["cdylib"]
 [features]
 default = ["quoridor"]
 quoridor = ["dep:quoridor"]
-arimaa = ["dep:arimaa"]
+arimaa = []
 connect4 = ["dep:connect4"]
 
 [dependencies]
@@ -28,7 +28,7 @@ tensorflow-model = { path = "../tensorflow-model", default-features = false, fea
 self-play = { path = "../self-play", default-features = false, features = [
     "traits",
 ] }
-arimaa = { path = "../arimaa", default-features = false, optional = true }
+arimaa = { path = "../arimaa" }
 quoridor = { path = "../quoridor", default-features = false, features = [
     "mappings",
 ], optional = true }

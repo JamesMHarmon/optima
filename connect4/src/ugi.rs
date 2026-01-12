@@ -1,6 +1,9 @@
+#[cfg(feature = "model")]
 use std::path::PathBuf;
 
-use crate::{Action, Engine, GameState, ModelFactory};
+#[cfg(feature = "model")]
+use crate::ModelFactory;
+use crate::{Action, Engine, GameState};
 use engine::GameState as GameStateTrait;
 
 use anyhow::Result;
@@ -14,6 +17,7 @@ impl UGI {
         Self {}
     }
 
+    #[cfg(feature = "model")]
     pub fn model_factory(&self, model_dir: PathBuf) -> ModelFactory {
         ModelFactory::new(model_dir)
     }

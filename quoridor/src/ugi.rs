@@ -1,9 +1,12 @@
+#[cfg(feature = "model")]
 use std::path::PathBuf;
 
-use crate::{Action, Coordinate, Engine, GameState, ModelFactory};
+#[cfg(feature = "model")]
+use crate::ModelFactory;
+use crate::{Action, Coordinate, Engine, GameState};
 use engine::GameState as GameStateTrait;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use regex::Regex;
 use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
@@ -15,6 +18,7 @@ impl UGI {
         Self {}
     }
 
+    #[cfg(feature = "model")]
     pub fn model_factory(&self, model_dir: PathBuf) -> ModelFactory {
         ModelFactory::new(model_dir)
     }
@@ -35,10 +39,7 @@ impl ActionsToMoveString for UGI {
     type Action = Action;
 
     fn actions_to_move_string(&self, _: &GameState, actions: &[Action]) -> String {
-        actions
-            .iter()
-            .map(|a| a.to_string())
-            .join(" ")
+        actions.iter().map(|a| a.to_string()).join(" ")
     }
 }
 
