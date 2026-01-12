@@ -8,7 +8,7 @@ use engine::GameState as GameStateTrait;
 
 use anyhow::Result;
 use itertools::Itertools;
-use ugi::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
+use ugi::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
 
 pub struct UGI {}
 
@@ -67,5 +67,18 @@ impl InitialGameState for UGI {
 
     fn initial_game_state(&self) -> GameState {
         GameState::initial()
+    }
+}
+
+impl ConvertToValidCompositeActions for UGI {
+    type State = GameState;
+    type Action = Action;
+
+    fn convert_to_valid_composite_actions(
+        &self,
+        actions: &[Action],
+        _state: &GameState,
+    ) -> Vec<Action> {
+        actions.to_vec()
     }
 }

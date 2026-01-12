@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::{PropagatedGameLength, PropagatedValue};
+use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::Analyzer;
@@ -8,7 +8,7 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{ActionsToMoveString, InitialGameState, MoveStringToActions, ParseGameState};
+use crate::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
 use crate::{GameManager, InputParser};
 use crate::{
     Output, UGICommand, UGIOptions, log_debug, log_warning, output_ugi_cmd, output_ugi_info,
@@ -22,12 +22,13 @@ pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps>(
     selection_strategy: FnSel,
 ) -> Result<()>
 where
-    S: GameState + Clone + Display + Send + 'static,
+    S: GameState + Clone + Display + TranspositionHash + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
         + InitialGameState<State = S>
         + ActionsToMoveString<State = S, Action = A>
+        + ConvertToValidCompositeActions<State = S, Action = A>
         + Send
         + Sync
         + 'static,

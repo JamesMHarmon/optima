@@ -24,3 +24,17 @@ pub trait InitialGameState {
 
     fn initial_game_state(&self) -> Self::State;
 }
+
+/// Trait for converting actions to valid composite actions
+/// This is useful for games like Arimaa where multiple simple actions
+/// can be combined into composite actions with transposition handling
+pub trait ConvertToValidCompositeActions {
+    type State;
+    type Action;
+
+    fn convert_to_valid_composite_actions(
+        &self,
+        actions: &[Self::Action],
+        game_state: &Self::State,
+    ) -> Vec<Self::Action>;
+}

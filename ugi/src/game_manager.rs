@@ -1,5 +1,5 @@
-use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions};
-use common::{PropagatedGameLength, PropagatedValue};
+use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions, ConvertToValidCompositeActions};
+use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use mcts::{BackpropagationStrategy, EdgeDetails, MCTS, NodeDetails, SelectionStrategy};
@@ -94,7 +94,7 @@ impl<S, A> GameManager<S, A> {
 
 impl<S, A> GameManager<S, A>
 where
-    S: GameState + Clone + Display + Send + 'static,
+    S: GameState + Clone + Display + TranspositionHash + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
 {
     pub fn new<U, E, M, FnB, B, FnSel, Sel, Pr, Ps>(
@@ -107,6 +107,7 @@ where
     where
         U: InitialGameState<State = S>
             + ActionsToMoveString<State = S, Action = A>
+            + ConvertToValidCompositeActions<State = S, Action = A>
             + Send
             + Sync
             + 'static,
@@ -186,9 +187,11 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel> {
 #[allow(clippy::too_many_arguments)]
 impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr> GameManagerInner<S, A, U, E, M, FnB, FnSel>
 where
-    S: GameState + Clone + Display,
+    S: GameState + Clone + Display + TranspositionHash,
     A: Display + Debug + Eq + Clone,
-    U: InitialGameState<State = S> + ActionsToMoveString<State = S, Action = A>,
+    U: InitialGameState<State = S>
+        + ActionsToMoveString<State = S, Action = A>
+        + ConvertToValidCompositeActions<State = S, Action = A>,
     E: GameEngine<State = S, Action = A>
         + ValidActions<State = S, Action = A>
         + Players<State = S>
@@ -231,6 +234,44 @@ where
             backpropagation_strategy,
             selection_strategy,
         }
+    }
+
+    fn find_and_apply_transpositions<B2, Sel2, P2, PV2>(
+        &self,
+        actions: &[A],
+        game_state: &S,
+        mcts: &MCTS<S, A, E, impl model::GameAnalyzer<State = S, Action = A, Predictions = P2>, B2, Sel2, P2, PV2>,
+    ) -> Vec<A>
+    where
+        E: GameEngine<State = S, Action = A, Terminal = P2>,
+        PV2: Default,
+    {
+        let now = Instant::now();
+        let mut transposed_actions = find_transpositions(
+            actions,
+            game_state,
+            mcts,
+            &self.engine,
+            |gs| gs.transposition_hash(),
+        );
+        let elapsed = now.elapsed();
+
+        if !transposed_actions.is_empty() {
+            transposed_actions.sort_by(|a, b| b.1.cmp(&a.1));
+
+            self.output.info(&format!(
+                "Transpositions found: {:?} in {} milliseconds",
+                transposed_actions
+                    .iter()
+                    .map(|(actions, visits)| (actions.len(), visits))
+                    .collect::<Vec<_>>(),
+                elapsed.as_millis()
+            ));
+
+            return transposed_actions.swap_remove(0).0;
+        }
+
+        actions.to_vec()
     }
 
     async fn run_game_loop(&mut self) {
@@ -332,6 +373,7 @@ where
                                 player_to_move,
                                 &pv,
                                 &focus_game_state,
+                                &focus_game_state,
                                 start_time,
                                 &[best_node.Qsa()],
                                 &[node_details.visits],
@@ -363,10 +405,13 @@ where
                     }
                 }
                 CommandInner::MakeMove(actions) => {
-                    // @TODO: Add this for arimaa
-                    // let actions = self
-                    //     .ugi_mapper
-                    //     .convert_to_valid_composite_actions(&actions, &game_state);
+                    // Convert to valid composite actions (for games like Arimaa with step actions)
+                    let actions = self
+                        .ugi_mapper
+                        .convert_to_valid_composite_actions(&actions, &game_state);
+
+                    // Find transpositions to preserve the most-explored branch
+                    let actions = self.find_and_apply_transpositions(&actions, &game_state, mcts);
 
                     self.output
                         .info(&format!("Updating tree with actions: {:?}", &actions));
@@ -512,13 +557,17 @@ where
                         .into_iter()
                         .collect_vec();
 
-                    let node_details =
-                        node_details_container.expect("Expected node_details to have been set");
+                    let node_details = node_details_container
+                        .or_else(|| {
+                            mcts.get_focus_node_details().unwrap()
+                        })
+                        .expect("Expected node_details to have been set");
 
                     self.output_post_search_info(
                         current_player,
                         &pv,
                         &pre_action_game_state,
+                        &focus_game_state,
                         search_start,
                         &scores,
                         &visits,
@@ -573,6 +622,7 @@ where
         player_to_move: usize,
         pv: &[Vec<EdgeDetails<A, PV>>],
         pre_action_game_state: &S,
+        focus_game_state: &S,
         search_start: Instant,
         scores: &[f32],
         visits: &[usize],
@@ -581,19 +631,22 @@ where
         node_details: &NodeDetails<A, PV>,
     ) {
         self.output.info(&format!(
-            "time {time} playertomove {playertomove} score {score:.3} visits {visits} game_length {game_length:.3} depth {depth}",
-            time = search_start.elapsed().as_secs(),
-            playertomove = player_to_move,
-            score = scores.first().unwrap_or(&0.5),
-            visits = visits.iter().max().unwrap_or(&0),
-            game_length = game_lengths.last().unwrap_or(&0.0),
-            depth = depths.iter().max().unwrap_or(&0)
+            "time {} playertomove {} root_score {:.3} score {:.3} game_length {:.1} visits {} depth {} root_transpositionid {} transpositionid {}",
+            search_start.elapsed().as_secs(),
+            player_to_move,
+            scores.first().unwrap_or(&0.5),
+            scores.last().unwrap_or(&0.5),
+            game_lengths.last().unwrap_or(&0.0),
+            visits.iter().max().unwrap_or(&0),
+            depths.iter().max().unwrap_or(&0),
+            pre_action_game_state.transposition_hash(),
+            focus_game_state.transposition_hash()
         ));
 
         let visits_sum = (node_details.visits - 1).max(1);
 
-        for (i, (edge, pv)) in node_details.children.iter().zip(pv).enumerate() {
-            let pv_actions = pv
+        for (i, (edge, pv_line)) in node_details.children.iter().zip(pv).enumerate() {
+            let pv_actions = pv_line
                 .iter()
                 .map(|edge| &edge.action)
                 .cloned()
@@ -701,3 +754,100 @@ fn calc_search_duration(options: &UGIOptions, current_player: usize) -> Duration
 
     std::time::Duration::from_secs_f32(0f32.max(search_time))
 }
+
+/// Find transpositions for a given sequence of actions
+/// Returns a list of alternative action sequences that lead to the same game state,
+/// sorted by visit count (most visited first)
+pub fn find_transpositions<S, A, E, M, B, Sel, P, PV>(
+    actions: &[A],
+    game_state: &S,
+    mcts: &MCTS<S, A, E, M, B, Sel, P, PV>,
+    engine: &E,
+    get_hash: impl Fn(&S) -> u64,
+) -> Vec<(Vec<A>, usize)>
+where
+    S: GameState + Clone,
+    A: Clone + Eq + Debug,
+    E: GameEngine<State = S, Action = A, Terminal = P>,
+    M: model::GameAnalyzer<State = S, Action = A, Predictions = P>,
+    PV: Default,
+{
+    // Calculate target hash after applying all actions
+    let target_hash = actions.iter().fold(game_state.clone(), |gs, action| {
+        engine.take_action(&gs, action)
+    });
+    let target_hash = get_hash(&target_hash);
+
+    let player_to_move = engine.player_to_move(game_state);
+
+    mcts.get_root_node()
+        .ok()
+        .map(|root_node| {
+            find_transposition_paths(
+                &*root_node,
+                game_state,
+                player_to_move,
+                target_hash,
+                mcts,
+                engine,
+                &get_hash,
+            )
+        })
+        .unwrap_or_default()
+}
+
+fn find_transposition_paths<S, A, E, M, B, Sel, P, PV>(
+    node: &mcts::MCTSNode<A, P, PV>,
+    game_state: &S,
+    player_to_move: usize,
+    target_hash: u64,
+    mcts: &MCTS<S, A, E, M, B, Sel, P, PV>,
+    engine: &E,
+    get_hash: &impl Fn(&S) -> u64,
+) -> Vec<(Vec<A>, usize)>
+where
+    S: GameState + Clone,
+    A: Clone + Eq + Debug,
+    E: GameEngine<State = S, Action = A, Terminal = P>,
+    M: model::GameAnalyzer<State = S, Action = A, Predictions = P>,
+    PV: Default,
+{
+    let mut transpositions = vec![];
+
+    for edge in node.iter_visited_edges() {
+        if let Some(child_node) = mcts.get_node_of_edge(edge) {
+            let new_game_state = engine.take_action(game_state, edge.action());
+
+            // Check if this action leads directly to the target
+            if get_hash(&new_game_state) == target_hash {
+                transpositions.push((vec![edge.action().clone()], edge.visits()));
+                continue;
+            }
+
+            // Stop if terminal or if we've switched players
+            if child_node.is_terminal() || engine.player_to_move(&new_game_state) != player_to_move
+            {
+                continue;
+            }
+
+            // Recursively search for transpositions in child nodes
+            let child_transpositions = find_transposition_paths(
+                &*child_node,
+                &new_game_state,
+                player_to_move,
+                target_hash,
+                mcts,
+                engine,
+                get_hash,
+            );
+
+            for (mut actions, visits) in child_transpositions {
+                actions.insert(0, edge.action().clone());
+                transpositions.push((actions, visits));
+            }
+        }
+    }
+
+    transpositions
+}
+
