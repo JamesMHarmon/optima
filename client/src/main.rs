@@ -10,7 +10,7 @@ use dotenv::dotenv;
 use env_logger::Env;
 use game::{
     BackpropagationStrategy, Engine, ModelFactory, ModelRef, SelectionStrategy, StrategyOptions,
-    UGI,
+    TimeStrategy, UGI,
 };
 use log::info;
 use mcts::DynamicCPUCT;
@@ -226,12 +226,15 @@ async fn async_main(cli: Cli) -> Result<()> {
                 SelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
             };
 
+            let time_strategy = TimeStrategy::new();
+
             run_ugi(
                 ugi,
                 engine,
                 model,
                 backpropagation_strategy,
                 selection_strategy,
+                time_strategy,
             )
             .await?
         }

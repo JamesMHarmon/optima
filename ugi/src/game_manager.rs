@@ -1,4 +1,4 @@
-use crate::{ActionsToMoveString, InitialGameState, UGICommand, UGIOption, UGIOptions, ConvertToValidCompositeActions};
+use crate::{ActionsToMoveString, InitialGameState, TimeStrategy, UGICommand, UGIOption, UGIOptions, ConvertToValidCompositeActions};
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
@@ -9,7 +9,7 @@ use rand::thread_rng;
 use std::fmt::{Debug, Display};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::{str, thread};
 use tokio::sync::mpsc;
 
@@ -103,12 +103,13 @@ where
     S: GameState + Clone + Display + TranspositionHash + Send + 'static,
     A: Display + Debug + Eq + Clone + Send + 'static,
 {
-    pub fn new<U, E, M, FnB, B, FnSel, Sel, Pr, Ps>(
+    pub fn new<U, E, M, FnB, B, FnSel, Sel, Pr, Ps, T>(
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
         backpropagation_strategy: FnB,
         selection_strategy: FnSel,
+        time_strategy: T,
     ) -> (Self, mpsc::UnboundedReceiver<Output>)
     where
         U: InitialGameState<State = S>
@@ -137,6 +138,7 @@ where
                 PropagatedValues = B::PropagatedValues,
             > + Send
             + 'static,
+        T: TimeStrategy<S> + Send + 'static,
         M::Analyzer: Send,
         B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
         E::Terminal: Clone,
@@ -166,6 +168,7 @@ where
             model,
             backpropagation_strategy,
             selection_strategy,
+            time_strategy,
         );
 
         let handle = tokio::runtime::Handle::current();
@@ -178,7 +181,7 @@ where
     }
 }
 
-pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel> {
+pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel, T> {
     command_rx: mpsc::Receiver<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
@@ -188,10 +191,11 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel> {
     model: M,
     backpropagation_strategy: FnB,
     selection_strategy: FnSel,
+    time_strategy: T,
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr> GameManagerInner<S, A, U, E, M, FnB, FnSel>
+impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr, T> GameManagerInner<S, A, U, E, M, FnB, FnSel, T>
 where
     S: GameState + Clone + Display + TranspositionHash,
     A: Display + Debug + Eq + Clone,
@@ -213,6 +217,7 @@ where
             Predictions = E::Terminal,
             PropagatedValues = B::PropagatedValues,
         >,
+    T: TimeStrategy<S>,
     B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
     E::Terminal: Clone,
     Ps: Display,
@@ -228,6 +233,7 @@ where
         model: M,
         backpropagation_strategy: FnB,
         selection_strategy: FnSel,
+        time_strategy: T,
     ) -> Self {
         Self {
             command_rx,
@@ -239,6 +245,7 @@ where
             model,
             backpropagation_strategy,
             selection_strategy,
+            time_strategy,
         }
     }
 
@@ -499,7 +506,7 @@ where
                         options_visits = options.visits;
                         options_max_visits = options.max_visits;
                         options_alternative_action_threshold = options.alternative_action_threshold;
-                        search_duration = calc_search_duration(&options, current_player);
+                        search_duration = self.time_strategy.search_duration(&options, &focus_game_state, current_player);
                     }
 
                     let mut actions = Vec::new();
@@ -740,26 +747,7 @@ fn init_options() -> UGIOptions {
     options
 }
 
-fn calc_search_duration(options: &UGIOptions, current_player: usize) -> Duration {
-    let current_g_reserve_time = options.current_g_reserve_time;
-    let current_s_reserve_time = options.current_s_reserve_time;
-    let reserve_time_to_use = options.reserve_time_to_use;
-    let time_per_move = options.time_per_move;
-    let fixed_time = options.fixed_time;
-    let time_buffer = options.time_buffer;
 
-    let reserve_time: f32 = if current_player == 1 {
-        current_g_reserve_time
-    } else {
-        current_s_reserve_time
-    };
-    let reserve_time: f32 = reserve_time.min(reserve_time - time_per_move).max(0.0);
-    let search_time: f32 = reserve_time * reserve_time_to_use + time_per_move;
-    let search_time = search_time - time_buffer - time_per_move * 0.05;
-    let search_time: f32 = fixed_time.unwrap_or(search_time);
-
-    std::time::Duration::from_secs_f32(0f32.max(search_time))
-}
 
 /// Find transpositions for a given sequence of actions
 /// Returns a list of alternative action sequences that lead to the same game state,

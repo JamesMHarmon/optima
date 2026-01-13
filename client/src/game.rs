@@ -25,11 +25,14 @@ pub use quoridor::{
     UGI,
 };
 
+#[cfg(feature = "quoridor")]
+pub use ugi::BaseTimeStrategy as TimeStrategy;
+
 #[cfg(feature = "arimaa")]
 pub use arimaa::{
     ArimaaBackpropagationStrategy as BackpropagationStrategy,
-    ArimaaSelectionStrategy as SelectionStrategy, ArimaaStrategyOptions as StrategyOptions, Engine,
-    ModelFactory, ModelRef, UGI,
+    ArimaaSelectionStrategy as SelectionStrategy, ArimaaStrategyOptions as StrategyOptions,
+    ArimaaTimeStrategy as TimeStrategy, Engine, ModelFactory, ModelRef, UGI,
 };
 
 #[cfg(feature = "connect4")]
@@ -38,3 +41,6 @@ pub use connect4::{
     Connect4SelectionStrategy as SelectionStrategy, Connect4StrategyOptions as StrategyOptions,
     Engine, ModelFactory, ModelRef, UGI,
 };
+
+#[cfg(feature = "connect4")]
+pub use ugi::BaseTimeStrategy as TimeStrategy;

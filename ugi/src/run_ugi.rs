@@ -8,18 +8,19 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
+use crate::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState, TimeStrategy};
 use crate::{GameManager, InputParser};
 use crate::{
     Output, UGICommand, UGIOptions, log_debug, log_warning, output_ugi_cmd, output_ugi_info,
 };
 
-pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps>(
+pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
     ugi_mapper: U,
     engine: E,
     model: M,
     backpropagation_strategy: FnB,
     selection_strategy: FnSel,
+    time_strategy: T,
 ) -> Result<()>
 where
     S: GameState + Clone + Display + TranspositionHash + Send + 'static,
@@ -52,6 +53,7 @@ where
             PropagatedValues = B::PropagatedValues,
         > + Send
         + 'static,
+    T: TimeStrategy<S> + Send + 'static,
     E::Terminal: Clone,
     Ps: Display,
     Pr: Display,
@@ -64,6 +66,7 @@ where
         model,
         backpropagation_strategy,
         selection_strategy,
+        time_strategy,
     );
     let input_parser = InputParser::new(&*ugi_mapper);
 
