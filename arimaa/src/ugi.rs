@@ -77,9 +77,9 @@ impl ConvertToValidCompositeActions for UGI {
     fn convert_to_valid_composite_actions(
         &self,
         actions: &[Action],
-        _state: &GameState,
+        state: &GameState,
     ) -> Vec<Action> {
-        actions.to_vec()
+        convert_to_valid_composite_actions(actions, state)
     }
 }
 
@@ -149,8 +149,7 @@ fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> 
     let mut game_state = game_state;
     let mut actions_as_string = Vec::new();
     let actions_last_idx = actions.len() - 1;
-
-    add_placements(&game_state, actions, &mut actions_as_string);
+    let mut cummulative_place_actions = Vec::new();
 
     for (i, action) in actions.iter().enumerate() {
         match action {
@@ -187,7 +186,14 @@ fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> 
                         )));
                 }
             }
-            Action::Place(_) => {}
+            Action::Place(_) => {
+                cummulative_place_actions.push(action.clone());
+
+                if cummulative_place_actions.len() == 8 {
+                    add_placements(&game_state, &cummulative_place_actions, &mut actions_as_string);
+                    cummulative_place_actions.clear();
+                }
+            }
             Action::Pass => {}
         }
 
@@ -205,6 +211,7 @@ fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> 
 }
 
 fn add_placements(game_state: &GameState, actions: &[Action], actions_string: &mut Vec<String>) {
+    assert_eq!(actions.len(), 8, "Expected 8 placement actions");
 
     let rows = if game_state.is_p1_turn_to_move() {
         [2, 1]
@@ -299,74 +306,46 @@ fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Ac
     }
 }
 
-// fn convert_to_valid_composite_actions(
-//     step_actions: &[StepAction],
-//     game_state: &GameState,
-// ) -> Vec<Action> {
-//     let composite_actions = convert_step_actions_into_composite_actions(step_actions);
+fn convert_to_valid_composite_actions(
+    actions: &[Action],
+    game_state: &GameState,
+) -> Vec<Action> {
+    if !game_state.is_play_phase() {
+        return actions.to_vec();
+    }
 
-//     if !game_state.is_play_phase() {
-//         return composite_actions;
-//     }
+    let target_game_state = actions
+        .iter()
+        .fold(game_state.clone(), |target_game_state, a| {
+            target_game_state.take_action(a)
+        });
 
-//     let target_game_state = composite_actions
-//         .into_iter()
-//         .fold(game_state.clone(), |target_game_state, a| {
-//             target_game_state.take_action(&a)
-//         });
+    let target_hash = target_game_state.get_transposition_hash();
 
-//     let target_hash = target_game_state.get_transposition_hash();
+    match_target_hash(Cow::Borrowed(game_state), target_hash)
+        .expect("No valid set of actions found")
+}
 
-//     match_target_hash(Cow::Borrowed(game_state), target_hash)
-//         .expect("No valid set of actions found")
-// }
+fn match_target_hash(game_state: Cow<GameState>, target_hash: u64) -> Option<Vec<Action>> {
+    let p1_turn_to_move = game_state.is_p1_turn_to_move();
+    for action in game_state.valid_actions() {
+        let new_game_state = game_state.take_action(&action);
 
-// fn match_target_hash(game_state: Cow<GameState>, target_hash: u64) -> Option<Vec<Action>> {
-//     let p1_turn_to_move = game_state.is_p1_turn_to_move();
-//     for action in game_state.valid_actions() {
-//         let new_game_state = game_state.take_action(&action);
+        if new_game_state.get_transposition_hash() == target_hash {
+            return Some(vec![action]);
+        }
 
-//         if new_game_state.get_transposition_hash() == target_hash {
-//             return Some(vec![action]);
-//         }
+        if matches!(new_game_state.is_terminal(), Some(_))
+            || new_game_state.is_p1_turn_to_move() != p1_turn_to_move
+        {
+            continue;
+        }
 
-//         if matches!(new_game_state.is_terminal(), Some(_))
-//             || new_game_state.is_p1_turn_to_move() != p1_turn_to_move
-//         {
-//             continue;
-//         }
+        if let Some(mut actions) = match_target_hash(Cow::Owned(new_game_state), target_hash) {
+            actions.insert(0, action);
+            return Some(actions);
+        }
+    }
 
-//         if let Some(mut actions) = match_target_hash(Cow::Owned(new_game_state), target_hash) {
-//             actions.insert(0, action);
-//             return Some(actions);
-//         }
-//     }
-
-//     None
-// }
-
-// fn convert_step_actions_into_composite_actions(step_actions: &[StepAction]) -> Vec<Action> {
-//     let place_actions = step_actions
-//         .iter()
-//         .filter_map(|a| match a {
-//             StepAction::Place(square, piece) => Some((square, piece)),
-//             _ => None,
-//         })
-//         .filter(|(_, p)| **p != Piece::Rabbit)
-//         .sorted_by(|(_, piece_a), (_, piece_b)| Ord::cmp(piece_b, piece_a))
-//         .map(|(square, _)| Action::Place(*square));
-
-//     let moves = step_actions.iter().filter_map(|a| match a {
-//         StepAction::Place(_, _) => None,
-//         StepAction::Pass => Some(Action::Pass),
-//         StepAction::Move(square, dir) => {
-//             Some(Action::Move(*square, std::iter::once(dir).collect()))
-//         }
-//     });
-
-//     let actions = place_actions.chain(moves).collect();
-
-//     log_debug(&format!("{:?}", actions));
-
-//     actions
-// }
+    None
+}
