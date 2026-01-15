@@ -609,7 +609,7 @@ where
             let is_root = depth == 1;
 
             let selected_edge_index = if let Some(focus_action) = focus_actions.get(depth - 1) {
-                node.get_position_of_visited_action(focus_action)
+                node.get_position_of_action(focus_action)
                     .ok_or_else(|| anyhow!("Focused action was not found"))?
             } else {
                 selection_strategy.select_path(node, &game_state, is_root)?

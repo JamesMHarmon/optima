@@ -122,7 +122,16 @@ where
             .map(|(index, _)| index)
             .expect("Should have found a top action idx.");
 
-        let action_policy = self.unvisited_edges.swap_remove(top_action_idx);
+        self.move_unvisited_to_visited(top_action_idx);
+
+        // Cleanup any spare capacity from the actions vec.
+        if self.unvisited_edges.capacity() - self.unvisited_edges.len() > 16 {
+            self.unvisited_edges.shrink_to_fit();
+        }
+    }
+
+    fn move_unvisited_to_visited(&mut self, unvisited_idx: usize) {
+        let action_policy = self.unvisited_edges.swap_remove(unvisited_idx);
 
         // Control the amount of capacity that is added to the vec as we don't want it doubling by default.
         if self.visited_edges.capacity() == self.visited_edges.len() {
@@ -130,11 +139,6 @@ where
         }
 
         self.visited_edges.push(action_policy.into());
-
-        // Cleanup any spare capacity from the actions vec.
-        if self.unvisited_edges.capacity() - self.unvisited_edges.len() > 16 {
-            self.unvisited_edges.shrink_to_fit();
-        }
     }
 }
 
@@ -145,5 +149,19 @@ where
 {
     pub fn get_child_of_action(&mut self, action: &A) -> Option<&mut MCTSEdge<A, PV>> {
         self.iter_all_edges().find(|e| e.action() == action)
+    }
+
+    pub fn get_position_of_action(&mut self, action: &A) -> Option<usize> {
+        if let Some(pos) = self.visited_edges.iter().position(|c| c.action() == action) {
+            return Some(pos);
+        }
+
+        let unvisited_idx = self
+            .unvisited_edges
+            .iter()
+            .position(|a| &a.action == action)?;
+
+        self.move_unvisited_to_visited(unvisited_idx);
+        Some(self.visited_edges.len() - 1)
     }
 }
