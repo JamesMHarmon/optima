@@ -8,7 +8,10 @@ use std::fmt::{Debug, Display};
 use std::io::stdin;
 use std::sync::Arc;
 
-use crate::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState, TimeStrategy};
+use crate::{
+    ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions,
+    ParseGameState, TimeStrategy,
+};
 use crate::{GameManager, InputParser};
 use crate::{
     Output, UGICommand, UGIOptions, log_debug, log_warning, output_ugi_cmd, output_ugi_info,

@@ -9,7 +9,10 @@ use engine::GameState as GameStateTrait;
 use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use regex::Regex;
-use ugi::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
+use ugi::{
+    ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions,
+    ParseGameState,
+};
 
 pub struct UGI {}
 

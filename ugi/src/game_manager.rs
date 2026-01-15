@@ -1,4 +1,7 @@
-use crate::{ActionsToMoveString, InitialGameState, TimeStrategy, UGICommand, UGIOption, UGIOptions, ConvertToValidCompositeActions};
+use crate::{
+    ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, TimeStrategy,
+    UGICommand, UGIOption, UGIOptions,
+};
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
@@ -249,24 +252,32 @@ where
         }
     }
 
-    fn find_and_apply_transpositions<B2, Sel2, P2, PV2>(
+    fn normalize_actions(
         &self,
         actions: &[A],
         game_state: &S,
-        mcts: &MCTS<S, A, E, impl model::GameAnalyzer<State = S, Action = A, Predictions = P2>, B2, Sel2, P2, PV2>,
-    ) -> Vec<A>
-    where
-        E: GameEngine<State = S, Action = A, Terminal = P2>,
-        PV2: Default,
-    {
+        mcts: &MCTS<S, A, E, M::Analyzer, B, Sel, E::Terminal, B::PropagatedValues>,
+    ) -> Vec<A> {
+        // Convert to valid composite actions (for games like Arimaa with step actions)
+        let actions = self
+            .ugi_mapper
+            .convert_to_valid_composite_actions(actions, game_state);
+
+        // Find transpositions to follow the most-explored branch
+        self.find_transposition_path(&actions, game_state, mcts)
+    }
+
+    fn find_transposition_path(
+        &self,
+        actions: &[A],
+        game_state: &S,
+        mcts: &MCTS<S, A, E, M::Analyzer, B, Sel, E::Terminal, B::PropagatedValues>,
+    ) -> Vec<A> {
         let now = Instant::now();
-        let mut transposed_actions = find_transpositions(
-            actions,
-            game_state,
-            mcts,
-            &self.engine,
-            |gs| gs.transposition_hash(),
-        );
+        let mut transposed_actions =
+            find_transpositions(actions, game_state, mcts, &self.engine, |gs| {
+                gs.transposition_hash()
+            });
         let elapsed = now.elapsed();
 
         if !transposed_actions.is_empty() {
@@ -418,13 +429,7 @@ where
                     }
                 }
                 CommandInner::MakeMove(actions) => {
-                    // Convert to valid composite actions (for games like Arimaa with step actions)
-                    let actions = self
-                        .ugi_mapper
-                        .convert_to_valid_composite_actions(&actions, &game_state);
-
-                    // Find transpositions to preserve the most-explored branch
-                    let actions = self.find_and_apply_transpositions(&actions, &game_state, mcts);
+                    let actions = self.normalize_actions(&actions, &game_state, mcts);
 
                     self.output
                         .info(&format!("Updating tree with actions: {:?}", &actions));
@@ -455,6 +460,8 @@ where
                     self.display_board(&game_state);
                 }
                 CommandInner::FocusActions(actions) => {
+                    let actions = self.normalize_actions(&actions, &focus_game_state, mcts);
+
                     for action in actions {
                         let is_valid_action = self
                             .engine
@@ -506,7 +513,11 @@ where
                         options_visits = options.visits;
                         options_max_visits = options.max_visits;
                         options_alternative_action_threshold = options.alternative_action_threshold;
-                        search_duration = self.time_strategy.search_duration(&options, &focus_game_state, current_player);
+                        search_duration = self.time_strategy.search_duration(
+                            &options,
+                            &focus_game_state,
+                            current_player,
+                        );
                     }
 
                     let mut actions = Vec::new();
@@ -571,9 +582,7 @@ where
                         .collect_vec();
 
                     let node_details = node_details_container
-                        .or_else(|| {
-                            mcts.get_focus_node_details().unwrap()
-                        })
+                        .or_else(|| mcts.get_focus_node_details().unwrap())
                         .expect("Expected node_details to have been set");
 
                     self.output_post_search_info(
@@ -747,8 +756,6 @@ fn init_options() -> UGIOptions {
     options
 }
 
-
-
 /// Find transpositions for a given sequence of actions
 /// Returns a list of alternative action sequences that lead to the same game state,
 /// sorted by visit count (most visited first)
@@ -844,4 +851,3 @@ where
 
     transpositions
 }
-

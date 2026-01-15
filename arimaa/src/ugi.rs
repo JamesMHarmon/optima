@@ -10,7 +10,10 @@ use engine::GameState as GameStateTrait;
 
 use anyhow::Result;
 use itertools::Itertools;
-use ugi::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
+use ugi::{
+    ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions,
+    ParseGameState,
+};
 
 pub struct UGI {}
 
@@ -126,7 +129,11 @@ fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> 
                 cummulative_place_actions.push(action.clone());
 
                 if cummulative_place_actions.len() == 8 {
-                    add_placements(&game_state, &cummulative_place_actions, &mut actions_as_string);
+                    add_placements(
+                        &game_state,
+                        &cummulative_place_actions,
+                        &mut actions_as_string,
+                    );
                     cummulative_place_actions.clear();
                 }
             }
@@ -223,7 +230,6 @@ fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Ac
             .into_iter()
             .map(|(_, square)| Action::Place(square))
             .collect())
-            
     } else {
         let mut actions = actions
             .iter()
@@ -242,10 +248,7 @@ fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Ac
     }
 }
 
-fn convert_to_valid_composite_actions(
-    actions: &[Action],
-    game_state: &GameState,
-) -> Vec<Action> {
+fn convert_to_valid_composite_actions(actions: &[Action], game_state: &GameState) -> Vec<Action> {
     if !game_state.is_play_phase() {
         return actions.to_vec();
     }

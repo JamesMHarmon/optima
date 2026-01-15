@@ -8,7 +8,10 @@ use engine::GameState as GameStateTrait;
 
 use anyhow::Result;
 use itertools::Itertools;
-use ugi::{ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions, ParseGameState};
+use ugi::{
+    ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, MoveStringToActions,
+    ParseGameState,
+};
 
 pub struct UGI {}
 
