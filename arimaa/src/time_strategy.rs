@@ -42,7 +42,7 @@ impl TimeStrategy<GameState> for ArimaaTimeStrategy {
         let search_time: f32 = fixed_time.unwrap_or(search_time);
         
         let search_time = if game_state.is_play_phase() {
-            search_time
+            search_time / 4.0
         } else {
             search_time / 8.0
         };

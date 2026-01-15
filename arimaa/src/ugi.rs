@@ -55,10 +55,8 @@ impl MoveStringToActions for UGI {
 impl ParseGameState for UGI {
     type State = GameState;
 
-    fn parse_game_state(&self, _str: &str) -> Result<GameState> {
-        // Connect4 doesn't have a standard FEN format, so we just return initial state
-        // A more complete implementation would parse a position string
-        Ok(GameState::initial())
+    fn parse_game_state(&self, str: &str) -> Result<GameState> {
+        str.parse()
     }
 }
 
@@ -82,68 +80,6 @@ impl ConvertToValidCompositeActions for UGI {
         convert_to_valid_composite_actions(actions, state)
     }
 }
-
-// use anyhow::Result;
-// use arimaa::value::Value;
-// use arimaa::{convert_piece_to_letter, Action, Direction, ModelRef, Piece, Square};
-// use arimaa::{Analyzer, Engine, GameState, ModelFactory};
-// use clap::Parser;
-// use cli::Cli;
-// use engine::engine::GameEngine as EngineTrait;
-// use engine::game_state::GameState as GameStateTrait;
-// use env_logger::Env;
-// use itertools::Itertools;
-// use mcts::mcts::MCTSNode;
-// use mcts::mcts::{MCTSOptions, MCTS};
-// use mcts::node_details::PUCT;
-// use model::{Analyzer as AnalyzerTrait, Load};
-// // use model::{Model as ModelTrait, ModelFactory as ModelFactoryTrait};
-// use options::{UGIOption, UGIOptions};
-// use rand::seq::IteratorRandom;
-// use rand::thread_rng;
-// use regex::Regex;
-// use std::borrow::Cow;
-// use std::io::stdin;
-// use std::path::PathBuf;
-// use std::sync::atomic::{AtomicBool, Ordering};
-// use std::sync::{Arc, Mutex};
-// use std::thread;
-// use std::time::{Duration, Instant};
-// use tokio::sync::mpsc;
-
-// struct ArimaaUGI {}
-
-// struct ArimaaUGIAction {}
-
-// fn calculate_search_duration(
-//     options: &UGIOptions,
-//     game_state: &GameState,
-//     current_player: usize,
-// ) -> Duration {
-//     let current_g_reserve_time = options.current_g_reserve_time;
-//     let current_s_reserve_time = options.current_s_reserve_time;
-//     let reserve_time_to_use = options.reserve_time_to_use;
-//     let time_per_move = options.time_per_move;
-//     let fixed_time = options.fixed_time;
-//     let time_buffer = options.time_buffer;
-
-//     let reserve_time: f32 = if current_player == 1 {
-//         current_g_reserve_time
-//     } else {
-//         current_s_reserve_time
-//     };
-//     let reserve_time: f32 = reserve_time.min(reserve_time - time_per_move).max(0.0);
-//     let search_time: f32 = reserve_time * reserve_time_to_use + time_per_move;
-//     let search_time = search_time - time_buffer - time_per_move * 0.05;
-//     let search_time: f32 = fixed_time.unwrap_or(search_time);
-//     let search_time = if game_state.is_play_phase() {
-//         search_time
-//     } else {
-//         search_time / 8.0
-//     };
-
-//     std::time::Duration::from_secs_f32(0f32.max(search_time))
-// }
 
 fn convert_actions_to_move_string(game_state: GameState, actions: &[Action]) -> String {
     let mut game_state = game_state;
@@ -335,7 +271,7 @@ fn match_target_hash(game_state: Cow<GameState>, target_hash: u64) -> Option<Vec
             return Some(vec![action]);
         }
 
-        if matches!(new_game_state.is_terminal(), Some(_))
+        if new_game_state.is_terminal().is_some()
             || new_game_state.is_p1_turn_to_move() != p1_turn_to_move
         {
             continue;

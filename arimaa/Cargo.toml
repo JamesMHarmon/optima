@@ -32,7 +32,7 @@ model = { path = "../model" }
 tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
     "traits",
 ] }
-arimaa-engine = { path = "../../arimaa-engine/arimaa-engine" }
+arimaa-engine = { path = "../../arimaa-engine" }
 mcts = { path = "../mcts" }
 ugi = { path = "../ugi" }
 
