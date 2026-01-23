@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 use std::task::{Context, Poll};
 use tensorflow::*;
-use tokio::sync::{oneshot, oneshot::Receiver, oneshot::Sender};
+use tokio::sync::oneshot::{self, Sender};
 
 use super::*;
 use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
@@ -318,42 +318,31 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type Future = UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>>;
+    type Future = AnalysisFuture<Self::Action, Self::Predictions>;
 
-    fn get_state_analysis(
-        &self,
-        game_state: &S,
-    ) -> UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>> {
+    fn get_state_analysis(&self, game_state: &S) -> Self::Future {
         let (tx, rx) = oneshot::channel();
         let sender = &self.batching_model.1;
         sender
             .send((game_state.to_owned(), tx))
             .unwrap_or_else(|_| debug!("Channel closed"));
 
-        UnwrappedReceiver::new(rx)
+        AnalysisFuture { receiver: rx }
     }
 }
 
-use pin_project::pin_project;
-
-#[pin_project]
-pub struct UnwrappedReceiver<T> {
-    #[pin]
-    receiver: Receiver<T>,
+/// A future that resolves to a GameStateAnalysis
+pub struct AnalysisFuture<A, P> {
+    receiver: oneshot::Receiver<GameStateAnalysis<A, P>>,
 }
 
-impl<T> UnwrappedReceiver<T> {
-    fn new(receiver: Receiver<T>) -> Self {
-        UnwrappedReceiver { receiver }
-    }
-}
+impl<A, P> Future for AnalysisFuture<A, P> {
+    type Output = GameStateAnalysis<A, P>;
 
-impl<T> Future for UnwrappedReceiver<T> {
-    type Output = T;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-        match self.as_mut().project().receiver.poll(cx) {
-            Poll::Ready(val) => Poll::Ready(val.expect("Expected a receivable value")),
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match Pin::new(&mut self.receiver).poll(cx) {
+            Poll::Ready(Ok(analysis)) => Poll::Ready(analysis),
+            Poll::Ready(Err(_)) => panic!("Analysis channel closed before receiving result"),
             Poll::Pending => Poll::Pending,
         }
     }
