@@ -11,17 +11,16 @@ use parking_lot::Mutex;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelBridge, ParallelIterator,
 };
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::HashMap;
 use std::future::Future;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Weak;
 use std::task::{Context, Poll};
-use std::{collections::binary_heap::PeekMut, sync::Weak};
 use tensorflow::*;
-use tokio::sync::{mpsc, oneshot, oneshot::Receiver, oneshot::Sender};
+use tokio::sync::{oneshot, oneshot::Receiver, oneshot::Sender};
 
 use super::*;
 use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
@@ -301,26 +300,11 @@ type BatchingModelAndSender<S, A, P, E, Map, Te> = (
 
 pub struct GameAnalyzer<S, A, P, E, Map, Te> {
     batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>,
-    analysed_state_ordered: CompletedAnalysisOrdered,
-    analysed_state_sender: mpsc::UnboundedSender<AnalysisToSend<A, P>>,
 }
 
-impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te>
-where
-    A: Send + 'static,
-    P: Send + 'static,
-{
+impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te> {
     fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>) -> Self {
-        let (analysed_state_sender, analyzed_state_receiver) = mpsc::unbounded_channel();
-
-        let analysed_state_ordered =
-            CompletedAnalysisOrdered::with_capacity(analyzed_state_receiver, 1);
-
-        Self {
-            batching_model,
-            analysed_state_ordered,
-            analysed_state_sender,
-        }
+        Self { batching_model }
     }
 }
 
@@ -341,16 +325,10 @@ where
         game_state: &S,
     ) -> UnwrappedReceiver<GameStateAnalysis<Self::Action, Self::Predictions>> {
         let (tx, rx) = oneshot::channel();
-        let id = self.analysed_state_ordered.get_id();
         let sender = &self.batching_model.1;
         sender
-            .send((
-                id,
-                game_state.to_owned(),
-                self.analysed_state_sender.clone(),
-                tx,
-            ))
-            .unwrap_or_else(|_| debug!("Channel 3 Closed"));
+            .send((game_state.to_owned(), tx))
+            .unwrap_or_else(|_| debug!("Channel closed"));
 
         UnwrappedReceiver::new(rx)
     }
@@ -381,25 +359,9 @@ impl<T> Future for UnwrappedReceiver<T> {
     }
 }
 
-type StatesToAnalyse<S, A, P> = (
-    usize,
-    S,
-    mpsc::UnboundedSender<AnalysisToSend<A, P>>,
-    Sender<GameStateAnalysis<A, P>>,
-);
+type StatesToAnalyse<S, A, P> = (S, Sender<GameStateAnalysis<A, P>>);
 
-type AnalysisToSend<A, P> = (
-    usize,
-    GameStateAnalysis<A, P>,
-    Sender<GameStateAnalysis<A, P>>,
-);
-
-type StatesToInfer<S, A, P> = (
-    usize,
-    S,
-    tokio::sync::mpsc::UnboundedSender<AnalysisToSend<A, P>>,
-    tokio::sync::oneshot::Sender<GameStateAnalysis<A, P>>,
-);
+type StatesToInfer<S, A, P> = (S, Sender<GameStateAnalysis<A, P>>);
 
 struct BatchingModel<E, Map, Te> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
@@ -467,11 +429,7 @@ where
         let states_to_predict_tx = &states_to_predict_tx;
 
         rayon::scope_fifo(move |s| {
-            // receiver
-            //     .iter()
-            //     .par_bridge()
-            //     .for_each(|(id, state_to_analyse, unordered_tx, tx)| {
-            while let Ok((id, state_to_analyse, unordered_tx, tx)) = receiver.recv() {
+            while let Ok((state_to_analyse, tx)) = receiver.recv() {
                 s.spawn_fifo(move |_| {
                     if let Some(analysis) = Self::try_immediate_analysis(
                         &state_to_analyse,
@@ -480,13 +438,12 @@ where
                         mapper,
                         reporter,
                     ) {
-                        unordered_tx
-                            .send((id, analysis, tx))
-                            .unwrap_or_else(|_| debug!("Channel 1 Closed"));
+                        tx.send(analysis)
+                            .unwrap_or_else(|_| debug!("Channel closed"));
                     } else {
                         states_to_predict_tx
-                            .send((id, state_to_analyse, unordered_tx, tx))
-                            .unwrap_or_else(|_| debug!("Channel 2 Closed"));
+                            .send((state_to_analyse, tx))
+                            .unwrap_or_else(|_| debug!("Channel closed"));
                     }
                 });
             }
@@ -558,7 +515,7 @@ where
                         .iter()
                         .zip(tensor.chunks_mut(input_len))
                         .par_bridge()
-                        .for_each(|((_, state_to_analyse, _, _), tensor_chunk)| {
+                        .for_each(|((state_to_analyse, _), tensor_chunk)| {
                             mapper.game_state_to_input(state_to_analyse, tensor_chunk, Mode::Infer);
                         });
 
@@ -589,7 +546,7 @@ where
         states_to_analyse
             .into_par_iter()
             .enumerate()
-            .for_each(|(i, (id, game_state, tx, tx2))| {
+            .for_each(|(i, (game_state, tx))| {
                 let outputs = predictions
                     .outputs
                     .iter()
@@ -611,8 +568,8 @@ where
                     mapper,
                 );
 
-                tx.send((id, analysis, tx2))
-                    .unwrap_or_else(|_| debug!("Channel 4 Closed"));
+                tx.send(analysis)
+                    .unwrap_or_else(|_| debug!("Channel closed"));
             });
     }
 
@@ -659,96 +616,6 @@ where
         reporter.set_analyzed_node();
 
         None
-    }
-}
-
-struct StateToTransmit<A, P> {
-    id: usize,
-    tx: Sender<GameStateAnalysis<A, P>>,
-    analysis: GameStateAnalysis<A, P>,
-}
-
-impl<A, P> Ord for StateToTransmit<A, P> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.id.cmp(&self.id)
-    }
-}
-
-impl<A, P> PartialOrd for StateToTransmit<A, P> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<A, P> PartialEq for StateToTransmit<A, P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<A, P> Eq for StateToTransmit<A, P> {}
-
-struct CompletedAnalysisOrdered {
-    id_generator: AtomicUsize,
-}
-
-impl CompletedAnalysisOrdered {
-    fn with_capacity<A, P>(
-        analyzed_state_receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, P>>,
-        n: usize,
-    ) -> Self
-    where
-        A: Send + 'static,
-        P: Send + 'static,
-    {
-        Self::create_ordering_task(analyzed_state_receiver, n);
-
-        Self {
-            id_generator: AtomicUsize::new(1),
-        }
-    }
-
-    fn get_id(&self) -> usize {
-        self.id_generator.fetch_add(1, Ordering::Relaxed)
-    }
-
-    fn create_ordering_task<A, P>(
-        receiver: mpsc::UnboundedReceiver<AnalysisToSend<A, P>>,
-        capacity: usize,
-    ) where
-        A: Send + 'static,
-        P: Send + 'static,
-    {
-        tokio::task::spawn(async move {
-            let mut analyzed_states_to_tx =
-                BinaryHeap::<StateToTransmit<A, P>>::with_capacity(capacity);
-            let mut next_id_to_tx: usize = 1;
-            let mut receiver = receiver;
-
-            while let Some(analysed_state) = receiver.recv().await {
-                let (id, analysis, tx) = analysed_state;
-                if id == next_id_to_tx {
-                    next_id_to_tx += 1;
-                    if tx.send(analysis).is_err() {
-                        debug!("Failed to send analysis 1");
-                    }
-
-                    while let Some(val) = analyzed_states_to_tx.peek_mut() {
-                        if val.id == next_id_to_tx {
-                            let StateToTransmit { tx, analysis, .. } = PeekMut::pop(val);
-                            next_id_to_tx += 1;
-                            if tx.send(analysis).is_err() {
-                                debug!("Failed to send analysis 2");
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    analyzed_states_to_tx.push(StateToTransmit { id, analysis, tx })
-                }
-            }
-        });
     }
 }
 
