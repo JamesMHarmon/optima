@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 use std::task::{Context, Poll};
 use tensorflow::*;
-use tokio::sync::oneshot::{self, Sender};
+use tokio::sync::oneshot;
 
 use super::*;
 use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
@@ -293,6 +293,25 @@ impl OperationWithIndex {
     }
 }
 
+/// Enum to support both async (tokio oneshot) and blocking (crossbeam) response channels
+enum ResponseChannel<A, P> {
+    Async(oneshot::Sender<GameStateAnalysis<A, P>>),
+    Blocking(crossbeam::channel::Sender<GameStateAnalysis<A, P>>),
+}
+
+impl<A, P> ResponseChannel<A, P> {
+    fn send(self, analysis: GameStateAnalysis<A, P>) {
+        match self {
+            ResponseChannel::Async(tx) => {
+                let _ = tx.send(analysis);
+            }
+            ResponseChannel::Blocking(tx) => {
+                let _ = tx.send(analysis);
+            }
+        }
+    }
+}
+
 type BatchingModelAndSender<S, A, P, E, Map, Te> = (
     BatchingModel<E, Map, Te>,
     UnboundedSender<StatesToAnalyse<S, A, P>>,
@@ -324,10 +343,37 @@ where
         let (tx, rx) = oneshot::channel();
         let sender = &self.batching_model.1;
         sender
-            .send((game_state.to_owned(), tx))
+            .send((game_state.to_owned(), ResponseChannel::Async(tx)))
             .unwrap_or_else(|_| debug!("Channel closed"));
 
         AnalysisFuture { receiver: rx }
+    }
+}
+
+impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te>
+where
+    S: Clone,
+    A: Clone,
+{
+    /// Blocking version of get_state_analysis.
+    ///
+    /// WARNING: This blocks the current thread and should NOT be used in async contexts
+    /// or within the MCTS parallel search. Use `get_state_analysis()` instead for
+    /// async/concurrent scenarios.
+    ///
+    /// This method is primarily intended for:
+    /// - Simple testing scenarios
+    /// - Single-threaded evaluation
+    /// - Command-line tools
+    pub fn get_state_analysis_blocking(&self, game_state: &S) -> GameStateAnalysis<A, P> {
+        let (tx, rx) = crossbeam::channel::bounded(1);
+        let sender = &self.batching_model.1;
+        sender
+            .send((game_state.to_owned(), ResponseChannel::Blocking(tx)))
+            .unwrap_or_else(|_| debug!("Channel closed"));
+
+        rx.recv()
+            .expect("Analysis channel closed before receiving result")
     }
 }
 
@@ -348,9 +394,9 @@ impl<A, P> Future for AnalysisFuture<A, P> {
     }
 }
 
-type StatesToAnalyse<S, A, P> = (S, Sender<GameStateAnalysis<A, P>>);
+type StatesToAnalyse<S, A, P> = (S, ResponseChannel<A, P>);
 
-type StatesToInfer<S, A, P> = (S, Sender<GameStateAnalysis<A, P>>);
+type StatesToInfer<S, A, P> = (S, ResponseChannel<A, P>);
 
 struct BatchingModel<E, Map, Te> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
@@ -427,12 +473,9 @@ where
                         mapper,
                         reporter,
                     ) {
-                        tx.send(analysis)
-                            .unwrap_or_else(|_| debug!("Channel closed"));
+                        tx.send(analysis);
                     } else {
-                        states_to_predict_tx
-                            .send((state_to_analyse, tx))
-                            .unwrap_or_else(|_| debug!("Channel closed"));
+                        let _ = states_to_predict_tx.send((state_to_analyse, tx));
                     }
                 });
             }
@@ -557,8 +600,7 @@ where
                     mapper,
                 );
 
-                tx.send(analysis)
-                    .unwrap_or_else(|_| debug!("Channel closed"));
+                tx.send(analysis);
             });
     }
 
