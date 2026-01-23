@@ -2,8 +2,8 @@ use log::info;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const BYTES_PER_KB: usize = 1000;
-const BYTES_PER_MB: usize = BYTES_PER_KB * 1000;
+const BYTES_PER_KB: usize = 1024;
+const BYTES_PER_MB: usize = BYTES_PER_KB * 1024;
 
 pub trait TranspositionHash {
     fn transposition_hash(&self) -> u64;
@@ -41,9 +41,9 @@ impl<Te> TranspositionTable<Te> {
 
     pub fn get<'ret, 'me: 'ret>(
         &'me self,
-        tranposition_key: u64,
+        transposition_key: u64,
     ) -> Option<MappedMutexGuard<'ret, Te>> {
-        let idx = tranposition_key & self.key_mask;
+        let idx = transposition_key & self.key_mask;
 
         let guard = self.table[idx as usize].lock();
 
@@ -51,23 +51,23 @@ impl<Te> TranspositionTable<Te> {
             return None;
         }
 
-        if guard.as_ref().unwrap().full_key == tranposition_key {
+        if guard.as_ref().unwrap().full_key == transposition_key {
             Some(MutexGuard::map(guard, |e| {
-                &mut e.as_mut().unwrap().tranposition
+                &mut e.as_mut().unwrap().transposition
             }))
         } else {
             None
         }
     }
 
-    pub fn set(&self, tranposition_key: u64, tranposition: Te) {
-        let idx = tranposition_key & self.key_mask;
+    pub fn set(&self, transposition_key: u64, transposition: Te) {
+        let idx = transposition_key & self.key_mask;
 
         let mut row = self.table[idx as usize].lock();
 
         let prev = row.replace(TranspositionTableEntry {
-            full_key: tranposition_key,
-            tranposition,
+            full_key: transposition_key,
+            transposition,
         });
 
         if prev.is_none() {
@@ -92,7 +92,7 @@ type TranspositionRow<Te> = Mutex<Option<TranspositionTableEntry<Te>>>;
 
 pub struct TranspositionTableEntry<Te> {
     full_key: u64,
-    tranposition: Te,
+    transposition: Te,
 }
 
 fn calculate_tt_capacity_power<Te>(tt_cache_size_mb: usize) -> usize {
