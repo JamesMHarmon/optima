@@ -32,9 +32,7 @@ fn bench_tensorflow_infer(c: &mut Criterion) {
 
     // let valid_actions = game_state.valid_actions();
 
-    let predictor = Predictor::new(Path::new(
-        "/home/james/arimaa-client/Arimaa_runs/run-1/5b64f_00100",
-    ));
+    let predictor = Predictor::new(Path::new("10b256f_00568"));
 
     let batch_size = 4096;
     let dimensions = [8, 8, 18];
