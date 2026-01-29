@@ -9,6 +9,7 @@ members = [
     "ugi",
     "model",
     "mcts",
+    "puct",
     "replay-buffer",
     "self-play",
 

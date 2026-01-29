@@ -7,7 +7,11 @@ pub trait GameAnalyzer {
     type Predictions;
     type Future: Future<Output = GameStateAnalysis<Self::Action, Self::Predictions>>;
 
-    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future;
+    fn analyze_async(&self, game_state: &Self::State) -> Self::Future;
+
+    fn analyze(&self, game_state: &Self::State) -> GameStateAnalysis<Self::Action, Self::Predictions>;
+
+    fn prefetch(&self, game_state: &Self::State);
 }
 
 #[derive(Clone, Debug)]

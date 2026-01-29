@@ -111,6 +111,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "append-only-vec"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2114736faba96bcd79595c700d03183f61357b9fbce14852515e59f3bee4ed4a"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2218,6 +2224,26 @@ name = "protobuf"
 version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
+
+[[package]]
+name = "puct"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "append-only-vec",
+ "assert_approx_eq",
+ "common",
+ "crossbeam",
+ "engine",
+ "half 1.8.3",
+ "itertools 0.12.1",
+ "log",
+ "model",
+ "rand 0.8.5",
+ "rand_distr",
+ "rayon",
+ "tinyvec",
+]
 
 [[package]]
 name = "pyo3"
