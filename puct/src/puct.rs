@@ -3,9 +3,10 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::thread::spawn;
-use append_only_vec::AppendOnlyVec;
 use crossbeam::channel::Receiver;
 use crossbeam::channel::bounded;
+
+use super::{NodeArena, NodeId};
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
@@ -17,7 +18,7 @@ pub struct PUCT<'a, S, A, E, M, B, Sel> {
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: S,
-    nodes: AppendOnlyVec<PUCTNode<A>>,
+    nodes: NodeArena<PUCTNode<A>>,
 }
 
 struct PUCTNode<A> {
@@ -42,7 +43,7 @@ impl<S, A, E, M, B, Sel> PUCT<'_, S, A, E, M, B, Sel> {
     }
 
     fn run_simulate(&self) {
-        self.nodes.index(10)
+        self.nodes.get(NodeId::from_usize(10));
     }
 
     fn run_selections(&self) -> Workers {
