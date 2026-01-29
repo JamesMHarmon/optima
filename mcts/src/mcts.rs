@@ -24,31 +24,44 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-pub struct MCTS<'a, S, A, E, M, B, Sel, P, PV> {
+pub struct MCTS<'a, E, M, B, Sel>
+where
+    E: GameEngine,
+    M: GameAnalyzer,
+    B: BackpropagationStrategy,
+{
     game_engine: &'a E,
     analyzer: &'a M,
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
-    game_state: S,
+    game_state: E::State,
     root: Option<Index>,
-    arena: NodeArena<MCTSNode<A, P, PV>>,
-    focus_actions: Vec<A>,
+    arena: NodeArena<MCTSNode<E::Action, M::Predictions, B::PropagatedValues>>,
+    focus_actions: Vec<E::Action>,
     parallelism: usize,
 }
 
 #[allow(non_snake_case)]
-impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
+impl<'a, E, M, B, Sel> MCTS<'a, E, M, B, Sel>
 where
-    S: GameState,
-    A: Clone + Eq + Debug,
-    E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
-    M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
-    B: 'a,
-    Sel: 'a,
-    PV: Default,
+    E: 'a + GameEngine,
+    E::State: GameState,
+    E::Action: Clone + Eq + Debug,
+    E::Terminal: From<M::Predictions>,
+    M: 'a + GameAnalyzer<State = E::State, Action = E::Action>,
+    B: 'a
+        + BackpropagationStrategy<State = E::State, Action = E::Action, Predictions = M::Predictions>,
+    B::PropagatedValues: Default,
+    Sel: 'a
+        + SelectionStrategy<
+            State = E::State,
+            Action = E::Action,
+            Predictions = M::Predictions,
+            PropagatedValues = B::PropagatedValues,
+        >,
 {
     pub fn new(
-        game_state: S,
+        game_state: E::State,
         game_engine: &'a E,
         analyzer: &'a M,
         backpropagation_strategy: &'a B,
@@ -70,7 +83,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     pub fn with_capacity(
-        game_state: S,
+        game_state: E::State,
         game_engine: &'a E,
         analyzer: &'a M,
         backpropagation_strategy: &'a B,
@@ -91,19 +104,19 @@ where
         }
     }
 
-    pub async fn advance_to_action(&mut self, action: A) -> Result<()> {
+    pub async fn advance_to_action(&mut self, action: E::Action) -> Result<()> {
         self.advance_to_action_clearable(action, true).await
     }
 
-    pub async fn advance_to_action_retain(&mut self, action: A) -> Result<()> {
+    pub async fn advance_to_action_retain(&mut self, action: E::Action) -> Result<()> {
         self.advance_to_action_clearable(action, false).await
     }
 
-    pub fn add_focus_to_action(&mut self, action: A) {
+    pub fn add_focus_to_action(&mut self, action: E::Action) {
         self.focus_actions.push(action);
     }
 
-    pub fn get_focused_actions(&self) -> &[A] {
+    pub fn get_focused_actions(&self) -> &[E::Action] {
         &self.focus_actions
     }
 
@@ -121,7 +134,10 @@ where
         }
     }
 
-    pub fn get_root_node(&self) -> Result<impl Deref<Target = MCTSNode<A, P, PV>> + '_> {
+    pub fn get_root_node(
+        &self,
+    ) -> Result<impl Deref<Target = MCTSNode<E::Action, M::Predictions, B::PropagatedValues>> + '_>
+    {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let arena_ref = self.arena.get();
         let node = Ref::map(arena_ref, |arena_ref| arena_ref.node(root_index));
@@ -130,8 +146,9 @@ where
 
     pub fn get_node_of_edge(
         &self,
-        edge: &MCTSEdge<A, PV>,
-    ) -> Option<impl Deref<Target = MCTSNode<A, P, PV>> + '_> {
+        edge: &MCTSEdge<E::Action, B::PropagatedValues>,
+    ) -> Option<impl Deref<Target = MCTSNode<E::Action, M::Predictions, B::PropagatedValues>> + '_>
+    {
         edge.node_index()
             .map(|index| Ref::map(self.arena.get(), |n| n.node(index)))
     }
@@ -145,7 +162,7 @@ where
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
-    async fn advance_to_action_clearable(&mut self, action: A, clear: bool) -> Result<()> {
+    async fn advance_to_action_clearable(&mut self, action: E::Action, clear: bool) -> Result<()> {
         self.clear_focus();
 
         let root_index = self.get_or_create_root_node().await;
@@ -190,7 +207,10 @@ where
         Ok(())
     }
 
-    fn remove_nodes_from_arena(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>) {
+    fn remove_nodes_from_arena(
+        node_index: Index,
+        arena: &mut NodeArenaInner<MCTSNode<E::Action, M::Predictions, B::PropagatedValues>>,
+    ) {
         let node = arena.remove(node_index);
 
         for child_node_index in node.iter_visited_edges().filter_map(|n| n.node_index()) {
@@ -198,7 +218,10 @@ where
         }
     }
 
-    fn clear_node(node_index: Index, arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>) {
+    fn clear_node(
+        node_index: Index,
+        arena: &mut NodeArenaInner<MCTSNode<E::Action, M::Predictions, B::PropagatedValues>>,
+    ) {
         let node = arena.node_mut(node_index);
         node.set_visits(1);
 
@@ -217,8 +240,8 @@ where
     }
 
     fn split_node_children_by_action(
-        current_root: &mut MCTSNode<A, P, PV>,
-        action: &A,
+        current_root: &mut MCTSNode<E::Action, M::Predictions, B::PropagatedValues>,
+        action: &E::Action,
     ) -> Result<(Option<Index>, Vec<Index>)> {
         let matching_action = current_root
             .get_child_of_action(action)
@@ -235,9 +258,9 @@ where
     }
 
     fn select_action_using_temperature(
-        edge_details: &[EdgeDetails<A, PV>],
+        edge_details: &[EdgeDetails<E::Action, B::PropagatedValues>],
         tempAndOffset: TempAndOffset,
-    ) -> Result<A> {
+    ) -> Result<E::Action> {
         let normalized_visits = edge_details.iter().map(|edge_details| {
             (edge_details.Nsa as f32 + tempAndOffset.temperature_visit_offset)
                 .max(0.0)
@@ -275,13 +298,19 @@ where
         root_node_index
     }
 
-    async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, P, PV> {
+    async fn analyse_and_create_node(
+        game_state: &E::State,
+        analyzer: &M,
+    ) -> MCTSNode<E::Action, M::Predictions, B::PropagatedValues> {
         let analysis = analyzer.get_state_analysis(game_state).await;
         let (policy_scores, predictions) = analysis.into_inner();
         MCTSNode::new(policy_scores, predictions)
     }
 
-    fn apply_dirichlet_noise_to_node(node: &mut MCTSNode<A, P, PV>, dirichlet: &DirichletOptions) {
+    fn apply_dirichlet_noise_to_node(
+        node: &mut MCTSNode<E::Action, M::Predictions, B::PropagatedValues>,
+        dirichlet: &DirichletOptions,
+    ) {
         let policy_scores: Vec<f32> = node
             .iter_all_edges()
             .map(|child_node| child_node.policy_score())
@@ -318,7 +347,7 @@ where
         Ok(Some(node_index))
     }
 
-    fn get_focus_node_game_state(&self) -> S {
+    fn get_focus_node_game_state(&self) -> E::State {
         let mut game_state = Cow::Borrowed(&self.game_state);
 
         for action in &self.focus_actions {
@@ -350,18 +379,27 @@ where
     }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
+impl<'a, E, M, B, Sel> MCTS<'a, E, M, B, Sel>
 where
-    S: GameState,
-    A: Clone + Eq + Debug,
-    E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
-    M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
-    Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    PV: Default + Ord,
+    E: 'a + GameEngine,
+    E::State: GameState,
+    E::Action: Clone + Eq + Debug,
+    E::Terminal: From<M::Predictions>,
+    M: 'a + GameAnalyzer<State = E::State, Action = E::Action>,
+    B: 'a
+        + BackpropagationStrategy<State = E::State, Action = E::Action, Predictions = M::Predictions>,
+    Sel: 'a
+        + SelectionStrategy<
+            State = E::State,
+            Action = E::Action,
+            Predictions = M::Predictions,
+            PropagatedValues = B::PropagatedValues,
+        >,
+    B::PropagatedValues: Default + Ord,
 {
-    pub fn select_action<T>(&mut self, temp: &T) -> Result<A>
+    pub fn select_action<T>(&mut self, temp: &T) -> Result<E::Action>
     where
-        T: Temperature<State = S>,
+        T: Temperature<State = E::State>,
     {
         if let Some(node_index) = &self.get_focus_node_index()? {
             let game_state = self.get_focus_node_game_state();
@@ -397,7 +435,9 @@ where
         ))
     }
 
-    pub fn get_focus_node_details(&mut self) -> Result<Option<NodeDetails<A, PV>>> {
+    pub fn get_focus_node_details(
+        &mut self,
+    ) -> Result<Option<NodeDetails<E::Action, B::PropagatedValues>>> {
         self.get_focus_node_index()?
             .map(|node_index| {
                 let is_root = self.focus_actions.is_empty();
@@ -409,9 +449,9 @@ where
 
     pub fn get_principal_variation(
         &mut self,
-        action: Option<&A>,
+        action: Option<&E::Action>,
         depth: usize,
-    ) -> Result<Vec<EdgeDetails<A, PV>>> {
+    ) -> Result<Vec<EdgeDetails<E::Action, B::PropagatedValues>>> {
         self.get_focus_node_index()?
             .map(|mut node_index| {
                 let mut game_state = self.get_focus_node_game_state();
@@ -463,9 +503,9 @@ where
     fn node_details(
         &mut self,
         node_index: Index,
-        game_state: &S,
+        game_state: &E::State,
         is_root: bool,
-    ) -> Result<NodeDetails<A, PV>> {
+    ) -> Result<NodeDetails<E::Action, B::PropagatedValues>> {
         let arena_ref = &mut self.arena.get_mut();
         let node = arena_ref.node_mut(node_index);
         let mut children = self
@@ -481,16 +521,24 @@ where
     }
 }
 
-impl<'a, S, A, E, M, B, Sel, P, PV> MCTS<'a, S, A, E, M, B, Sel, P, PV>
+impl<'a, E, M, B, Sel> MCTS<'a, E, M, B, Sel>
 where
-    S: GameState,
-    A: Clone + Eq + Debug,
-    E: 'a + GameEngine<State = S, Action = A, Terminal = P>,
-    M: 'a + GameAnalyzer<State = S, Action = A, Predictions = P>,
-    B: 'a + BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    Sel: 'a + SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    P: Clone,
-    PV: Default,
+    E: 'a + GameEngine,
+    E::State: GameState,
+    E::Action: Clone + Eq + Debug,
+    E::Terminal: From<M::Predictions>,
+    M: 'a + GameAnalyzer<State = E::State, Action = E::Action>,
+    B: 'a
+        + BackpropagationStrategy<State = E::State, Action = E::Action, Predictions = M::Predictions>,
+    Sel: 'a
+        + SelectionStrategy<
+            State = E::State,
+            Action = E::Action,
+            Predictions = M::Predictions,
+            PropagatedValues = B::PropagatedValues,
+        >,
+    M::Predictions: Clone,
+    B::PropagatedValues: Default,
 {
     pub async fn search_time(&mut self, duration: Duration) -> Result<usize> {
         self.search_time_max_visits(duration, usize::MAX).await
@@ -577,9 +625,9 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn traverse_tree_and_expand(
         root_index: Index,
-        arena: &NodeArena<MCTSNode<A, P, PV>>,
-        game_state: &S,
-        focus_actions: &[A],
+        arena: &NodeArena<MCTSNode<E::Action, M::Predictions, B::PropagatedValues>>,
+        game_state: &E::State,
+        focus_actions: &[E::Action],
         game_engine: &E,
         analyzer: &M,
         selection_strategy: &Sel,
@@ -692,10 +740,10 @@ where
     }
 
     fn backpropagate(
-        predictions: &P,
+        predictions: &M::Predictions,
         visited_node_info: &[NodeUpdateInfo<B::NodeInfo>],
         backpropagation_strategy: &B,
-        arena: &mut NodeArenaInner<MCTSNode<A, P, PV>>,
+        arena: &mut NodeArenaInner<MCTSNode<E::Action, M::Predictions, B::PropagatedValues>>,
     ) {
         let node_iter = NodeIterator::new(visited_node_info, arena);
         backpropagation_strategy.backpropagate(node_iter, predictions);
@@ -742,13 +790,18 @@ impl<'node, I, A, P, PV> NodeLendingIterator<'node, I, A, P, PV>
     }
 }
 
-impl<S, A, E, M, B, Sel, P, PV> MCTS<'_, S, A, E, M, B, Sel, P, PV>
+impl<E, M, B, Sel> MCTS<'_, E, M, B, Sel>
 where
-    A: Clone,
-    P: Clone,
-    PV: Clone + Default,
+    E: GameEngine,
+    E::Action: Clone,
+    M: GameAnalyzer,
+    B: BackpropagationStrategy,
+    M::Predictions: Clone,
+    B::PropagatedValues: Clone + Default,
 {
-    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetrics<A, P, PV>> {
+    pub fn get_root_node_metrics(
+        &mut self,
+    ) -> Result<NodeMetrics<E::Action, M::Predictions, B::PropagatedValues>> {
         let root_index = self.root.ok_or_else(|| anyhow!("No root node found!"))?;
         let mut arena_ref = self.arena.get_mut();
         let root = arena_ref.node_mut(root_index);
