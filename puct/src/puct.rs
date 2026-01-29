@@ -1,39 +1,52 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::thread::JoinHandle;
-use std::thread::spawn;
 use crossbeam::channel::Receiver;
 use crossbeam::channel::bounded;
+use half::f16;
+use model::Analyzer;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::thread::JoinHandle;
+use std::thread::spawn;
 
 use super::{NodeArena, NodeId};
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
 
-
-pub struct PUCT<'a, S, A, E, M, B, Sel> {
+pub struct PUCT<'a, S, A, M, E, B, Sel, P, R>
+where
+    M: Analyzer,
+    B: BackpropagationStrategy,
+{
     game_engine: &'a E,
     analyzer: &'a M,
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: S,
-    nodes: NodeArena<PUCTNode<A>>,
+    nodes: NodeArena<PUCTNode<A, M::Predictions, B::RollupStats>>,
 }
 
-struct PUCTNode<A> {
-    visits: usize,
+struct PUCTNode<A, P, R> {
+    visits: u32,
+    predictions: P,
+    rollup_stats: R,
     edges: Vec<PUCTEdge<A>>,
 }
 
 struct PUCTEdge<A> {
     action: A,
-    prior: f32,
-    visits: usize,
-    child_idx: usize
+    policy_prior: f16,
+    visits: u32,
+    child: NodeId,
 }
 
-impl<S, A, E, M, B, Sel> PUCT<'_, S, A, E, M, B, Sel> {
+impl<A, P, R> PUCTNode<A, P, R> {
+    fn is_unexpanded(&self) -> bool {
+        self.visits == 0 || self.edges.is_empty()
+    }
+}
+
+impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
     pub fn search(&mut self) {
         let selection_workers = Self::run_selections(self);
 
@@ -43,7 +56,21 @@ impl<S, A, E, M, B, Sel> PUCT<'_, S, A, E, M, B, Sel> {
     }
 
     fn run_simulate(&self) {
-        self.nodes.get(NodeId::from_usize(10));
+        let current_node = self.get_root_node();
+
+        loop {
+            // Check if terminal or unexpanded
+            if current_node.is_unexpanded() {
+                break;
+            }
+
+            // TODO: select best edge and move to child
+            break;
+        }
+    }
+
+    fn get_root_node(&self) -> &PUCTNode<A, P, R> {
+        self.nodes.get(NodeId::from_usize(0))
     }
 
     fn run_selections(&self) -> Workers {
@@ -72,13 +99,9 @@ impl<S, A, E, M, B, Sel> PUCT<'_, S, A, E, M, B, Sel> {
         }
     }
 
-    fn select() {
+    fn select() {}
 
-    }
-
-    fn backpropagate(blee: usize) {
-
-    }
+    fn backpropagate(blee: usize) {}
 }
 
 struct Workers {
@@ -87,15 +110,17 @@ struct Workers {
 
 impl Workers {
     fn join(self) {
-        for h in self.handles { h.join().unwrap(); }
+        for h in self.handles {
+            h.join().unwrap();
+        }
     }
 }
 
 // Multi-thread implementationr
 // Read: trace down the tree to find nodes to expand
-    // - checks if the node is in a cache?
-    // - put a node in the cache if not already
-    // - have n number of threads
+// - checks if the node is in a cache?
+// - put a node in the cache if not already
+// - have n number of threads
 
 // Write: deterministic trace that updates node/edge values and backpropagate results up the tree
 // Write: expands nodes
