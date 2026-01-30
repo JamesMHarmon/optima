@@ -1,9 +1,10 @@
 use crossbeam::channel::Receiver;
 use crossbeam::channel::bounded;
+use dashmap::DashMap;
 use half::f16;
 use model::Analyzer;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU32, AtomicBool};
 use std::sync::atomic::Ordering;
 use std::thread::JoinHandle;
 use std::thread::spawn;
@@ -24,6 +25,7 @@ where
     selection_strategy: &'a Sel,
     game_state: S,
     nodes: NodeArena<PUCTNode<A, M::Predictions, B::RollupStats>>,
+    transposition_table: DashMap<u64, NodeId>,
 }
 
 struct PUCTNode<A, P, R> {
@@ -37,22 +39,34 @@ struct PUCTEdge<A> {
     action: A,
     policy_prior: f16,
     visits: u32,
-    child: NodeId,
+    child: AtomicU32
 }
 
-impl<A, P, R> PUCTNode<A, P, R> {
-    fn is_unexpanded(&self) -> bool {
-        self.visits == 0 || self.edges.is_empty()
+impl<A> PUCTEdge<A> {
+    fn get_child(&self) -> Option<NodeId> {
+        let raw = self.child.load(Ordering::Acquire);
+        if raw == u32::MAX {
+            None
+        } else {
+            Some(NodeId::from_u32(raw))
+        }
+    }
+    
+    fn set_child(&self, node_id: NodeId) {
+        let new_value = node_id.as_u32();
+        
+        debug_assert!({
+            let old = self.child.load(Ordering::Relaxed);
+            old == u32::MAX || old == new_value
+        }, "Child mismatch");
+        
+        self.child.store(new_value, Ordering::Relaxed); 
     }
 }
 
 impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
     pub fn search(&mut self) {
-        let selection_workers = Self::run_selections(self);
-
         self.run_simulate();
-
-        selection_workers.join();
     }
 
     fn run_simulate(&self) {
@@ -62,24 +76,47 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         self.apply_expansion(expansion);
     }
 
+    /// Get child from edge if cached, otherwise lookup in transposition table and cache.
+    /// Returns None if this is a truly new position that needs expansion.
+    fn get_or_lookup_child(&self, edge: &PUCTEdge<A>, state: &S) -> Option<NodeId> {
+        if let Some(child_id) = edge.get_child() {
+            return Some(child_id);
+        }
+        
+        let child_hash = self.game_engine.hash(state);
+        
+        if let Some(existing_id) = self.transposition_table.get(&child_hash) {
+            let existing_id = *existing_id;
+            edge.set_child(existing_id);
+            Some(existing_id)
+        } else {
+            None
+        }
+    }
+
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<S> {
         let mut path = vec![];
         let mut current = node_id;
-        let mut state = self.game_state.clone();
+        let mut state: S = self.game_state.clone();
         
         loop {
             let node = self.nodes.get(current);
             path.push(current);
             
-            if node.is_unexpanded() {
+            if node.edges.is_empty() {
                 break;
             }
             
             let edge_idx = self.select_best_edge(node);
             let edge = &node.edges[edge_idx];
             
-            current = edge.child;
             state = self.game_engine.take_action(&state, &edge.action);
+            
+            if let Some(child_id) = self.get_or_lookup_child(edge, &state) {
+                current = child_id;
+            } else {
+                break;
+            }
         }
         
         SelectionResult { path, leaf_state: state }
@@ -91,7 +128,8 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         let value = self.evaluate_node(&new_node);
         
         ExpansionResult {
-            path: selection.path,
+            path: selection.path.clone(),
+            leaf_state: selection.leaf_state.clone(),
             new_node,
             value,
         }
@@ -99,6 +137,9 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
 
     fn apply_expansion(&mut self, result: ExpansionResult<A, P, R>) {
         let new_node_id = self.nodes.push(result.new_node);
+        
+        let state_hash = self.game_engine.hash(&result.leaf_state);
+        self.transposition_table.insert(state_hash, new_node_id);
         
         if let Some(&parent_id) = result.path.last() {
             let parent = self.nodes.get_mut(parent_id);
@@ -114,35 +155,7 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         self.nodes.get(NodeId::from_usize(0))
     }
 
-    fn run_selections(&self) -> Workers {
-        let (sender, receiver) = bounded(BATCH_SIZE);
-
-        let mut handles = vec![];
-        for _ in 0..NUM_SELECTIONS {
-            let sender = sender.clone();
-            let handle = spawn(move || {
-                loop {
-                    let selection = Self::select();
-                    if sender.send(selection).is_err() {
-                        break;
-                    }
-                }
-            });
-            handles.push(handle);
-        }
-
-        Workers { handles }
-    }
-
-    fn run_backpropagation(receiver: Receiver<usize>) {
-        while let Ok(blee) = receiver.recv() {
-            Self::backpropagate(blee);
-        }
-    }
-
     fn select() {}
-
-    fn backpropagate(blee: usize) {}
 }
 
 
@@ -151,8 +164,9 @@ struct SelectionResult<S> {
     leaf_state: S,
 }
 
-struct ExpansionResult< A, P, R> {
+struct ExpansionResult<A, P, R> {
     path: Vec<NodeId>,
+    leaf_state: S,
     new_node: PUCTNode<A, P, R>,
     value: f32,
 }
@@ -177,3 +191,8 @@ impl Workers {
 
 // Write: deterministic trace that updates node/edge values and backpropagate results up the tree
 // Write: expands nodes
+
+//@ TOODO: Solve cycles
+//@ TODO: Add proper child node average value updates
+//@ TODO: When applying an expansion, need to link the parent edge to the new child node
+//@ TODO: Check for and reduce clones

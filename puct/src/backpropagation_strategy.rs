@@ -18,36 +18,6 @@ pub trait BackpropagationStrategy {
         &self,
         node_visits: u32,
         rollup_stats: &mut Self::RollupStats,
-        edges: &[EdgeInfo],
-        _depth: usize,
+        edges: &[EdgeInfo]
     );
-}
-
-pub struct SimpleBackpropagationStrategy;
-
-impl BackpropagationStrategy for SimpleBackpropagationStrategy {
-    type Action = ();
-    type Predictions = ();
-    type RollupStats = ();
-    type State = ();
-
-    fn backpropagate(
-        &self,
-        node_visits: u32,
-        rollup_stats: &mut Self::RollupStats,
-        edges: &[EdgeInfo],
-        _depth: usize,
-    )
-    {
-                // Compute weighted average from all children
-        let total_visits = node_visits as f32;
-        let mut weighted_sum = 0.0;
-        
-        for edge in edges {
-            let weight = edge.visits as f32 / total_visits;
-            weighted_sum += edge.child_value * weight;
-        }
-        
-        rollup_stats.value = weighted_sum;
-    }
 }
