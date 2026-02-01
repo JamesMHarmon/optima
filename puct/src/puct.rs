@@ -4,8 +4,8 @@ use dashmap::DashMap;
 use half::f16;
 use model::Analyzer;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, AtomicBool};
 use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::thread::JoinHandle;
 use std::thread::spawn;
 
@@ -29,6 +29,7 @@ where
 }
 
 struct PUCTNode<A, P, R> {
+    hash: u64,
     visits: u32,
     predictions: P,
     rollup_stats: R,
@@ -39,7 +40,7 @@ struct PUCTEdge<A> {
     action: A,
     policy_prior: f16,
     visits: u32,
-    child: AtomicU32
+    child: AtomicU32,
 }
 
 impl<A> PUCTEdge<A> {
@@ -51,16 +52,19 @@ impl<A> PUCTEdge<A> {
             Some(NodeId::from_u32(raw))
         }
     }
-    
+
     fn set_child(&self, node_id: NodeId) {
         let new_value = node_id.as_u32();
-        
-        debug_assert!({
-            let old = self.child.load(Ordering::Relaxed);
-            old == u32::MAX || old == new_value
-        }, "Child mismatch");
-        
-        self.child.store(new_value, Ordering::Relaxed); 
+
+        debug_assert!(
+            {
+                let old = self.child.load(Ordering::Relaxed);
+                old == u32::MAX || old == new_value
+            },
+            "Child mismatch"
+        );
+
+        self.child.store(new_value, Ordering::Relaxed);
     }
 }
 
@@ -79,12 +83,17 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
     /// Returns None if this is a truly new position that needs expansion.
     fn get_or_lookup_child(&self, edge: &PUCTEdge<A>, state: &S) -> Option<NodeId> {
-        if let Some(child_id) = edge.get_child() {
-            return Some(child_id);
-        }
-        
         let child_hash = self.game_engine.hash(state);
-        
+
+        // Check if cached child matches this hash
+        if let Some(child_id) = edge.get_child() {
+            let child_node = self.nodes.get(child_id);
+            if child_node.hash == child_hash {
+                return Some(child_id);
+            }
+        }
+
+        // Cache miss or invalid, lookup in transposition table
         if let Some(existing_id) = self.transposition_table.get(&child_hash) {
             let existing_id = *existing_id;
             edge.set_child(existing_id);
@@ -98,35 +107,38 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         let mut path = vec![];
         let mut current = node_id;
         let mut state: S = self.game_state.clone();
-        
+
         loop {
             let node = self.nodes.get(current);
             path.push(current);
-            
+
             if node.edges.is_empty() {
                 break;
             }
-            
+
             let edge_idx = self.select_best_edge(node);
             let edge = &node.edges[edge_idx];
-            
+
             state = self.game_engine.take_action(&state, &edge.action);
-            
+
             if let Some(child_id) = self.get_or_lookup_child(edge, &state) {
                 current = child_id;
             } else {
                 break;
             }
         }
-        
-        SelectionResult { path, leaf_state: state }
+
+        SelectionResult {
+            path,
+            leaf_state: state,
+        }
     }
 
     fn evaluate_leaf(&self, selection: &SelectionResult<S>) -> ExpansionResult<A, P, R> {
         let analysis = self.analyzer.get_state_analysis(&selection.leaf_state);
         let new_node = self.create_node_from_analysis(analysis);
         let value = self.evaluate_node(&new_node);
-        
+
         ExpansionResult {
             path: selection.path.clone(),
             leaf_state: selection.leaf_state.clone(),
@@ -136,15 +148,19 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
     }
 
     fn apply_expansion(&mut self, result: ExpansionResult<A, P, R>) {
-        let new_node_id = self.nodes.push(result.new_node);
-        
         let state_hash = self.game_engine.hash(&result.leaf_state);
+
+        // Store hash in the new node
+        let mut new_node = result.new_node;
+        new_node.hash = state_hash;
+
+        let new_node_id = self.nodes.push(new_node);
         self.transposition_table.insert(state_hash, new_node_id);
-        
+
         if let Some(&parent_id) = result.path.last() {
             let parent = self.nodes.get_mut(parent_id);
         }
-        
+
         for &node_id in result.path.iter().rev() {
             let node = self.nodes.get_mut(node_id);
             node.visits += 1;
@@ -157,7 +173,6 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
 
     fn select() {}
 }
-
 
 struct SelectionResult<S> {
     path: Vec<NodeId>,
