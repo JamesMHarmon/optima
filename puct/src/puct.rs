@@ -1,35 +1,33 @@
-use crossbeam::channel::Receiver;
-use crossbeam::channel::bounded;
 use dashmap::DashMap;
+use engine::GameEngine;
 use half::f16;
 use model::Analyzer;
-use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::thread::JoinHandle;
-use std::thread::spawn;
 
-use super::{NodeArena, NodeId};
+use super::{BackpropagationStrategy, NodeArena, NodeId};
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
 
-pub struct PUCT<'a, S, A, M, E, B, Sel, P, R>
+pub struct PUCT<'a, E, M, B, Sel>
 where
     M: Analyzer,
     B: BackpropagationStrategy,
+    E: GameEngine,
 {
     game_engine: &'a E,
     analyzer: &'a M,
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
-    game_state: S,
-    nodes: NodeArena<PUCTNode<A, M::Predictions, B::RollupStats>>,
+    game_state: E::State,
+    nodes: NodeArena<PUCTNode<E::Action, M::Predictions, B::RollupStats>>,
     transposition_table: DashMap<u64, NodeId>,
 }
 
 struct PUCTNode<A, P, R> {
-    hash: u64,
+    transposition_hash: u64,
     visits: u32,
     predictions: P,
     rollup_stats: R,
@@ -40,6 +38,7 @@ struct PUCTEdge<A> {
     action: A,
     policy_prior: f16,
     visits: u32,
+    /// Acts as a cached child node. Requires validation to support path-dependent and stochastic state transitions.
     child: AtomicU32,
 }
 
@@ -55,46 +54,43 @@ impl<A> PUCTEdge<A> {
 
     fn set_child(&self, node_id: NodeId) {
         let new_value = node_id.as_u32();
-
-        debug_assert!(
-            {
-                let old = self.child.load(Ordering::Relaxed);
-                old == u32::MAX || old == new_value
-            },
-            "Child mismatch"
-        );
-
         self.child.store(new_value, Ordering::Relaxed);
     }
 }
 
-impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
+impl<E, M, B, Sel> PUCT<'_, E, M, B, Sel>
+where
+    E: GameEngine,
+    M: Analyzer,
+    B: BackpropagationStrategy,
+{
     pub fn search(&mut self) {
         self.run_simulate();
     }
 
     fn run_simulate(&self) {
-        let root_node_id = NodeId::from_usize(0);
+        let root_node_id = NodeId::from_u32(0);
         let selection = self.select_leaf(root_node_id);
         let expansion = self.evaluate_leaf(&selection);
         self.apply_expansion(expansion);
     }
 
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
-    /// Returns None if this is a truly new position that needs expansion.
-    fn get_or_lookup_child(&self, edge: &PUCTEdge<A>, state: &S) -> Option<NodeId> {
-        let child_hash = self.game_engine.hash(state);
+    /// Validates the cached child by comparing transposition hashes.
+    /// Returns None if this is a new position that needs expansion.
+    fn get_or_lookup_child(&self, edge: &PUCTEdge<E::Action>, state: &E::State) -> Option<NodeId> {
+        let transposition_hash = self.game_engine.hash(state);
 
         // Check if cached child matches this hash
         if let Some(child_id) = edge.get_child() {
             let child_node = self.nodes.get(child_id);
-            if child_node.hash == child_hash {
+            if child_node.transposition_hash == transposition_hash {
                 return Some(child_id);
             }
         }
 
         // Cache miss or invalid, lookup in transposition table
-        if let Some(existing_id) = self.transposition_table.get(&child_hash) {
+        if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
             let existing_id = *existing_id;
             edge.set_child(existing_id);
             Some(existing_id)
@@ -103,10 +99,10 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         }
     }
 
-    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<S> {
+    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<E::State> {
         let mut path = vec![];
         let mut current = node_id;
-        let mut state: S = self.game_state.clone();
+        let mut state: E::State = self.game_state.clone();
 
         loop {
             let node = self.nodes.get(current);
@@ -134,7 +130,10 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         }
     }
 
-    fn evaluate_leaf(&self, selection: &SelectionResult<S>) -> ExpansionResult<A, P, R> {
+    fn evaluate_leaf(
+        &self,
+        selection: &SelectionResult<E::State>,
+    ) -> ExpansionResult<E::State, E::Action, M::Predictions, B::RollupStats> {
         let analysis = self.analyzer.get_state_analysis(&selection.leaf_state);
         let new_node = self.create_node_from_analysis(analysis);
         let value = self.evaluate_node(&new_node);
@@ -147,28 +146,31 @@ impl<S, A, M, E, B, Sel, P, R> PUCT<'_, S, A, M, E, B, Sel, P, R> {
         }
     }
 
-    fn apply_expansion(&mut self, result: ExpansionResult<A, P, R>) {
+    fn apply_expansion(
+        &mut self,
+        result: ExpansionResult<E::State, E::Action, M::Predictions, B::RollupStats>,
+    ) {
         let state_hash = self.game_engine.hash(&result.leaf_state);
 
         // Store hash in the new node
         let mut new_node = result.new_node;
-        new_node.hash = state_hash;
+        new_node.transposition_hash = state_hash;
 
         let new_node_id = self.nodes.push(new_node);
         self.transposition_table.insert(state_hash, new_node_id);
 
         if let Some(&parent_id) = result.path.last() {
-            let parent = self.nodes.get_mut(parent_id);
+            let parent = self.nodes.get(parent_id);
         }
 
         for &node_id in result.path.iter().rev() {
-            let node = self.nodes.get_mut(node_id);
+            let node = self.nodes.get(node_id);
             node.visits += 1;
         }
     }
 
-    fn get_root_node(&self) -> &PUCTNode<A, P, R> {
-        self.nodes.get(NodeId::from_usize(0))
+    fn get_root_node(&self) -> &PUCTNode<E::Action, M::Predictions, B::RollupStats> {
+        self.nodes.get(NodeId::from_u32(0))
     }
 
     fn select() {}
@@ -179,7 +181,7 @@ struct SelectionResult<S> {
     leaf_state: S,
 }
 
-struct ExpansionResult<A, P, R> {
+struct ExpansionResult<S, A, P, R> {
     path: Vec<NodeId>,
     leaf_state: S,
     new_node: PUCTNode<A, P, R>,
@@ -211,3 +213,5 @@ impl Workers {
 //@ TODO: Add proper child node average value updates
 //@ TODO: When applying an expansion, need to link the parent edge to the new child node
 //@ TODO: Check for and reduce clones
+// @TODO: Add repetition count to hash
+// @TODO: Maybe from_u32 isn't always the root
