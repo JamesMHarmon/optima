@@ -15,7 +15,7 @@ pub trait SelectionPolicy {
     ///
     /// # Returns
     /// Index of the selected edge
-    fn select_edge<'a, A, R, I>(
+    fn select_edge<'a, I, A: 'a, R: 'a>(
         &self,
         edges: I,
         node_visits: u32,

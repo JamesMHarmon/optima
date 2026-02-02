@@ -73,7 +73,7 @@ where
     E: GameEngine,
     M: Analyzer,
     B: BackpropagationStrategy,
-    Sel: SelectionPolicy<Action = E::Action, State = E::State, RollupStats = B::RollupStats>,
+    Sel: SelectionPolicy<State = E::State>,
 {
     pub fn search(&mut self) {
         self.run_simulate();
@@ -185,8 +185,8 @@ where
     }
 
     fn select_edge(&self, node: &PUCTNode<E::Action, M::Predictions, B::RollupStats>) -> usize {
-        self.selection_strategy
-            .select_edge(&node.edges, node.visits, &self.game_state, 0)
+        let edge_iter = node.edges.iter().map(|e| e.as_edge_info::<B::RollupStats>());
+        self.selection_strategy.select_edge(edge_iter, node.visits, &self.game_state, 0)
     }
 }
 
