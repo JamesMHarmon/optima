@@ -2,11 +2,12 @@ use dashmap::DashMap;
 use engine::GameEngine;
 use half::f16;
 use model::Analyzer;
+use smallvec::SmallVec;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::thread::JoinHandle;
 
-use super::{BackpropagationStrategy, NodeArena, NodeId};
+use super::{BackpropagationStrategy, EdgeInfo, NodeArena, NodeId, SelectionPolicy};
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
@@ -43,6 +44,15 @@ struct PUCTEdge<A> {
 }
 
 impl<A> PUCTEdge<A> {
+    fn as_edge_info<R>(&self) -> EdgeInfo<A, R> {
+        EdgeInfo {
+            action: &self.action,
+            policy_prior: self.policy_prior.into(),
+            visits: self.visits,
+            rollup_stats: None,
+        }
+    }
+
     fn get_child(&self) -> Option<NodeId> {
         let raw = self.child.load(Ordering::Acquire);
         if raw == u32::MAX {
@@ -63,6 +73,7 @@ where
     E: GameEngine,
     M: Analyzer,
     B: BackpropagationStrategy,
+    Sel: SelectionPolicy<Action = E::Action, State = E::State, RollupStats = B::RollupStats>,
 {
     pub fn search(&mut self) {
         self.run_simulate();
@@ -112,7 +123,7 @@ where
                 break;
             }
 
-            let edge_idx = self.select_best_edge(node);
+            let edge_idx = self.select_edge(node);
             let edge = &node.edges[edge_idx];
 
             state = self.game_engine.take_action(&state, &edge.action);
@@ -173,7 +184,10 @@ where
         self.nodes.get(NodeId::from_u32(0))
     }
 
-    fn select() {}
+    fn select_edge(&self, node: &PUCTNode<E::Action, M::Predictions, B::RollupStats>) -> usize {
+        self.selection_strategy
+            .select_edge(&node.edges, node.visits, &self.game_state, 0)
+    }
 }
 
 struct SelectionResult<S> {
