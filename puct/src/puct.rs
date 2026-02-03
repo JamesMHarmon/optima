@@ -1,8 +1,9 @@
+use common::TranspositionHash;
 use dashmap::DashMap;
 use engine::GameEngine;
 use half::f16;
-use model::Analyzer;
-use smallvec::SmallVec;
+use model::GameAnalyzer;
+use std::collections::HashSet;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::thread::JoinHandle;
@@ -14,7 +15,7 @@ const BATCH_SIZE: usize = 32;
 
 pub struct PUCT<'a, E, M, B, Sel>
 where
-    M: Analyzer,
+    M: GameAnalyzer,
     B: BackpropagationStrategy,
     E: GameEngine,
 {
@@ -23,14 +24,13 @@ where
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: E::State,
-    nodes: NodeArena<PUCTNode<E::Action, M::Predictions, B::RollupStats>>,
+    nodes: NodeArena<PUCTNode<E::Action, B::RollupStats>>,
     transposition_table: DashMap<u64, NodeId>,
 }
 
-struct PUCTNode<A, P, R> {
+struct PUCTNode<A, R> {
     transposition_hash: u64,
     visits: u32,
-    predictions: P,
     rollup_stats: R,
     edges: Vec<PUCTEdge<A>>,
 }
@@ -39,7 +39,6 @@ struct PUCTEdge<A> {
     action: A,
     policy_prior: f16,
     visits: u32,
-    /// Acts as a cached child node. Requires validation to support path-dependent and stochastic state transitions.
     child: AtomicU32,
 }
 
@@ -71,9 +70,12 @@ impl<A> PUCTEdge<A> {
 impl<E, M, B, Sel> PUCT<'_, E, M, B, Sel>
 where
     E: GameEngine,
-    M: Analyzer,
+    E::Terminal: engine::Value,
+    M: GameAnalyzer<State = E::State>,
+    M::Predictions: E::Terminal,
     B: BackpropagationStrategy,
     Sel: SelectionPolicy<State = E::State>,
+    E::State: TranspositionHash
 {
     pub fn search(&mut self) {
         self.run_simulate();
@@ -82,25 +84,35 @@ where
     fn run_simulate(&self) {
         let root_node_id = NodeId::from_u32(0);
         let selection = self.select_leaf(root_node_id);
-        let expansion = self.evaluate_leaf(&selection);
-        self.apply_expansion(expansion);
+        
+        let (path, propagated_value) = match selection {
+            SelectionResult::Unexpanded { path, leaf_state } => {
+                let analysis = self.analyzer.analyze(&leaf_state);
+                let new_node = self.create_node(&leaf_state);
+                path.push(new_node);
+                (path, analysis.predictions())
+            }
+            SelectionResult::Terminal { path, terminal_value, .. } => (path, terminal_value)
+        };
+
+        self.backpropagate(path, propagated_value);
     }
 
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
-    /// Validates the cached child by comparing transposition hashes.
     /// Returns None if this is a new position that needs expansion.
     fn get_or_lookup_child(&self, edge: &PUCTEdge<E::Action>, state: &E::State) -> Option<NodeId> {
-        let transposition_hash = self.game_engine.hash(state);
+        let transposition_hash = state.transposition_hash();
 
-        // Check if cached child matches this hash
         if let Some(child_id) = edge.get_child() {
             let child_node = self.nodes.get(child_id);
-            if child_node.transposition_hash == transposition_hash {
-                return Some(child_id);
-            }
+            debug_assert_eq!(
+                child_node.transposition_hash, 
+                transposition_hash,
+                "Edge's cached child node must match the state hash - edges point to a single node"
+            );
+            return Some(child_id);
         }
-
-        // Cache miss or invalid, lookup in transposition table
+        
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
             let existing_id = *existing_id;
             edge.set_child(existing_id);
@@ -110,96 +122,94 @@ where
         }
     }
 
-    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<E::State> {
+    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<E::State, E::Terminal> {
         let mut path = vec![];
+        let mut visited = HashSet::new();
         let mut current = node_id;
         let mut state: E::State = self.game_state.clone();
 
         loop {
             let node = self.nodes.get(current);
-            path.push(current);
-
-            if node.edges.is_empty() {
-                break;
+            
+            if visited.insert(current) {
+                path.push(current);
             }
+
+            debug_assert!(!node.edges.is_empty(), "Node in tree should always have edges - should be terminal");
 
             let edge_idx = self.select_edge(node);
             let edge = &node.edges[edge_idx];
 
             state = self.game_engine.take_action(&state, &edge.action);
 
-            if let Some(child_id) = self.get_or_lookup_child(edge, &state) {
+            if let Some(terminal_value) = self.game_engine.terminal_state(&state) {
+                return SelectionResult::Terminal {
+                    path,
+                    leaf_state: state,
+                    terminal_value,
+                };
+            } else if let Some(child_id) = self.get_or_lookup_child(edge, &state) {
                 current = child_id;
             } else {
-                break;
+                return SelectionResult::Unexpanded {
+                    path,
+                    leaf_state: state,
+                };
             }
         }
-
-        SelectionResult {
-            path,
-            leaf_state: state,
-        }
     }
-
-    fn evaluate_leaf(
-        &self,
-        selection: &SelectionResult<E::State>,
-    ) -> ExpansionResult<E::State, E::Action, M::Predictions, B::RollupStats> {
-        let analysis = self.analyzer.get_state_analysis(&selection.leaf_state);
-        let new_node = self.create_node_from_analysis(analysis);
-        let value = self.evaluate_node(&new_node);
-
-        ExpansionResult {
-            path: selection.path.clone(),
-            leaf_state: selection.leaf_state.clone(),
-            new_node,
-            value,
-        }
-    }
-
-    fn apply_expansion(
-        &mut self,
-        result: ExpansionResult<E::State, E::Action, M::Predictions, B::RollupStats>,
-    ) {
-        let state_hash = self.game_engine.hash(&result.leaf_state);
-
-        // Store hash in the new node
-        let mut new_node = result.new_node;
-        new_node.transposition_hash = state_hash;
+    
+    fn create_node(&self, state: &E::State) -> NodeId {
+        let new_node = PUCTNode {
+            transposition_hash: state.transposition_hash(),
+            visits: 0,
+            rollup_stats: B::initial_rollup_stats(),
+            edges: vec![],
+        };
 
         let new_node_id = self.nodes.push(new_node);
-        self.transposition_table.insert(state_hash, new_node_id);
+        self.transposition_table.insert(new_node.transposition_hash, new_node_id);
 
-        if let Some(&parent_id) = result.path.last() {
-            let parent = self.nodes.get(parent_id);
-        }
+        return new_node_id;
+    }
 
-        for &node_id in result.path.iter().rev() {
+    fn backpropagate(&self, path: Vec<NodeId>, prediction: M::Predictions) {
+        // Backpropagate the known terminal value up the path
+        // Path is already deduplicated by select_leaf
+        for &node_id in path.iter().rev() {
             let node = self.nodes.get(node_id);
             node.visits += 1;
+            // TODO: Update rollup stats with terminal value
         }
     }
 
-    fn get_root_node(&self) -> &PUCTNode<E::Action, M::Predictions, B::RollupStats> {
+    fn get_root_node(&self) -> &PUCTNode<E::Action, B::RollupStats> {
         self.nodes.get(NodeId::from_u32(0))
     }
 
-    fn select_edge(&self, node: &PUCTNode<E::Action, M::Predictions, B::RollupStats>) -> usize {
+    fn select_edge(&self, node: &PUCTNode<E::Action, B::RollupStats>) -> usize {
         let edge_iter = node.edges.iter().map(|e| e.as_edge_info::<B::RollupStats>());
         self.selection_strategy.select_edge(edge_iter, node.visits, &self.game_state, 0)
     }
 }
 
-struct SelectionResult<S> {
-    path: Vec<NodeId>,
-    leaf_state: S,
+enum SelectionResult<S, T> {
+    Terminal {
+        path: Vec<NodeId>,
+        leaf_state: S,
+        terminal_value: T,
+    },
+    Unexpanded {
+        path: Vec<NodeId>,
+        leaf_state: S,
+    },
 }
 
 struct ExpansionResult<S, A, P, R> {
     path: Vec<NodeId>,
     leaf_state: S,
-    new_node: PUCTNode<A, P, R>,
-    value: f32,
+    new_node: PUCTNode<A, R>,
+    predictions: P,
 }
 
 struct Workers {

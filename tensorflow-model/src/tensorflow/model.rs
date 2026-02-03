@@ -387,7 +387,7 @@ where
     type Predictions = P;
     type Future = AnalysisFuture<Self::Action, Self::Predictions>;
 
-    fn get_state_analysis(&self, game_state: &S) -> Self::Future {
+    fn analyze_async(&self, game_state: &S) -> Self::Future {
         let (tx, rx) = oneshot::channel();
         let sender = &self.batching_model.1;
         sender
@@ -396,24 +396,18 @@ where
 
         AnalysisFuture { receiver: rx }
     }
-}
 
-impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te>
-where
-    S: Clone,
-    A: Clone,
-{
-    /// Blocking version of get_state_analysis.
+    /// Blocking version of analyze_async.
     ///
     /// WARNING: This blocks the current thread and should NOT be used in async contexts
-    /// or within the MCTS parallel search. Use `get_state_analysis()` instead for
+    /// or within the MCTS parallel search. Use `analyze_async()` instead for
     /// async/concurrent scenarios.
     ///
     /// This method is primarily intended for:
     /// - Simple testing scenarios
     /// - Single-threaded evaluation
     /// - Command-line tools
-    pub fn get_state_analysis_blocking(&self, game_state: &S) -> GameStateAnalysis<A, P> {
+    fn analyze(&self, game_state: &S) -> GameStateAnalysis<A, P> {
         let (tx, rx) = crossbeam::channel::bounded(1);
         let sender = &self.batching_model.1;
         sender
