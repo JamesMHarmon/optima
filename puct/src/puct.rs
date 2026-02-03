@@ -1,4 +1,5 @@
 use common::TranspositionHash;
+use common::transposition;
 use dashmap::DashMap;
 use engine::GameEngine;
 use half::f16;
@@ -8,7 +9,9 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::thread::JoinHandle;
 
-use super::{BackpropagationStrategy, EdgeInfo, NodeArena, NodeId, SelectionPolicy};
+use super::{
+    BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeId, SelectionPolicy,
+};
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
@@ -71,11 +74,11 @@ impl<E, M, B, Sel> PUCT<'_, E, M, B, Sel>
 where
     E: GameEngine,
     E::Terminal: engine::Value,
-    M: GameAnalyzer<State = E::State>,
-    M::Predictions: E::Terminal,
+    M: GameAnalyzer<State = E::State, Predictions = E::Terminal>,
     B: BackpropagationStrategy,
     Sel: SelectionPolicy<State = E::State>,
-    E::State: TranspositionHash
+    E::State: TranspositionHash,
+    B::RollupStats: Default,
 {
     pub fn search(&mut self) {
         self.run_simulate();
@@ -84,18 +87,36 @@ where
     fn run_simulate(&self) {
         let root_node_id = NodeId::from_u32(0);
         let selection = self.select_leaf(root_node_id);
-        
-        let (path, propagated_value) = match selection {
-            SelectionResult::Unexpanded { path, leaf_state } => {
-                let analysis = self.analyzer.analyze(&leaf_state);
-                let new_node = self.create_node(&leaf_state);
-                path.push(new_node);
-                (path, analysis.predictions())
-            }
-            SelectionResult::Terminal { path, terminal_value, .. } => (path, terminal_value)
-        };
+        self.expand_and_backpropagate(selection);
+    }
 
-        self.backpropagate(path, propagated_value);
+    fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
+        match selection {
+            SelectionResult::Unexpanded(unexpanded) => self.expand_unexpanded(unexpanded),
+            SelectionResult::Terminal(terminal) => self.backpropagate_terminal(terminal),
+        }
+    }
+
+    fn expand_unexpanded(&self, unexpanded: UnexpandedSelection<'_, E::State>) {
+        let UnexpandedSelection {
+            mut path,
+            game_state,
+        } = unexpanded;
+        let analysis = self.analyzer.analyze(&*game_state);
+        let new_node = self.create_node(&*game_state);
+        path.push(new_node);
+
+        self.backpropagate(path, analysis.predictions());
+    }
+
+    fn backpropagate_terminal(&self, terminal: TerminalSelection<'_, E::State, E::Terminal>) {
+        let TerminalSelection {
+            path,
+            terminal_value,
+            ..
+        } = terminal;
+
+        self.backpropagate(path, &terminal_value);
     }
 
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
@@ -106,13 +127,12 @@ where
         if let Some(child_id) = edge.get_child() {
             let child_node = self.nodes.get(child_id);
             debug_assert_eq!(
-                child_node.transposition_hash, 
-                transposition_hash,
+                child_node.transposition_hash, transposition_hash,
                 "Edge's cached child node must match the state hash - edges point to a single node"
             );
             return Some(child_id);
         }
-        
+
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
             let existing_id = *existing_id;
             edge.set_child(existing_id);
@@ -122,58 +142,62 @@ where
         }
     }
 
-    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<E::State, E::Terminal> {
+    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];
         let mut visited = HashSet::new();
         let mut current = node_id;
-        let mut state: E::State = self.game_state.clone();
+        let mut game_state = BorrowedOrOwned::Borrowed(&self.game_state);
 
         loop {
             let node = self.nodes.get(current);
-            
+
             if visited.insert(current) {
                 path.push(current);
             }
 
-            debug_assert!(!node.edges.is_empty(), "Node in tree should always have edges - should be terminal");
+            debug_assert!(
+                !node.edges.is_empty(),
+                "Node in tree should always have edges - should be terminal"
+            );
 
             let edge_idx = self.select_edge(node);
             let edge = &node.edges[edge_idx];
 
-            state = self.game_engine.take_action(&state, &edge.action);
+            let next_game_state = self.game_engine.take_action(&game_state, &edge.action);
+            game_state = BorrowedOrOwned::Owned(next_game_state);
 
-            if let Some(terminal_value) = self.game_engine.terminal_state(&state) {
-                return SelectionResult::Terminal {
+            if let Some(terminal_value) = self.game_engine.terminal_state(&game_state) {
+                return SelectionResult::Terminal(TerminalSelection {
                     path,
-                    leaf_state: state,
+                    game_state,
                     terminal_value,
-                };
-            } else if let Some(child_id) = self.get_or_lookup_child(edge, &state) {
+                });
+            } else if let Some(child_id) = self.get_or_lookup_child(edge, &game_state) {
                 current = child_id;
             } else {
-                return SelectionResult::Unexpanded {
-                    path,
-                    leaf_state: state,
-                };
+                return SelectionResult::Unexpanded(UnexpandedSelection { path, game_state });
             }
         }
     }
-    
+
     fn create_node(&self, state: &E::State) -> NodeId {
+        let transposition_hash = state.transposition_hash();
+
         let new_node = PUCTNode {
-            transposition_hash: state.transposition_hash(),
+            transposition_hash,
             visits: 0,
-            rollup_stats: B::initial_rollup_stats(),
+            rollup_stats: B::RollupStats::default(),
             edges: vec![],
         };
 
         let new_node_id = self.nodes.push(new_node);
-        self.transposition_table.insert(new_node.transposition_hash, new_node_id);
+        self.transposition_table
+            .insert(transposition_hash, new_node_id);
 
         return new_node_id;
     }
 
-    fn backpropagate(&self, path: Vec<NodeId>, prediction: M::Predictions) {
+    fn backpropagate(&self, path: Vec<NodeId>, prediction: &M::Predictions) {
         // Backpropagate the known terminal value up the path
         // Path is already deduplicated by select_leaf
         for &node_id in path.iter().rev() {
@@ -188,26 +212,34 @@ where
     }
 
     fn select_edge(&self, node: &PUCTNode<E::Action, B::RollupStats>) -> usize {
-        let edge_iter = node.edges.iter().map(|e| e.as_edge_info::<B::RollupStats>());
-        self.selection_strategy.select_edge(edge_iter, node.visits, &self.game_state, 0)
+        let edge_iter = node
+            .edges
+            .iter()
+            .map(|e| e.as_edge_info::<B::RollupStats>());
+        self.selection_strategy
+            .select_edge(edge_iter, node.visits, &self.game_state, 0)
     }
 }
 
-enum SelectionResult<S, T> {
-    Terminal {
-        path: Vec<NodeId>,
-        leaf_state: S,
-        terminal_value: T,
-    },
-    Unexpanded {
-        path: Vec<NodeId>,
-        leaf_state: S,
-    },
+enum SelectionResult<'a, S, T> {
+    Terminal(TerminalSelection<'a, S, T>),
+    Unexpanded(UnexpandedSelection<'a, S>),
+}
+
+struct TerminalSelection<'a, S, T> {
+    path: Vec<NodeId>,
+    game_state: BorrowedOrOwned<'a, S>,
+    terminal_value: T,
+}
+
+struct UnexpandedSelection<'a, S> {
+    path: Vec<NodeId>,
+    game_state: BorrowedOrOwned<'a, S>,
 }
 
 struct ExpansionResult<S, A, P, R> {
     path: Vec<NodeId>,
-    leaf_state: S,
+    game_state: S,
     new_node: PUCTNode<A, R>,
     predictions: P,
 }
