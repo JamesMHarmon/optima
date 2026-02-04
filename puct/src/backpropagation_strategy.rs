@@ -2,31 +2,67 @@
 ///
 /// Designed for concurrent access - the backpropagation strategy updates rollup statistics
 /// that support atomic operations, allowing readers to access values while writes occur.
+///
+/// The strategy handles three types of nodes:
+/// - StateNode: has rollup_stats that aggregate values from child edges
+/// - AfterStateNode: rollup_stats computed dynamically from outcomes (not stored)
+/// - TerminalNode: has rollup_stats from terminal evaluation
 pub trait BackpropagationStrategy {
     type Predictions;
     type RollupStats;
-    type NodeInfo;
+    type StateInfo;
     type State;
 
-    /// Extract node-specific information from the game state.
+    /// Extract state-specific information from the game state.
     ///
-    /// This is called during tree traversal to capture context needed for backpropagation,
-    /// such as which player is to move at this node.
-    fn node_info(&self, game_state: &Self::State) -> Self::NodeInfo;
+    /// This is called during node creation to capture context needed for backpropagation,
+    /// such as which player is to move at this state.
+    fn state_info(&self, game_state: &Self::State) -> Self::StateInfo;
 
-    /// Backpropagate predictions through a single node.
+    /// Create initial rollup statistics from predictions.
     ///
-    /// This method is called once for each node in the traversal path, from leaf to root.
-    /// It should update the rollup statistics based on the predictions and node context.
+    /// Called when creating a new State or Terminal node to initialize its statistics.
     ///
     /// # Arguments
-    /// * `node_info` - Context about the node (e.g., player to move)
-    /// * `rollup_stats` - Statistics to update (e.g., value, game length, visit counts)
-    /// * `predictions` - Terminal predictions from the leaf node
-    fn backpropagate(
+    /// * `state_info` - Context about the state (e.g., player to move)
+    /// * `predictions` - Predictions to initialize stats from
+    fn create_rollup_stats(
         &self,
-        node_info: &Self::NodeInfo,
-        rollup_stats: &Self::RollupStats,
+        state_info: &Self::StateInfo,
         predictions: &Self::Predictions,
-    );
+    ) -> Self::RollupStats;
+
+    /// Update a StateNode's rollup statistics during backpropagation.
+    ///
+    /// This method is called once for each StateNode in the traversal path, from leaf to root.
+    /// It should aggregate values from the node's child edges using weighted averaging.
+    ///
+    /// # Arguments
+    /// * `rollup_stats` - Statistics to update (e.g., value, game length, visit counts)
+    /// * `children` - Iterator over (child_rollup_stats, visits) pairs for weighted averaging
+    fn update_state_stats<'a, I>(
+        &self,
+        rollup_stats: &Self::RollupStats,
+        children: I,
+    ) where
+        I: Iterator<Item = (&'a Self::RollupStats, u32)>,
+        Self::RollupStats: 'a;
+
+    /// Aggregate AfterStateNode rollup statistics from its outcomes.
+    ///
+    /// AfterStateNodes don't store rollup_stats - instead they are computed dynamically
+    /// by aggregating over the outcomes (stochastic transitions).
+    ///
+    /// # Arguments
+    /// * `outcomes` - Iterator over (outcome_rollup_stats, visits) pairs
+    ///
+    /// # Returns
+    /// Aggregated rollup statistics, or None if no outcomes exist yet
+    fn aggregate_after_state_stats<'a, I>(
+        &self,
+        outcomes: I,
+    ) -> Option<Self::RollupStats>
+    where
+        I: Iterator<Item = (&'a Self::RollupStats, u32)>,
+        Self::RollupStats: 'a;
 }

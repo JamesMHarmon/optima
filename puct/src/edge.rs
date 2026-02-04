@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use super::NodeId;
 
 pub struct PUCTEdge {
-    visits: AtomicU32,
-    child: AtomicU32,
+    pub visits: AtomicU32,
+    pub child: AtomicU32,
 }
 
 impl PUCTEdge {

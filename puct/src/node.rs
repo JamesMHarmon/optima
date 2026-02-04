@@ -2,25 +2,24 @@ use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tinyvec::TinyVec;
 
-use super::{EdgeInfo, NodeArena, NodeId, NodeType};
+use super::{EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge};
 
-pub struct StateNode<A, R> {
+pub struct StateNode<A, R, SI> {
     pub transposition_hash: u64,
     pub visits: AtomicU32,
     pub rollup_stats: R,
+    pub state_info: SI,
     pub policy_priors: Vec<ActionWithPolicy<A>>,
-    pub edges: Vec<Edge>,
+    pub edges: Vec<PUCTEdge>,
 }
 
-impl<A, R> StateNode<A, R>
-where
-    R: Default,
-{
-    pub fn new(transposition_hash: u64, policy_priors: Vec<ActionWithPolicy<A>>) -> Self {
+impl<A, R, SI> StateNode<A, R, SI> {
+    pub fn new(transposition_hash: u64, policy_priors: Vec<ActionWithPolicy<A>>, state_info: SI, rollup_stats: R) -> Self {
         Self {
             transposition_hash,
             visits: AtomicU32::new(1),
-            rollup_stats: R::default(),
+            rollup_stats,
+            state_info,
             policy_priors,
             edges: Vec::new(),
         }
@@ -34,12 +33,12 @@ where
         let expansion_index = self.edges.len();
         self.policy_priors.swap(index, expansion_index);
 
-        self.edges.push(Edge::new());
+        self.edges.push(PUCTEdge::new());
 
         expansion_index
     }
 
-    pub fn get_edge(&self, index: usize) -> Option<&Edge> {
+    pub fn get_edge(&self, index: usize) -> Option<&PUCTEdge> {
         self.edges.get(index)
     }
 
@@ -53,7 +52,7 @@ where
 
     pub fn iter_edges<'a>(
         &'a self,
-        nodes: &'a NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
+        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R>> + 'a {
         (0..self.edges.len()).map(move |i| self.edge_info(i, nodes))
     }
@@ -61,7 +60,7 @@ where
     fn edge_info<'a>(
         &'a self,
         edge_idx: usize,
-        nodes: &'a NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
+        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> EdgeInfo<'a, A, R> {
         let edge = &self.edges[edge_idx];
         let action_with_policy = &self.policy_priors[edge_idx];
@@ -84,39 +83,54 @@ where
 
         EdgeInfo {
             action: &action_with_policy.action,
-            policy_prior: action_with_policy.policy,
+            policy_prior: action_with_policy.policy_score.to_f32(),
             visits: edge.visits.load(Ordering::Acquire),
             rollup_stats,
         }
     }
-}
 
-fn aggregate_after_state_stats<'a, A, R>(
-    after_state: &'a AfterState,
-    nodes: &'a NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
-) -> Option<R>
-where
-    R: Clone + Default,
-{
-    // TODO: Implement proper weighted aggregation based on outcome probabilities
-    // This should compute a weighted average of child rollup_stats based on outcome probabilities
-    // For now, return None to indicate unimplemented
-    None
-}
+    /// Iterate over children with their rollup stats and visits for backpropagation.
+    ///
+    /// This provides the data needed for weighted-average aggregation during backpropagation.
+    /// Returns an iterator of (rollup_stats, visits) pairs for each child edge.
+    pub fn iter_children_stats<'a>(
+        &'a self,
+        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    ) -> impl Iterator<Item = (&'a R, u32)> + 'a {
+        self.edges.iter().filter_map(move |edge| {
+            let child_raw = edge.child.load(Ordering::Acquire);
+            if child_raw == u32::MAX {
+                return None;
+            }
 
-/// Edge from a State node to an AfterState or Terminal node.
-pub struct Edge {
-    pub visits: AtomicU32,
-    pub child: AtomicU32,
-}
+            let child_id = NodeId::from_u32(child_raw);
+            let visits = edge.visits.load(Ordering::Acquire);
+            
+            // Get rollup stats based on child type
+            let rollup_stats = match child_id.node_type() {
+                NodeType::State => Some(&nodes.get_state(child_id).rollup_stats),
+                NodeType::AfterState => {
+                    // AfterState stats must be aggregated from outcomes
+                    // This is expensive but necessary for weighted averaging
+                    None // TODO: compute on-demand or cache
+                }
+                NodeType::Terminal => Some(&nodes.get_terminal(child_id).rollup_stats),
+            };
 
-impl Edge {
-    pub fn new() -> Self {
-        Self {
-            visits: AtomicU32::new(0),
-            child: AtomicU32::new(u32::MAX),
-        }
+            rollup_stats.map(|stats| (stats, visits))
+        })
     }
+}
+
+fn aggregate_after_state_stats<'a, A, R, SI, B>(
+    after_state: &'a AfterState,
+    nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    backprop_strategy: &B,
+    target: &R,
+) where
+    B: crate::BackpropagationStrategy<RollupStats = R>,
+{
+    backprop_strategy.aggregate_stats(target, after_state.iter_outcome_stats(nodes))
 }
 
 /// Stochastic node representing (State, Action) pair before environment response.
@@ -124,6 +138,38 @@ impl Edge {
 /// Visits and rollup_stats are computed by aggregating from the outcomes.
 pub struct AfterState {
     pub outcomes: TinyVec<[AfterStateOutcome; 2]>,
+}
+
+impl AfterState {
+    /// Iterate over outcome children with their rollup stats and visits.
+    ///
+    /// This provides the data needed for aggregating AfterState statistics from outcomes.
+    /// Returns an iterator of (rollup_stats, visits) pairs for each outcome.
+    pub fn iter_outcome_stats<'a, A, R, SI>(
+        &'a self,
+        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    ) -> impl Iterator<Item = (&'a R, u32)> + 'a {
+        self.outcomes.iter().filter_map(move |outcome| {
+            let child_raw = outcome.child.load(Ordering::Acquire);
+            if child_raw == u32::MAX {
+                return None;
+            }
+
+            let child_id = NodeId::from_u32(child_raw);
+            let visits = outcome.visits.load(Ordering::Acquire);
+            
+            // AfterState outcomes always point to either State or Terminal nodes
+            let rollup_stats = match child_id.node_type() {
+                NodeType::State => &nodes.get_state(child_id).rollup_stats,
+                NodeType::Terminal => &nodes.get_terminal(child_id).rollup_stats,
+                NodeType::AfterState => {
+                    panic!("AfterState outcome cannot point to another AfterState")
+                }
+            };
+
+            Some((rollup_stats, visits))
+        })
+    }
 }
 
 /// Possible outcome from an AfterState node.
