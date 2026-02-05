@@ -8,11 +8,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::JoinHandle;
 use tinyvec::TinyVec;
 
-use crate::node_arena;
-
 use super::{
     AfterState, AfterStateOutcome, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
-    NodeId, NodeType, PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    NodeGraph, NodeId, NodeType, PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
 
 const NUM_SELECTIONS: i32 = 10;
@@ -34,6 +32,7 @@ where
         AfterState,
         Terminal<B::RollupStats>,
     >,
+    graph: NodeGraph<'a, E::Action, B::RollupStats, B::StateInfo>,
     transposition_table: DashMap<u64, NodeId>,
 }
 
@@ -110,80 +109,6 @@ where
         }
     }
 
-    fn find_referenced_state_node(
-        &self,
-        node_id: NodeId,
-        transposition_hash: u64,
-    ) -> Option<NodeId> {
-        match node_id.node_type() {
-            NodeType::State => (self.nodes.get_state(node_id).transposition_hash
-                == transposition_hash)
-                .then_some(node_id),
-            NodeType::AfterState => self
-                .nodes
-                .get_after_state(node_id)
-                .outcomes
-                .iter()
-                .find_map(|outcome| {
-                    self.find_referenced_state_node(outcome.child, transposition_hash)
-                }),
-            NodeType::Terminal => None,
-        }
-
-        // @TODO: Do I need to increment visits if found in afterstate?
-    }
-
-    fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
-        if edge.try_set_child(child_id) {
-            return;
-        }
-
-        let existing_child_id = edge
-            .get_child()
-            .expect("Child must be set if try_set_child failed");
-
-        let after_state = match existing_child_id.node_type() {
-            NodeType::AfterState => {
-                panic!(
-                    "Current implementation supports a maximum of two after states. Update implementation to support more."
-                )
-            }
-            NodeType::State | NodeType::Terminal => {
-                let mut outcomes = TinyVec::new();
-
-                // @TODO: Where do we increment the visit here? I guess that we don't because this isn't the edge being selected?
-                outcomes.push(AfterStateOutcome {
-                    visits: AtomicU32::new(edge.visits.load(Ordering::Acquire)),
-                    child: existing_child_id,
-                });
-
-                // @TODO: Should visits set to be 1 here?
-                outcomes.push(AfterStateOutcome {
-                    visits: AtomicU32::new(0),
-                    child: child_id,
-                });
-
-                let after_state_id = self.nodes.push_after_state(AfterState::new(outcomes));
-                edge.set_child(after_state_id);
-
-                self.nodes.get_after_state(after_state_id)
-            }
-        };
-
-        debug_assert!(
-            {
-                let outcome_count = after_state.outcomes.len();
-                let ids: HashSet<_> = after_state.outcomes.iter().map(|o| o.child).collect();
-                ids.len() == outcome_count
-                    && ids
-                        .iter()
-                        .filter(|id| id.node_type() == NodeType::Terminal)
-                        .count()
-                        <= 1
-            },
-            "AfterState outcomes should not contain duplicate node IDs and at most one terminal"
-        );
-    }
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];

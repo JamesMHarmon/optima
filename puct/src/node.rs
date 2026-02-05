@@ -1,3 +1,4 @@
+use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tinyvec::TinyVec;
