@@ -56,6 +56,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.edges.len()
     }
 
+    pub fn increment_visits(&self) {
+        self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
     pub fn iter_edges<'a>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,

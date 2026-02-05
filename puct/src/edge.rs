@@ -34,4 +34,8 @@ impl PUCTEdge {
             .compare_exchange(u32::MAX, new_child.as_u32(), Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
     }
+
+    pub fn increment_visits(&self) {
+        self.visits.fetch_add(1, Ordering::AcqRel);
+    }
 }

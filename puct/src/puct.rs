@@ -4,17 +4,22 @@ use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{Ordering};
 use std::thread::JoinHandle;
-use tinyvec::TinyVec;
 
 use super::{
-    AfterState, AfterStateOutcome, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
-    NodeGraph, NodeId, NodeType, PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
+    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
+
+type PUCTNodeArena<A, R, SI> = NodeArena<
+    StateNode<A, R, SI>,
+    AfterState,
+    Terminal<R>,
+>;
 
 pub struct PUCT<'a, E, M, B, Sel>
 where
@@ -27,11 +32,7 @@ where
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: E::State,
-    nodes: NodeArena<
-        StateNode<E::Action, B::RollupStats, B::StateInfo>,
-        AfterState,
-        Terminal<B::RollupStats>,
-    >,
+    nodes: PUCTNodeArena<E::Action, B::RollupStats, B::StateInfo>,
     graph: NodeGraph<'a, E::Action, B::RollupStats, B::StateInfo>,
     transposition_table: DashMap<u64, NodeId>,
 }
@@ -86,29 +87,25 @@ where
         (path, predictions)
     }
 
-    /// Get child from edge if cached, otherwise lookup in transposition table and cache.
+    /// Get child from edge if cached, otherwise lookup in transposition table and link.
     /// Returns None if this is a new position that needs expansion.
-    fn get_or_set_edge_for_transposition(
+    fn get_or_link_transposition(
         &self,
         edge: &PUCTEdge,
         transposition_hash: u64,
     ) -> Option<NodeId> {
-        if let Some(child_id) = edge.get_child()
-            && let Some(nested_child_id) =
-                self.find_referenced_state_node(child_id, transposition_hash)
-        {
+        if let Some(nested_child_id) = self.graph.get_edge_state_with_hash(edge, transposition_hash) {
             return Some(nested_child_id);
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
             let existing_id = *existing_id;
-            self.add_child_to_edge(edge, existing_id);
+            self.graph.add_child_to_edge(edge, existing_id);
             Some(existing_id)
         } else {
             None
         }
     }
-
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];
@@ -121,7 +118,7 @@ where
 
             if visited.insert(current) {
                 path.push(current);
-                node.visits.fetch_add(1, Ordering::AcqRel);
+                node.increment_visits();
             }
 
             debug_assert!(
@@ -135,7 +132,7 @@ where
                 .expect("Selected edge must be expanded");
             let action = &node.get_action(edge_idx).action;
 
-            edge.visits.fetch_add(1, Ordering::AcqRel);
+            edge.increment_visits();
 
             let next_game_state = self.game_engine.take_action(&game_state, action);
             game_state = BorrowedOrOwned::Owned(next_game_state);
@@ -148,7 +145,7 @@ where
                     terminal_value,
                 });
             } else if let Some(child_id) =
-                self.get_or_lookup_child(edge, game_state.transposition_hash())
+                self.get_or_link_transposition(edge, game_state.transposition_hash())
             {
                 current = child_id;
             } else {

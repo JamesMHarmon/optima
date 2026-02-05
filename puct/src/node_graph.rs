@@ -30,8 +30,13 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         }
     }
 
+    /// Check if an edge already points to a state with the given transposition hash.
+    pub fn get_edge_state_with_hash(&self, edge: &PUCTEdge, transposition_hash: u64) -> Option<NodeId> {
+        edge.get_child()
+            .and_then(|child_id| self.find_state_with_hash(child_id, transposition_hash))
+    }
+
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
-    /// Uses copy-on-write to avoid unsafe mutation with concurrent readers.
     pub fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
         if edge.try_set_child(child_id) {
             return;
