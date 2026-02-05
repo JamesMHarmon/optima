@@ -89,11 +89,16 @@ where
 
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
     /// Returns None if this is a new position that needs expansion.
-    fn get_or_set_transposition(&self, edge: &PUCTEdge, transposition_hash: u64) -> Option<NodeId> {
+    fn get_or_set_edge_for_transposition(
+        &self,
+        edge: &PUCTEdge,
+        transposition_hash: u64,
+    ) -> Option<NodeId> {
         if let Some(child_id) = edge.get_child()
-            && let Some(child_id) = self.find_referenced_state_node(child_id, transposition_hash)
+            && let Some(nested_child_id) =
+                self.find_referenced_state_node(child_id, transposition_hash)
         {
-            return Some(child_id);
+            return Some(nested_child_id);
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
