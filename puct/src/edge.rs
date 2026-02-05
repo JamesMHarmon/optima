@@ -28,4 +28,10 @@ impl PUCTEdge {
         let new_value = node_id.as_u32();
         self.child.store(new_value, Ordering::Relaxed);
     }
+
+    pub fn try_set_child(&self, new_child: NodeId) -> bool {
+        self.child
+            .compare_exchange(u32::MAX, new_child.as_u32(), Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
 }

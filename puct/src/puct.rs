@@ -4,12 +4,15 @@ use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::JoinHandle;
+use tinyvec::TinyVec;
+
+use crate::node_arena;
 
 use super::{
-    AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeId,
-    PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    AfterState, AfterStateOutcome, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeId,
+    PUCTEdge, SelectionPolicy, StateNode, Terminal, NodeType
 };
 
 const NUM_SELECTIONS: i32 = 10;
@@ -74,26 +77,78 @@ where
 
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
     /// Returns None if this is a new position that needs expansion.
-    fn get_or_lookup_child(&self, edge: &PUCTEdge, state: &E::State) -> Option<NodeId> {
-        let transposition_hash = state.transposition_hash();
-
-        if let Some(child_id) = edge.get_child() {
-            let child_node = self.nodes.get_state(child_id);
-            debug_assert_eq!(
-                child_node.transposition_hash, transposition_hash,
-                "Edge's cached child node must match the state hash - edges point to a single node"
-            );
+    fn get_or_set_transposition(&self, edge: &PUCTEdge, transposition_hash: u64) -> Option<NodeId> {
+        if let Some(child_id) = edge.get_child() &&
+            let Some(child_id) = self.find_referenced_state_node(child_id, transposition_hash) {
             return Some(child_id);
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
             let existing_id = *existing_id;
-            edge.set_child(existing_id);
+            self.add_child_to_edge(edge, existing_id);
             Some(existing_id)
         } else {
             None
         }
     }
+
+    fn find_referenced_state_node(&self, node_id: NodeId, transposition_hash: u64) -> Option<NodeId> {
+        match node_id.node_type() {
+            NodeType::State => (self.nodes.get_state(node_id).transposition_hash == transposition_hash).then_some(node_id),
+            NodeType::AfterState => self.nodes.get_after_state(node_id).outcomes.iter().find_map(|outcome| {
+                let child_id = NodeId::from_u32(outcome.child.load(Ordering::Acquire));
+                self.find_referenced_state_node(child_id, transposition_hash)
+            }),
+            NodeType::Terminal => None
+        }
+
+        // @TODO: Do I need to increment visits if found in afterstate?
+    }
+
+    fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
+        if edge.try_set_child(child_id) {
+            return;
+        }
+
+        let existing_child_id = edge.get_child().expect("Child must be set if try_set_child failed");
+
+        let after_state = match existing_child_id.node_type() {
+            NodeType::AfterState => self.nodes.get_after_state(existing_child_id),
+            NodeType::State | NodeType::Terminal => {
+                // Convert to AfterState with existing child as first outcome
+                let after_state_id = self.nodes.push_after_state(AfterState {
+                    outcomes: TinyVec::new(),
+                });
+                
+                let after_state = self.nodes.get_after_state(after_state_id);
+                after_state.outcomes.push(AfterStateOutcome {
+                    visits: AtomicU32::new(0),
+                    child: AtomicU32::new(existing_child_id.as_u32()),
+                });
+                
+                edge.set_child(after_state_id);
+                after_state
+            }
+        };
+
+        // Add new child as an outcome
+        after_state.outcomes.push(AfterStateOutcome {
+            visits: AtomicU32::new(0),
+            child: AtomicU32::new(child_id.as_u32()),
+        });
+
+        debug_assert!(
+            {
+                let outcome_count = after_state.outcomes.len();
+                let ids: HashSet<_> = after_state.outcomes.iter()
+                    .map(|o| NodeId::from_u32(o.child.load(Ordering::Acquire)))
+                    .collect();
+                ids.len() == outcome_count && ids.iter().filter(|id| id.node_type() == NodeType::Terminal).count() <= 1
+            },
+            "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
+        );
+    }
+
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];
@@ -126,11 +181,13 @@ where
             game_state = BorrowedOrOwned::Owned(next_game_state);
 
             if let Some(terminal_value) = self.game_engine.terminal_state(&game_state) {
+                self.update_edge_with_terminal(edge, &terminal_value);
+
                 return SelectionResult::Terminal(TerminalSelection {
                     path,
                     terminal_value,
                 });
-            } else if let Some(child_id) = self.get_or_lookup_child(edge, &game_state) {
+            } else if let Some(child_id) = self.get_or_lookup_child(edge, game_state.transposition_hash()) {
                 current = child_id;
             } else {
                 return SelectionResult::Unexpanded(UnexpandedSelection {
@@ -139,6 +196,11 @@ where
                 });
             }
         }
+    }
+
+    fn update_edge_with_terminal(&self, edge: &PUCTEdge, terminal_value: &E::Terminal) {
+        // Update edge statistics based on terminal value
+        // Placeholder for actual implementation
     }
 
     fn create_node(&self, transposition_hash: u64, policy_priors: Vec<ActionWithPolicy<M::Action>>, game_state: &E::State, predictions: &M::Predictions) -> NodeId {
