@@ -112,21 +112,21 @@ impl<S, A, T> NodeArena<S, A, T> {
     }
 
     #[inline]
-    pub fn get_state(&self, id: NodeId) -> &S {
+    pub fn get_state_node(&self, id: NodeId) -> &S {
         debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
         debug_assert_eq!(id.node_type(), NodeType::State);
         &self.state_nodes[id.index()]
     }
 
     #[inline]
-    pub fn get_after_state(&self, id: NodeId) -> &A {
+    pub fn get_after_state_node(&self, id: NodeId) -> &A {
         debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
         debug_assert_eq!(id.node_type(), NodeType::AfterState);
         &self.after_state_nodes[id.index()]
     }
 
     #[inline]
-    pub fn get_terminal(&self, id: NodeId) -> &T {
+    pub fn get_terminal_node(&self, id: NodeId) -> &T {
         debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
         debug_assert_eq!(id.node_type(), NodeType::Terminal);
         &self.terminal_nodes[id.index()]

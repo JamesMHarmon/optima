@@ -114,20 +114,14 @@ where
         let mut game_state = BorrowedOrOwned::Borrowed(&self.game_state);
 
         loop {
-            let node = self.nodes.get_state(current);
+            let node = self.nodes.get_state_node(current);
 
             if visited.insert(current) {
                 path.push(current);
                 node.increment_visits();
             }
 
-            debug_assert!(
-                !node.edges.is_empty(),
-                "Node in tree should always have edges - should be terminal"
-            );
-
-            let edge_idx = self.select_edge(node);
-            let (edge, action) = node.get_edge_and_action(edge_idx);
+            let (edge, action) = self.select_action(node);
 
             edge.increment_visits();
 
@@ -136,18 +130,15 @@ where
 
             if let Some(terminal_value) = self.game_engine.terminal_state(&game_state) {
                 self.update_edge_with_terminal(edge, &terminal_value);
-
-                return SelectionResult::Terminal(TerminalSelection {
-                    path,
-                    terminal_value,
-                });
-            } else if let Some(child_id) =
-                self.get_or_link_transposition(edge, game_state.transposition_hash())
-            {
-                current = child_id;
-            } else {
-                return SelectionResult::Unexpanded(UnexpandedSelection { path, game_state });
+                return SelectionResult::Terminal(TerminalSelection { path, terminal_value });
             }
+
+            if let Some(child_id) = self.get_or_link_transposition(edge, game_state.transposition_hash()) {
+                current = child_id;
+                continue;
+            }
+
+            return SelectionResult::Unexpanded(UnexpandedSelection { path, game_state });
         }
     }
 
@@ -163,6 +154,11 @@ where
         game_state: &E::State,
         predictions: &M::Predictions,
     ) -> NodeId {
+        debug_assert!(
+            !policy_priors.is_empty(),
+            "Cannot create state node without actions - should be terminal"
+        );
+
         let state_info = self.backpropagation_strategy.state_info(game_state);
         let rollup_stats = self
             .backpropagation_strategy
@@ -178,7 +174,7 @@ where
 
     fn backpropagate(&self, path: Vec<NodeId>, _predictions: &M::Predictions) {
         for &node_id in path.iter().rev() {
-            let node = self.nodes.get_state(node_id);
+            let node = self.nodes.get_state_node(node_id);
 
             self.backpropagation_strategy
                 .aggregate_stats(&node.rollup_stats, node.iter_children_stats(&self.nodes));
@@ -186,7 +182,7 @@ where
     }
 
     fn get_root_node(&self) -> &StateNode<E::Action, B::RollupStats, B::StateInfo> {
-        self.nodes.get_state(NodeId::from_u32(0))
+        self.nodes.get_state_node(NodeId::from_u32(0))
     }
 
     fn select_edge(&self, node: &StateNode<E::Action, B::RollupStats, B::StateInfo>) -> usize {
@@ -208,6 +204,11 @@ where
             &self.game_state,
             0,
         )
+    }
+
+    fn select_action<'a>(&self, node: &'a StateNode<E::Action, B::RollupStats, B::StateInfo>) -> (&'a PUCTEdge, &'a E::Action) {
+        let edge_idx = self.select_edge(node);
+        node.get_edge_and_action(edge_idx)
     }
 }
 

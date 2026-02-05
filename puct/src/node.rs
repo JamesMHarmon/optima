@@ -87,13 +87,13 @@ impl<A, R, SI> StateNode<A, R, SI> {
         } else {
             let child_id = NodeId::from_u32(child_raw);
             Some(match child_id.node_type() {
-                NodeType::State => &nodes.get_state(child_id).rollup_stats,
+                NodeType::State => &nodes.get_state_node(child_id).rollup_stats,
                 NodeType::AfterState => {
                     // AfterState stats are aggregated from outcomes, not stored directly
                     // TODO: implement aggregate_after_state_stats to compute weighted average
                     panic!("AfterState rollup_stats aggregation not yet implemented")
                 }
-                NodeType::Terminal => &nodes.get_terminal(child_id).rollup_stats,
+                NodeType::Terminal => &nodes.get_terminal_node(child_id).rollup_stats,
             })
         };
 
@@ -124,13 +124,13 @@ impl<A, R, SI> StateNode<A, R, SI> {
 
             // Get rollup stats based on child type
             let rollup_stats = match child_id.node_type() {
-                NodeType::State => Some(&nodes.get_state(child_id).rollup_stats),
+                NodeType::State => Some(&nodes.get_state_node(child_id).rollup_stats),
                 NodeType::AfterState => {
                     // AfterState stats must be aggregated from outcomes
                     // This is expensive but necessary for weighted averaging
                     None // TODO: compute on-demand or cache
                 }
-                NodeType::Terminal => Some(&nodes.get_terminal(child_id).rollup_stats),
+                NodeType::Terminal => Some(&nodes.get_terminal_node(child_id).rollup_stats),
             };
 
             rollup_stats.map(|stats| (stats, visits))
@@ -180,8 +180,8 @@ impl AfterState {
 
             // AfterState outcomes always point to either State or Terminal nodes
             let rollup_stats = match child_id.node_type() {
-                NodeType::State => &nodes.get_state(child_id).rollup_stats,
-                NodeType::Terminal => &nodes.get_terminal(child_id).rollup_stats,
+                NodeType::State => &nodes.get_state_node(child_id).rollup_stats,
+                NodeType::Terminal => &nodes.get_terminal_node(child_id).rollup_stats,
                 NodeType::AfterState => {
                     panic!("AfterState outcome cannot point to another AfterState")
                 }
