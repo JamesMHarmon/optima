@@ -14,7 +14,12 @@ pub struct StateNode<A, R, SI> {
 }
 
 impl<A, R, SI> StateNode<A, R, SI> {
-    pub fn new(transposition_hash: u64, policy_priors: Vec<ActionWithPolicy<A>>, state_info: SI, rollup_stats: R) -> Self {
+    pub fn new(
+        transposition_hash: u64,
+        policy_priors: Vec<ActionWithPolicy<A>>,
+        state_info: SI,
+        rollup_stats: R,
+    ) -> Self {
         Self {
             transposition_hash,
             visits: AtomicU32::new(1),
@@ -105,7 +110,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
 
             let child_id = NodeId::from_u32(child_raw);
             let visits = edge.visits.load(Ordering::Acquire);
-            
+
             // Get rollup stats based on child type
             let rollup_stats = match child_id.node_type() {
                 NodeType::State => Some(&nodes.get_state(child_id).rollup_stats),
@@ -141,6 +146,10 @@ pub struct AfterState {
 }
 
 impl AfterState {
+    pub fn new(outcomes: TinyVec<[AfterStateOutcome; 2]>) -> Self {
+        Self { outcomes }
+    }
+
     /// Iterate over outcome children with their rollup stats and visits.
     ///
     /// This provides the data needed for aggregating AfterState statistics from outcomes.
@@ -150,14 +159,14 @@ impl AfterState {
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = (&'a R, u32)> + 'a {
         self.outcomes.iter().filter_map(move |outcome| {
-            let child_raw = outcome.child.load(Ordering::Acquire);
-            if child_raw == u32::MAX {
-                return None;
-            }
-
-            let child_id = NodeId::from_u32(child_raw);
+            let child_id = outcome.child;
             let visits = outcome.visits.load(Ordering::Acquire);
-            
+
+            debug_assert!(
+                child_id.as_u32() != u32::MAX,
+                "AfterState outcome has unset child NodeId"
+            );
+
             // AfterState outcomes always point to either State or Terminal nodes
             let rollup_stats = match child_id.node_type() {
                 NodeType::State => &nodes.get_state(child_id).rollup_stats,
@@ -175,14 +184,14 @@ impl AfterState {
 /// Possible outcome from an AfterState node.
 pub struct AfterStateOutcome {
     pub visits: AtomicU32,
-    pub child: AtomicU32,
+    pub child: NodeId,
 }
 
 impl AfterStateOutcome {
     pub fn new() -> Self {
         Self {
             visits: AtomicU32::new(0),
-            child: AtomicU32::new(u32::MAX),
+            child: u32::MAX.into(),
         }
     }
 }

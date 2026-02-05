@@ -11,8 +11,8 @@ use tinyvec::TinyVec;
 use crate::node_arena;
 
 use super::{
-    AfterState, AfterStateOutcome, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeId,
-    PUCTEdge, SelectionPolicy, StateNode, Terminal, NodeType
+    AfterState, AfterStateOutcome, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
+    NodeId, NodeType, PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
 
 const NUM_SELECTIONS: i32 = 10;
@@ -29,7 +29,11 @@ where
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: E::State,
-    nodes: NodeArena<StateNode<E::Action, B::RollupStats, B::StateInfo>, AfterState, Terminal<B::RollupStats>>,
+    nodes: NodeArena<
+        StateNode<E::Action, B::RollupStats, B::StateInfo>,
+        AfterState,
+        Terminal<B::RollupStats>,
+    >,
     transposition_table: DashMap<u64, NodeId>,
 }
 
@@ -61,15 +65,23 @@ where
         self.backpropagate(path, &predictions);
     }
 
-    fn expand_unexpanded(&self, unexpanded: UnexpandedSelection<'_, E::State>) -> (Vec<NodeId>, M::Predictions) {
+    fn expand_unexpanded(
+        &self,
+        unexpanded: UnexpandedSelection<'_, E::State>,
+    ) -> (Vec<NodeId>, M::Predictions) {
         let UnexpandedSelection {
             mut path,
             game_state,
         } = unexpanded;
 
         let (policy_priors, predictions) = self.analyzer.analyze(&*game_state).into_inner();
-        let new_node_id = self.create_node(game_state.transposition_hash(), policy_priors, &*game_state, &predictions);
-        
+        let new_node_id = self.create_node(
+            game_state.transposition_hash(),
+            policy_priors,
+            &*game_state,
+            &predictions,
+        );
+
         path.push(new_node_id);
 
         (path, predictions)
@@ -78,8 +90,9 @@ where
     /// Get child from edge if cached, otherwise lookup in transposition table and cache.
     /// Returns None if this is a new position that needs expansion.
     fn get_or_set_transposition(&self, edge: &PUCTEdge, transposition_hash: u64) -> Option<NodeId> {
-        if let Some(child_id) = edge.get_child() &&
-            let Some(child_id) = self.find_referenced_state_node(child_id, transposition_hash) {
+        if let Some(child_id) = edge.get_child()
+            && let Some(child_id) = self.find_referenced_state_node(child_id, transposition_hash)
+        {
             return Some(child_id);
         }
 
@@ -92,14 +105,24 @@ where
         }
     }
 
-    fn find_referenced_state_node(&self, node_id: NodeId, transposition_hash: u64) -> Option<NodeId> {
+    fn find_referenced_state_node(
+        &self,
+        node_id: NodeId,
+        transposition_hash: u64,
+    ) -> Option<NodeId> {
         match node_id.node_type() {
-            NodeType::State => (self.nodes.get_state(node_id).transposition_hash == transposition_hash).then_some(node_id),
-            NodeType::AfterState => self.nodes.get_after_state(node_id).outcomes.iter().find_map(|outcome| {
-                let child_id = NodeId::from_u32(outcome.child.load(Ordering::Acquire));
-                self.find_referenced_state_node(child_id, transposition_hash)
-            }),
-            NodeType::Terminal => None
+            NodeType::State => (self.nodes.get_state(node_id).transposition_hash
+                == transposition_hash)
+                .then_some(node_id),
+            NodeType::AfterState => self
+                .nodes
+                .get_after_state(node_id)
+                .outcomes
+                .iter()
+                .find_map(|outcome| {
+                    self.find_referenced_state_node(outcome.child, transposition_hash)
+                }),
+            NodeType::Terminal => None,
         }
 
         // @TODO: Do I need to increment visits if found in afterstate?
@@ -110,45 +133,52 @@ where
             return;
         }
 
-        let existing_child_id = edge.get_child().expect("Child must be set if try_set_child failed");
+        let existing_child_id = edge
+            .get_child()
+            .expect("Child must be set if try_set_child failed");
 
         let after_state = match existing_child_id.node_type() {
-            NodeType::AfterState => self.nodes.get_after_state(existing_child_id),
+            NodeType::AfterState => {
+                panic!(
+                    "Current implementation supports a maximum of two after states. Update implementation to support more."
+                )
+            }
             NodeType::State | NodeType::Terminal => {
-                // Convert to AfterState with existing child as first outcome
-                let after_state_id = self.nodes.push_after_state(AfterState {
-                    outcomes: TinyVec::new(),
+                let mut outcomes = TinyVec::new();
+
+                // @TODO: Where do we increment the visit here? I guess that we don't because this isn't the edge being selected?
+                outcomes.push(AfterStateOutcome {
+                    visits: AtomicU32::new(edge.visits.load(Ordering::Acquire)),
+                    child: existing_child_id,
                 });
-                
-                let after_state = self.nodes.get_after_state(after_state_id);
-                after_state.outcomes.push(AfterStateOutcome {
+
+                // @TODO: Should visits set to be 1 here?
+                outcomes.push(AfterStateOutcome {
                     visits: AtomicU32::new(0),
-                    child: AtomicU32::new(existing_child_id.as_u32()),
+                    child: child_id,
                 });
-                
+
+                let after_state_id = self.nodes.push_after_state(AfterState::new(outcomes));
                 edge.set_child(after_state_id);
-                after_state
+
+                self.nodes.get_after_state(after_state_id)
             }
         };
-
-        // Add new child as an outcome
-        after_state.outcomes.push(AfterStateOutcome {
-            visits: AtomicU32::new(0),
-            child: AtomicU32::new(child_id.as_u32()),
-        });
 
         debug_assert!(
             {
                 let outcome_count = after_state.outcomes.len();
-                let ids: HashSet<_> = after_state.outcomes.iter()
-                    .map(|o| NodeId::from_u32(o.child.load(Ordering::Acquire)))
-                    .collect();
-                ids.len() == outcome_count && ids.iter().filter(|id| id.node_type() == NodeType::Terminal).count() <= 1
+                let ids: HashSet<_> = after_state.outcomes.iter().map(|o| o.child).collect();
+                ids.len() == outcome_count
+                    && ids
+                        .iter()
+                        .filter(|id| id.node_type() == NodeType::Terminal)
+                        .count()
+                        <= 1
             },
-            "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
+            "AfterState outcomes should not contain duplicate node IDs and at most one terminal"
         );
     }
-
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];
@@ -187,13 +217,12 @@ where
                     path,
                     terminal_value,
                 });
-            } else if let Some(child_id) = self.get_or_lookup_child(edge, game_state.transposition_hash()) {
+            } else if let Some(child_id) =
+                self.get_or_lookup_child(edge, game_state.transposition_hash())
+            {
                 current = child_id;
             } else {
-                return SelectionResult::Unexpanded(UnexpandedSelection {
-                    path,
-                    game_state,
-                });
+                return SelectionResult::Unexpanded(UnexpandedSelection { path, game_state });
             }
         }
     }
@@ -203,9 +232,17 @@ where
         // Placeholder for actual implementation
     }
 
-    fn create_node(&self, transposition_hash: u64, policy_priors: Vec<ActionWithPolicy<M::Action>>, game_state: &E::State, predictions: &M::Predictions) -> NodeId {
+    fn create_node(
+        &self,
+        transposition_hash: u64,
+        policy_priors: Vec<ActionWithPolicy<M::Action>>,
+        game_state: &E::State,
+        predictions: &M::Predictions,
+    ) -> NodeId {
         let state_info = self.backpropagation_strategy.state_info(game_state);
-        let rollup_stats = self.backpropagation_strategy.create_rollup_stats(&state_info, predictions);
+        let rollup_stats = self
+            .backpropagation_strategy
+            .create_rollup_stats(&state_info, predictions);
         let new_node = StateNode::new(transposition_hash, policy_priors, state_info, rollup_stats);
 
         let new_node_id = self.nodes.push_state(new_node);
@@ -218,11 +255,9 @@ where
     fn backpropagate(&self, path: Vec<NodeId>, _predictions: &M::Predictions) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state(node_id);
-            
-            self.backpropagation_strategy.aggregate_stats(
-                &node.rollup_stats,
-                node.iter_children_stats(&self.nodes),
-            );
+
+            self.backpropagation_strategy
+                .aggregate_stats(&node.rollup_stats, node.iter_children_stats(&self.nodes));
         }
     }
 
