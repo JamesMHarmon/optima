@@ -127,10 +127,7 @@ where
             );
 
             let edge_idx = self.select_edge(node);
-            let edge = node
-                .get_edge(edge_idx)
-                .expect("Selected edge must be expanded");
-            let action = &node.get_action(edge_idx).action;
+            let (edge, action) = node.get_edge_and_action(edge_idx);
 
             edge.increment_visits();
 

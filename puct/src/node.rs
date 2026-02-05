@@ -52,6 +52,12 @@ impl<A, R, SI> StateNode<A, R, SI> {
         &self.policy_priors[index]
     }
 
+    pub fn get_edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
+        let edge = self.get_edge(index).expect("Selected edge must be expanded");
+        let action = &self.get_action(index).action;
+        (edge, action)
+    }
+
     pub fn edge_count(&self) -> usize {
         self.edges.len()
     }
@@ -163,7 +169,7 @@ impl AfterState {
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = (&'a R, u32)> + 'a {
-        self.outcomes.iter().filter_map(move |outcome| {
+        self.outcomes.iter().map(move |outcome| {
             let child_id = outcome.child;
             let visits = outcome.visits.load(Ordering::Acquire);
 
@@ -181,7 +187,7 @@ impl AfterState {
                 }
             };
 
-            Some((rollup_stats, visits))
+            (rollup_stats, visits)
         })
     }
 }
