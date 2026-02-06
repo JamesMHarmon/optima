@@ -36,6 +36,24 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
             .and_then(|child_id| self.find_state_with_hash(child_id, transposition_hash))
     }
 
+    /// Find terminal node reachable through edge and return its ID with visit count.
+    /// Returns edge visits if pointing directly to terminal, or outcome visits if through AfterState.
+    pub fn find_edge_terminal(&self, edge: &PUCTEdge) -> Option<(NodeId, u32)> {
+        edge.get_child().and_then(|child_id| match child_id.node_type() {
+            NodeType::Terminal => {
+                let visits = edge.visits.load(Ordering::Acquire);
+                Some((child_id, visits))
+            }
+            NodeType::AfterState => {
+                let after_state = self.arena.get_after_state_node(child_id);
+                after_state.outcomes.iter()
+                    .find(|outcome| outcome.child.node_type() == NodeType::Terminal)
+                    .map(|outcome| (outcome.child, outcome.visits.load(Ordering::Acquire)))
+            }
+            NodeType::State => None,
+        })
+    }
+
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
     pub fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
         if edge.try_set_child(child_id) {

@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
-    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal, TerminalStatus,
 };
 
 const NUM_SELECTIONS: i32 = 10;
@@ -57,34 +57,30 @@ where
     }
 
     fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
-        let (path, predictions) = match selection {
-            SelectionResult::Unexpanded(unexpanded) => self.expand_unexpanded(unexpanded),
-            SelectionResult::Terminal(terminal) => terminal.into_inner(),
+        let new_node = match selection {
+            SelectionResult { terminal: None, .. } => Some(self.analyze_and_create_node(&selection.game_state)),
+            SelectionResult { terminal: Some(terminal), .. } => self.update_edge_with_terminal(selection.edge, &terminal),
         };
 
-        self.backpropagate(path, &predictions);
+        if let Some(new_node_id) = new_node {
+            self.graph.add_child_to_edge(selection.edge, new_node_id);
+        }
+        
+        self.backpropagate(selection.path);
     }
 
-    fn expand_unexpanded(
+    fn analyze_and_create_node (
         &self,
-        unexpanded: UnexpandedSelection<'_, E::State>,
-    ) -> (Vec<NodeId>, M::Predictions) {
-        let UnexpandedSelection {
-            mut path,
-            game_state,
-        } = unexpanded;
-
+        game_state: &E::State
+    ) -> NodeId {
         let (policy_priors, predictions) = self.analyzer.analyze(&*game_state).into_inner();
-        let new_node_id = self.create_node(
+
+        self.create_node(
             game_state.transposition_hash(),
             policy_priors,
             &*game_state,
             &predictions,
-        );
-
-        path.push(new_node_id);
-
-        (path, predictions)
+        )
     }
 
     /// Get child from edge if cached, otherwise lookup in transposition table and link.
@@ -121,16 +117,16 @@ where
                 node.increment_visits();
             }
 
-            let (edge, action) = self.select_action(node);
+            let edge_idx = self.select_edge(node);
+            let (edge, action) = node.get_edge_and_action(edge_idx);
 
             edge.increment_visits();
 
             let next_game_state = self.game_engine.take_action(&game_state, action);
             game_state = BorrowedOrOwned::Owned(next_game_state);
 
-            if let Some(terminal_value) = self.game_engine.terminal_state(&game_state) {
-                self.update_edge_with_terminal(edge, &terminal_value);
-                return SelectionResult::Terminal(TerminalSelection { path, terminal_value });
+            if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
+                return SelectionResult { path, edge, game_state, terminal: Some(terminal) };
             }
 
             if let Some(child_id) = self.get_or_link_transposition(edge, game_state.transposition_hash()) {
@@ -138,13 +134,28 @@ where
                 continue;
             }
 
-            return SelectionResult::Unexpanded(UnexpandedSelection { path, game_state });
+            return SelectionResult { path, edge, game_state, terminal: None };
         }
     }
 
-    fn update_edge_with_terminal(&self, edge: &PUCTEdge, terminal_value: &E::Terminal) {
-        // Update edge statistics based on terminal value
-        // Placeholder for actual implementation
+    fn update_edge_with_terminal(&self, edge: &PUCTEdge, terminal_value: &E::Terminal) -> Option<NodeId> {
+        let rollup_stats = self.backpropagation_strategy.create_rollup_stats_from_terminal(terminal_value);
+
+        if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
+            // Terminal already exists, merge stats
+            let terminal = self.nodes.get_terminal_node(terminal_id);
+            self.backpropagation_strategy.merge_terminal_stats(
+                &terminal.rollup_stats,
+                &rollup_stats,
+                visits,
+            );
+
+            None
+        } else {
+            // Create new terminal with rollup stats
+            let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
+            Some(terminal_id)
+        }
     }
 
     fn create_node(
@@ -166,13 +177,17 @@ where
         let new_node = StateNode::new(transposition_hash, policy_priors, state_info, rollup_stats);
 
         let new_node_id = self.nodes.push_state(new_node);
-        self.transposition_table
+        let previous_entry = self.transposition_table
             .insert(transposition_hash, new_node_id);
+
+        debug_assert!(
+            previous_entry.is_none(), "Transposition table entry for hash already exists"
+        );
 
         new_node_id
     }
 
-    fn backpropagate(&self, path: Vec<NodeId>, _predictions: &M::Predictions) {
+    fn backpropagate(&self, path: Vec<NodeId>) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
 
@@ -212,32 +227,11 @@ where
     }
 }
 
-enum SelectionResult<'a, S, T> {
-    Terminal(TerminalSelection<T>),
-    Unexpanded(UnexpandedSelection<'a, S>),
-}
-
-struct TerminalSelection<T> {
+struct SelectionResult<'a, S, T> {
     path: Vec<NodeId>,
-    terminal_value: T,
-}
-
-impl<T> TerminalSelection<T> {
-    fn into_inner(self) -> (Vec<NodeId>, T) {
-        (self.path, self.terminal_value)
-    }
-}
-
-struct UnexpandedSelection<'a, S> {
-    path: Vec<NodeId>,
+    edge: &'a PUCTEdge,
     game_state: BorrowedOrOwned<'a, S>,
-}
-
-struct ExpansionResult<S, A, P, R, SI> {
-    path: Vec<NodeId>,
-    game_state: S,
-    new_node: StateNode<A, R, SI>,
-    predictions: P,
+    terminal: Option<T>
 }
 
 struct Workers {

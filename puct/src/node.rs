@@ -217,3 +217,9 @@ impl Default for AfterStateOutcome {
 pub struct Terminal<R> {
     pub rollup_stats: R,
 }
+
+impl<R> Terminal<R> {
+    pub fn new(rollup_stats: R) -> Self {
+        Self { rollup_stats }
+    }
+}
