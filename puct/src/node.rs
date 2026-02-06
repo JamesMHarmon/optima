@@ -136,17 +136,23 @@ impl<A, R, SI> StateNode<A, R, SI> {
             let visits = edge.visits.load(Ordering::Acquire);
 
             // Get rollup stats based on child type
-            let rollup_stats = match child_id.node_type() {
-                NodeType::State => Some(&nodes.get_state_node(child_id).rollup_stats),
-                NodeType::AfterState => {
-                    // AfterState stats must be aggregated from outcomes
-                    // This is expensive but necessary for weighted averaging
-                    None // TODO: compute on-demand or cache
+            match child_id.node_type() {
+                NodeType::State => {
+                    let stats = &nodes.get_state_node(child_id).rollup_stats;
+                    Some((stats, visits))
                 }
-                NodeType::Terminal => Some(&nodes.get_terminal_node(child_id).rollup_stats),
-            };
-
-            rollup_stats.map(|stats| (stats, visits))
+                NodeType::AfterState => {
+                    // AfterState nodes don't store rollup_stats directly.
+                    // They would need to be aggregated from outcomes on-demand,
+                    // but we can't return a reference to computed values.
+                    // Skip AfterState children in this iteration.
+                    None
+                }
+                NodeType::Terminal => {
+                    let stats = &nodes.get_terminal_node(child_id).rollup_stats;
+                    Some((stats, visits))
+                }
+            }
         })
     }
 }
