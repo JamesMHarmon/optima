@@ -1,8 +1,6 @@
 pub trait WeightedMerge {
-    type Weight;
-
     fn zero() -> Self;
-    fn merge_weighted(&mut self, other: &Self, weight: &Self::Weight);
+    fn merge_weighted(&mut self, other: &Self, weight: u32);
 }
 
 pub trait RollupStats {
@@ -15,7 +13,7 @@ pub trait RollupStats {
     fn snapshot(&self) -> Self::Snapshot;
 
     /// Merge another RollupStats into this one with a weight
-    fn merge_rollup_weighted(&self, other: &Self, weight: &<Self::Snapshot as WeightedMerge>::Weight) {
+    fn merge_rollup_weighted(&self, other: &Self, weight: u32) {
         let mut snap = self.snapshot();
         snap.merge_weighted(&other.snapshot(), weight);
         self.update(&snap);
@@ -24,11 +22,11 @@ pub trait RollupStats {
     /// Aggregate weighted snapshots
     fn aggregate_weighted<I>(iter: I) -> Self::Snapshot
     where
-        I: IntoIterator<Item = (Self::Snapshot, <Self::Snapshot as WeightedMerge>::Weight)>,
+        I: IntoIterator<Item = (Self::Snapshot, u32)>,
     {
         let mut out = Self::Snapshot::zero();
         for (snap, weight) in iter {
-            out.merge_weighted(&snap, &weight);
+            out.merge_weighted(&snap, weight);
         }
         out
     }
@@ -60,7 +58,7 @@ pub enum EdgeStats<'a, R: RollupStats> {
 
     Afterstates {
         prior: f32,
-        outcomes: &'a [(R, <R::Snapshot as WeightedMerge>::Weight)],
+        outcomes: &'a [(R, u32)],
     },
 }
 
@@ -69,7 +67,7 @@ pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<'_, R>) -> (f32, R::Snapsh
         EdgeStats::Direct { stats, prior } => (*prior, stats.snapshot()),
 
         EdgeStats::Afterstates { prior, outcomes } => {
-            let snap = R::aggregate_weighted(outcomes.iter().map(|(r, w)| (r.snapshot(), w)));
+            let snap = R::aggregate_weighted(outcomes.iter().map(|(r, w)| (r.snapshot(), *w)));
             (*prior, snap)
         }
     }
