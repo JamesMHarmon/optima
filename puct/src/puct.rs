@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
-    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal, TerminalStatus,
+    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
 
 const NUM_SELECTIONS: i32 = 10;
@@ -59,7 +59,9 @@ where
     fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
         let new_node = match selection {
             SelectionResult { terminal: None, .. } => Some(self.analyze_and_create_node(&selection.game_state)),
-            SelectionResult { terminal: Some(terminal), .. } => self.update_edge_with_terminal(selection.edge, &terminal),
+            SelectionResult { terminal: Some(terminal), .. } => {
+                self.create_or_merge_terminal (selection.edge, &selection.game_state, &terminal)
+            }
         };
 
         if let Some(new_node_id) = new_node {
@@ -73,14 +75,25 @@ where
         &self,
         game_state: &E::State
     ) -> NodeId {
-        let (policy_priors, predictions) = self.analyzer.analyze(&*game_state).into_inner();
+        let (policy_priors, predictions) = self.analyzer.analyze(game_state).into_inner();
 
         self.create_node(
             game_state.transposition_hash(),
             policy_priors,
-            &*game_state,
+            game_state,
             &predictions,
         )
+    }
+
+    fn create_or_merge_terminal(
+        &self,
+        edge: &PUCTEdge,
+        game_state: &E::State,
+        terminal: &E::Terminal,
+    ) -> Option<NodeId> {
+        let state_info = self.backpropagation_strategy.state_info(game_state);
+        let rollup_stats = self.backpropagation_strategy.create_rollup_stats(&state_info, terminal);
+        self.update_edge_with_terminal(edge, rollup_stats)
     }
 
     /// Get child from edge if cached, otherwise lookup in transposition table and link.
@@ -138,21 +151,15 @@ where
         }
     }
 
-    fn update_edge_with_terminal(&self, edge: &PUCTEdge, terminal_value: &E::Terminal) -> Option<NodeId> {
-        let rollup_stats = self.backpropagation_strategy.create_rollup_stats_from_terminal(terminal_value);
-
+    fn update_edge_with_terminal(&self, edge: &PUCTEdge, rollup_stats: B::RollupStats) -> Option<NodeId> {
         if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
-            // Terminal already exists, merge stats
             let terminal = self.nodes.get_terminal_node(terminal_id);
-            self.backpropagation_strategy.merge_terminal_stats(
+            self.backpropagation_strategy.aggregate_stats(
                 &terminal.rollup_stats,
-                &rollup_stats,
-                visits,
+                [(&terminal.rollup_stats, visits), (&rollup_stats, 1)].into_iter()
             );
-
             None
         } else {
-            // Create new terminal with rollup stats
             let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
             Some(terminal_id)
         }
