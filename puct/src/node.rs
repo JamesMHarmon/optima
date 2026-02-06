@@ -6,12 +6,12 @@ use tinyvec::TinyVec;
 use super::{EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge};
 
 pub struct StateNode<A, R, SI> {
-    pub transposition_hash: u64,
-    pub visits: AtomicU32,
-    pub rollup_stats: R,
-    pub state_info: SI,
-    pub policy_priors: Vec<ActionWithPolicy<A>>,
-    pub edges: Vec<PUCTEdge>,
+    transposition_hash: u64,
+    visits: AtomicU32,
+    rollup_stats: R,
+    state_info: SI,
+    policy_priors: Vec<ActionWithPolicy<A>>,
+    edges: Vec<PUCTEdge>,
 }
 
 impl<A, R, SI> StateNode<A, R, SI> {
@@ -53,7 +53,9 @@ impl<A, R, SI> StateNode<A, R, SI> {
     }
 
     pub fn get_edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
-        let edge = self.get_edge(index).expect("Selected edge must be expanded");
+        let edge = self
+            .get_edge(index)
+            .expect("Selected edge must be expanded");
         let action = &self.get_action(index).action;
         (edge, action)
     }
@@ -62,8 +64,16 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.edges.len()
     }
 
+    pub fn visits(&self) -> u32 {
+        self.visits.load(Ordering::Acquire)
+    }
+
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn rollup_stats(&self) -> &R {
+        &self.rollup_stats
     }
 
     pub fn iter_edges<'a>(

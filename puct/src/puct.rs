@@ -4,22 +4,18 @@ use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
-use std::sync::atomic::{Ordering};
+use std::sync::atomic::Ordering;
 use std::thread::JoinHandle;
 
 use super::{
-    AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena,
-    NodeGraph, NodeId, PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeGraph, NodeId,
+    PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
 
 const NUM_SELECTIONS: i32 = 10;
 const BATCH_SIZE: usize = 32;
 
-type PUCTNodeArena<A, R, SI> = NodeArena<
-    StateNode<A, R, SI>,
-    AfterState,
-    Terminal<R>,
->;
+type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
 pub struct PUCT<'a, E, M, B, Sel>
 where
@@ -58,23 +54,23 @@ where
 
     fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
         let new_node = match selection {
-            SelectionResult { terminal: None, .. } => Some(self.analyze_and_create_node(&selection.game_state)),
-            SelectionResult { terminal: Some(terminal), .. } => {
-                self.create_or_merge_terminal (selection.edge, &selection.game_state, &terminal)
+            SelectionResult { terminal: None, .. } => {
+                Some(self.analyze_and_create_node(&selection.game_state))
             }
+            SelectionResult {
+                terminal: Some(terminal),
+                ..
+            } => self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal),
         };
 
         if let Some(new_node_id) = new_node {
             self.graph.add_child_to_edge(selection.edge, new_node_id);
         }
-        
+
         self.backpropagate(selection.path);
     }
 
-    fn analyze_and_create_node (
-        &self,
-        game_state: &E::State
-    ) -> NodeId {
+    fn analyze_and_create_node(&self, game_state: &E::State) -> NodeId {
         let (policy_priors, predictions) = self.analyzer.analyze(game_state).into_inner();
 
         self.create_node(
@@ -92,7 +88,9 @@ where
         terminal: &E::Terminal,
     ) -> Option<NodeId> {
         let state_info = self.backpropagation_strategy.state_info(game_state);
-        let rollup_stats = self.backpropagation_strategy.create_rollup_stats(&state_info, terminal);
+        let rollup_stats = self
+            .backpropagation_strategy
+            .create_rollup_stats(&state_info, terminal);
         self.update_edge_with_terminal(edge, rollup_stats)
     }
 
@@ -103,7 +101,10 @@ where
         edge: &PUCTEdge,
         transposition_hash: u64,
     ) -> Option<NodeId> {
-        if let Some(nested_child_id) = self.graph.get_edge_state_with_hash(edge, transposition_hash) {
+        if let Some(nested_child_id) = self
+            .graph
+            .get_edge_state_with_hash(edge, transposition_hash)
+        {
             return Some(nested_child_id);
         }
 
@@ -139,24 +140,40 @@ where
             game_state = BorrowedOrOwned::Owned(next_game_state);
 
             if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
-                return SelectionResult { path, edge, game_state, terminal: Some(terminal) };
+                return SelectionResult {
+                    path,
+                    edge,
+                    game_state,
+                    terminal: Some(terminal),
+                };
             }
 
-            if let Some(child_id) = self.get_or_link_transposition(edge, game_state.transposition_hash()) {
+            if let Some(child_id) =
+                self.get_or_link_transposition(edge, game_state.transposition_hash())
+            {
                 current = child_id;
                 continue;
             }
 
-            return SelectionResult { path, edge, game_state, terminal: None };
+            return SelectionResult {
+                path,
+                edge,
+                game_state,
+                terminal: None,
+            };
         }
     }
 
-    fn update_edge_with_terminal(&self, edge: &PUCTEdge, rollup_stats: B::RollupStats) -> Option<NodeId> {
+    fn update_edge_with_terminal(
+        &self,
+        edge: &PUCTEdge,
+        rollup_stats: B::RollupStats,
+    ) -> Option<NodeId> {
         if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
             let terminal = self.nodes.get_terminal_node(terminal_id);
             self.backpropagation_strategy.aggregate_stats(
                 &terminal.rollup_stats,
-                [(&terminal.rollup_stats, visits), (&rollup_stats, 1)].into_iter()
+                [(&terminal.rollup_stats, visits), (&rollup_stats, 1)].into_iter(),
             );
             None
         } else {
@@ -184,11 +201,13 @@ where
         let new_node = StateNode::new(transposition_hash, policy_priors, state_info, rollup_stats);
 
         let new_node_id = self.nodes.push_state(new_node);
-        let previous_entry = self.transposition_table
+        let previous_entry = self
+            .transposition_table
             .insert(transposition_hash, new_node_id);
 
         debug_assert!(
-            previous_entry.is_none(), "Transposition table entry for hash already exists"
+            previous_entry.is_none(),
+            "Transposition table entry for hash already exists"
         );
 
         new_node_id
@@ -199,7 +218,7 @@ where
             let node = self.nodes.get_state_node(node_id);
 
             self.backpropagation_strategy
-                .aggregate_stats(&node.rollup_stats, node.iter_children_stats(&self.nodes));
+                .aggregate_stats(&node.rollup_stats(), node.iter_children_stats(&self.nodes));
         }
     }
 
@@ -220,15 +239,14 @@ where
             }
         });
 
-        self.selection_strategy.select_edge(
-            edge_iter,
-            node.visits.load(Ordering::Acquire),
-            &self.game_state,
-            0,
-        )
+        self.selection_strategy
+            .select_edge(edge_iter, node.visits(), &self.game_state, 0)
     }
 
-    fn select_action<'a>(&self, node: &'a StateNode<E::Action, B::RollupStats, B::StateInfo>) -> (&'a PUCTEdge, &'a E::Action) {
+    fn select_action<'a>(
+        &self,
+        node: &'a StateNode<E::Action, B::RollupStats, B::StateInfo>,
+    ) -> (&'a PUCTEdge, &'a E::Action) {
         let edge_idx = self.select_edge(node);
         node.get_edge_and_action(edge_idx)
     }
@@ -238,7 +256,7 @@ struct SelectionResult<'a, S, T> {
     path: Vec<NodeId>,
     edge: &'a PUCTEdge,
     game_state: BorrowedOrOwned<'a, S>,
-    terminal: Option<T>
+    terminal: Option<T>,
 }
 
 struct Workers {
