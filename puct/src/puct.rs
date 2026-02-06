@@ -49,14 +49,11 @@ where
     }
 
     fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
-        let new_node = match selection {
-            SelectionResult { terminal: None, .. } => {
-                Some(self.analyze_and_create_node(&selection.game_state))
+        let new_node = match selection.terminal {
+            None => Some(self.analyze_and_create_node(&selection.game_state)),
+            Some(terminal) => {
+                self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal)
             }
-            SelectionResult {
-                terminal: Some(terminal),
-                ..
-            } => self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal),
         };
 
         if let Some(new_node_id) = new_node {
@@ -136,12 +133,7 @@ where
             game_state = BorrowedOrOwned::Owned(next_game_state);
 
             if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
-                return SelectionResult {
-                    path,
-                    edge,
-                    game_state,
-                    terminal: Some(terminal),
-                };
+                return SelectionResult::new(path, edge, game_state, Some(terminal));
             }
 
             if let Some(child_id) =
@@ -151,12 +143,7 @@ where
                 continue;
             }
 
-            return SelectionResult {
-                path,
-                edge,
-                game_state,
-                terminal: None,
-            };
+            return SelectionResult::new(path, edge, game_state, None);
         }
     }
 
@@ -241,6 +228,22 @@ struct SelectionResult<'a, S, T> {
     edge: &'a PUCTEdge,
     game_state: BorrowedOrOwned<'a, S>,
     terminal: Option<T>,
+}
+
+impl<'a, S, T> SelectionResult<'a, S, T> {
+    fn new(
+        path: Vec<NodeId>,
+        edge: &'a PUCTEdge,
+        game_state: BorrowedOrOwned<'a, S>,
+        terminal: Option<T>,
+    ) -> Self {
+        Self {
+            path,
+            edge,
+            game_state,
+            terminal,
+        }
+    }
 }
 
 // Multi-thread implementationr
