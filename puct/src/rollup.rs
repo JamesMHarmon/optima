@@ -74,18 +74,31 @@ pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<R>) -> (f32, R::Snapshot) 
     }
 }
 
-pub fn score_edges<R, S>(edges: &[EdgeStats<R>], ctx: &NodeContext, scorer: &S) -> Vec<f64>
+pub fn edge_scores<'a, R, S, I>(
+    edges: I,
+    ctx: &NodeContext,
+    scorer: &'a S,
+) -> impl Iterator<Item = (usize, f64)> + 'a
 where
-    R: RollupStats,
+    R: RollupStats + 'a,
     S: EdgeScorer<R>,
+    I: IntoIterator<Item = &'a EdgeStats<R>> + 'a,
 {
     let prepared = scorer.prepare(ctx);
+    edges.into_iter().enumerate().map(move |(idx, edge)| {
+        let (prior, snap) = edge_snapshot(edge);
+        (idx, prepared.score(prior, &snap))
+    })
+}
 
-    edges
-        .iter()
-        .map(|edge| {
-            let (prior, snap) = edge_snapshot(edge);
-            prepared.score(prior, &snap)
-        })
-        .collect()
+pub fn select_best_edge<'a, R, S, I>(edges: I, ctx: &NodeContext, scorer: &'a S) -> usize
+where
+    R: RollupStats + 'a,
+    S: EdgeScorer<R>,
+    I: IntoIterator<Item = &'a EdgeStats<R>> + 'a,
+{
+    edge_scores(edges, ctx, scorer)
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(idx, _)| idx)
+        .unwrap_or(0)
 }
