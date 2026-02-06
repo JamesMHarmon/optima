@@ -4,10 +4,8 @@ use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
-use std::sync::atomic::Ordering;
-
 use super::{
-    AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeGraph, NodeId,
+    AfterState, BackpropagationStrategy, BorrowedOrOwned, NodeArena, NodeGraph, NodeId,
     PUCTEdge, RollupStats, SelectionPolicy, StateNode, Terminal
 };
 
@@ -35,7 +33,7 @@ where
     M: GameAnalyzer<State = E::State, Predictions = E::Terminal, Action = E::Action>,
     B: BackpropagationStrategy<State = E::State, Predictions = E::Terminal>,
     B::RollupStats: RollupStats,
-    Sel: SelectionPolicy<State = E::State>,
+    Sel: SelectionPolicy<B::RollupStats, State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {
@@ -205,20 +203,12 @@ where
     }
 
     fn select_edge(&self, node: &StateNode<E::Action, B::RollupStats, B::StateInfo>) -> usize {
-        let edge_iter = (0..node.edge_count()).map(|i| {
-            let edge = node.get_edge(i).unwrap();
-            let action_with_policy = node.get_action(i);
-
-            EdgeInfo::<E::Action, B::RollupStats> {
-                action: &action_with_policy.action,
-                policy_prior: action_with_policy.policy_score.to_f32(),
-                visits: edge.visits.load(Ordering::Acquire),
-                rollup_stats: None,
-            }
-        });
-
-        self.selection_strategy
-            .select_edge(edge_iter, node.visits(), &self.game_state, 0)
+        self.selection_strategy.select_edge(
+            node.iter_edges(&self.nodes),
+            node.visits(),
+            &self.game_state,
+            0,
+        )
     }
 }
 

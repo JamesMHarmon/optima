@@ -75,8 +75,8 @@ pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<'_, R>) -> (f32, R::Snapsh
 
 pub fn edge_scores<'a, R, S, I>(
     edges: I,
-    ctx: &NodeContext,
     scorer: &'a S,
+    ctx: &NodeContext,
 ) -> impl Iterator<Item = (usize, f64)> + 'a
 where
     R: RollupStats + 'a,
@@ -90,13 +90,13 @@ where
     })
 }
 
-pub fn select_best_edge<'a, R, S, I>(edges: I, ctx: &NodeContext, scorer: &'a S) -> usize
+pub fn select_best_edge<'a, R, S, I>(edges: I, scorer: &'a S, ctx: &NodeContext) -> usize
 where
     R: RollupStats + 'a,
     S: EdgeScorer<R>,
     I: IntoIterator<Item = &'a EdgeStats<'a, R>> + 'a,
 {
-    edge_scores(edges, ctx, scorer)
+    edge_scores(edges, scorer, ctx)
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(idx, _)| idx)
         .unwrap_or(0)
