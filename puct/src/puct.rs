@@ -5,15 +5,11 @@ use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
-use std::thread::JoinHandle;
 
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeGraph, NodeId,
     PUCTEdge, SelectionPolicy, StateNode, Terminal,
 };
-
-const NUM_SELECTIONS: i32 = 10;
-const BATCH_SIZE: usize = 32;
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
@@ -222,10 +218,6 @@ where
         }
     }
 
-    fn get_root_node(&self) -> &StateNode<E::Action, B::RollupStats, B::StateInfo> {
-        self.nodes.get_state_node(NodeId::from_u32(0))
-    }
-
     fn select_edge(&self, node: &StateNode<E::Action, B::RollupStats, B::StateInfo>) -> usize {
         let edge_iter = (0..node.edge_count()).map(|i| {
             let edge = node.get_edge(i).unwrap();
@@ -242,14 +234,6 @@ where
         self.selection_strategy
             .select_edge(edge_iter, node.visits(), &self.game_state, 0)
     }
-
-    fn select_action<'a>(
-        &self,
-        node: &'a StateNode<E::Action, B::RollupStats, B::StateInfo>,
-    ) -> (&'a PUCTEdge, &'a E::Action) {
-        let edge_idx = self.select_edge(node);
-        node.get_edge_and_action(edge_idx)
-    }
 }
 
 struct SelectionResult<'a, S, T> {
@@ -257,18 +241,6 @@ struct SelectionResult<'a, S, T> {
     edge: &'a PUCTEdge,
     game_state: BorrowedOrOwned<'a, S>,
     terminal: Option<T>,
-}
-
-struct Workers {
-    handles: Vec<JoinHandle<()>>,
-}
-
-impl Workers {
-    fn join(self) {
-        for h in self.handles {
-            h.join().unwrap();
-        }
-    }
 }
 
 // Multi-thread implementationr

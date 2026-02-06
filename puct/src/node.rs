@@ -67,6 +67,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.visits.load(Ordering::Acquire)
     }
 
+    pub fn transposition_hash(&self) -> u64 {
+        self.transposition_hash
+    }
+
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
     }
