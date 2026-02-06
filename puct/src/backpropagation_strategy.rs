@@ -21,8 +21,8 @@
 /// - Store from a fixed perspective: always Player 0's viewpoint
 ///
 /// The `create_rollup_stats` method uses `StateInfo` to convert player-relative
-/// predictions into canonical statistics. The `aggregate_stats` method assumes
-/// all statistics are already canonical and can be aggregated directly.
+/// predictions into canonical statistics. Aggregation is handled by the RollupStats
+/// trait methods.
 pub trait BackpropagationStrategy {
     type Predictions;
     type RollupStats;
@@ -55,26 +55,4 @@ pub trait BackpropagationStrategy {
         state_info: &Self::StateInfo,
         predictions: &Self::Predictions,
     ) -> Self::RollupStats;
-
-    /// Aggregate rollup statistics using weighted averaging.
-    ///
-    /// Takes an iterator of (rollup_stats, weight) pairs and computes the weighted average,
-    /// writing the result to the target rollup stats. All input statistics must already be
-    /// in canonical (perspective-agnostic) form, allowing direct aggregation without
-    /// perspective conversion.
-    ///
-    /// Used for both:
-    /// - StateNode backpropagation: aggregate values from child edges
-    /// - AfterState value computation: aggregate values from stochastic outcomes
-    ///
-    /// # Arguments
-    /// * `target` - RollupStats to write the aggregated result to (uses atomic operations)
-    /// * `weighted_stats` - Iterator over (canonical_rollup_stats, weight) pairs where weight is typically visit count
-    fn aggregate_stats<'a, I>(
-        &self,
-        target: &Self::RollupStats,
-        weighted_stats: I,
-    ) where
-        I: Iterator<Item = (&'a Self::RollupStats, u32)>,
-        Self::RollupStats: 'a;
 }

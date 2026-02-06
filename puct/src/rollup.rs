@@ -14,20 +14,21 @@ pub trait RollupStats {
     /// Snapshot current stats
     fn snapshot(&self) -> Self::Snapshot;
 
+    /// Merge another RollupStats into this one with a weight
+    fn merge_rollup_weighted(&self, other: &Self, weight: &<Self::Snapshot as WeightedMerge>::Weight) {
+        let mut snap = self.snapshot();
+        snap.merge_weighted(&other.snapshot(), weight);
+        self.update(&snap);
+    }
+
     /// Aggregate weighted snapshots
-    fn aggregate_weighted<'w, I>(iter: I) -> Self::Snapshot
+    fn aggregate_weighted<I>(iter: I) -> Self::Snapshot
     where
-        I: IntoIterator<
-            Item = (
-                Self::Snapshot,
-                &'w <Self::Snapshot as WeightedMerge>::Weight,
-            ),
-        >,
-        <Self::Snapshot as WeightedMerge>::Weight: 'w,
+        I: IntoIterator<Item = (Self::Snapshot, <Self::Snapshot as WeightedMerge>::Weight)>,
     {
         let mut out = Self::Snapshot::zero();
         for (snap, weight) in iter {
-            out.merge_weighted(&snap, weight);
+            out.merge_weighted(&snap, &weight);
         }
         out
     }
@@ -51,24 +52,24 @@ pub trait EdgeScorer<R: RollupStats> {
     fn prepare<'a>(&'a self, ctx: &NodeContext) -> Self::Prepared<'a>;
 }
 
-pub enum EdgeStats<R: RollupStats> {
+pub enum EdgeStats<'a, R: RollupStats> {
     Direct {
-        stats: R,
+        stats: &'a R,
         prior: f32,
     },
 
     Afterstates {
         prior: f32,
-        children: Vec<(R, <R::Snapshot as WeightedMerge>::Weight)>,
+        outcomes: &'a [(R, <R::Snapshot as WeightedMerge>::Weight)],
     },
 }
 
-pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<R>) -> (f32, R::Snapshot) {
+pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<'_, R>) -> (f32, R::Snapshot) {
     match edge {
         EdgeStats::Direct { stats, prior } => (*prior, stats.snapshot()),
 
-        EdgeStats::Afterstates { prior, children } => {
-            let snap = R::aggregate_weighted(children.iter().map(|(r, w)| (r.snapshot(), w)));
+        EdgeStats::Afterstates { prior, outcomes } => {
+            let snap = R::aggregate_weighted(outcomes.iter().map(|(r, w)| (r.snapshot(), w)));
             (*prior, snap)
         }
     }
@@ -82,7 +83,7 @@ pub fn edge_scores<'a, R, S, I>(
 where
     R: RollupStats + 'a,
     S: EdgeScorer<R>,
-    I: IntoIterator<Item = &'a EdgeStats<R>> + 'a,
+    I: IntoIterator<Item = &'a EdgeStats<'a, R>> + 'a,
 {
     let prepared = scorer.prepare(ctx);
     edges.into_iter().enumerate().map(move |(idx, edge)| {
@@ -95,7 +96,7 @@ pub fn select_best_edge<'a, R, S, I>(edges: I, ctx: &NodeContext, scorer: &'a S)
 where
     R: RollupStats + 'a,
     S: EdgeScorer<R>,
-    I: IntoIterator<Item = &'a EdgeStats<R>> + 'a,
+    I: IntoIterator<Item = &'a EdgeStats<'a, R>> + 'a,
 {
     edge_scores(edges, ctx, scorer)
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))

@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeInfo, NodeArena, NodeGraph, NodeId,
-    PUCTEdge, SelectionPolicy, StateNode, Terminal,
+    PUCTEdge, RollupStats, SelectionPolicy, StateNode, Terminal,WeightedMerge
 };
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
@@ -34,6 +34,8 @@ where
     E: GameEngine,
     M: GameAnalyzer<State = E::State, Predictions = E::Terminal, Action = E::Action>,
     B: BackpropagationStrategy<State = E::State, Predictions = E::Terminal>,
+    B::RollupStats: RollupStats,
+    <B::RollupStats as RollupStats>::Snapshot: WeightedMerge<Weight = u32>,
     Sel: SelectionPolicy<State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
@@ -153,11 +155,8 @@ where
         rollup_stats: B::RollupStats,
     ) -> Option<NodeId> {
         if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
-            let terminal = self.nodes.get_terminal_node(terminal_id);
-            self.backpropagation_strategy.aggregate_stats(
-                &terminal.rollup_stats,
-                [(&terminal.rollup_stats, visits), (&rollup_stats, 1)].into_iter(),
-            );
+            let terminal_rollup = self.nodes.get_terminal_node(terminal_id).rollup_stats();
+            terminal_rollup.merge_rollup_weighted(&rollup_stats, &visits);
             None
         } else {
             let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
@@ -199,9 +198,10 @@ where
     fn backpropagate(&self, path: Vec<NodeId>) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
-
-            self.backpropagation_strategy
-                .aggregate_stats(&node.rollup_stats(), node.iter_children_stats(&self.nodes));
+            let aggregated = B::RollupStats::aggregate_weighted(
+                node.iter_children_stats(&self.nodes).map(|(r, w)| (r.snapshot(), w))
+            );
+            node.rollup_stats().update(&aggregated);
         }
     }
 

@@ -138,7 +138,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
             // Get rollup stats based on child type
             match child_id.node_type() {
                 NodeType::State => {
-                    let stats = &nodes.get_state_node(child_id).rollup_stats;
+                    let stats = nodes.get_state_node(child_id).rollup_stats();
                     Some((stats, visits))
                 }
                 NodeType::AfterState => {
@@ -149,23 +149,12 @@ impl<A, R, SI> StateNode<A, R, SI> {
                     None
                 }
                 NodeType::Terminal => {
-                    let stats = &nodes.get_terminal_node(child_id).rollup_stats;
+                    let stats = nodes.get_terminal_node(child_id).rollup_stats();
                     Some((stats, visits))
                 }
             }
         })
     }
-}
-
-fn aggregate_after_state_stats<'a, A, R, SI, B>(
-    after_state: &'a AfterState,
-    nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    backprop_strategy: &B,
-    target: &R,
-) where
-    B: crate::BackpropagationStrategy<RollupStats = R>,
-{
-    backprop_strategy.aggregate_stats(target, after_state.iter_outcome_stats(nodes))
 }
 
 /// Stochastic node representing (State, Action) pair before environment response.
@@ -234,11 +223,15 @@ impl Default for AfterStateOutcome {
 
 /// Terminal node representing a final game state.
 pub struct Terminal<R> {
-    pub rollup_stats: R,
+    rollup_stats: R,
 }
 
 impl<R> Terminal<R> {
     pub fn new(rollup_stats: R) -> Self {
         Self { rollup_stats }
+    }
+
+    pub fn rollup_stats(&self) -> &R {
+        &self.rollup_stats
     }
 }
