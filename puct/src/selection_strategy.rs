@@ -1,4 +1,4 @@
-use crate::{EdgeScorer, NodeContext, PreparedEdgeScorer, RollupStats};
+use crate::{EdgeScorer, EdgeStats, NodeContext, PreparedEdgeScorer, RollupStats};
 
 /// Policy for selecting edges during tree traversal
 ///
@@ -32,24 +32,26 @@ pub trait SelectionPolicy<R: RollupStats> {
 /// Read-only information about an edge for selection
 ///
 /// Provides all information needed to compute PUCT scores without mutation.
-pub struct EdgeInfo<'a, A, R> {
+/// Supports both direct edges and afterstate edges with multiple outcomes.
+pub struct EdgeInfo<'a, A, R: RollupStats> {
     pub action: &'a A,
     pub policy_prior: f32,
     pub visits: u32,
-    pub rollup_stats: Option<&'a R>,
+    /// Edge statistics - None for unvisited edges
+    pub stats: Option<EdgeStats<'a, R>>,
 }
 
 /// Helper to implement SelectionPolicy using an EdgeScorer
 ///
 /// This provides a default selection implementation that:
-/// 1. Converts EdgeInfo into EdgeStats format for visited edges
-/// 2. Uses the provided EdgeScorer to compute scores
-/// 3. Handles unvisited edges (visits=0) with FPU value
+/// 1. Uses the provided EdgeScorer to compute scores for visited edges
+/// 2. Properly aggregates afterstate outcomes when present
+/// 3. Handles unvisited edges (visits=0) with high exploration priority
 /// 4. Selects the edge with the highest score
 ///
-/// Note: Unvisited edges are given FPU score instead of being passed to the scorer,
-/// since they have no rollup stats to snapshot. The FPU value typically comes from
-/// the PreparedEdgeScorer when it encounters a zero-visit edge.
+/// Note: Unvisited edges are given infinite score to prioritize exploration.
+/// For visited edges, the EdgeStats snapshot is computed (aggregating afterstates
+/// if present) and passed to the scorer.
 ///
 /// Use this when your selection policy can be expressed as an EdgeScorer.
 pub fn select_edge_with_scorer<'a, R, S, I, A>(
@@ -77,21 +79,21 @@ where
     let (best_idx, _): (usize, f64) = edges
         .enumerate()
         .map(|(idx, e)| {
-            let score = if e.visits == 0 || e.rollup_stats.is_none() {
-                // Unvisited edge: typically gets very high exploration score
-                // Pass a dummy snapshot or let the scorer handle it
-                // For now, we'll use f64::INFINITY to prioritize unvisited edges
-                f64::INFINITY
-            } else {
-                // Visited edge: use the rollup stats
-                let stats = e.rollup_stats.unwrap();
-                let snap = stats.snapshot();
-                PreparedEdgeScorer::<R>::score(&prepared, e.policy_prior, &snap)
+            let score = match &e.stats {
+                None => {
+                    // Unvisited edge: prioritize exploration
+                    f64::INFINITY
+                }
+                Some(edge_stats) => {
+                    // Visited edge: compute snapshot (handles both direct and afterstate cases)
+                    let snap = edge_stats.snapshot();
+                    PreparedEdgeScorer::<R>::score(&prepared, e.policy_prior, &snap)
+                }
             };
             (idx, score)
         })
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or((0, 0.0));
-    
+
     best_idx
 }

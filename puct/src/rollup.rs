@@ -50,54 +50,24 @@ pub trait EdgeScorer<R: RollupStats> {
     fn prepare<'a>(&'a self, ctx: &NodeContext) -> Self::Prepared<'a>;
 }
 
+/// Statistics for an edge, either direct or aggregated from afterstates
 pub enum EdgeStats<'a, R: RollupStats> {
-    Direct {
-        stats: &'a R,
-        prior: f32,
-    },
+    /// Direct edge with single rollup stats
+    Direct { stats: &'a R },
 
-    Afterstates {
-        prior: f32,
-        outcomes: &'a [(R, u32)],
-    },
+    /// Edge with multiple afterstate outcomes to aggregate
+    /// Each outcome has rollup stats and a weight (typically visit count)
+    Afterstates { outcomes: &'a [(R, u32)] },
 }
 
-pub fn edge_snapshot<R: RollupStats>(edge: &EdgeStats<'_, R>) -> (f32, R::Snapshot) {
-    match edge {
-        EdgeStats::Direct { stats, prior } => (*prior, stats.snapshot()),
-
-        EdgeStats::Afterstates { prior, outcomes } => {
-            let snap = R::aggregate_weighted(outcomes.iter().map(|(r, w)| (r.snapshot(), *w)));
-            (*prior, snap)
+impl<'a, R: RollupStats> EdgeStats<'a, R> {
+    /// Compute the aggregated snapshot for this edge
+    pub fn snapshot(&self) -> R::Snapshot {
+        match self {
+            EdgeStats::Direct { stats } => stats.snapshot(),
+            EdgeStats::Afterstates { outcomes } => {
+                R::aggregate_weighted(outcomes.iter().map(|(r, w)| (r.snapshot(), *w)))
+            }
         }
     }
-}
-
-pub fn edge_scores<'a, R, S, I>(
-    edges: I,
-    scorer: &'a S,
-    ctx: &NodeContext,
-) -> impl Iterator<Item = (usize, f64)> + 'a
-where
-    R: RollupStats + 'a,
-    S: EdgeScorer<R>,
-    I: IntoIterator<Item = &'a EdgeStats<'a, R>> + 'a,
-{
-    let prepared = scorer.prepare(ctx);
-    edges.into_iter().enumerate().map(move |(idx, edge)| {
-        let (prior, snap) = edge_snapshot(edge);
-        (idx, prepared.score(prior, &snap))
-    })
-}
-
-pub fn select_best_edge<'a, R, S, I>(edges: I, scorer: &'a S, ctx: &NodeContext) -> usize
-where
-    R: RollupStats + 'a,
-    S: EdgeScorer<R>,
-    I: IntoIterator<Item = &'a EdgeStats<'a, R>> + 'a,
-{
-    edge_scores(edges, scorer, ctx)
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(idx, _)| idx)
-        .unwrap_or(0)
 }
