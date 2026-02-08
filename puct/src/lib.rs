@@ -6,6 +6,7 @@ mod node_arena;
 mod node_graph;
 mod puct;
 mod rollup;
+mod scorer_selection_policy;
 mod selection_strategy;
 
 pub use backpropagation_strategy::*;
@@ -16,4 +17,5 @@ pub use node_arena::*;
 pub use node_graph::*;
 pub use puct::*;
 pub use rollup::*;
+pub use scorer_selection_policy::*;
 pub use selection_strategy::*;
