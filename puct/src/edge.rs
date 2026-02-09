@@ -35,7 +35,12 @@ impl PUCTEdge {
 
     pub fn try_set_child(&self, new_child: NodeId) -> bool {
         self.child
-            .compare_exchange(u32::MAX, new_child.as_u32(), Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(
+                u32::MAX,
+                new_child.as_u32(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
             .is_ok()
     }
 

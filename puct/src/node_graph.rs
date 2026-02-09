@@ -45,12 +45,12 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         edge.child()
             .and_then(|child_id| match child_id.node_type() {
                 NodeType::Terminal => Some((child_id, edge.visits())),
-                
-                NodeType::AfterState => {
-                    self.arena.get_after_state_node(child_id)
-                        .terminal_outcome()
-                        .map(|outcome| outcome.as_tuple())
-                }
+
+                NodeType::AfterState => self
+                    .arena
+                    .get_after_state_node(child_id)
+                    .terminal_outcome()
+                    .map(|outcome| outcome.as_tuple()),
                 NodeType::State => None,
             })
     }
@@ -87,7 +87,9 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         edge.set_child(new_after_state_id);
 
         debug_assert!(
-            self.arena.get_after_state_node(new_after_state_id).is_valid(),
+            self.arena
+                .get_after_state_node(new_after_state_id)
+                .is_valid(),
             "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
         );
     }

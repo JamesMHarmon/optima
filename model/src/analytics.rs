@@ -9,7 +9,10 @@ pub trait GameAnalyzer {
 
     fn analyze_async(&self, game_state: &Self::State) -> Self::Future;
 
-    fn analyze(&self, game_state: &Self::State) -> GameStateAnalysis<Self::Action, Self::Predictions>;
+    fn analyze(
+        &self,
+        game_state: &Self::State,
+    ) -> GameStateAnalysis<Self::Action, Self::Predictions>;
 
     fn prefetch(&self, game_state: &Self::State);
 }

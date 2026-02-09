@@ -1,7 +1,7 @@
 use model::ActionWithPolicy;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tinyvec::TinyVec;
-use std::collections::HashSet;
 
 use super::{EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats};
 
@@ -139,7 +139,11 @@ impl AfterState {
         let outcome_count = self.outcomes.len();
         let ids: HashSet<NodeId> = self.outcomes.iter().map(|o| o.child()).collect();
         ids.len() == outcome_count
-            && ids.iter().filter(|id| id.node_type() == NodeType::Terminal).count() <= 1
+            && ids
+                .iter()
+                .filter(|id| id.node_type() == NodeType::Terminal)
+                .count()
+                <= 1
             && ids.iter().all(|id| id.node_type() != NodeType::AfterState)
     }
 
