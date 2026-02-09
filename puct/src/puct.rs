@@ -200,8 +200,7 @@ where
                     .filter_map(|e| e.snapshot.map(|s| (s, e.visits))),
             );
 
-            // @TODO: Might need to be a pure set.
-            node.rollup_stats().update(&aggregated);
+            node.rollup_stats().set(&aggregated);
         }
     }
 

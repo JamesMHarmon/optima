@@ -6,17 +6,14 @@ pub trait WeightedMerge {
 pub trait RollupStats {
     type Snapshot: WeightedMerge;
 
-    /// Update stats from a rollout result
-    fn update(&self, value: &Self::Snapshot);
-
-    /// Snapshot current stats
     fn snapshot(&self) -> Self::Snapshot;
 
-    /// Merge another RollupStats into this one with a weight
+    fn set(&self, value: &Self::Snapshot);
+
     fn merge_rollup_weighted(&self, other: &Self, weight: u32) {
         let mut snap = Self::Snapshot::zero();
         snap.merge_weighted(&other.snapshot(), weight);
-        self.update(&snap);
+        self.set(&snap);
     }
 
     /// Aggregate weighted snapshots
