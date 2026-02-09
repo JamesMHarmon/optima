@@ -33,7 +33,7 @@ where
     M: GameAnalyzer<State = E::State, Predictions = E::Terminal, Action = E::Action>,
     B: BackpropagationStrategy<State = E::State, Predictions = E::Terminal>,
     B::RollupStats: RollupStats,
-    Sel: SelectionPolicy<<B::RollupStats as RollupStats>::Snapshot, State = E::State>,
+    Sel: SelectionPolicy<B::RollupStats, State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {

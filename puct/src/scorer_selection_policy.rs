@@ -49,21 +49,17 @@ where
 {
 }
 
-pub struct CpuctPolicy<S, R> {
+pub struct CpuctPolicy<S> {
     pub scorer: S,
-    _marker: std::marker::PhantomData<R>,
 }
 
-impl<S, R> CpuctPolicy<S, R> {
+impl<S> CpuctPolicy<S> {
     pub fn new(scorer: S) -> Self {
-        Self {
-            scorer,
-            _marker: std::marker::PhantomData,
-        }
+        Self { scorer }
     }
 }
 
-impl<R, S> SelectionPolicy<R::Snapshot> for CpuctPolicy<S, R>
+impl<R, S> SelectionPolicy<R> for CpuctPolicy<S>
 where
     R: RollupStats,
     S: EdgeScorer<R>,
