@@ -139,12 +139,8 @@ impl AfterState {
         let outcome_count = self.outcomes.len();
         let ids: HashSet<NodeId> = self.outcomes.iter().map(|o| o.child()).collect();
         ids.len() == outcome_count
-            && ids
-                .iter()
-                .filter(|id| id.node_type() == NodeType::Terminal)
-                .count()
-                <= 1
-            && ids.iter().all(|id| id.node_type() != NodeType::AfterState)
+            && ids.iter().filter(|id| id.is_terminal()).count() <= 1
+            && ids.iter().all(|id| !id.is_after_state())
     }
 
     /// Iterates over outcome rollups and weights.
@@ -179,7 +175,7 @@ impl AfterState {
     pub fn terminal_outcome(&self) -> Option<&AfterStateOutcome> {
         self.outcomes
             .iter()
-            .find(|outcome| outcome.child().node_type() == NodeType::Terminal)
+            .find(|outcome| outcome.child().is_terminal())
     }
 }
 

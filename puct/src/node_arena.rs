@@ -39,6 +39,21 @@ impl NodeId {
     }
 
     #[inline]
+    pub fn is_state(self) -> bool {
+        matches!(self.node_type(), NodeType::State)
+    }
+
+    #[inline]
+    pub fn is_after_state(self) -> bool {
+        matches!(self.node_type(), NodeType::AfterState)
+    }
+
+    #[inline]
+    pub fn is_terminal(self) -> bool {
+        matches!(self.node_type(), NodeType::Terminal)
+    }
+
+    #[inline]
     fn index(self) -> usize {
         (self.0 & INDEX_MASK) as usize
     }
