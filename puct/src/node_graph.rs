@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::{
     AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, PUCTEdge, StateNode, Terminal,
 };
@@ -89,17 +87,7 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         edge.set_child(new_after_state_id);
 
         debug_assert!(
-            {
-                let after_state = self.arena.get_after_state_node(new_after_state_id);
-                let outcome_count = after_state.outcomes.len();
-                let ids: HashSet<_> = after_state.outcomes.iter().map(|o| o.child()).collect();
-                ids.len() == outcome_count
-                    && ids
-                        .iter()
-                        .filter(|id: &&NodeId| id.node_type() == NodeType::Terminal)
-                        .count()
-                        <= 1
-            },
+            self.arena.get_after_state_node(new_after_state_id).is_valid(),
             "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
         );
     }
