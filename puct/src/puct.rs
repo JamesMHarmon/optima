@@ -154,7 +154,8 @@ where
     ) -> Option<NodeId> {
         if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
             let terminal_rollup = self.nodes.get_terminal_node(terminal_id).rollup_stats();
-            terminal_rollup.merge_rollup_weighted(&rollup_stats, visits);
+            let terminal_visits = visits - 1; // Subtract 1 since we already incremented visits for this edge during selection
+            terminal_rollup.merge_rollup_weighted(terminal_visits, &rollup_stats, 1);
             None
         } else {
             let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
