@@ -11,8 +11,10 @@ pub trait RollupStats {
     fn set(&self, value: &Self::Snapshot);
 
     fn merge_rollup_weighted(&self, other: &Self, weight: u32) {
+        // @TODO: Fix this issue with weights.
         let mut snap = Self::Snapshot::zero();
-        snap.merge_weighted(&other.snapshot(), weight);
+        snap.merge_weighted(&other.snapshot(), 1);
+        snap.merge_weighted(&self.snapshot(), weight);
         self.set(&snap);
     }
 

@@ -118,12 +118,13 @@ where
         loop {
             let node = self.nodes.get_state_node(current);
 
+            // Allow for cycles in search. Game states need to internally track repetitions and terminate permanent cycles.
             if visited.insert(current) {
                 path.push(current);
                 node.increment_visits();
             }
 
-            let edge_idx = self.select_edge(node);
+            let edge_idx = self.select_edge(&game_state, node);
             let (edge, action) = node.get_edge_and_action(edge_idx);
 
             edge.increment_visits();
@@ -195,6 +196,7 @@ where
     fn backpropagate(&self, path: Vec<NodeId>) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
+            // @TODO: Need to include a nodes own prediction in the rollup, otherwise we won't update nodes that are only visited once and never have a child added (e.g. leaf nodes that hit a cutoff)
             let aggregated = B::RollupStats::aggregate_weighted(
                 node.iter_edges(&self.nodes)
                     .filter_map(|e| e.snapshot.map(|s| (s, e.visits))),
@@ -204,11 +206,15 @@ where
         }
     }
 
-    fn select_edge(&self, node: &StateNode<E::Action, B::RollupStats, B::StateInfo>) -> usize {
+    fn select_edge(
+        &self,
+        game_state: &E::State,
+        node: &StateNode<E::Action, B::RollupStats, B::StateInfo>,
+    ) -> usize {
         self.selection_strategy.select_edge(
             node.iter_edges(&self.nodes),
             node.visits(),
-            &self.game_state,
+            game_state,
             0,
         )
     }
