@@ -157,7 +157,7 @@ impl AfterState {
             let visits = outcome.visits();
 
             debug_assert!(
-                child_id.as_u32() != u32::MAX,
+                !child_id.is_unset(),
                 "AfterState outcome has unset child NodeId"
             );
 
@@ -215,7 +215,7 @@ impl Default for AfterStateOutcome {
     fn default() -> Self {
         Self {
             visits: AtomicU32::new(0),
-            child: NodeId::from_u32(u32::MAX),
+            child: NodeId::unset(),
         }
     }
 }

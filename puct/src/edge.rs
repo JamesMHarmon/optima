@@ -11,7 +11,7 @@ impl PUCTEdge {
     pub fn new() -> Self {
         Self {
             visits: AtomicU32::new(0),
-            child: AtomicU32::new(u32::MAX),
+            child: AtomicU32::new(NodeId::unset().as_u32()),
         }
     }
 
@@ -21,10 +21,11 @@ impl PUCTEdge {
 
     pub fn child(&self) -> Option<NodeId> {
         let raw = self.child.load(Ordering::Acquire);
-        if raw == u32::MAX {
+        let node_id = NodeId::from_u32(raw);
+        if node_id.is_unset() {
             None
         } else {
-            Some(NodeId::from_u32(raw))
+            Some(node_id)
         }
     }
 
@@ -36,7 +37,7 @@ impl PUCTEdge {
     pub fn try_set_child(&self, new_child: NodeId) -> bool {
         self.child
             .compare_exchange(
-                u32::MAX,
+                NodeId::unset().as_u32(),
                 new_child.as_u32(),
                 Ordering::AcqRel,
                 Ordering::Acquire,

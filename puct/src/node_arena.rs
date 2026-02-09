@@ -54,6 +54,16 @@ impl NodeId {
     }
 
     #[inline]
+    pub const fn unset() -> Self {
+        Self(u32::MAX)
+    }
+
+    #[inline]
+    pub const fn is_unset(self) -> bool {
+        self.0 == u32::MAX
+    }
+
+    #[inline]
     fn index(self) -> usize {
         (self.0 & INDEX_MASK) as usize
     }
@@ -128,21 +138,21 @@ impl<S, A, T> NodeArena<S, A, T> {
 
     #[inline]
     pub fn get_state_node(&self, id: NodeId) -> &S {
-        debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
+        debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::State);
         &self.state_nodes[id.index()]
     }
 
     #[inline]
     pub fn get_after_state_node(&self, id: NodeId) -> &A {
-        debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
+        debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::AfterState);
         &self.after_state_nodes[id.index()]
     }
 
     #[inline]
     pub fn get_terminal_node(&self, id: NodeId) -> &T {
-        debug_assert_ne!(id.as_u32(), u32::MAX, "NodeId is unset (u32::MAX)");
+        debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::Terminal);
         &self.terminal_nodes[id.index()]
     }
