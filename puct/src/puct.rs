@@ -47,68 +47,6 @@ where
         self.expand_and_backpropagate(selection);
     }
 
-    fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
-        let new_node = match selection.terminal {
-            None => Some(self.analyze_and_create_node(&selection.game_state)),
-            Some(terminal) => {
-                self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal)
-            }
-        };
-
-        if let Some(new_node_id) = new_node {
-            self.graph.add_child_to_edge(selection.edge, new_node_id);
-        }
-
-        self.backpropagate(selection.path);
-    }
-
-    fn analyze_and_create_node(&self, game_state: &E::State) -> NodeId {
-        let (policy_priors, predictions) = self.analyzer.analyze(game_state).into_inner();
-
-        self.create_node(
-            game_state.transposition_hash(),
-            policy_priors,
-            game_state,
-            &predictions,
-        )
-    }
-
-    fn create_or_merge_terminal(
-        &self,
-        edge: &PUCTEdge,
-        game_state: &E::State,
-        terminal: &E::Terminal,
-    ) -> Option<NodeId> {
-        let state_info = self.backpropagation_strategy.state_info(game_state);
-        let rollup_stats = self
-            .backpropagation_strategy
-            .create_rollup_stats(&state_info, terminal);
-        self.update_edge_with_terminal(edge, rollup_stats)
-    }
-
-    /// Get child from edge if cached, otherwise lookup in transposition table and link.
-    /// Returns None if this is a new position that needs expansion.
-    fn get_or_link_transposition(
-        &self,
-        edge: &PUCTEdge,
-        transposition_hash: u64,
-    ) -> Option<NodeId> {
-        if let Some(nested_child_id) = self
-            .graph
-            .get_edge_state_with_hash(edge, transposition_hash)
-        {
-            return Some(nested_child_id);
-        }
-
-        if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            let existing_id = *existing_id;
-            self.graph.add_child_to_edge(edge, existing_id);
-            Some(existing_id)
-        } else {
-            None
-        }
-    }
-
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
         let mut path = vec![];
         let mut visited = HashSet::new();
@@ -147,53 +85,6 @@ where
         }
     }
 
-    fn update_edge_with_terminal(
-        &self,
-        edge: &PUCTEdge,
-        rollup_stats: B::RollupStats,
-    ) -> Option<NodeId> {
-        if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
-            let terminal_rollup = self.nodes.get_terminal_node(terminal_id).rollup_stats();
-            let terminal_visits = visits - 1; // Subtract 1 since we already incremented visits for this edge during selection
-            terminal_rollup.merge_rollup_weighted(terminal_visits, &rollup_stats, 1);
-            None
-        } else {
-            let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
-            Some(terminal_id)
-        }
-    }
-
-    fn create_node(
-        &self,
-        transposition_hash: u64,
-        policy_priors: Vec<ActionWithPolicy<M::Action>>,
-        game_state: &E::State,
-        predictions: &M::Predictions,
-    ) -> NodeId {
-        debug_assert!(
-            !policy_priors.is_empty(),
-            "Cannot create state node without actions - should be terminal"
-        );
-
-        let state_info = self.backpropagation_strategy.state_info(game_state);
-        let rollup_stats = self
-            .backpropagation_strategy
-            .create_rollup_stats(&state_info, predictions);
-        let new_node = StateNode::new(transposition_hash, policy_priors, state_info, rollup_stats);
-
-        let new_node_id = self.nodes.push_state(new_node);
-        let previous_entry = self
-            .transposition_table
-            .insert(transposition_hash, new_node_id);
-
-        debug_assert!(
-            previous_entry.is_none(),
-            "Transposition table entry for hash already exists"
-        );
-
-        new_node_id
-    }
-
     fn backpropagate(&self, path: Vec<NodeId>) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
@@ -220,6 +111,120 @@ where
             0,
         )
     }
+
+    fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
+        let new_node = match selection.terminal {
+            None => Some(self.analyze_and_create_node(&selection.game_state)),
+            Some(terminal) => {
+                self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal)
+            }
+        };
+
+        if let Some(new_node_id) = new_node {
+            self.graph.add_child_to_edge(selection.edge, new_node_id);
+        }
+
+        self.backpropagate(selection.path);
+    }
+
+    fn create_node(
+        &self,
+        transposition_hash: u64,
+        policy_priors: Vec<ActionWithPolicy<M::Action>>,
+        game_state: &E::State,
+        predictions: &M::Predictions,
+    ) -> NodeId {
+        debug_assert!(
+            !policy_priors.is_empty(),
+            "Cannot create state node without actions - should be terminal"
+        );
+
+        let state_info = self.backpropagation_strategy.state_info(game_state);
+        let rollup_stats = self.create_rollup_stats(game_state, predictions);
+        let new_node = StateNode::new(transposition_hash, policy_priors, state_info, rollup_stats);
+
+        let new_node_id = self.nodes.push_state(new_node);
+        let previous_entry = self
+            .transposition_table
+            .insert(transposition_hash, new_node_id);
+
+        debug_assert!(
+            previous_entry.is_none(),
+            "Transposition table entry for hash already exists"
+        );
+
+        new_node_id
+    }
+
+    fn create_rollup_stats(
+        &self,
+        game_state: &E::State,
+        predictions: &M::Predictions,
+    ) -> B::RollupStats {
+        let state_info = self.backpropagation_strategy.state_info(game_state);
+        self.backpropagation_strategy
+            .create_rollup_stats(&state_info, predictions)
+    }
+
+    fn analyze_and_create_node(&self, game_state: &E::State) -> NodeId {
+        let (policy_priors, predictions) = self.analyzer.analyze(game_state).into_inner();
+
+        self.create_node(
+            game_state.transposition_hash(),
+            policy_priors,
+            game_state,
+            &predictions,
+        )
+    }
+
+    fn update_edge_with_terminal(
+        &self,
+        edge: &PUCTEdge,
+        rollup_stats: B::RollupStats,
+    ) -> Option<NodeId> {
+        if let Some((terminal_id, visits)) = self.graph.find_edge_terminal(edge) {
+            let terminal_rollup = self.nodes.get_terminal_node(terminal_id).rollup_stats();
+            let terminal_visits = visits - 1; // Subtract 1 since we already incremented visits for this edge during selection
+            terminal_rollup.merge_rollup_weighted(terminal_visits, &rollup_stats, 1);
+            None
+        } else {
+            let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
+            Some(terminal_id)
+        }
+    }
+
+    /// Get child from edge if cached, otherwise lookup in transposition table and link.
+    /// Returns None if this is a new position that needs expansion.
+    fn get_or_link_transposition(
+        &self,
+        edge: &PUCTEdge,
+        transposition_hash: u64,
+    ) -> Option<NodeId> {
+        if let Some(nested_child_id) = self
+            .graph
+            .get_edge_state_with_hash(edge, transposition_hash)
+        {
+            return Some(nested_child_id);
+        }
+
+        if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
+            let existing_id = *existing_id;
+            self.graph.add_child_to_edge(edge, existing_id);
+            Some(existing_id)
+        } else {
+            None
+        }
+    }
+
+    fn create_or_merge_terminal(
+        &self,
+        edge: &PUCTEdge,
+        game_state: &E::State,
+        terminal: &E::Terminal,
+    ) -> Option<NodeId> {
+        let rollup_stats = self.create_rollup_stats(game_state, terminal);
+        self.update_edge_with_terminal(edge, rollup_stats)
+    }
 }
 
 struct SelectionResult<'a, S, T> {
@@ -245,7 +250,7 @@ impl<'a, S, T> SelectionResult<'a, S, T> {
     }
 }
 
-// Multi-thread implementationr
+// Multi-thread implementation
 // Read: trace down the tree to find nodes to expand
 // - checks if the node is in a cache?
 // - put a node in the cache if not already
@@ -254,9 +259,9 @@ impl<'a, S, T> SelectionResult<'a, S, T> {
 // Write: deterministic trace that updates node/edge values and backpropagate results up the tree
 // Write: expands nodes
 
-//@ TOODO: Solve cycles
-//@ TODO: Add proper child node average value updates
-//@ TODO: When applying an expansion, need to link the parent edge to the new child node
-//@ TODO: Check for and reduce clones
+// @TODO: Solve cycles
+// @TODO: Add proper child node average value updates
+// @TODO: When applying an expansion, need to link the parent edge to the new child node
+// @TODO: Check for and reduce clones
 // @TODO: Add repetition count to hash
 // @TODO: Maybe from_u32 isn't always the root
