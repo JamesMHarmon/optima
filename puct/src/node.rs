@@ -104,11 +104,12 @@ where
             NodeType::State => nodes.get_state_node(child_id).rollup_stats.snapshot(),
 
             NodeType::AfterState => {
-                let after = nodes.get_after_state_node(child_id);
+                let after_state = nodes.get_after_state_node(child_id);
+                let weighted_outcomes = after_state
+                    .iter_outcomes(nodes)
+                    .map(|(r, w)| (r.snapshot(), w));
 
-                <R as RollupStats>::aggregate_weighted(
-                    after.outcomes(nodes).map(|(r, w)| (r.snapshot(), w)),
-                )
+                <R as RollupStats>::aggregate_weighted(weighted_outcomes)
             }
 
             NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats.snapshot(),
@@ -144,7 +145,7 @@ impl AfterState {
     }
 
     /// Iterates over outcome rollups and weights.
-    pub fn outcomes<'a, A, R, SI>(
+    pub fn iter_outcomes<'a, A, R, SI>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = (&'a R, u32)> + 'a
@@ -152,7 +153,7 @@ impl AfterState {
         R: RollupStats,
     {
         self.outcomes.iter().map(move |outcome| {
-            let child_id = outcome.child;
+            let child_id = outcome.child();
             let visits = outcome.visits();
 
             debug_assert!(
@@ -199,10 +200,6 @@ impl AfterStateOutcome {
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
-    }
-
-    pub fn set_child(&mut self, child: NodeId) {
-        self.child = child;
     }
 
     pub fn child(&self) -> NodeId {
