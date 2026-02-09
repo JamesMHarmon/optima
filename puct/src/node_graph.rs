@@ -49,12 +49,9 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
                 NodeType::Terminal => Some((child_id, edge.visits())),
                 
                 NodeType::AfterState => {
-                    let after_state = self.arena.get_after_state_node(child_id);
-                    after_state
-                        .outcomes
-                        .iter()
-                        .find(|outcome| outcome.child().node_type() == NodeType::Terminal)
-                        .map(|outcome| (outcome.child(), outcome.visits()))
+                    self.arena.get_after_state_node(child_id)
+                        .terminal_outcome()
+                        .map(|outcome| outcome.as_tuple())
                 }
                 NodeType::State => None,
             })

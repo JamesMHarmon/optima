@@ -100,20 +100,18 @@ where
         let action_with_policy = &self.policy_priors[edge_idx];
 
         let snapshot = edge.child().map(|child_id| match child_id.node_type() {
-                NodeType::State => nodes.get_state_node(child_id).rollup_stats.snapshot(),
+            NodeType::State => nodes.get_state_node(child_id).rollup_stats.snapshot(),
 
-                NodeType::AfterState => {
-                    let after = nodes.get_after_state_node(child_id);
+            NodeType::AfterState => {
+                let after = nodes.get_after_state_node(child_id);
 
-                    <R as RollupStats>::aggregate_weighted(
-                        after
-                            .outcomes(nodes)
-                            .map(|(r, w)| (r.snapshot(), w)),
-                    )
-                }
+                <R as RollupStats>::aggregate_weighted(
+                    after.outcomes(nodes).map(|(r, w)| (r.snapshot(), w)),
+                )
+            }
 
-                NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats.snapshot(),
-            });
+            NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats.snapshot(),
+        });
 
         EdgeInfo {
             action: &action_with_policy.action,
@@ -164,6 +162,12 @@ impl AfterState {
             (rollup_stats, visits)
         })
     }
+
+    pub fn terminal_outcome(&self) -> Option<&AfterStateOutcome> {
+        self.outcomes
+            .iter()
+            .find(|outcome| outcome.child().node_type() == NodeType::Terminal)
+    }
 }
 
 /// Possible outcome from an AfterState node.
@@ -194,6 +198,10 @@ impl AfterStateOutcome {
 
     pub fn child(&self) -> NodeId {
         self.child
+    }
+
+    pub fn as_tuple(&self) -> (NodeId, u32) {
+        (self.child(), self.visits())
     }
 }
 
