@@ -1,0 +1,7 @@
+[package]
+name = "rcu-append-buffer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arc-swap = "1.8.1"
