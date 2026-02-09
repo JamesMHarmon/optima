@@ -3,8 +3,8 @@ use crate::{EdgeInfo, RollupStats, SelectionPolicy};
 pub trait ScorerSelectionPolicy<R: RollupStats>: EdgeScorer<R> {
     fn select_with_scorer<'a, I, A: 'a>(&self, edges: I, node_visits: u32, depth: u16) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R>>,
-        R: 'a,
+        I: Iterator<Item = EdgeInfo<'a, A, R::Snapshot>>,
+        R::Snapshot: 'a,
     {
         let ctx = NodeContext { node_visits, depth };
 
@@ -13,12 +13,9 @@ pub trait ScorerSelectionPolicy<R: RollupStats>: EdgeScorer<R> {
         edges
             .enumerate()
             .map(|(idx, e)| {
-                let score = match &e.stats {
+                let score = match &e.snapshot {
                     None => f64::INFINITY,
-                    Some(edge_stats) => {
-                        let snap = edge_stats.snapshot();
-                        prepared.score(e.policy_prior, &snap)
-                    }
+                    Some(snapshot) => prepared.score(e.policy_prior, snapshot),
                 };
                 (idx, score)
             })
@@ -52,11 +49,21 @@ where
 {
 }
 
-pub struct CpuctPolicy<S> {
+pub struct CpuctPolicy<S, R> {
     pub scorer: S,
+    _marker: std::marker::PhantomData<R>,
 }
 
-impl<R, S> SelectionPolicy<R> for CpuctPolicy<S>
+impl<S, R> CpuctPolicy<S, R> {
+    pub fn new(scorer: S) -> Self {
+        Self {
+            scorer,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<R, S> SelectionPolicy<R::Snapshot> for CpuctPolicy<S, R>
 where
     R: RollupStats,
     S: EdgeScorer<R>,
@@ -71,8 +78,8 @@ where
         depth: u16,
     ) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R>>,
-        R: 'a,
+        I: Iterator<Item = EdgeInfo<'a, A, R::Snapshot>>,
+        R::Snapshot: 'a,
     {
         self.scorer.select_with_scorer(edges, node_visits, depth)
     }

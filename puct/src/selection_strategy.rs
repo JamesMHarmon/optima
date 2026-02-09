@@ -2,7 +2,7 @@
 ///
 /// Used by read-only selection workers to compute PUCT values and choose edges.
 /// Implementations define the exploration formula (standard PUCT, AlphaZero variant, etc.)
-pub trait SelectionPolicy<R> {
+pub trait SelectionPolicy<S> {
     type State;
 
     /// Select which edge to follow from the current node
@@ -23,8 +23,8 @@ pub trait SelectionPolicy<R> {
         depth: u16,
     ) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R>>,
-        R: 'a;
+        I: Iterator<Item = EdgeInfo<'a, A, S>>,
+        S: 'a;
 }
 
 /// Read-only information about an edge for selection

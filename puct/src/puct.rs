@@ -1,13 +1,13 @@
+use super::{
+    AfterState, BackpropagationStrategy, BorrowedOrOwned, NodeArena, NodeGraph, NodeId, PUCTEdge,
+    RollupStats, SelectionPolicy, StateNode, Terminal,
+};
 use common::TranspositionHash;
 use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 use std::collections::HashSet;
-use super::{
-    AfterState, BackpropagationStrategy, BorrowedOrOwned, NodeArena, NodeGraph, NodeId,
-    PUCTEdge, RollupStats, SelectionPolicy, StateNode, Terminal
-};
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
@@ -33,7 +33,7 @@ where
     M: GameAnalyzer<State = E::State, Predictions = E::Terminal, Action = E::Action>,
     B: BackpropagationStrategy<State = E::State, Predictions = E::Terminal>,
     B::RollupStats: RollupStats,
-    Sel: SelectionPolicy<B::RollupStats, State = E::State>,
+    Sel: SelectionPolicy<<B::RollupStats as RollupStats>::Snapshot, State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {
@@ -196,8 +196,11 @@ where
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
             let aggregated = B::RollupStats::aggregate_weighted(
-                node.iter_children_stats(&self.nodes).map(|(r, w)| (r.snapshot(), w))
+                node.iter_edges(&self.nodes)
+                    .filter_map(|e| e.snapshot.map(|s| (s, e.visits))),
             );
+
+            // @TODO: Might need to be a pure set.
             node.rollup_stats().update(&aggregated);
         }
     }

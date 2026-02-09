@@ -2,7 +2,7 @@ use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tinyvec::TinyVec;
 
-use super::{EdgeInfo, EdgeStats, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats};
+use super::{EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats};
 
 pub struct StateNode<A, R, SI> {
     transposition_hash: u64,
@@ -78,11 +78,16 @@ impl<A, R, SI> StateNode<A, R, SI> {
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
     }
+}
 
+impl<A, R, SI> StateNode<A, R, SI>
+where
+    R: RollupStats,
+{
     pub fn iter_edges<'a>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> impl Iterator<Item = EdgeInfo<'a, A, R>> + 'a {
+    ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
         (0..self.edges.len()).map(move |i| self.edge_info(i, nodes))
     }
 
@@ -90,7 +95,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
         &'a self,
         edge_idx: usize,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> EdgeInfo<'a, A, R> {
+    ) -> EdgeInfo<'a, A, R::Snapshot> {
         let edge = &self.edges[edge_idx];
         let action_with_policy = &self.policy_priors[edge_idx];
 
@@ -101,7 +106,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
                 NodeType::AfterState => {
                     let after = nodes.get_after_state_node(child_id);
 
-                    aggregate_snapshots(
+                    <R as RollupStats>::aggregate_weighted(
                         after
                             .outcomes(nodes)
                             .into_iter()
@@ -119,44 +124,6 @@ impl<A, R, SI> StateNode<A, R, SI> {
             visits: edge.visits.load(Ordering::Acquire),
             snapshot,
         }
-    }
-
-    /// Iterate over children with their rollup stats and visits for backpropagation.
-    ///
-    /// This provides the data needed for weighted-average aggregation during backpropagation.
-    /// Returns an iterator of (rollup_stats, visits) pairs for each child edge.
-    pub fn iter_children_stats<'a>(
-        &'a self,
-        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> impl Iterator<Item = (&'a R, u32)> + 'a {
-        self.edges.iter().filter_map(move |edge| {
-            let child_raw = edge.child.load(Ordering::Acquire);
-            if child_raw == u32::MAX {
-                return None;
-            }
-
-            let child_id = NodeId::from_u32(child_raw);
-            let visits = edge.visits.load(Ordering::Acquire);
-
-            // Get rollup stats based on child type
-            match child_id.node_type() {
-                NodeType::State => {
-                    let stats = nodes.get_state_node(child_id).rollup_stats();
-                    Some((stats, visits))
-                }
-                NodeType::AfterState => {
-                    // AfterState nodes don't store rollup_stats directly.
-                    // They would need to be aggregated from outcomes on-demand,
-                    // but we can't return a reference to computed values.
-                    // Skip AfterState children in this iteration.
-                    None
-                }
-                NodeType::Terminal => {
-                    let stats = nodes.get_terminal_node(child_id).rollup_stats();
-                    Some((stats, visits))
-                }
-            }
-        })
     }
 }
 
