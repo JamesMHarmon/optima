@@ -1,13 +1,12 @@
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, NodeArena, NodeGraph, NodeId, PUCTEdge,
-    RollupStats, SelectionPolicy, StateNode, Terminal,
+    RollupStats, SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, Terminal,
 };
 use common::TranspositionHash;
 use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
-use std::collections::HashSet;
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
@@ -25,6 +24,7 @@ where
     nodes: PUCTNodeArena<E::Action, B::RollupStats, B::StateInfo>,
     graph: NodeGraph<'a, E::Action, B::RollupStats, B::StateInfo>,
     transposition_table: DashMap<u64, NodeId>,
+    context_pool: SearchContextPool,
 }
 
 impl<E, M, B, Sel> PUCT<'_, E, M, B, Sel>
@@ -48,15 +48,14 @@ where
     }
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
-        let mut path = vec![];
-        let mut visited = HashSet::new();
+        let mut ctx = self.context_pool.acquire();
+        let (path, visited) = ctx.split_mut();
         let mut current = node_id;
         let mut game_state = BorrowedOrOwned::Borrowed(&self.game_state);
 
         loop {
             let node = self.nodes.get_state_node(current);
 
-            // Allow for cycles in search. Game states need to internally track repetitions and terminate permanent cycles.
             if visited.insert(current) {
                 path.push(current);
                 node.increment_visits();
@@ -71,7 +70,7 @@ where
             game_state = BorrowedOrOwned::Owned(next_game_state);
 
             if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
-                return SelectionResult::new(path, edge, game_state, Some(terminal));
+                return SelectionResult::new(ctx, edge, game_state, Some(terminal));
             }
 
             if let Some(child_id) =
@@ -81,11 +80,11 @@ where
                 continue;
             }
 
-            return SelectionResult::new(path, edge, game_state, None);
+            return SelectionResult::new(ctx, edge, game_state, None);
         }
     }
 
-    fn backpropagate(&self, path: Vec<NodeId>) {
+    fn backpropagate(&self, path: &[NodeId]) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
             // @TODO: Need to include a nodes own prediction in the rollup, otherwise we won't update nodes that are only visited once and never have a child added (e.g. leaf nodes that hit a cutoff)
@@ -113,10 +112,10 @@ where
     }
 
     fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
-        let new_node = match selection.terminal {
+        let new_node = match &selection.terminal {
             None => Some(self.analyze_and_create_node(&selection.game_state)),
             Some(terminal) => {
-                self.create_or_merge_terminal(selection.edge, &selection.game_state, &terminal)
+                self.create_or_merge_terminal(selection.edge, &selection.game_state, terminal)
             }
         };
 
@@ -124,7 +123,7 @@ where
             self.graph.add_child_to_edge(selection.edge, new_node_id);
         }
 
-        self.backpropagate(selection.path);
+        self.backpropagate(selection.path());
     }
 
     fn create_node(
@@ -228,7 +227,7 @@ where
 }
 
 struct SelectionResult<'a, S, T> {
-    path: Vec<NodeId>,
+    context: SearchContextGuard,
     edge: &'a PUCTEdge,
     game_state: BorrowedOrOwned<'a, S>,
     terminal: Option<T>,
@@ -236,17 +235,21 @@ struct SelectionResult<'a, S, T> {
 
 impl<'a, S, T> SelectionResult<'a, S, T> {
     fn new(
-        path: Vec<NodeId>,
+        context: SearchContextGuard,
         edge: &'a PUCTEdge,
         game_state: BorrowedOrOwned<'a, S>,
         terminal: Option<T>,
     ) -> Self {
         Self {
-            path,
+            context,
             edge,
             game_state,
             terminal,
         }
+    }
+
+    fn path(&self) -> &[NodeId] {
+        &self.context.get_ref().path
     }
 }
 
