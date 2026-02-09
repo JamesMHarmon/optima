@@ -15,7 +15,11 @@ impl PUCTEdge {
         }
     }
 
-    pub fn get_child(&self) -> Option<NodeId> {
+    pub fn visits(&self) -> u32 {
+        self.visits.load(Ordering::Acquire)
+    }
+
+    pub fn child(&self) -> Option<NodeId> {
         let raw = self.child.load(Ordering::Acquire);
         if raw == u32::MAX {
             None
@@ -37,5 +41,11 @@ impl PUCTEdge {
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+impl Default for PUCTEdge {
+    fn default() -> Self {
+        Self::new()
     }
 }

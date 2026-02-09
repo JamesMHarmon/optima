@@ -1,5 +1,4 @@
-use std::sync::atomic::AtomicU32;
-use std::{collections::HashSet, sync::atomic::Ordering};
+use std::collections::HashSet;
 
 use super::{
     AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, PUCTEdge, StateNode, Terminal,
@@ -25,7 +24,7 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
             NodeType::AfterState => {
                 let after_state = self.arena.get_after_state_node(node_id);
                 after_state.outcomes.iter().find_map(|outcome| {
-                    self.find_state_with_hash(outcome.child, transposition_hash)
+                    self.find_state_with_hash(outcome.child(), transposition_hash)
                 })
             }
             NodeType::Terminal => None,
@@ -38,26 +37,24 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         edge: &PUCTEdge,
         transposition_hash: u64,
     ) -> Option<NodeId> {
-        edge.get_child()
+        edge.child()
             .and_then(|child_id| self.find_state_with_hash(child_id, transposition_hash))
     }
 
     /// Find terminal node reachable through edge and return its ID with visit count.
     /// Returns edge visits if pointing directly to terminal, or outcome visits if through AfterState.
     pub fn find_edge_terminal(&self, edge: &PUCTEdge) -> Option<(NodeId, u32)> {
-        edge.get_child()
+        edge.child()
             .and_then(|child_id| match child_id.node_type() {
-                NodeType::Terminal => {
-                    let visits = edge.visits.load(Ordering::Acquire);
-                    Some((child_id, visits))
-                }
+                NodeType::Terminal => Some((child_id, edge.visits())),
+                
                 NodeType::AfterState => {
                     let after_state = self.arena.get_after_state_node(child_id);
                     after_state
                         .outcomes
                         .iter()
-                        .find(|outcome| outcome.child.node_type() == NodeType::Terminal)
-                        .map(|outcome| (outcome.child, outcome.visits.load(Ordering::Acquire)))
+                        .find(|outcome| outcome.child().node_type() == NodeType::Terminal)
+                        .map(|outcome| (outcome.child(), outcome.visits()))
                 }
                 NodeType::State => None,
             })
@@ -70,37 +67,25 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
         }
 
         let existing_child_id = edge
-            .get_child()
+            .child()
             .expect("Child must be set if try_set_child failed");
 
-        // Build new outcomes based on existing child type
         let mut new_outcomes = tinyvec::TinyVec::new();
 
         match existing_child_id.node_type() {
             NodeType::AfterState => {
-                // Copy existing outcomes (snapshot atomic visits)
                 let after_state = self.arena.get_after_state_node(existing_child_id);
                 for outcome in &after_state.outcomes {
-                    new_outcomes.push(AfterStateOutcome {
-                        visits: AtomicU32::new(outcome.visits.load(Ordering::Acquire)),
-                        child: outcome.child,
-                    });
+                    new_outcomes.push(outcome.clone());
                 }
             }
             NodeType::State | NodeType::Terminal => {
-                // First outcome is the existing child
-                new_outcomes.push(AfterStateOutcome {
-                    visits: AtomicU32::new(edge.visits.load(Ordering::Acquire)),
-                    child: existing_child_id,
-                });
+                new_outcomes.push(AfterStateOutcome::new(edge.visits(), existing_child_id));
             }
         }
 
-        // Add new child as outcome
-        new_outcomes.push(AfterStateOutcome {
-            visits: AtomicU32::new(0),
-            child: child_id,
-        });
+        // @TODO: Should this be visit of 1?
+        new_outcomes.push(AfterStateOutcome::new(0, child_id));
 
         // Create new AfterState and atomically update edge
         let new_after_state_id = self.arena.push_after_state(AfterState::new(new_outcomes));
@@ -110,7 +95,7 @@ impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
             {
                 let after_state = self.arena.get_after_state_node(new_after_state_id);
                 let outcome_count = after_state.outcomes.len();
-                let ids: HashSet<_> = after_state.outcomes.iter().map(|o| o.child).collect();
+                let ids: HashSet<_> = after_state.outcomes.iter().map(|o| o.child()).collect();
                 ids.len() == outcome_count
                     && ids
                         .iter()

@@ -99,8 +99,7 @@ where
         let edge = &self.edges[edge_idx];
         let action_with_policy = &self.policy_priors[edge_idx];
 
-        let snapshot = edge.get_child().and_then(|child_id| {
-            Some(match child_id.node_type() {
+        let snapshot = edge.child().map(|child_id| match child_id.node_type() {
                 NodeType::State => nodes.get_state_node(child_id).rollup_stats.snapshot(),
 
                 NodeType::AfterState => {
@@ -109,19 +108,17 @@ where
                     <R as RollupStats>::aggregate_weighted(
                         after
                             .outcomes(nodes)
-                            .into_iter()
                             .map(|(r, w)| (r.snapshot(), w)),
                     )
                 }
 
                 NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats.snapshot(),
-            })
-        });
+            });
 
         EdgeInfo {
             action: &action_with_policy.action,
             policy_prior: action_with_policy.policy_score.to_f32(),
-            visits: edge.visits.load(Ordering::Acquire),
+            visits: edge.visits(),
             snapshot,
         }
     }
@@ -149,7 +146,7 @@ impl AfterState {
     {
         self.outcomes.iter().map(move |outcome| {
             let child_id = outcome.child;
-            let visits = outcome.visits.load(Ordering::Acquire);
+            let visits = outcome.visits();
 
             debug_assert!(
                 child_id.as_u32() != u32::MAX,
@@ -171,22 +168,50 @@ impl AfterState {
 
 /// Possible outcome from an AfterState node.
 pub struct AfterStateOutcome {
-    pub visits: AtomicU32,
-    pub child: NodeId,
+    visits: AtomicU32,
+    child: NodeId,
 }
 
 impl AfterStateOutcome {
-    pub fn new() -> Self {
+    pub fn new(visits: u32, child: NodeId) -> Self {
         Self {
-            visits: AtomicU32::new(0),
-            child: u32::MAX.into(),
+            visits: AtomicU32::new(visits),
+            child,
         }
+    }
+
+    pub fn visits(&self) -> u32 {
+        self.visits.load(Ordering::Acquire)
+    }
+
+    pub fn increment_visits(&self) {
+        self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn set_child(&mut self, child: NodeId) {
+        self.child = child;
+    }
+
+    pub fn child(&self) -> NodeId {
+        self.child
     }
 }
 
 impl Default for AfterStateOutcome {
     fn default() -> Self {
-        Self::new()
+        Self {
+            visits: AtomicU32::new(0),
+            child: NodeId::from_u32(u32::MAX),
+        }
+    }
+}
+
+impl Clone for AfterStateOutcome {
+    fn clone(&self) -> Self {
+        Self {
+            visits: AtomicU32::new(self.visits()),
+            child: self.child,
+        }
     }
 }
 

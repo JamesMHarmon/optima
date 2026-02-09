@@ -131,4 +131,10 @@ impl<S, A, T> NodeArena<S, A, T> {
         debug_assert_eq!(id.node_type(), NodeType::Terminal);
         &self.terminal_nodes[id.index()]
     }
+}   
+
+impl Default for NodeArena<(), (), ()> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
