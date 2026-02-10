@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
+use rcu_append_buffer::BufferItem;
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
@@ -74,7 +75,7 @@ where
             }
 
             if let Some(child_id) =
-                self.get_or_link_transposition(edge, game_state.transposition_hash())
+                self.get_or_link_transposition(&*edge, game_state.transposition_hash())
             {
                 current = child_id;
                 continue;
@@ -115,12 +116,12 @@ where
         let new_node = match &selection.terminal {
             None => Some(self.analyze_and_create_node(&selection.game_state)),
             Some(terminal) => {
-                self.create_or_merge_terminal(selection.edge, &selection.game_state, terminal)
+                self.create_or_merge_terminal(&*selection.edge, &selection.game_state, terminal)
             }
         };
 
         if let Some(new_node_id) = new_node {
-            self.graph.add_child_to_edge(selection.edge, new_node_id);
+            self.graph.add_child_to_edge(&*selection.edge, new_node_id);
         }
 
         self.backpropagate(selection.path());
@@ -228,7 +229,7 @@ where
 
 struct SelectionResult<'a, S, T> {
     context: SearchContextGuard,
-    edge: &'a PUCTEdge,
+    edge: BufferItem<PUCTEdge>,
     game_state: BorrowedOrOwned<'a, S>,
     terminal: Option<T>,
 }
@@ -236,7 +237,7 @@ struct SelectionResult<'a, S, T> {
 impl<'a, S, T> SelectionResult<'a, S, T> {
     fn new(
         context: SearchContextGuard,
-        edge: &'a PUCTEdge,
+        edge: BufferItem<PUCTEdge>,
         game_state: BorrowedOrOwned<'a, S>,
         terminal: Option<T>,
     ) -> Self {

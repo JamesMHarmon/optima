@@ -1,4 +1,5 @@
 use model::ActionWithPolicy;
+use rcu_append_buffer::{BufferItem, RcuAppendBuffer};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tinyvec::TinyVec;
@@ -10,41 +11,30 @@ pub struct StateNode<A, R, SI> {
     visits: AtomicU32,
     rollup_stats: R,
     state_info: SI,
-    policy_priors: Vec<ActionWithPolicy<A>>,
-    edges: Vec<PUCTEdge>,
+    policy_priors: Box<[ActionWithPolicy<A>]>,
+    edges: RcuAppendBuffer<PUCTEdge>,
 }
 
 impl<A, R, SI> StateNode<A, R, SI> {
     pub fn new(
         transposition_hash: u64,
-        policy_priors: Vec<ActionWithPolicy<A>>,
+        policy_priors: impl Into<Box<[ActionWithPolicy<A>]>>,
         state_info: SI,
         rollup_stats: R,
     ) -> Self {
+        let policy_priors = policy_priors.into();
+
         Self {
             transposition_hash,
             visits: AtomicU32::new(1),
             rollup_stats,
             state_info,
             policy_priors,
-            edges: Vec::new(),
+            edges: RcuAppendBuffer::new(),
         }
     }
 
-    pub fn expand_edge(&mut self, index: usize) -> usize {
-        if index < self.edges.len() {
-            return index;
-        }
-
-        let expansion_index = self.edges.len();
-        self.policy_priors.swap(index, expansion_index);
-
-        self.edges.push(PUCTEdge::new());
-
-        expansion_index
-    }
-
-    pub fn get_edge(&self, index: usize) -> Option<&PUCTEdge> {
+    pub fn get_edge(&self, index: usize) -> Option<BufferItem<PUCTEdge>> {
         self.edges.get(index)
     }
 
@@ -52,7 +42,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
         &self.policy_priors[index]
     }
 
-    pub fn get_edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
+    pub fn get_edge_and_action(&self, index: usize) -> (BufferItem<PUCTEdge>, &A) {
         let edge = self
             .get_edge(index)
             .expect("Selected edge must be expanded");
@@ -97,7 +87,10 @@ where
         edge_idx: usize,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> EdgeInfo<'a, A, R::Snapshot> {
-        let edge = &self.edges[edge_idx];
+        let edge = self
+            .edges
+            .get(edge_idx)
+            .expect("Edge index must be within expanded edge range");
         let action_with_policy = &self.policy_priors[edge_idx];
 
         let snapshot = edge.child().map(|child_id| match child_id.node_type() {

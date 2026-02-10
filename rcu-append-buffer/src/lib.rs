@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -15,6 +16,23 @@ pub struct BufferSnapshot<T> {
     len: usize,
 }
 
+pub struct BufferItem<T> {
+    inner: Arc<Inner<T>>,
+    index: usize,
+}
+
+impl<T> Deref for BufferItem<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // Safety: `BufferItem` is only constructed by `RcuAppendBuffer::get` after
+        // verifying `index < inner.len()` with Acquire ordering.
+        // The writer publishes initialization before incrementing len with Release.
+        let ptr = (self.inner.data.as_ptr() as *const MaybeUninit<T>) as *const T;
+        unsafe { &*ptr.add(self.index) }
+    }
+}
+
 impl<T> BufferSnapshot<T> {
     pub fn as_slice(&self) -> &[T] {
         self.inner.as_slice_len(self.len)
@@ -27,6 +45,82 @@ impl<T> Clone for BufferSnapshot<T> {
             inner: self.inner.clone(),
             len: self.len,
         }
+    }
+}
+
+impl<T> RcuAppendBuffer<T> {
+    pub fn new() -> Self {
+        Self {
+            inner: ArcSwap::from_pointee(Inner::with_capacity(2)),
+            writer_active: AtomicBool::new(false),
+        }
+    }
+
+    pub fn snapshot(&self) -> BufferSnapshot<T> {
+        let inner = self.inner.load_full();
+        let len = inner.len();
+        BufferSnapshot { inner, len }
+    }
+
+    pub fn get(&self, index: usize) -> Option<BufferItem<T>> {
+        let inner = self.inner.load_full();
+        if index < inner.len() {
+            Some(BufferItem { inner, index })
+        } else {
+            None
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.load().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl<T> RcuAppendBuffer<T>
+where
+    T: Clone,
+{
+    pub fn push(&self, value: T) {
+        if self
+            .writer_active
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            panic!("Concurrent writers detected");
+        }
+
+        let current = self.inner.load_full();
+
+        match current.push(value) {
+            Ok(()) => {}
+            Err(value) => {
+                let old_len = current.len();
+                let new_cap = next_capacity(current.capacity());
+                let new_inner = Inner::with_capacity(new_cap);
+
+                let ptr = (current.data.as_ptr() as *const MaybeUninit<T>) as *const T;
+
+                for i in 0..old_len {
+                    let item = unsafe { &*ptr.add(i) };
+                    let _ = new_inner.push(item.clone());
+                }
+
+                let _ = new_inner.push(value);
+                self.inner.store(Arc::new(new_inner));
+            }
+        }
+
+        self.writer_active.store(false, Ordering::Release);
+    }
+}
+
+impl<T> Default for RcuAppendBuffer<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -84,60 +178,6 @@ impl<T> Drop for Inner<T> {
                 (*self.data[i].get()).assume_init_drop();
             }
         }
-    }
-}
-
-impl<T: Clone + Send + Sync> RcuAppendBuffer<T> {
-    pub fn new() -> Self {
-        Self {
-            inner: ArcSwap::from_pointee(Inner::with_capacity(2)),
-            writer_active: AtomicBool::new(false),
-        }
-    }
-
-    pub fn push(&self, value: T) {
-        if self
-            .writer_active
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
-        {
-            panic!("Concurrent writers detected");
-        }
-
-        let current = self.inner.load_full();
-
-        match current.push(value) {
-            Ok(()) => {}
-            Err(value) => {
-                let old_len = current.len();
-                let new_cap = next_capacity(current.capacity());
-                let new_inner = Inner::with_capacity(new_cap);
-
-                let ptr = (current.data.as_ptr() as *const MaybeUninit<T>) as *const T;
-
-                for i in 0..old_len {
-                    let item = unsafe { &*ptr.add(i) };
-                    let _ = new_inner.push(item.clone());
-                }
-
-                let _ = new_inner.push(value);
-                self.inner.store(Arc::new(new_inner));
-            }
-        }
-
-        self.writer_active.store(false, Ordering::Release);
-    }
-
-    pub fn snapshot(&self) -> BufferSnapshot<T> {
-        let inner = self.inner.load_full();
-        let len = inner.len();
-        BufferSnapshot { inner, len }
-    }
-}
-
-impl<T: Clone + Send + Sync> Default for RcuAppendBuffer<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

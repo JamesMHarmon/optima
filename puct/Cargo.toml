@@ -12,6 +12,7 @@ name = "puct"
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
+rcu-append-buffer = { path = "../rcu-append-buffer" }
 
 anyhow = "1.0"
 itertools = "0.12"
