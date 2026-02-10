@@ -1,3 +1,4 @@
+mod after_state;
 mod backpropagation_strategy;
 mod borrowed_or_owned;
 mod edge;
@@ -9,7 +10,9 @@ mod rollup;
 mod scorer_selection_policy;
 mod search_context;
 mod selection_strategy;
+mod terminal_node;
 
+pub use after_state::*;
 pub use backpropagation_strategy::*;
 pub use borrowed_or_owned::*;
 pub use edge::*;
@@ -21,3 +24,4 @@ pub use rollup::*;
 pub use scorer_selection_policy::*;
 pub use search_context::*;
 pub use selection_strategy::*;
+pub use terminal_node::*;

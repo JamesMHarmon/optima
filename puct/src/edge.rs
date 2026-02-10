@@ -5,11 +5,11 @@ use super::NodeId;
 pub struct PUCTEdge {
     pub visits: AtomicU32,
     pub child: AtomicU32,
-    pub action_idx: usize,
+    pub action_idx: u32,
 }
 
 impl PUCTEdge {
-    pub fn new(action_idx: usize) -> Self {
+    pub fn new(action_idx: u32) -> Self {
         Self {
             visits: AtomicU32::new(0),
             child: AtomicU32::new(NodeId::unset().as_u32()),

@@ -12,7 +12,6 @@ name = "puct"
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
-rcu-append-buffer = { path = "../rcu-append-buffer" }
 
 anyhow = "1.0"
 itertools = "0.12"
@@ -27,3 +26,4 @@ crossbeam-queue = "0.3"
 tinyvec = { version = "1.10", features = ["alloc"] }
 append-only-vec = "0.1.8"
 dashmap = { version = "6.1.0", features = ["inline"] }
+parking_lot = "0.12"

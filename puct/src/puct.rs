@@ -7,7 +7,8 @@ use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
-use rcu_append_buffer::BufferItem;
+
+use crate::EdgeReadGuard;
 
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
@@ -229,7 +230,7 @@ where
 
 struct SelectionResult<'a, S, T> {
     context: SearchContextGuard,
-    edge: BufferItem<PUCTEdge>,
+    edge: EdgeReadGuard<'a>,
     game_state: BorrowedOrOwned<'a, S>,
     terminal: Option<T>,
 }
@@ -237,7 +238,7 @@ struct SelectionResult<'a, S, T> {
 impl<'a, S, T> SelectionResult<'a, S, T> {
     fn new(
         context: SearchContextGuard,
-        edge: BufferItem<PUCTEdge>,
+        edge: EdgeReadGuard<'a>,
         game_state: BorrowedOrOwned<'a, S>,
         terminal: Option<T>,
     ) -> Self {
