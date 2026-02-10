@@ -40,13 +40,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
         RwLockReadGuard::map(guard, |edges| &edges[index])
     }
 
-    pub fn get_action(&self, index: usize) -> &ActionWithPolicy<A> {
-        &self.policy_priors[index]
-    }
-
     pub fn get_edge_and_action(&self, index: usize) -> (EdgeReadGuard<'_>, &A) {
         let edge = self.get_edge(index);
-        let action = &self.get_action(index).action;
+        let action_idx = edge.action_idx();
+        let action = &self.get_action(action_idx).action;
         (edge, action)
     }
 
@@ -68,6 +65,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
 
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
+    }
+
+    fn get_action(&self, action_idx: u32) -> &ActionWithPolicy<A> {
+        &self.policy_priors[action_idx as usize]
     }
 }
 
@@ -142,7 +143,8 @@ where
         self.index += 1;
 
         let edge = &self.edges[i];
-        let action_with_policy = &self.policy_priors[i];
+        let action_idx = edge.action_idx() as usize;
+        let action_with_policy = &self.policy_priors[action_idx];
         let visits = edge.visits();
         let snapshot = StateNode::child_snapshot(edge.child(), self.nodes);
 

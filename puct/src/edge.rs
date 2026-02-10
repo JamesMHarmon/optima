@@ -3,9 +3,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use super::NodeId;
 
 pub struct PUCTEdge {
-    pub visits: AtomicU32,
-    pub child: AtomicU32,
-    pub action_idx: u32,
+    visits: AtomicU32,
+    child: AtomicU32,
+    action_idx: u32,
 }
 
 impl PUCTEdge {
@@ -49,5 +49,9 @@ impl PUCTEdge {
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn action_idx(&self) -> u32 {
+        self.action_idx
     }
 }
