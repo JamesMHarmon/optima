@@ -13,10 +13,7 @@ pub trait ScorerSelectionPolicy<R: RollupStats>: EdgeScorer<R> {
         edges
             .enumerate()
             .map(|(idx, e)| {
-                let score = match &e.snapshot {
-                    None => f64::INFINITY,
-                    Some(snapshot) => prepared.score(e.policy_prior, snapshot),
-                };
+                let score = prepared.score(e.policy_prior, e.snapshot.as_ref());
                 (idx, score)
             })
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
@@ -31,7 +28,7 @@ pub struct NodeContext {
 }
 
 pub trait PreparedEdgeScorer<R: RollupStats> {
-    fn score(&self, prior: f32, child: &R::Snapshot) -> f64;
+    fn score(&self, prior: f32, child: Option<&R::Snapshot>) -> f64;
 }
 
 pub trait EdgeScorer<R: RollupStats> {
