@@ -1,17 +1,37 @@
 use std::cmp::Ordering;
 
+pub(crate) trait Comparator<T> {
+    fn cmp(&self, a: &T, b: &T) -> Ordering;
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct OrdComparator;
+
+impl<T: Ord> Comparator<T> for OrdComparator {
+    #[inline]
+    fn cmp(&self, a: &T, b: &T) -> Ordering {
+        a.cmp(b)
+    }
+}
+
 /// Generic in-place max-heap over a `Vec<T>`.
 ///
 /// The heap occupies `items[0..heap_len]`. Each `extract_next_to_end()` moves the current maximum
 /// to the end of the heap region, shrinks the heap boundary, and restores the heap property.
-pub(crate) struct InPlaceMaxHeap<T> {
+pub(crate) struct InPlaceMaxHeap<T, C = OrdComparator> {
     heap_len: usize,
     items: Box<[T]>,
-    cmp: fn(&T, &T) -> Ordering,
+    cmp: C,
 }
 
-impl<T> InPlaceMaxHeap<T> {
-    pub(crate) fn new(items: Box<[T]>, cmp: fn(&T, &T) -> Ordering) -> Self {
+impl<T: Ord> InPlaceMaxHeap<T, OrdComparator> {
+    pub(crate) fn new(items: Box<[T]>) -> Self {
+        Self::with_comparator(items, OrdComparator)
+    }
+}
+
+impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
+    pub(crate) fn with_comparator(items: Box<[T]>, cmp: C) -> Self {
         let heap_len = items.len();
         Self {
             heap_len,
@@ -75,12 +95,12 @@ impl<T> InPlaceMaxHeap<T> {
             let mut best = left;
 
             if right < heap_len {
-                if (self.cmp)(&self.items[right], &self.items[left]) == Ordering::Greater {
+                if self.cmp.cmp(&self.items[right], &self.items[left]) == Ordering::Greater {
                     best = right;
                 }
             }
 
-            if (self.cmp)(&self.items[best], &self.items[root]) != Ordering::Greater {
+            if self.cmp.cmp(&self.items[best], &self.items[root]) != Ordering::Greater {
                 return;
             }
 

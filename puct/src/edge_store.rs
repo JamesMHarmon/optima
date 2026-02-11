@@ -4,7 +4,9 @@ use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
 use parking_lot::{RwLock, RwLockReadGuard};
 
-use super::{InPlaceMaxHeap, PUCTEdge};
+use super::{Comparator, InPlaceMaxHeap, PUCTEdge};
+
+type PolicyPriorsHeap<A> = InPlaceMaxHeap<ActionWithPolicy<A>, PolicyScoreCmp>;
 
 /// In-place heapified edge store (heap over `policy_priors` themselves), guarded by an `RwLock`.
 ///
@@ -16,7 +18,7 @@ use super::{InPlaceMaxHeap, PUCTEdge};
 /// - `action_idx` is implicit and maps `edge_index i` to `policy_priors[len - 1 - i]`.
 pub(crate) struct EdgeStore<A> {
     edges: AppendOnlyVec<PUCTEdge>,
-    heap: RwLock<InPlaceMaxHeap<ActionWithPolicy<A>>>,
+    heap: RwLock<PolicyPriorsHeap<A>>,
 }
 
 type ActionWithPolicyGuard<'a, A> = parking_lot::MappedRwLockReadGuard<'a, ActionWithPolicy<A>>;
@@ -25,7 +27,10 @@ impl<A> EdgeStore<A> {
     pub(crate) fn new(policy_priors: Box<[ActionWithPolicy<A>]>) -> Self {
         Self {
             edges: AppendOnlyVec::new(),
-            heap: RwLock::new(InPlaceMaxHeap::new(policy_priors, Self::cmp_prior)),
+            heap: RwLock::new(InPlaceMaxHeap::with_comparator(
+                policy_priors,
+                PolicyScoreCmp,
+            )),
         }
     }
 
@@ -81,7 +86,7 @@ impl<A> EdgeStore<A> {
     }
 
     #[inline]
-    fn initialize_heap_if_first_edge(&self, heap: &mut InPlaceMaxHeap<ActionWithPolicy<A>>) {
+    fn initialize_heap_if_first_edge(&self, heap: &mut PolicyPriorsHeap<A>) {
         if self.heap_initialized() {
             return;
         }
@@ -90,7 +95,7 @@ impl<A> EdgeStore<A> {
     }
 
     #[inline]
-    fn materialize_next_edge(&self, heap: &mut InPlaceMaxHeap<ActionWithPolicy<A>>) {
+    fn materialize_next_edge(&self, heap: &mut PolicyPriorsHeap<A>) {
         if heap.remaining() == 0 {
             return;
         }
@@ -104,8 +109,14 @@ impl<A> EdgeStore<A> {
     fn phys(total_len: usize, edge_index: usize) -> usize {
         total_len - 1 - edge_index
     }
+}
 
-    fn cmp_prior(a: &ActionWithPolicy<A>, b: &ActionWithPolicy<A>) -> Ordering {
+#[derive(Clone, Copy, Default)]
+struct PolicyScoreCmp;
+
+impl<A> Comparator<ActionWithPolicy<A>> for PolicyScoreCmp {
+    #[inline]
+    fn cmp(&self, a: &ActionWithPolicy<A>, b: &ActionWithPolicy<A>) -> Ordering {
         let pa = a.policy_score().to_f32();
         let pb = b.policy_score().to_f32();
         pa.partial_cmp(&pb).unwrap_or(Ordering::Equal)
