@@ -49,6 +49,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.edges.len()
     }
 
+    pub fn iter_edge_refs(&self) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
+        self.edges.iter()
+    }
+
     pub fn visits(&self) -> u32 {
         self.visits.load(Ordering::Acquire)
     }

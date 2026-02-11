@@ -151,10 +151,25 @@ impl<S, A, T> NodeArena<S, A, T> {
     }
 
     #[inline]
+    pub fn get_after_state_node_mut(&mut self, id: NodeId) -> &mut A {
+        debug_assert!(!id.is_unset(), "NodeId is unset");
+        debug_assert_eq!(id.node_type(), NodeType::AfterState);
+        &mut self.after_state_nodes[id.index()]
+    }
+
+    #[inline]
     pub fn get_terminal_node(&self, id: NodeId) -> &T {
         debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::Terminal);
         &self.terminal_nodes[id.index()]
+    }
+
+    pub fn into_vecs(self) -> (Vec<S>, Vec<A>, Vec<T>) {
+        (
+            self.state_nodes.into_vec(),
+            self.after_state_nodes.into_vec(),
+            self.terminal_nodes.into_vec(),
+        )
     }
 }
 
