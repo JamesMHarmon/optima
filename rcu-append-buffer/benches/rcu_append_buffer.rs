@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+use append_only_vec::AppendOnlyVec;
 use arc_swap::ArcSwap;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
@@ -42,6 +43,7 @@ impl Entry {
 #[derive(Clone, Copy, Debug)]
 enum ImplKind {
     RcuAppendBuffer,
+    AppendOnlyVec,
     ArcSwapVec,
     ParkingMutexVec,
     ParkingRwLockVec,
@@ -52,6 +54,7 @@ impl ImplKind {
     fn name(self) -> &'static str {
         match self {
             ImplKind::RcuAppendBuffer => "rcu_append_buffer",
+            ImplKind::AppendOnlyVec => "append_only_vec",
             ImplKind::ArcSwapVec => "arc_swap_vec",
             ImplKind::ParkingMutexVec => "parking_lot_mutex_vec",
             ImplKind::ParkingRwLockVec => "parking_lot_rwlock_vec",
@@ -88,6 +91,7 @@ fn bench_one_writer_readers(c: &mut Criterion) {
 
                 for &impl_kind in &[
                     ImplKind::RcuAppendBuffer,
+                    ImplKind::AppendOnlyVec,
                     ImplKind::ArcSwapVec,
                     ImplKind::ParkingMutexVec,
                     ImplKind::ParkingRwLockVec,
@@ -135,6 +139,7 @@ fn bench_read_only_many_readers(c: &mut Criterion) {
 
             for &impl_kind in &[
                 ImplKind::RcuAppendBuffer,
+                ImplKind::AppendOnlyVec,
                 ImplKind::ArcSwapVec,
                 ImplKind::ParkingMutexVec,
                 ImplKind::ParkingRwLockVec,
@@ -180,6 +185,26 @@ fn run_read_only_scenario(impl_kind: ImplKind, target_len: usize, readers: usize
                         for _ in 0..READ_ONLY_READ_OPS_PER_READER {
                             let snap = buf.snapshot();
                             consume_all(snap.as_slice());
+                        }
+                    });
+                }
+            });
+        }
+        ImplKind::AppendOnlyVec => {
+            let buf: Arc<AppendOnlyVec<Entry>> = Arc::new(AppendOnlyVec::new());
+            for i in 0..target_len as u32 {
+                buf.push(Entry::from_seed(i));
+            }
+
+            let start_barrier = Arc::new(std::sync::Barrier::new(readers));
+            std::thread::scope(|s| {
+                for _ in 0..readers {
+                    let buf = buf.clone();
+                    let start_barrier = start_barrier.clone();
+                    s.spawn(move || {
+                        start_barrier.wait();
+                        for _ in 0..READ_ONLY_READ_OPS_PER_READER {
+                            consume_all_append_only_vec(&buf);
                         }
                     });
                 }
@@ -362,6 +387,7 @@ fn run_latency_reports() {
             for &ratio in WRITE_TO_READ_RATIOS {
                 for &impl_kind in &[
                     ImplKind::RcuAppendBuffer,
+                    ImplKind::AppendOnlyVec,
                     ImplKind::ArcSwapVec,
                     ImplKind::ParkingMutexVec,
                     ImplKind::ParkingRwLockVec,
@@ -383,6 +409,7 @@ fn run_scenario_latency(
 ) -> LatencyResult {
     match impl_kind {
         ImplKind::RcuAppendBuffer => run_rcu_append_buffer_latency(readers, ratio, target_len),
+        ImplKind::AppendOnlyVec => run_append_only_vec_latency(readers, ratio, target_len),
         ImplKind::ArcSwapVec => run_arc_swap_vec_latency(readers, ratio, target_len),
         ImplKind::ParkingMutexVec => run_parking_mutex_vec_latency(readers, ratio, target_len),
         ImplKind::ParkingRwLockVec => run_parking_rwlock_vec_latency(readers, ratio, target_len),
@@ -397,6 +424,7 @@ fn run_scenario(impl_kind: ImplKind, target_len: usize, readers: usize, ratio: u
 fn run_impl(impl_kind: ImplKind, readers: usize, ratio: usize, target_len: usize) {
     match impl_kind {
         ImplKind::RcuAppendBuffer => run_rcu_append_buffer(readers, ratio, target_len),
+        ImplKind::AppendOnlyVec => run_append_only_vec(readers, ratio, target_len),
         ImplKind::ArcSwapVec => run_arc_swap_vec(readers, ratio, target_len),
         ImplKind::ParkingMutexVec => run_parking_mutex_vec(readers, ratio, target_len),
         ImplKind::ParkingRwLockVec => run_parking_rwlock_vec(readers, ratio, target_len),
@@ -413,6 +441,187 @@ fn consume_all(values: &[Entry]) {
         acc = acc.wrapping_add(v.c as u64);
     }
     black_box(acc);
+}
+
+fn consume_all_append_only_vec(values: &AppendOnlyVec<Entry>) {
+    // Requirement: each read iterates over the entire contents of the collection.
+    // AppendOnlyVec is safe to index concurrently with appends.
+    let n = values.len();
+    let mut acc = 0u64;
+    for i in 0..n {
+        let v = &values[i];
+        acc = acc.wrapping_add(v.a as u64);
+        acc = acc.wrapping_add(v.b as u64);
+        acc = acc.wrapping_add(v.c as u64);
+    }
+    black_box(acc);
+}
+
+fn run_append_only_vec(readers: usize, ratio: usize, target_len: usize) {
+    if target_len == 0 {
+        return;
+    }
+
+    let buf: Arc<AppendOnlyVec<Entry>> = Arc::new(AppendOnlyVec::new());
+
+    let start_barrier = Arc::new(std::sync::Barrier::new(readers + 1));
+    let started = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let read_ops = Arc::new(AtomicUsize::new(0));
+    let writer_seed = Arc::new(AtomicU32::new(0));
+
+    std::thread::scope(|s| {
+        {
+            let buf = buf.clone();
+            let start_barrier = start_barrier.clone();
+            let started = started.clone();
+            let done = done.clone();
+            let read_ops = read_ops.clone();
+            let writer_seed = writer_seed.clone();
+
+            s.spawn(move || {
+                start_barrier.wait();
+
+                buf.push(Entry::from_seed(
+                    writer_seed.fetch_add(1, Ordering::Relaxed),
+                ));
+                started.store(true, Ordering::Release);
+
+                let reads_per_write = ratio.saturating_mul(readers).max(1);
+                let mut next_threshold = reads_per_write;
+                let mut pushed = 1usize;
+
+                while pushed < target_len {
+                    while read_ops.load(Ordering::Acquire) < next_threshold {
+                        std::hint::spin_loop();
+                    }
+
+                    buf.push(Entry::from_seed(
+                        writer_seed.fetch_add(1, Ordering::Relaxed),
+                    ));
+                    pushed += 1;
+                    next_threshold = next_threshold.saturating_add(reads_per_write);
+                }
+
+                done.store(true, Ordering::Release);
+            });
+        }
+
+        for _ in 0..readers {
+            let buf = buf.clone();
+            let start_barrier = start_barrier.clone();
+            let started = started.clone();
+            let done = done.clone();
+            let read_ops = read_ops.clone();
+
+            s.spawn(move || {
+                start_barrier.wait();
+                while !started.load(Ordering::Acquire) {
+                    std::hint::spin_loop();
+                }
+
+                while !done.load(Ordering::Acquire) {
+                    consume_all_append_only_vec(&buf);
+                    read_ops.fetch_add(1, Ordering::Release);
+                }
+            });
+        }
+    });
+}
+
+fn run_append_only_vec_latency(readers: usize, ratio: usize, target_len: usize) -> LatencyResult {
+    if target_len == 0 {
+        return LatencyResult::default();
+    }
+
+    let buf: Arc<AppendOnlyVec<Entry>> = Arc::new(AppendOnlyVec::new());
+
+    let start_barrier = Arc::new(std::sync::Barrier::new(readers + 1));
+    let started = Arc::new(AtomicBool::new(false));
+    let done = Arc::new(AtomicBool::new(false));
+    let read_ops = Arc::new(AtomicUsize::new(0));
+    let writer_seed = Arc::new(AtomicU32::new(0));
+
+    std::thread::scope(|s| {
+        let writer_handle = {
+            let buf = buf.clone();
+            let start_barrier = start_barrier.clone();
+            let started = started.clone();
+            let done = done.clone();
+            let read_ops = read_ops.clone();
+            let writer_seed = writer_seed.clone();
+
+            s.spawn(move || {
+                let mut publish_ns: Vec<u64> = Vec::with_capacity(target_len.max(1));
+                start_barrier.wait();
+
+                let t0 = Instant::now();
+                buf.push(Entry::from_seed(
+                    writer_seed.fetch_add(1, Ordering::Relaxed),
+                ));
+                publish_ns.push(t0.elapsed().as_nanos() as u64);
+                started.store(true, Ordering::Release);
+
+                let reads_per_write = ratio.saturating_mul(readers).max(1);
+                let mut next_threshold = reads_per_write;
+                let mut pushed = 1usize;
+
+                while pushed < target_len {
+                    while read_ops.load(Ordering::Acquire) < next_threshold {
+                        std::hint::spin_loop();
+                    }
+
+                    let t0 = Instant::now();
+                    buf.push(Entry::from_seed(
+                        writer_seed.fetch_add(1, Ordering::Relaxed),
+                    ));
+                    publish_ns.push(t0.elapsed().as_nanos() as u64);
+                    pushed += 1;
+                    next_threshold = next_threshold.saturating_add(reads_per_write);
+                }
+
+                done.store(true, Ordering::Release);
+                publish_ns
+            })
+        };
+
+        let mut reader_handles = Vec::with_capacity(readers);
+        for _ in 0..readers {
+            let buf = buf.clone();
+            let start_barrier = start_barrier.clone();
+            let started = started.clone();
+            let done = done.clone();
+            let read_ops = read_ops.clone();
+
+            reader_handles.push(s.spawn(move || {
+                let mut reader_ns: Vec<u64> = Vec::new();
+                start_barrier.wait();
+                while !started.load(Ordering::Acquire) {
+                    std::hint::spin_loop();
+                }
+
+                while !done.load(Ordering::Acquire) {
+                    let t0 = Instant::now();
+                    consume_all_append_only_vec(&buf);
+                    reader_ns.push(t0.elapsed().as_nanos() as u64);
+                    read_ops.fetch_add(1, Ordering::Release);
+                }
+
+                reader_ns
+            }));
+        }
+
+        let publish_ns = writer_handle.join().unwrap();
+        let mut reader_ns = Vec::new();
+        for h in reader_handles {
+            reader_ns.extend(h.join().unwrap());
+        }
+
+        LatencyResult {
+            publish_ns,
+            reader_ns,
+        }
+    })
 }
 
 fn run_rcu_append_buffer(readers: usize, ratio: usize, target_len: usize) {

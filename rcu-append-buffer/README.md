@@ -53,3 +53,14 @@ High-read, low-write scenarios where:
 - Reads dominate.
 - Snapshot consistency matters.
 - Append-only semantics are sufficient.
+
+## Performance Notes
+
+Criterion benchmarks live in `benches/rcu_append_buffer.rs` and model a PUCT-like workload (many full scans between appends).
+
+- `RcuAppendBuffer`: very fast reads (mean ~0.09µs per full scan) with low publish cost (mean ~0.34µs).
+- `AppendOnlyVec`: fastest publish/append (mean ~0.16µs) with similar read cost at this length (mean ~0.11µs).
+- `parking_lot::RwLock<Vec<_>>`: competitive in this low-reader case (publish mean ~0.25µs, read mean ~0.11µs), but readers take a lock and can block the writer.
+- `ArcSwap<Vec<_>>`: much higher publish cost (mean ~2.36µs) and large tail latency spikes (p99 ~51µs), due to copy-on-write cloning.
+
+Reproduce (from workspace root): `OPTIMA_LATENCY=1 cargo bench -p rcu-append-buffer --bench rcu_append_buffer`

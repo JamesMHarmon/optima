@@ -1,5 +1,5 @@
+use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal};
@@ -10,10 +10,10 @@ pub struct StateNode<A, R, SI> {
     rollup_stats: R,
     state_info: SI,
     policy_priors: Box<[ActionWithPolicy<A>]>,
-    edges: RwLock<Vec<PUCTEdge>>,
+    edges: AppendOnlyVec<PUCTEdge>,
 }
 
-pub type EdgeReadGuard<'a> = MappedRwLockReadGuard<'a, PUCTEdge>;
+pub type EdgeRef<'a> = &'a PUCTEdge;
 
 impl<A, R, SI> StateNode<A, R, SI> {
     pub fn new(
@@ -30,17 +30,15 @@ impl<A, R, SI> StateNode<A, R, SI> {
             rollup_stats,
             state_info,
             policy_priors,
-            edges: RwLock::new(vec![]),
+            edges: AppendOnlyVec::new(),
         }
     }
 
-    pub fn get_edge(&self, index: usize) -> EdgeReadGuard<'_> {
-        let guard = self.edges.read();
-
-        RwLockReadGuard::map(guard, |edges| &edges[index])
+    pub fn get_edge(&self, index: usize) -> EdgeRef<'_> {
+        &self.edges[index]
     }
 
-    pub fn get_edge_and_action(&self, index: usize) -> (EdgeReadGuard<'_>, &A) {
+    pub fn get_edge_and_action(&self, index: usize) -> (EdgeRef<'_>, &A) {
         let edge = self.get_edge(index);
         let action_idx = edge.action_idx();
         let action = &self.get_action(action_idx).action;
@@ -48,7 +46,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
     }
 
     pub fn edge_count(&self) -> usize {
-        self.edges.read().len()
+        self.edges.len()
     }
 
     pub fn visits(&self) -> u32 {
@@ -79,13 +77,22 @@ where
     pub fn iter_edges<'a>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> StateNodeEdges<'a, A, R, SI> {
-        StateNodeEdges {
-            nodes,
-            edges: self.edges.read(),
-            policy_priors: &self.policy_priors,
-            index: 0,
-        }
+    ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
+        let policy_priors: &'a [ActionWithPolicy<A>] = &self.policy_priors;
+
+        self.edges.iter().map(move |edge| {
+            let action_idx = edge.action_idx() as usize;
+            let action_with_policy = &policy_priors[action_idx];
+            let visits = edge.visits();
+            let snapshot = StateNode::child_snapshot(edge.child(), nodes);
+
+            EdgeInfo {
+                action: &action_with_policy.action,
+                policy_prior: action_with_policy.policy_score.to_f32(),
+                visits,
+                snapshot,
+            }
+        })
     }
 
     fn child_snapshot(
@@ -105,54 +112,6 @@ where
             }
 
             NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats().snapshot(),
-        })
-    }
-}
-
-pub struct StateNodeEdges<'a, A, R, SI>
-where
-    R: RollupStats,
-{
-    nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    edges: RwLockReadGuard<'a, Vec<PUCTEdge>>,
-    policy_priors: &'a [ActionWithPolicy<A>],
-    index: usize,
-}
-
-impl<'a, A, R, SI> StateNodeEdges<'a, A, R, SI>
-where
-    R: RollupStats,
-{
-    pub fn edges(&self) -> &Vec<PUCTEdge> {
-        &self.edges
-    }
-}
-
-impl<'a, A, R, SI> Iterator for StateNodeEdges<'a, A, R, SI>
-where
-    R: RollupStats,
-{
-    type Item = EdgeInfo<'a, A, R::Snapshot>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.edges.len() {
-            return None;
-        }
-
-        let i = self.index;
-        self.index += 1;
-
-        let edge = &self.edges[i];
-        let action_idx = edge.action_idx() as usize;
-        let action_with_policy = &self.policy_priors[action_idx];
-        let visits = edge.visits();
-        let snapshot = StateNode::child_snapshot(edge.child(), self.nodes);
-
-        Some(EdgeInfo {
-            action: &action_with_policy.action,
-            policy_prior: action_with_policy.policy_score.to_f32(),
-            visits,
-            snapshot,
         })
     }
 }
