@@ -67,4 +67,8 @@ impl<A> ActionWithPolicy<A> {
     pub fn policy_score(&self) -> f16 {
         self.policy_score
     }
+
+    pub fn set_policy_score(&mut self, policy_score: f16) {
+        self.policy_score = policy_score;
+    }
 }

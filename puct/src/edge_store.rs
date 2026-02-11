@@ -1,95 +1,113 @@
+use std::cmp::Ordering;
+
 use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
+use parking_lot::{RwLock, RwLockReadGuard};
 
-use super::PUCTEdge;
+use super::{InPlaceMaxHeap, PUCTEdge};
 
+/// In-place heapified edge store (heap over `policy_priors` themselves), guarded by an `RwLock`.
+///
+/// This is intended for benchmarks: it avoids allocating a separate heap of indices.
+///
+/// Notes:
+/// - Reorders `policy_priors` in-place under an `RwLock` write lock.
+/// - Heapifies priors once, then extracts the next-best prior by moving it to the end.
+/// - `action_idx` is implicit and maps `edge_index i` to `policy_priors[len - 1 - i]`.
 pub(crate) struct EdgeStore<A> {
-    policy_priors: Box<[ActionWithPolicy<A>]>,
     edges: AppendOnlyVec<PUCTEdge>,
+    heap: RwLock<InPlaceMaxHeap<ActionWithPolicy<A>>>,
 }
+
+type ActionWithPolicyGuard<'a, A> = parking_lot::MappedRwLockReadGuard<'a, ActionWithPolicy<A>>;
 
 impl<A> EdgeStore<A> {
     pub(crate) fn new(policy_priors: Box<[ActionWithPolicy<A>]>) -> Self {
         Self {
-            policy_priors,
             edges: AppendOnlyVec::new(),
+            heap: RwLock::new(InPlaceMaxHeap::new(policy_priors, Self::cmp_prior)),
         }
     }
 
-    pub(crate) fn policy_priors(&self) -> &[ActionWithPolicy<A>] {
-        &self.policy_priors
+    #[inline]
+    fn heap_initialized(&self) -> bool {
+        self.edges.len() != 0
+    }
+
+    fn action_with_policy(&self, edge_index: usize) -> ActionWithPolicyGuard<'_, A> {
+        let heap = self.heap.read();
+
+        RwLockReadGuard::map(heap, |v| {
+            let total_len = v.total_len();
+            debug_assert!(edge_index < total_len);
+            let idx = Self::phys(total_len, edge_index);
+            &v.items()[idx]
+        })
     }
 
     pub(crate) fn edges_iter(
         &self,
-    ) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
-        self.edges.iter()
+    ) -> impl DoubleEndedIterator<Item = (&PUCTEdge, ActionWithPolicyGuard<'_, A>)> + ExactSizeIterator
+    {
+        self.edges.iter().enumerate().map(move |(i, edge)| {
+            let action_with_policy = self.action_with_policy(i);
+            (edge, action_with_policy)
+        })
     }
 
-    pub(crate) fn get_edge(&self, index: usize) -> &PUCTEdge {
-        &self.edges[index]
+    pub(crate) fn edge(&self, index: usize) -> (&PUCTEdge, ActionWithPolicyGuard<'_, A>) {
+        let edge = &self.edges[index];
+        let action_with_policy = self.action_with_policy(index);
+        (edge, action_with_policy)
     }
 
-    pub(crate) fn edge_count(&self) -> usize {
-        self.edges.len()
-    }
-
-    pub(crate) fn iter_edge_refs(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
-        self.edges.iter()
-    }
-
-    pub(crate) fn get_action(&self, action_idx: u32) -> &ActionWithPolicy<A> {
-        &self.policy_priors[action_idx as usize]
-    }
-
-    /// Ensures there is at most one frontier edge (defined as `visits == 0`), and that if there
-    /// is no frontier edge (i.e. the last edge has `visits > 0`), a new one is materialized with
-    /// the highest policy prior among not-yet-materialized actions.
     pub(crate) fn ensure_frontier_edge(&self) {
-        let edge_count = self.edges.len();
-        if edge_count != 0 {
-            let last_edge = &self.edges[edge_count - 1];
-            if last_edge.visits() == 0 {
-                return;
-            }
-        }
-
-        let mut best_action_idx: Option<u32> = None;
-        let mut best_score = None;
-
-        for (idx, awp) in self.policy_priors.iter().enumerate() {
-            let score = awp.policy_score();
-
-            let score_can_beat_current_best = match best_score {
-                None => true,
-                Some(curr) => {
-                    score
-                        .partial_cmp(&curr)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        == std::cmp::Ordering::Greater
-                }
-            };
-
-            if !score_can_beat_current_best {
-                continue;
-            }
-
-            let action_idx = idx as u32;
-            let already_materialized = self.edges.iter().any(|e| e.action_idx() == action_idx);
-            if already_materialized {
-                continue;
-            }
-
-            best_action_idx = Some(action_idx);
-            best_score = Some(score);
-        }
-
-        let Some(best_action_idx) = best_action_idx else {
+        if self.has_unvisited_frontier_edge() {
             return;
-        };
+        }
 
-        self.edges.push(PUCTEdge::new(best_action_idx));
+        let mut heap = self.heap.write();
+
+        self.materialize_next_edge(&mut heap);
+    }
+
+    #[inline]
+    fn has_unvisited_frontier_edge(&self) -> bool {
+        let edge_count = self.edges.len();
+        if edge_count == 0 {
+            return false;
+        }
+        self.edges[edge_count - 1].visits() == 0
+    }
+
+    #[inline]
+    fn initialize_heap_if_first_edge(&self, heap: &mut InPlaceMaxHeap<ActionWithPolicy<A>>) {
+        if self.heap_initialized() {
+            return;
+        }
+
+        heap.heapify_max();
+    }
+
+    #[inline]
+    fn materialize_next_edge(&self, heap: &mut InPlaceMaxHeap<ActionWithPolicy<A>>) {
+        if heap.remaining() == 0 {
+            return;
+        }
+
+        self.initialize_heap_if_first_edge(heap);
+        heap.extract_next_to_end();
+        self.edges.push(PUCTEdge::new());
+    }
+
+    #[inline]
+    fn phys(total_len: usize, edge_index: usize) -> usize {
+        total_len - 1 - edge_index
+    }
+
+    fn cmp_prior(a: &ActionWithPolicy<A>, b: &ActionWithPolicy<A>) -> Ordering {
+        let pa = a.policy_score().to_f32();
+        let pb = b.policy_score().to_f32();
+        pa.partial_cmp(&pb).unwrap_or(Ordering::Equal)
     }
 }

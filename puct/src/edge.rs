@@ -5,15 +5,13 @@ use super::NodeId;
 pub struct PUCTEdge {
     visits: AtomicU32,
     child: AtomicU32,
-    action_idx: u32,
 }
 
 impl PUCTEdge {
-    pub fn new(action_idx: u32) -> Self {
+    pub fn new() -> Self {
         Self {
             visits: AtomicU32::new(0),
             child: AtomicU32::new(NodeId::unset().as_u32()),
-            action_idx,
         }
     }
 
@@ -49,9 +47,5 @@ impl PUCTEdge {
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
-    }
-
-    pub fn action_idx(&self) -> u32 {
-        self.action_idx
     }
 }

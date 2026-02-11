@@ -3,6 +3,7 @@ mod backpropagation_strategy;
 mod borrowed_or_owned;
 mod edge;
 mod edge_store;
+mod in_place_max_heap;
 mod node;
 mod node_arena;
 mod node_graph;
@@ -13,6 +14,8 @@ mod scorer_selection_policy;
 mod search_context;
 mod selection_strategy;
 mod terminal_node;
+
+use in_place_max_heap::*;
 
 pub use after_state::*;
 pub use backpropagation_strategy::*;
