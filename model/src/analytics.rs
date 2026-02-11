@@ -48,8 +48,8 @@ impl<A, P> GameStateAnalysis<A, P> {
 
 #[derive(Clone, Debug)]
 pub struct ActionWithPolicy<A> {
-    pub action: A,
-    pub policy_score: f16,
+    action: A,
+    policy_score: f16,
 }
 
 impl<A> ActionWithPolicy<A> {
@@ -58,5 +58,13 @@ impl<A> ActionWithPolicy<A> {
             action,
             policy_score,
         }
+    }
+
+    pub fn action(&self) -> &A {
+        &self.action
+    }
+
+    pub fn policy_score(&self) -> f16 {
+        self.policy_score
     }
 }

@@ -45,19 +45,15 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.edges.ensure_frontier_edge();
     }
 
-    pub fn get_edge(&self, index: usize) -> EdgeRef<'_> {
-        self.edges.get_edge(index)
-    }
-
-    pub fn get_edge_and_action(&self, index: usize) -> (EdgeRef<'_>, &A) {
-        let edge = self.get_edge(index);
-        let action_idx = edge.action_idx();
-        let action = &self.get_action(action_idx).action;
-        (edge, action)
-    }
-
     pub fn edge_count(&self) -> usize {
         self.edges.edge_count()
+    }
+
+    pub fn edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
+        let edge = self.edges.get_edge(index);
+        let action_idx = edge.action_idx();
+        let action = &self.edges.get_action(action_idx).action();
+        (edge, action)
     }
 
     pub fn iter_edge_refs(&self) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
@@ -79,10 +75,6 @@ impl<A, R, SI> StateNode<A, R, SI> {
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
     }
-
-    fn get_action(&self, action_idx: u32) -> &ActionWithPolicy<A> {
-        self.edges.get_action(action_idx)
-    }
 }
 
 impl<A, R, SI> StateNode<A, R, SI>
@@ -95,19 +87,23 @@ where
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
         let policy_priors: &'a [ActionWithPolicy<A>] = self.edges.policy_priors();
 
-        self.edges.edges_iter().map(move |edge| {
-            let action_idx = edge.action_idx() as usize;
-            let action_with_policy = &policy_priors[action_idx];
-            let visits = edge.visits();
-            let snapshot = StateNode::child_snapshot(edge.child(), nodes);
+        self.edges
+            .edges_iter()
+            .enumerate()
+            .map(move |(edge_index, edge)| {
+                let action_idx = edge.action_idx() as usize;
+                let action_with_policy = &policy_priors[action_idx];
+                let visits = edge.visits();
+                let snapshot = StateNode::child_snapshot(edge.child(), nodes);
 
-            EdgeInfo {
-                action: &action_with_policy.action,
-                policy_prior: action_with_policy.policy_score.to_f32(),
-                visits,
-                snapshot,
-            }
-        })
+                EdgeInfo {
+                    edge_index,
+                    action: &action_with_policy.action(),
+                    policy_prior: action_with_policy.policy_score().to_f32(),
+                    visits,
+                    snapshot,
+                }
+            })
     }
 
     fn child_snapshot(

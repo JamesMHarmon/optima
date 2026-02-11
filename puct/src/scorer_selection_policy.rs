@@ -11,14 +11,13 @@ pub trait ScorerSelectionPolicy<R: RollupStats>: EdgeScorer<R> {
         let prepared = self.prepare(&ctx);
 
         edges
-            .enumerate()
-            .map(|(idx, e)| {
+            .map(|e| {
                 let score = prepared.score(e.policy_prior, e.snapshot.as_ref());
-                (idx, score)
+                (e.edge_index, score)
             })
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(idx, _)| idx)
-            .unwrap_or(0)
+            .map(|(edge_index, _)| edge_index)
+            .expect("Expected at least one edge for selection")
     }
 }
 

@@ -60,7 +60,7 @@ impl<A> EdgeStore<A> {
         let mut best_score = None;
 
         for (idx, awp) in self.policy_priors.iter().enumerate() {
-            let score = awp.policy_score;
+            let score = awp.policy_score();
 
             let score_can_beat_current_best = match best_score {
                 None => true,

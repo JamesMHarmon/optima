@@ -63,7 +63,7 @@ where
             }
 
             let edge_idx = self.select_edge(&game_state, node);
-            let (edge, action) = node.get_edge_and_action(edge_idx);
+            let (edge, action) = node.edge_and_action(edge_idx);
 
             edge.increment_visits();
 

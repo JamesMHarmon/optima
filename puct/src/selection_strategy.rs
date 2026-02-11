@@ -27,6 +27,7 @@ where
 /// Provides all information needed to compute PUCT scores without mutation.
 /// Supports both direct edges and afterstate edges with multiple outcomes.
 pub struct EdgeInfo<'a, A, S> {
+    pub edge_index: usize,
     pub action: &'a A,
     pub policy_prior: f32,
     pub visits: u32,
