@@ -1,7 +1,7 @@
 use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
 
-use crate::PUCTEdge;
+use super::PUCTEdge;
 
 pub(crate) struct EdgeStore<A> {
     policy_priors: Box<[ActionWithPolicy<A>]>,

@@ -1,8 +1,10 @@
 use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::{AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal};
-use crate::edge_store::EdgeStore;
+use super::{
+    AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal,
+    edge_store::EdgeStore,
+};
 
 pub struct StateNode<A, R, SI> {
     transposition_hash: u64,
