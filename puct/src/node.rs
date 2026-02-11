@@ -1,16 +1,15 @@
-use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal};
+use crate::edge_store::EdgeStore;
 
 pub struct StateNode<A, R, SI> {
     transposition_hash: u64,
     visits: AtomicU32,
     rollup_stats: R,
     state_info: SI,
-    policy_priors: Box<[ActionWithPolicy<A>]>,
-    edges: AppendOnlyVec<PUCTEdge>,
+    edges: EdgeStore<A>,
 }
 
 pub type EdgeRef<'a> = &'a PUCTEdge;
@@ -22,20 +21,30 @@ impl<A, R, SI> StateNode<A, R, SI> {
         state_info: SI,
         rollup_stats: R,
     ) -> Self {
-        let policy_priors = policy_priors.into();
+        let edges = EdgeStore::new(policy_priors.into());
+        let visits = AtomicU32::new(1);
 
         Self {
             transposition_hash,
-            visits: AtomicU32::new(1),
+            visits,
             rollup_stats,
             state_info,
-            policy_priors,
-            edges: AppendOnlyVec::new(),
+            edges,
         }
     }
 
+    /// Ensures there is at most one frontier edge (defined as `visits == 0`), and that if there
+    /// is no frontier edge (i.e. the last edge has `visits > 0`), a new one is materialized with
+    /// the highest policy prior among not-yet-materialized actions.
+    ///
+    /// This intentionally avoids sorting (which is often wasted work if only a few edges are ever
+    /// traversed) at the cost of a scan when the frontier advances.
+    pub fn ensure_frontier_edge(&self) {
+        self.edges.ensure_frontier_edge();
+    }
+
     pub fn get_edge(&self, index: usize) -> EdgeRef<'_> {
-        &self.edges[index]
+        self.edges.get_edge(index)
     }
 
     pub fn get_edge_and_action(&self, index: usize) -> (EdgeRef<'_>, &A) {
@@ -46,11 +55,11 @@ impl<A, R, SI> StateNode<A, R, SI> {
     }
 
     pub fn edge_count(&self) -> usize {
-        self.edges.len()
+        self.edges.edge_count()
     }
 
     pub fn iter_edge_refs(&self) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
-        self.edges.iter()
+        self.edges.iter_edge_refs()
     }
 
     pub fn visits(&self) -> u32 {
@@ -70,7 +79,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
     }
 
     fn get_action(&self, action_idx: u32) -> &ActionWithPolicy<A> {
-        &self.policy_priors[action_idx as usize]
+        self.edges.get_action(action_idx)
     }
 }
 
@@ -82,9 +91,9 @@ where
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
-        let policy_priors: &'a [ActionWithPolicy<A>] = &self.policy_priors;
+        let policy_priors: &'a [ActionWithPolicy<A>] = self.edges.policy_priors();
 
-        self.edges.iter().map(move |edge| {
+        self.edges.edges_iter().map(move |edge| {
             let action_idx = edge.action_idx() as usize;
             let action_with_policy = &policy_priors[action_idx];
             let visits = edge.visits();

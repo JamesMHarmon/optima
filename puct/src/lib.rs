@@ -2,6 +2,7 @@ mod after_state;
 mod backpropagation_strategy;
 mod borrowed_or_owned;
 mod edge;
+mod edge_store;
 mod node;
 mod node_arena;
 mod node_graph;

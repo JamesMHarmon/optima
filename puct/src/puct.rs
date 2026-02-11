@@ -104,6 +104,7 @@ where
         node: &StateNode<E::Action, B::RollupStats, B::StateInfo>,
     ) -> usize {
         // @TODO: Set Depth
+        node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
             node.iter_edges(&self.nodes),
             node.visits(),
