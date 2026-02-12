@@ -38,7 +38,7 @@ impl RollupStats for DummyRollup {
         DummySnapshot(self.v.load(Ordering::Relaxed))
     }
 
-    fn set(&self, value: &Self::Snapshot) {
+    fn set(&self, value: Self::Snapshot) {
         self.v.store(value.0, Ordering::Relaxed);
     }
 }
@@ -243,11 +243,11 @@ fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
     nodes
         .get_state_node(state_id)
         .rollup_stats()
-        .set(&DummySnapshot(5));
+        .set(DummySnapshot(5));
 
     let terminal_rollup = {
         let r = DummyRollup::default();
-        r.set(&DummySnapshot(7));
+        r.set(DummySnapshot(7));
         r
     };
     let terminal_id = nodes.push_terminal(Terminal::new(terminal_rollup));
@@ -285,11 +285,11 @@ fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
     nodes
         .get_state_node(state_id)
         .rollup_stats()
-        .set(&DummySnapshot(5));
+        .set(DummySnapshot(5));
 
     let terminal_rollup = {
         let r = DummyRollup::default();
-        r.set(&DummySnapshot(7));
+        r.set(DummySnapshot(7));
         r
     };
     let terminal_id = nodes.push_terminal(Terminal::new(terminal_rollup));
