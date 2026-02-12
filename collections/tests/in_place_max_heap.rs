@@ -60,8 +60,8 @@ fn extracted_and_iter_orders_match() {
     heap.extract_next_to_end();
     heap.extract_next_to_end();
 
-    // After two extractions, stable tail should hold the 2 largest values, sorted ascending.
-    assert_eq!(heap.stable_slice(), &[3, 4]);
+    // After two extractions, stable prefix holds the 2 largest values in extraction order.
+    assert_eq!(heap.stable_slice(), &[4, 3]);
 
     // extracted(i) is in extraction order (largest first).
     assert_eq!(*heap.extracted(0), 4);
@@ -91,15 +91,12 @@ fn full_extraction_produces_sorted_stable_slice() {
     assert_eq!(heap.remaining(), 0);
     assert_eq!(heap.extracted_len(), heap.total_len());
 
-    let mut expected = vec![9u32, 1, 8, 2, 7, 3, 6, 4, 5];
-    expected.sort();
-    assert_eq!(heap.stable_slice(), expected.as_slice());
+    // Stable slice is the whole array, in extraction order (descending).
+    assert_eq!(heap.stable_slice(), &[9, 8, 7, 6, 5, 4, 3, 2, 1]);
 
-    // extracted_iter() is reverse of stable_slice().
+    // extracted_iter() matches stable_slice().
     let iter: Vec<u32> = heap.extracted_iter().copied().collect();
-    let mut expected_desc = expected;
-    expected_desc.reverse();
-    assert_eq!(iter, expected_desc);
+    assert_eq!(iter, vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
 }
 
 #[test]
@@ -114,8 +111,8 @@ fn stable_tail_after_partial_extraction_contains_top_k_sorted() {
     assert_eq!(heap.remaining(), 6);
     assert_eq!(heap.extracted_len(), 4);
 
-    // Stable tail should be the top-4 elements: 7,8,9,10 (sorted ascending).
-    assert_eq!(heap.stable_slice(), &[7, 8, 9, 10]);
+    // Stable prefix should be the top-4 elements in extraction order.
+    assert_eq!(heap.stable_slice(), &[10, 9, 8, 7]);
 
     // And extracted order is descending.
     let extracted: Vec<u32> = heap.extracted_iter().copied().collect();
@@ -168,11 +165,11 @@ fn concurrent_extractions_complete_and_sort() {
     assert_eq!(heap.remaining(), 0);
     assert_eq!(heap.extracted_len(), heap.total_len());
 
-    // After full extraction, stable_slice should be sorted ascending.
+    // After full extraction, stable_slice should be sorted descending (extraction order).
     let slice = heap.stable_slice();
     assert_eq!(slice.len(), 1000);
     for w in slice.windows(2) {
-        assert!(w[0] <= w[1]);
+        assert!(w[0] >= w[1]);
     }
 
     // Sanity: extracted_iter is descending.
@@ -225,7 +222,7 @@ fn custom_comparator_orders_by_key() {
 
     assert_eq!(keys, vec![4, 3, 2, 1]);
 
-    // Stable slice should be sorted by key ascending.
+    // Stable slice is in extraction order (descending by key).
     let stable_keys: Vec<u32> = heap.stable_slice().iter().map(|it| it.key).collect();
-    assert_eq!(stable_keys, vec![1, 2, 3, 4]);
+    assert_eq!(stable_keys, vec![4, 3, 2, 1]);
 }

@@ -22,14 +22,20 @@ impl<T: Ord> Comparator<T> for OrdComparator {
 /// In-place max-heap with a stable tail.
 ///
 /// Invariants:
-/// - Heap (unstable, mutable):      [0 .. heap_len)
-/// - Stable (immutable forever):    [heap_len .. n)
+/// - Stable (immutable forever):    [0 .. stable_len)
+/// - Heap (unstable, mutable):      [stable_len .. n)
 ///
-/// Each extraction moves the max element into index `heap_len - 1`, then decreases `heap_len`,
-/// thereby *growing* the stable region by 1.
-/// Stable region is in descending order from the end toward the front:
-/// - extracted(0) is the first extracted (largest), at index n-1
-/// - extracted(1) at index n-2, etc.
+/// The heap is stored “backwards”:
+/// - The root of the heap is the last element in the array (index `n - 1`).
+/// - Heap edges go right-to-left (i.e. children are stored at lower indices).
+///
+/// Each extraction swaps the root (at the end) with the leftmost heap element (the boundary
+/// element at index `stable_len`), then decreases `heap_len`, thereby *growing* the stable region
+/// by 1.
+///
+/// Stable region is in extraction order from left to right (largest first):
+/// - extracted(0) is the first extracted (largest), at index 0
+/// - extracted(1) is the next, at index 1
 pub struct InPlaceMaxHeap<T, C = OrdComparator> {
     heap_len: AtomicUsize,
     writer: Mutex<()>,
@@ -84,29 +90,30 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
     pub fn extracted(&self, i: usize) -> &T {
         let heap_len = self.heap_len.load(AtomicOrdering::Acquire);
         let total = self.items.len();
-        let stable_count = total - heap_len;
+        let stable_len = total - heap_len;
 
-        assert!(i < stable_count, "extracted index out of range");
+        assert!(i < stable_len, "extracted index out of range");
 
-        let idx = total - 1 - i;
-        debug_assert!(idx >= heap_len);
+        let idx = i;
+        debug_assert!(idx < stable_len);
 
         // SAFETY: idx is in the stable region, which is never mutated again.
         unsafe { &*self.items[idx].get() }
     }
 
     /// Returns a slice of all stable items.
-    /// The order is from the end of the array toward the front: first extracted (largest) is last.
+    /// The order is in extraction order (largest first), from left to right.
     pub fn stable_slice(&self) -> &[T] {
-        let start = self.heap_len.load(AtomicOrdering::Acquire);
-        let cells: &[UnsafeCell<T>] = &self.items[start..];
+        let heap_len = self.heap_len.load(AtomicOrdering::Acquire);
+        let stable_len = self.items.len() - heap_len;
+        let cells: &[UnsafeCell<T>] = &self.items[..stable_len];
         unsafe { std::slice::from_raw_parts(cells.as_ptr() as *const T, cells.len()) }
     }
 
     /// A convenience iterator over extracted (stable) items, in extraction order:
     /// largest first.
     pub fn extracted_iter(&self) -> impl Iterator<Item = &T> {
-        self.stable_slice().iter().rev()
+        self.stable_slice().iter()
     }
 
     /// Extract the current maximum into the stable region (to the end of the array).
@@ -129,7 +136,26 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
 
     // ----------------- internal (writer-only) helpers -----------------
 
-    /// Heapify the heap region `[0..heap_len)` into a max-heap.
+    #[inline]
+    fn phys_of_logical(&self, logical: usize) -> usize {
+        // logical 0 is the root (physical last element)
+        self.items.len() - 1 - logical
+    }
+
+    #[inline]
+    fn swap_logical(&self, a: usize, b: usize) {
+        let pa = self.phys_of_logical(a);
+        let pb = self.phys_of_logical(b);
+        self.swap_items(pa, pb);
+    }
+
+    #[inline]
+    fn heap_ref_logical(&self, logical: usize) -> &T {
+        let p = self.phys_of_logical(logical);
+        self.heap_ref(p)
+    }
+
+    /// Heapify the heap region into a max-heap.
     ///
     /// MUST be called while holding the writer guard.
     fn heapify_max_writer(&self, heap_len: usize) {
@@ -155,17 +181,23 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
             let mut best = left;
 
             if right < heap_len {
-                let ord = self.cmp.cmp(self.heap_ref(right), self.heap_ref(left));
+                let ord = self
+                    .cmp
+                    .cmp(self.heap_ref_logical(right), self.heap_ref_logical(left));
                 if ord == Ordering::Greater {
                     best = right;
                 }
             }
 
-            if self.cmp.cmp(self.heap_ref(best), self.heap_ref(root)) != Ordering::Greater {
+            if self
+                .cmp
+                .cmp(self.heap_ref_logical(best), self.heap_ref_logical(root))
+                != Ordering::Greater
+            {
                 return;
             }
 
-            self.swap_items(root, best);
+            self.swap_logical(root, best);
             root = best;
         }
     }
@@ -185,20 +217,21 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
             self.heapify_max_writer(heap_len);
         }
 
-        let last = heap_len - 1;
+        let last_logical = heap_len - 1;
 
-        // Write the soon-to-be-stable slot `last`.
-        self.swap_items(0, last);
+        // Place the current max (logical root 0 at physical end) into the boundary element
+        // (logical last at physical start of heap).
+        self.swap_logical(0, last_logical);
 
-        // Publish the new stable boundary. Slots >= last are stable.
-        self.heap_len.store(last, AtomicOrdering::Release);
+        // Publish the new stable boundary. Slots < stable_len are stable.
+        self.heap_len.store(last_logical, AtomicOrdering::Release);
 
-        // Restore heap property inside the reduced heap region [0..last).
-        if last > 0 {
-            self.sift_down_max(0, last);
+        // Restore heap property inside the reduced heap region (logical indices [0..last_logical)).
+        if last_logical > 0 {
+            self.sift_down_max(0, last_logical);
         }
 
-        Some(last)
+        Some(self.phys_of_logical(last_logical))
     }
 
     #[inline]
