@@ -624,6 +624,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "collections"
+version = "0.1.0"
+dependencies = [
+ "append-only-vec",
+ "arc-swap",
+ "criterion 0.5.1",
+ "parking_lot",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2261,6 +2271,7 @@ dependencies = [
  "anyhow",
  "append-only-vec",
  "assert_approx_eq",
+ "collections",
  "common",
  "criterion 0.5.1",
  "crossbeam",
@@ -2503,16 +2514,6 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
-]
-
-[[package]]
-name = "rcu-append-buffer"
-version = "0.1.0"
-dependencies = [
- "append-only-vec",
- "arc-swap",
- "criterion 0.5.1",
- "parking_lot",
 ]
 
 [[package]]

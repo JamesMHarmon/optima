@@ -1,4 +1,4 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
 
-use rcu_append_buffer::RcuAppendBuffer;
+use collections::RcuAppendBuffer;
 
 criterion_group!(
     benches,

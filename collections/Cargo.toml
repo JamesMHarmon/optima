@@ -1,16 +1,23 @@
 [package]
-name = "rcu-append-buffer"
+name = "collections"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+publish = false
 
 [dependencies]
+parking_lot = "0.12"
 arc-swap = "1.8.1"
 
 [dev-dependencies]
 criterion = "0.5"
-parking_lot = "0.12"
 append-only-vec = "0.1.8"
+model = { path = "../model" }
+half = "1.8"
 
 [[bench]]
 name = "rcu_append_buffer"
+harness = false
+
+[[bench]]
+name = "in_place_max_heap"
 harness = false

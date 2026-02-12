@@ -3,7 +3,9 @@ use std::cmp::Ordering;
 use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
 
-use super::{Comparator, InPlaceMaxHeap, PUCTEdge};
+use collections::{Comparator, InPlaceMaxHeap};
+
+use super::PUCTEdge;
 
 type PolicyPriorsHeap<A> = InPlaceMaxHeap<ActionWithPolicy<A>, PolicyScoreCmp>;
 

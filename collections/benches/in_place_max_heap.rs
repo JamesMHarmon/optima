@@ -6,7 +6,7 @@ use criterion::{
 use half::f16;
 use model::ActionWithPolicy;
 
-use puct::{Comparator, InPlaceMaxHeap};
+use collections::{Comparator, InPlaceMaxHeap};
 
 criterion_group!(benches, bench_in_place_max_heap);
 criterion_main!(benches);

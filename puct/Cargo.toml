@@ -12,6 +12,7 @@ name = "puct"
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
+collections = { path = "../collections" }
 
 anyhow = "1.0"
 itertools = "0.12"
@@ -33,10 +34,6 @@ bench = []
 
 [dev-dependencies]
 criterion = "0.5"
-
-[[bench]]
-name = "in_place_max_heap"
-harness = false
 
 [[bench]]
 name = "edge_store"

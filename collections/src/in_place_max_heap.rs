@@ -112,11 +112,6 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
     /// Extract the current maximum into the stable region (to the end of the array).
     ///
     /// This grows the stable region by 1.
-    ///
-    /// Enforced single-writer. Safe with concurrent stable reads because:
-    /// - We write the new stable slot (via swap)
-    /// - Then publish the new boundary with Release store
-    /// - Readers use Acquire load before reading stable slots
     pub fn extract_next_to_end(&self) {
         self.with_writer(|| {
             let _ = self.extract_next_index_writer();
@@ -124,8 +119,6 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
     }
 
     /// Extract next max and return a reference to the newly-stable element.
-    ///
-    /// This is useful for "driving" extraction without exposing unstable memory.
     pub fn extract_next(&self) -> Option<&T> {
         self.with_writer(|| {
             let idx = self.extract_next_index_writer()?;
@@ -162,8 +155,6 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
             let mut best = left;
 
             if right < heap_len {
-                // Writer-only: safe to take shared refs into heap region temporarily
-                // because this function is only called while holding the writer guard.
                 let ord = self.cmp.cmp(self.heap_ref(right), self.heap_ref(left));
                 if ord == Ordering::Greater {
                     best = right;
@@ -189,8 +180,7 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
             return None;
         }
 
-        // Lazy init: the heap is only guaranteed to be heapified once extraction starts.
-        // We treat "no extractions yet" as `heap_len == total_len`.
+        // Lazy init: heapify only when extraction starts.
         if heap_len == self.total_len() {
             self.heapify_max_writer(heap_len);
         }

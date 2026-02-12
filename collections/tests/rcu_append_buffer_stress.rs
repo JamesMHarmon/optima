@@ -1,8 +1,8 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-use rcu_append_buffer::RcuAppendBuffer;
+use collections::RcuAppendBuffer;
 
 #[test]
 fn stress_push_and_snapshot() {

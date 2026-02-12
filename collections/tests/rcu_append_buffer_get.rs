@@ -1,4 +1,4 @@
-use rcu_append_buffer::RcuAppendBuffer;
+﻿use collections::RcuAppendBuffer;
 
 #[test]
 fn get_returns_stable_item_across_grow() {
