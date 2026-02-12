@@ -39,7 +39,7 @@ impl RollupStats for DummyRollup {
         DummySnapshot(self.v.load(Ordering::Relaxed))
     }
 
-    fn set(&self, value: &Self::Snapshot) {
+    fn set(&self, value: Self::Snapshot) {
         self.v.store(value.0, Ordering::Relaxed);
     }
 }
