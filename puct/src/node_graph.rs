@@ -1,13 +1,14 @@
 use super::{
-    AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, PUCTEdge, StateNode, Terminal,
+    AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, StateNode,
+    Terminal,
 };
 
 /// Graph operations wrapper around NodeArena for node traversal and mutation.
-pub struct NodeGraph<'a, A, R, SI> {
+pub struct NodeGraph<'a, A, R: RollupStats, SI> {
     arena: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
 }
 
-impl<'a, A, R, SI> NodeGraph<'a, A, R, SI> {
+impl<'a, A, R: RollupStats, SI> NodeGraph<'a, A, R, SI> {
     pub fn new(arena: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>) -> Self {
         Self { arena }
     }

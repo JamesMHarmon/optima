@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
 
-use super::{AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, StateNode, Terminal};
+use super::{
+    AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, RollupStats, StateNode, Terminal,
+};
 
-pub struct RebuiltArena<A, R, SI> {
+pub struct RebuiltArena<A, R: RollupStats, SI> {
     pub arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     pub root: NodeId,
     /// Optional helper for rebuilding a transposition table.
@@ -20,7 +22,10 @@ pub struct RebuiltArena<A, R, SI> {
 pub fn rebuild_from_root<A, R, SI>(
     arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     root: NodeId,
-) -> RebuiltArena<A, R, SI> {
+) -> RebuiltArena<A, R, SI>
+where
+    R: RollupStats,
+{
     let (state_nodes, after_state_nodes, terminal_nodes) = arena.into_vecs();
 
     // 1) Mark reachable nodes.

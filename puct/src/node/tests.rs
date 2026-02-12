@@ -170,16 +170,12 @@ fn iter_edge_info_matches_edges_with_policy() {
         assert!(info.snapshot.is_none());
     }
 
-    let snapshots: Vec<(*const _, Option<DummySnapshot>)> = node
-        .iter_edge_snapshots(&nodes)
+    let snapshots: Vec<(*const _, DummySnapshot)> = node
+        .iter_edge_rollups(&nodes)
         .map(|(e, s)| (e as *const _, s))
         .collect();
 
-    assert_eq!(snapshots.len(), with_policy.len());
-    for i in 0..snapshots.len() {
-        assert_eq!(snapshots[i].0, with_policy[i].0);
-        assert!(snapshots[i].1.is_none());
-    }
+    assert_eq!(snapshots.len(), 0);
 }
 
 #[test]
@@ -261,11 +257,12 @@ fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
     let (edge0, _action0) = node_state.edge_and_action(0);
     edge0.set_child(state_id);
 
-    let snaps: Vec<Option<DummySnapshot>> = node_state
-        .iter_edge_snapshots(&nodes)
+    let snaps: Vec<DummySnapshot> = node_state
+        .iter_edge_rollups(&nodes)
         .map(|(_e, s)| s)
         .collect();
-    assert_eq!(snaps, vec![Some(DummySnapshot(5))]);
+
+    assert_eq!(snaps, vec![DummySnapshot(5)]);
 
     // Terminal child
     let node_term = make_node(&[(0, 0.5)]);
@@ -309,9 +306,9 @@ fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
     edge.set_child(after_state_id);
 
     let snap = node
-        .iter_edge_snapshots(&nodes)
+        .iter_edge_rollups(&nodes)
         .next()
-        .and_then(|(_e, s)| s)
+        .map(|(_e, s)| s)
         .expect("expected snapshot for afterstate child");
 
     assert_eq!(snap, DummySnapshot(5 * 2 + 7 * 3));

@@ -6,9 +6,10 @@ use super::{
     edge_store::EdgeStore,
 };
 
-pub struct StateNode<A, R, SI> {
+pub struct StateNode<A, R: RollupStats, SI> {
     transposition_hash: u64,
     visits: AtomicU32,
+    rollup_prior: R::Snapshot,
     rollup_stats: R,
     state_info: SI,
     edges: EdgeStore<A>,
@@ -16,7 +17,10 @@ pub struct StateNode<A, R, SI> {
 
 pub type EdgeRef<'a> = &'a PUCTEdge;
 
-impl<A, R, SI> StateNode<A, R, SI> {
+impl<A, R, SI> StateNode<A, R, SI>
+where
+    R: RollupStats,
+{
     pub fn new(
         transposition_hash: u64,
         policy_priors: impl Into<Box<[ActionWithPolicy<A>]>>,
@@ -25,10 +29,12 @@ impl<A, R, SI> StateNode<A, R, SI> {
     ) -> Self {
         let edges = EdgeStore::new(policy_priors.into());
         let visits = AtomicU32::new(1);
+        let rollup_prior = rollup_stats.snapshot();
 
         Self {
             transposition_hash,
             visits,
+            rollup_prior,
             rollup_stats,
             state_info,
             edges,
@@ -69,6 +75,10 @@ impl<A, R, SI> StateNode<A, R, SI> {
         self.visits.fetch_add(1, Ordering::AcqRel);
     }
 
+    pub fn rollup_prior(&self) -> &R::Snapshot {
+        &self.rollup_prior
+    }
+
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
     }
@@ -78,12 +88,14 @@ impl<A, R, SI> StateNode<A, R, SI>
 where
     R: RollupStats,
 {
-    pub fn iter_edge_snapshots<'a>(
+    pub fn iter_edge_rollups<'a>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> impl Iterator<Item = (&'a PUCTEdge, Option<R::Snapshot>)> + 'a {
-        self.iter_edges()
-            .map(move |edge| (edge, StateNode::child_snapshot(edge.child(), nodes)))
+    ) -> impl Iterator<Item = (&'a PUCTEdge, R::Snapshot)> + 'a {
+        self.iter_edges().filter_map(move |edge| {
+            edge.child()
+                .map(|child_id| (edge, StateNode::child_snapshot(child_id, nodes)))
+        })
     }
 
     pub fn iter_edge_info<'a>(
@@ -93,7 +105,8 @@ where
         self.edges.iter_edges_with_policy().enumerate().map(
             move |(edge_index, (edge, action_with_policy))| {
                 let visits = edge.visits();
-                let snapshot = StateNode::child_snapshot(edge.child(), nodes);
+                let child = edge.child();
+                let snapshot = child.map(|child_id| StateNode::child_snapshot(child_id, nodes));
 
                 EdgeInfo {
                     edge_index,
@@ -107,23 +120,19 @@ where
     }
 
     fn child_snapshot(
-        child: Option<NodeId>,
+        child_id: NodeId,
         nodes: &NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) -> Option<R::Snapshot> {
-        child.map(|child_id| match child_id.node_type() {
+    ) -> R::Snapshot {
+        match child_id.node_type() {
             NodeType::State => nodes.get_state_node(child_id).rollup_stats().snapshot(),
 
             NodeType::AfterState => {
                 let after_state = nodes.get_after_state_node(child_id);
-                let weighted_outcomes = after_state
-                    .iter_outcomes(nodes)
-                    .map(|(r, w)| (r.snapshot(), w));
-
-                <R as RollupStats>::aggregate_weighted(weighted_outcomes)
+                R::aggregate_rollups(after_state.iter_outcomes(nodes))
             }
 
             NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats().snapshot(),
-        })
+        }
     }
 }
 

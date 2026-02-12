@@ -1,20 +1,20 @@
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeRef, NodeArena, NodeGraph, NodeId,
     PUCTEdge, RollupStats, SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode,
-    Terminal,
+    Terminal, WeightedMerge,
 };
 use common::TranspositionHash;
 use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
-
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
 
 pub struct PUCT<'a, E, M, B, Sel>
 where
     M: GameAnalyzer,
     B: BackpropagationStrategy,
+    B::RollupStats: RollupStats,
     E: GameEngine,
 {
     game_engine: &'a E,
@@ -88,11 +88,13 @@ where
     fn backpropagate(&self, path: &[NodeId]) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
-            // @TODO: Need to include a nodes own prediction in the rollup, otherwise we won't update nodes that are only visited once and never have a child added (e.g. leaf nodes that hit a cutoff)
-            let aggregated = B::RollupStats::aggregate_weighted(
-                node.iter_edge_snapshots(&self.nodes)
-                    .filter_map(|(edge, snapshot)| snapshot.map(|s| (s, edge.visits()))),
-            );
+
+            let mut aggregated = <B::RollupStats as RollupStats>::Snapshot::zero();
+            aggregated.merge_weighted(node.rollup_prior(), 1);
+
+            for (edge, snapshot) in node.iter_edge_rollups(&self.nodes) {
+                aggregated.merge_weighted(&snapshot, edge.visits());
+            }
 
             node.rollup_stats().set(&aggregated);
         }
