@@ -8,7 +8,27 @@ use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
+
 type PUCTNodeArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
+
+type PuctNodes<E, B> = PUCTNodeArena<
+    <E as GameEngine>::Action,
+    <B as BackpropagationStrategy>::RollupStats,
+    <B as BackpropagationStrategy>::StateInfo,
+>;
+
+type PuctGraph<'a, E, B> = NodeGraph<
+    'a,
+    <E as GameEngine>::Action,
+    <B as BackpropagationStrategy>::RollupStats,
+    <B as BackpropagationStrategy>::StateInfo,
+>;
+
+type PuctStateNode<E, B> = StateNode<
+    <E as GameEngine>::Action,
+    <B as BackpropagationStrategy>::RollupStats,
+    <B as BackpropagationStrategy>::StateInfo,
+>;
 
 pub struct PUCT<'a, E, M, B, Sel>
 where
@@ -22,8 +42,8 @@ where
     backpropagation_strategy: &'a B,
     selection_strategy: &'a Sel,
     game_state: E::State,
-    nodes: PUCTNodeArena<E::Action, B::RollupStats, B::StateInfo>,
-    graph: NodeGraph<'a, E::Action, B::RollupStats, B::StateInfo>,
+    nodes: PuctNodes<E, B>,
+    graph: PuctGraph<'a, E, B>,
     transposition_table: DashMap<u64, NodeId>,
     context_pool: SearchContextPool,
 }
@@ -100,11 +120,7 @@ where
         }
     }
 
-    fn select_edge(
-        &self,
-        game_state: &E::State,
-        node: &StateNode<E::Action, B::RollupStats, B::StateInfo>,
-    ) -> usize {
+    fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, B>) -> usize {
         // @TODO: Set Depth
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(

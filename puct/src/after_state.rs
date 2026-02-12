@@ -14,6 +14,8 @@ pub struct AfterState {
     pub outcomes: TinyVec<[AfterStateOutcome; 2]>,
 }
 
+type StateArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
+
 impl AfterState {
     pub fn new(outcomes: TinyVec<[AfterStateOutcome; 2]>) -> Self {
         Self { outcomes }
@@ -30,7 +32,7 @@ impl AfterState {
     /// Iterates over outcome rollups and weights.
     pub fn iter_outcomes<'a, A, R, SI>(
         &'a self,
-        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+        nodes: &'a StateArena<A, R, SI>,
     ) -> impl Iterator<Item = (&'a R, u32)> + 'a
     where
         R: RollupStats,

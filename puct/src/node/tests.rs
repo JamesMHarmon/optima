@@ -10,6 +10,9 @@ use crate::{
 
 use super::StateNode;
 
+type TestStateNode = StateNode<u32, DummyRollup, ()>;
+type TestArena = NodeArena<TestStateNode, AfterState, Terminal<DummyRollup>>;
+
 #[derive(Default)]
 struct DummyRollup {
     v: AtomicU32,
@@ -40,7 +43,7 @@ impl RollupStats for DummyRollup {
     }
 }
 
-fn make_node(priors: &[(u32, f32)]) -> StateNode<u32, DummyRollup, ()> {
+fn make_node(priors: &[(u32, f32)]) -> TestStateNode {
     let priors = priors
         .iter()
         .map(|&(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
@@ -50,11 +53,11 @@ fn make_node(priors: &[(u32, f32)]) -> StateNode<u32, DummyRollup, ()> {
     StateNode::new(0, priors, (), DummyRollup::default())
 }
 
-fn edge_count(node: &StateNode<u32, DummyRollup, ()>) -> usize {
+fn edge_count(node: &TestStateNode) -> usize {
     node.iter_edges().count()
 }
 
-fn frontier_edge_count(node: &StateNode<u32, DummyRollup, ()>) -> usize {
+fn frontier_edge_count(node: &TestStateNode) -> usize {
     node.iter_edges().filter(|e| e.visits() == 0).count()
 }
 
@@ -143,8 +146,7 @@ fn iter_edge_info_matches_edges_with_policy() {
         edge.increment_visits();
     }
 
-    let nodes: NodeArena<StateNode<u32, DummyRollup, ()>, AfterState, Terminal<DummyRollup>> =
-        NodeArena::new();
+    let nodes: TestArena = NodeArena::new();
 
     let with_policy: Vec<(*const _, u32, f32, u32)> = node
         .iter_edges_with_policy()
@@ -234,8 +236,7 @@ fn frontier_materializes_next_best_policy_prior_step_by_step() {
 
 #[test]
 fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
-    let nodes: NodeArena<StateNode<u32, DummyRollup, ()>, AfterState, Terminal<DummyRollup>> =
-        NodeArena::new();
+    let nodes: TestArena = NodeArena::new();
 
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
     let state_id = nodes.push_state(StateNode::new(1, empty_priors, (), DummyRollup::default()));
@@ -277,8 +278,7 @@ fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
 
 #[test]
 fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
-    let nodes: NodeArena<StateNode<u32, DummyRollup, ()>, AfterState, Terminal<DummyRollup>> =
-        NodeArena::new();
+    let nodes: TestArena = NodeArena::new();
 
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
     let state_id = nodes.push_state(StateNode::new(1, empty_priors, (), DummyRollup::default()));

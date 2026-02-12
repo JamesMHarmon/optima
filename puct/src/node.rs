@@ -6,7 +6,10 @@ use super::{
     edge_store::EdgeStore,
 };
 
-pub struct StateNode<A, R: RollupStats, SI> {
+pub struct StateNode<A, R, SI>
+where
+    R: RollupStats,
+{
     transposition_hash: u64,
     visits: AtomicU32,
     rollup_prior: R::Snapshot,

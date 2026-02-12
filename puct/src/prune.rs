@@ -4,7 +4,10 @@ use super::{
     AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, RollupStats, StateNode, Terminal,
 };
 
-pub struct RebuiltArena<A, R: RollupStats, SI> {
+pub struct RebuiltArena<A, R, SI>
+where
+    R: RollupStats,
+{
     pub arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     pub root: NodeId,
     /// Optional helper for rebuilding a transposition table.
