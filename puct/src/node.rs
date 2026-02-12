@@ -145,12 +145,7 @@ where
         match child_id.node_type() {
             NodeType::State => nodes.get_state_node(child_id).rollup_stats().snapshot(),
 
-            NodeType::AfterState => {
-                let after_state = nodes.get_after_state_node(child_id);
-                let outcomes = after_state.iter_outcomes(nodes);
-                let weighted_snaps = outcomes.map(|(r, w)| (r.snapshot(), w));
-                R::aggregate_weighted(weighted_snaps)
-            }
+            NodeType::AfterState => nodes.get_after_state_node(child_id).snapshot(nodes),
 
             NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats().snapshot(),
         }

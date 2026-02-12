@@ -29,6 +29,20 @@ impl AfterState {
             && ids.iter().all(|id| !id.is_after_state())
     }
 
+    pub fn terminal_outcome(&self) -> Option<&AfterStateOutcome> {
+        self.outcomes
+            .iter()
+            .find(|outcome| outcome.child().is_terminal())
+    }
+
+    pub fn snapshot<A, R, SI>(&self, nodes: &StateArena<A, R, SI>) -> R::Snapshot
+    where
+        R: RollupStats,
+    {
+        let outcomes = self.iter_outcomes(nodes).map(|(r, w)| (r.snapshot(), w));
+        R::aggregate_weighted(outcomes)
+    }
+
     /// Iterates over outcome rollups and weights.
     pub fn iter_outcomes<'a, A, R, SI>(
         &'a self,
@@ -56,12 +70,6 @@ impl AfterState {
 
             (rollup_stats, visits)
         })
-    }
-
-    pub fn terminal_outcome(&self) -> Option<&AfterStateOutcome> {
-        self.outcomes
-            .iter()
-            .find(|outcome| outcome.child().is_terminal())
     }
 }
 
