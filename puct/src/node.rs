@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{
     AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal,
-    edge_store::EdgeStore,
+    WeightedMerge, edge_store::EdgeStore,
 };
 
 pub struct StateNode<A, R, SI>
@@ -85,6 +85,22 @@ where
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
     }
+
+    pub fn recompute_rollup(
+        &self,
+        nodes: &NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    ) {
+        let mut aggregated = R::Snapshot::zero();
+        let edges = self.iter_edge_rollups(nodes);
+        let visited_edges = edges.map(|(e, s)| (e.visits(), s)).filter(|(v, _)| *v > 0);
+
+        aggregated.merge_weighted(self.rollup_prior(), 1);
+        for (visits, snapshot) in visited_edges {
+            aggregated.merge_weighted(&snapshot, visits);
+        }
+
+        self.rollup_stats.set(aggregated);
+    }
 }
 
 impl<A, R, SI> StateNode<A, R, SI>
@@ -131,7 +147,9 @@ where
 
             NodeType::AfterState => {
                 let after_state = nodes.get_after_state_node(child_id);
-                R::aggregate_rollups(after_state.iter_outcomes(nodes))
+                let outcomes = after_state.iter_outcomes(nodes);
+                let weighted_snaps = outcomes.map(|(r, w)| (r.snapshot(), w));
+                R::aggregate_weighted(weighted_snaps)
             }
 
             NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats().snapshot(),

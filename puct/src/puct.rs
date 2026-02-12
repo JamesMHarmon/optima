@@ -1,7 +1,7 @@
 use super::{
     AfterState, BackpropagationStrategy, BorrowedOrOwned, EdgeRef, NodeArena, NodeGraph, NodeId,
     PUCTEdge, RollupStats, SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode,
-    Terminal, WeightedMerge,
+    Terminal,
 };
 use common::TranspositionHash;
 use dashmap::DashMap;
@@ -108,15 +108,7 @@ where
     fn backpropagate(&self, path: &[NodeId]) {
         for &node_id in path.iter().rev() {
             let node = self.nodes.get_state_node(node_id);
-
-            let mut aggregated = <B::RollupStats as RollupStats>::Snapshot::zero();
-            aggregated.merge_weighted(node.rollup_prior(), 1);
-
-            for (edge, snapshot) in node.iter_edge_rollups(&self.nodes) {
-                aggregated.merge_weighted(&snapshot, edge.visits());
-            }
-
-            node.rollup_stats().set(&aggregated);
+            node.recompute_rollup(&self.nodes);
         }
     }
 
