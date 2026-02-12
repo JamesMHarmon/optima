@@ -2,52 +2,29 @@ use std::cmp::Ordering;
 
 use append_only_vec::AppendOnlyVec;
 use model::ActionWithPolicy;
-use parking_lot::{RwLock, RwLockReadGuard};
 
 use super::{Comparator, InPlaceMaxHeap, PUCTEdge};
 
 type PolicyPriorsHeap<A> = InPlaceMaxHeap<ActionWithPolicy<A>, PolicyScoreCmp>;
 
-/// In-place heapified edge store (heap over `policy_priors` themselves), guarded by an `RwLock`.
-///
-/// This is intended for benchmarks: it avoids allocating a separate heap of indices.
-///
-/// Notes:
-/// - Reorders `policy_priors` in-place under an `RwLock` write lock.
-/// - Heapifies priors once, then extracts the next-best prior by moving it to the end.
-/// - `action_idx` is implicit and maps `edge_index i` to `policy_priors[len - 1 - i]`.
 pub(crate) struct EdgeStore<A> {
     edges: AppendOnlyVec<PUCTEdge>,
-    heap: RwLock<PolicyPriorsHeap<A>>,
+    heap: PolicyPriorsHeap<A>,
 }
 
-type ActionWithPolicyGuard<'a, A> = parking_lot::MappedRwLockReadGuard<'a, ActionWithPolicy<A>>;
+pub(crate) type ActionWithPolicyGuard<'a, A> = &'a ActionWithPolicy<A>;
 
 impl<A> EdgeStore<A> {
     pub(crate) fn new(policy_priors: Box<[ActionWithPolicy<A>]>) -> Self {
         Self {
             edges: AppendOnlyVec::new(),
-            heap: RwLock::new(InPlaceMaxHeap::with_comparator(
-                policy_priors,
-                PolicyScoreCmp,
-            )),
+            heap: InPlaceMaxHeap::with_comparator(policy_priors, PolicyScoreCmp),
         }
     }
 
     #[inline]
-    fn heap_initialized(&self) -> bool {
-        self.edges.len() != 0
-    }
-
     fn action_with_policy(&self, edge_index: usize) -> ActionWithPolicyGuard<'_, A> {
-        let heap = self.heap.read();
-
-        RwLockReadGuard::map(heap, |v| {
-            let total_len = v.total_len();
-            debug_assert!(edge_index < total_len);
-            let idx = Self::phys(total_len, edge_index);
-            &v.items()[idx]
-        })
+        self.heap.extracted(edge_index)
     }
 
     pub(crate) fn edges_iter(
@@ -71,9 +48,7 @@ impl<A> EdgeStore<A> {
             return;
         }
 
-        let mut heap = self.heap.write();
-
-        self.materialize_next_edge(&mut heap);
+        self.materialize_next_edge();
     }
 
     #[inline]
@@ -86,28 +61,12 @@ impl<A> EdgeStore<A> {
     }
 
     #[inline]
-    fn initialize_heap_if_first_edge(&self, heap: &mut PolicyPriorsHeap<A>) {
-        if self.heap_initialized() {
+    fn materialize_next_edge(&self) {
+        if self.heap.remaining() == 0 {
             return;
         }
-
-        heap.heapify_max();
-    }
-
-    #[inline]
-    fn materialize_next_edge(&self, heap: &mut PolicyPriorsHeap<A>) {
-        if heap.remaining() == 0 {
-            return;
-        }
-
-        self.initialize_heap_if_first_edge(heap);
-        heap.extract_next_to_end();
+        self.heap.extract_next_to_end();
         self.edges.push(PUCTEdge::new());
-    }
-
-    #[inline]
-    fn phys(total_len: usize, edge_index: usize) -> usize {
-        total_len - 1 - edge_index
     }
 }
 

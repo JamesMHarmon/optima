@@ -15,12 +15,11 @@ mod search_context;
 mod selection_strategy;
 mod terminal_node;
 
-use in_place_max_heap::*;
-
 pub use after_state::*;
 pub use backpropagation_strategy::*;
 pub use borrowed_or_owned::*;
 pub use edge::*;
+pub use in_place_max_heap::*;
 pub use node::*;
 pub use node_arena::*;
 pub use node_graph::*;

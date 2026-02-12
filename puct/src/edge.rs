@@ -7,12 +7,18 @@ pub struct PUCTEdge {
     child: AtomicU32,
 }
 
-impl PUCTEdge {
-    pub fn new() -> Self {
+impl Default for PUCTEdge {
+    fn default() -> Self {
         Self {
             visits: AtomicU32::new(0),
             child: AtomicU32::new(NodeId::unset().as_u32()),
         }
+    }
+}
+
+impl PUCTEdge {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn visits(&self) -> u32 {

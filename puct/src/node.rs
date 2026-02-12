@@ -47,7 +47,7 @@ impl<A, R, SI> StateNode<A, R, SI> {
 
     pub fn edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
         let (edge, action_with_policy) = self.edges.edge(index);
-        (edge, &action_with_policy.action())
+        (edge, action_with_policy.action())
     }
 
     pub fn iter_edge_refs(&self) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
