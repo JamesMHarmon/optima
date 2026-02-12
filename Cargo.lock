@@ -2262,6 +2262,7 @@ dependencies = [
  "append-only-vec",
  "assert_approx_eq",
  "common",
+ "criterion 0.5.1",
  "crossbeam",
  "crossbeam-queue",
  "dashmap",
@@ -2508,6 +2509,7 @@ dependencies = [
 name = "rcu-append-buffer"
 version = "0.1.0"
 dependencies = [
+ "append-only-vec",
  "arc-swap",
  "criterion 0.5.1",
  "parking_lot",
