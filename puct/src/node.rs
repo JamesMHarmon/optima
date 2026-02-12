@@ -38,9 +38,6 @@ impl<A, R, SI> StateNode<A, R, SI> {
     /// Ensures there is at most one frontier edge (defined as `visits == 0`), and that if there
     /// is no frontier edge (i.e. the last edge has `visits > 0`), a new one is materialized with
     /// the highest policy prior among not-yet-materialized actions.
-    ///
-    /// This intentionally avoids sorting (which is often wasted work if only a few edges are ever
-    /// traversed) at the cost of a scan when the frontier advances.
     pub fn ensure_frontier_edge(&self) {
         self.edges.ensure_frontier_edge();
     }
@@ -50,8 +47,14 @@ impl<A, R, SI> StateNode<A, R, SI> {
         (edge, action_with_policy.action())
     }
 
-    pub fn iter_edge_refs(&self) -> impl DoubleEndedIterator<Item = &PUCTEdge> + ExactSizeIterator {
-        self.edges.edges_iter().map(|(edge, _)| edge)
+    pub fn iter_edges(&self) -> impl Iterator<Item = &PUCTEdge> {
+        self.edges.iter_edges()
+    }
+
+    pub fn iter_edges_with_policy(
+        &self,
+    ) -> impl Iterator<Item = (&PUCTEdge, &ActionWithPolicy<A>)> {
+        self.edges.iter_edges_with_policy()
     }
 
     pub fn visits(&self) -> u32 {
@@ -75,14 +78,20 @@ impl<A, R, SI> StateNode<A, R, SI>
 where
     R: RollupStats,
 {
-    pub fn iter_edges<'a>(
+    pub fn iter_edge_snapshots<'a>(
+        &'a self,
+        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    ) -> impl Iterator<Item = (&'a PUCTEdge, Option<R::Snapshot>)> + 'a {
+        self.iter_edges()
+            .map(move |edge| (edge, StateNode::child_snapshot(edge.child(), nodes)))
+    }
+
+    pub fn iter_edge_info<'a>(
         &'a self,
         nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
-        self.edges
-            .edges_iter()
-            .enumerate()
-            .map(move |(edge_index, (edge, action_with_policy))| {
+        self.edges.iter_edges_with_policy().enumerate().map(
+            move |(edge_index, (edge, action_with_policy))| {
                 let visits = edge.visits();
                 let snapshot = StateNode::child_snapshot(edge.child(), nodes);
 
@@ -93,7 +102,8 @@ where
                     visits,
                     snapshot,
                 }
-            })
+            },
+        )
     }
 
     fn child_snapshot(

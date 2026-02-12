@@ -37,3 +37,7 @@ criterion = "0.5"
 [[bench]]
 name = "in_place_max_heap"
 harness = false
+
+[[bench]]
+name = "edge_store"
+harness = false

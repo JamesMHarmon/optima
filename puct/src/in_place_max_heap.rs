@@ -1,7 +1,9 @@
 use std::cell::UnsafeCell;
 use std::cmp::Ordering;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+use parking_lot::Mutex;
 
 pub trait Comparator<T> {
     fn cmp(&self, a: &T, b: &T) -> Ordering;
@@ -30,7 +32,7 @@ impl<T: Ord> Comparator<T> for OrdComparator {
 /// - extracted(1) at index n-2, etc.
 pub struct InPlaceMaxHeap<T, C = OrdComparator> {
     heap_len: AtomicUsize,
-    writer: AtomicBool,
+    writer: Mutex<()>,
     items: Box<[UnsafeCell<T>]>,
     cmp: C,
 }
@@ -48,7 +50,7 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
 
         Self {
             heap_len: AtomicUsize::new(heap_len),
-            writer: AtomicBool::new(false),
+            writer: Mutex::new(()),
             items,
             cmp,
         }
@@ -93,10 +95,18 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
         unsafe { &*self.items[idx].get() }
     }
 
+    /// Returns a slice of all stable items.
+    /// The order is from the end of the array toward the front: first extracted (largest) is last.
+    pub fn stable_slice(&self) -> &[T] {
+        let start = self.heap_len.load(AtomicOrdering::Acquire);
+        let cells: &[UnsafeCell<T>] = &self.items[start..];
+        unsafe { std::slice::from_raw_parts(cells.as_ptr() as *const T, cells.len()) }
+    }
+
     /// A convenience iterator over extracted (stable) items, in extraction order:
     /// largest first.
-    pub fn extracted_iter(&self) -> ExtractedIter<'_, T, C> {
-        ExtractedIter { heap: self, i: 0 }
+    pub fn extracted_iter(&self) -> impl Iterator<Item = &T> {
+        self.stable_slice().iter().rev()
     }
 
     /// Extract the current maximum into the stable region (to the end of the array).
@@ -122,11 +132,6 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
             // SAFETY: `idx` is in the stable region, which is never mutated again.
             Some(unsafe { &*self.items[idx].get() })
         })
-    }
-
-    /// Iterator that drives extraction (consumes heap region) and yields stable refs.
-    pub fn drain_extracted(&self) -> DrainExtracted<'_, T, C> {
-        DrainExtracted { heap: self }
     }
 
     // ----------------- internal (writer-only) helpers -----------------
@@ -223,27 +228,8 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
 
     #[inline]
     fn with_writer<R>(&self, f: impl FnOnce() -> R) -> R {
-        let _w = self.enter_writer();
+        let _w = self.writer.lock();
         f()
-    }
-
-    #[inline]
-    fn enter_writer(&self) -> WriterGuard<'_, T, C> {
-        // Enforce single writer at a time.
-        while self
-            .writer
-            .compare_exchange_weak(
-                false,
-                true,
-                AtomicOrdering::Acquire,
-                AtomicOrdering::Relaxed,
-            )
-            .is_err()
-        {
-            std::hint::spin_loop();
-        }
-
-        WriterGuard { heap: self }
     }
 
     fn into_unsafe_cells(items: Box<[T]>) -> Box<[UnsafeCell<T>]> {
@@ -251,48 +237,6 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
         // SAFETY: `UnsafeCell<T>` is `#[repr(transparent)]` over `T`, so `[T]` and
         // `[UnsafeCell<T>]` have identical layout and slice metadata.
         unsafe { Box::from_raw(raw as *mut [UnsafeCell<T>]) }
-    }
-}
-
-struct WriterGuard<'a, T, C> {
-    heap: &'a InPlaceMaxHeap<T, C>,
-}
-
-impl<T, C> Drop for WriterGuard<'_, T, C> {
-    fn drop(&mut self) {
-        self.heap.writer.store(false, AtomicOrdering::Release);
-    }
-}
-
-/// Iterates over extracted (stable) items in extraction order (largest first).
-pub struct ExtractedIter<'a, T, C> {
-    heap: &'a InPlaceMaxHeap<T, C>,
-    i: usize,
-}
-
-impl<'a, T, C: Comparator<T>> Iterator for ExtractedIter<'a, T, C> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.i >= self.heap.extracted_len() {
-            return None;
-        }
-        let r = self.heap.extracted(self.i);
-        self.i += 1;
-        Some(r)
-    }
-}
-
-/// Drives extraction and yields a reference to each newly-stable element.
-pub struct DrainExtracted<'a, T, C> {
-    heap: &'a InPlaceMaxHeap<T, C>,
-}
-
-impl<'a, T, C: Comparator<T>> Iterator for DrainExtracted<'a, T, C> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.heap.extract_next()
     }
 }
 

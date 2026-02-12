@@ -90,8 +90,8 @@ where
             let node = self.nodes.get_state_node(node_id);
             // @TODO: Need to include a nodes own prediction in the rollup, otherwise we won't update nodes that are only visited once and never have a child added (e.g. leaf nodes that hit a cutoff)
             let aggregated = B::RollupStats::aggregate_weighted(
-                node.iter_edges(&self.nodes)
-                    .filter_map(|e| e.snapshot.map(|s| (s, e.visits))),
+                node.iter_edge_snapshots(&self.nodes)
+                    .filter_map(|(edge, snapshot)| snapshot.map(|s| (s, edge.visits()))),
             );
 
             node.rollup_stats().set(&aggregated);
@@ -106,7 +106,7 @@ where
         // @TODO: Set Depth
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
-            node.iter_edges(&self.nodes),
+            node.iter_edge_info(&self.nodes),
             node.visits(),
             game_state,
             0,

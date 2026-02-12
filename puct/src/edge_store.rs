@@ -27,14 +27,14 @@ impl<A> EdgeStore<A> {
         self.heap.extracted(edge_index)
     }
 
-    pub(crate) fn edges_iter(
+    pub(crate) fn iter_edges(&self) -> impl Iterator<Item = &PUCTEdge> {
+        self.edges.iter()
+    }
+
+    pub(crate) fn iter_edges_with_policy(
         &self,
-    ) -> impl DoubleEndedIterator<Item = (&PUCTEdge, ActionWithPolicyGuard<'_, A>)> + ExactSizeIterator
-    {
-        self.edges.iter().enumerate().map(move |(i, edge)| {
-            let action_with_policy = self.action_with_policy(i);
-            (edge, action_with_policy)
-        })
+    ) -> impl Iterator<Item = (&PUCTEdge, ActionWithPolicyGuard<'_, A>)> {
+        self.iter_edges().zip(self.heap.extracted_iter())
     }
 
     pub(crate) fn edge(&self, index: usize) -> (&PUCTEdge, ActionWithPolicyGuard<'_, A>) {
@@ -62,11 +62,11 @@ impl<A> EdgeStore<A> {
 
     #[inline]
     fn materialize_next_edge(&self) {
-        if self.heap.remaining() == 0 {
-            return;
+        if self.heap.remaining() > 0
+            && let Some(_) = self.heap.extract_next()
+        {
+            self.edges.push(PUCTEdge::new());
         }
-        self.heap.extract_next_to_end();
-        self.edges.push(PUCTEdge::new());
     }
 }
 

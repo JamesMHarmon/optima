@@ -45,7 +45,7 @@ pub fn rebuild_from_root<A, R, SI>(
                 live_states[idx] = true;
 
                 let node = &state_nodes[idx];
-                for edge in node.iter_edge_refs() {
+                for edge in node.iter_edges() {
                     if let Some(child) = edge.child() {
                         queue.push_back(child);
                     }
@@ -168,7 +168,7 @@ pub fn rebuild_from_root<A, R, SI>(
     // State edges
     for &state_id in &new_state_ids {
         let node = new_arena.get_state_node(state_id);
-        for edge in node.iter_edge_refs() {
+        for edge in node.iter_edges() {
             if let Some(child) = edge.child() {
                 let new_child = remap(child, &state_map, &after_state_map, &terminal_map);
                 edge.set_child(new_child);
