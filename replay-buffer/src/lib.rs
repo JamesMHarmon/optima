@@ -19,6 +19,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tensorflow_model::{InputMap, PredictionsMap};
 
+type OutputMap = HashMap<String, Vec<f32>>;
+
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
@@ -131,7 +133,7 @@ impl ReplayBuffer {
             .collect();
 
         let outputs = sampler.outputs();
-        let mut data: HashMap<String, Vec<f32>> = outputs
+        let mut data: OutputMap = outputs
             .iter()
             .map(|(key, size)| (key.to_owned(), Vec::with_capacity(num_samples * size)))
             .collect();
