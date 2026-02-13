@@ -1,6 +1,6 @@
 use super::{
     AfterState, BorrowedOrOwned, EdgeRef, NodeArena, NodeGraph, NodeId, PUCTEdge, RollupStats,
-    SearchContextGuard, SearchContextPool, SelectionPolicy, SnapshotMapper, StateNode, Terminal,
+    SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, Terminal, ValueModel,
 };
 use common::TranspositionHash;
 use dashmap::DashMap;
@@ -10,42 +10,36 @@ use model::GameAnalyzer;
 
 type PUCTNodeArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 
-type SnapshotOf<SM> = <SM as SnapshotMapper>::Snapshot;
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
-type PuctNodes<E, R> = PUCTNodeArena<<E as GameEngine>::Action, R>;
+type PuctNodes<E, VM> = PUCTNodeArena<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
-type PuctGraph<'a, E, R> = NodeGraph<'a, <E as GameEngine>::Action, R>;
+type PuctGraph<'a, E, VM> = NodeGraph<'a, <E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
-type PuctStateNode<E, R> = StateNode<<E as GameEngine>::Action, R>;
+type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
-pub struct PUCT<'a, E, M, SM, R, Sel>
+pub struct PUCT<'a, E, M, VM, Sel>
 where
-    R: RollupStats,
     E: GameEngine,
+    VM: ValueModel,
 {
     game_engine: &'a E,
     analyzer: &'a M,
-    snapshot_mapper: &'a SM,
+    value_model: &'a VM,
     selection_strategy: &'a Sel,
     game_state: E::State,
-    nodes: PuctNodes<E, R>,
-    graph: PuctGraph<'a, E, R>,
+    nodes: PuctNodes<E, VM>,
+    graph: PuctGraph<'a, E, VM>,
     transposition_table: DashMap<u64, NodeId>,
     context_pool: SearchContextPool,
 }
 
-impl<E, M, SM, R, Sel> PUCT<'_, E, M, SM, R, Sel>
+impl<E, M, VM, Sel> PUCT<'_, E, M, VM, Sel>
 where
     E: GameEngine,
     M: GameAnalyzer<State = E::State, Action = E::Action>,
-    SM: SnapshotMapper<
-            State = E::State,
-            Predictions = M::Predictions,
-            Terminal = E::Terminal,
-            Snapshot = R::Snapshot,
-        >,
-    R: RollupStats + From<SnapshotOf<SM>>,
-    Sel: SelectionPolicy<R, State = E::State>,
+    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
+    Sel: SelectionPolicy<VM::Rollup, State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {
@@ -103,7 +97,7 @@ where
         }
     }
 
-    fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, R>) -> usize {
+    fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, VM>) -> usize {
         // @TODO: Set Depth
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
@@ -142,7 +136,7 @@ where
             "Cannot create state node without actions - should be terminal"
         );
 
-        let snapshot = self.snapshot_mapper.pred_snapshot(game_state, predictions);
+        let snapshot = self.value_model.pred_snapshot(game_state, predictions);
         let rollup_stats = snapshot.into();
         let new_node = StateNode::new(transposition_hash, policy_priors, rollup_stats);
 
@@ -173,7 +167,7 @@ where
     fn update_edge_with_terminal(
         &self,
         edge: &PUCTEdge,
-        snapshot: SnapshotOf<SM>,
+        snapshot: SnapshotOf<VM>,
     ) -> Option<NodeId> {
         // @TODO: If we find the edge, how are visits being properly incremented?
         if let Some((terminal_id, _visits)) = self.graph.find_edge_terminal(edge) {
@@ -217,7 +211,7 @@ where
         state: &E::State,
         terminal: &E::Terminal,
     ) -> Option<NodeId> {
-        let snapshot = self.snapshot_mapper.terminal_snapshot(state, terminal);
+        let snapshot = self.value_model.terminal_snapshot(state, terminal);
         self.update_edge_with_terminal(edge, snapshot)
     }
 }

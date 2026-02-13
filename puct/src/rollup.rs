@@ -10,7 +10,12 @@ pub trait RollupStats {
 
     fn set(&self, value: Self::Snapshot);
 
-    /// Aggregate weighted snapshots
+    fn accumulate(&self, sample: &Self::Snapshot) {
+        let mut snap = self.snapshot();
+        snap.merge_weighted(sample, 1);
+        self.set(snap);
+    }
+
     fn aggregate_weighted<I>(iter: I) -> Self::Snapshot
     where
         I: IntoIterator<Item = (Self::Snapshot, u32)>,
@@ -20,11 +25,5 @@ pub trait RollupStats {
             out.merge_weighted(&snap, weight);
         }
         out
-    }
-
-    fn accumulate(&self, sample: &Self::Snapshot) {
-        let mut snap = self.snapshot();
-        snap.merge_weighted(sample, 1);
-        self.set(snap);
     }
 }
