@@ -20,8 +20,6 @@ type PuctStateNode<E, R> = StateNode<<E as GameEngine>::Action, R>;
 
 pub struct PUCT<'a, E, M, SM, R, Sel>
 where
-    M: GameAnalyzer,
-    SM: SnapshotMapper,
     R: RollupStats,
     E: GameEngine,
 {
@@ -39,7 +37,7 @@ where
 impl<E, M, SM, R, Sel> PUCT<'_, E, M, SM, R, Sel>
 where
     E: GameEngine,
-    M: GameAnalyzer<State = E::State, Predictions = E::Terminal, Action = E::Action>,
+    M: GameAnalyzer<State = E::State, Action = E::Action>,
     SM: SnapshotMapper<
             State = E::State,
             Predictions = M::Predictions,
