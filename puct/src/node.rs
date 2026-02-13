@@ -6,7 +6,7 @@ use super::{
     WeightedMerge, edge_store::EdgeStore,
 };
 
-pub struct StateNode<A, R, SI>
+pub struct StateNode<A, R>
 where
     R: RollupStats,
 {
@@ -14,20 +14,18 @@ where
     visits: AtomicU32,
     rollup_prior: R::Snapshot,
     rollup_stats: R,
-    state_info: SI,
     edges: EdgeStore<A>,
 }
 
 pub type EdgeRef<'a> = &'a PUCTEdge;
 
-impl<A, R, SI> StateNode<A, R, SI>
+impl<A, R> StateNode<A, R>
 where
     R: RollupStats,
 {
     pub fn new(
         transposition_hash: u64,
         policy_priors: impl Into<Box<[ActionWithPolicy<A>]>>,
-        state_info: SI,
         rollup_stats: R,
     ) -> Self {
         let edges = EdgeStore::new(policy_priors.into());
@@ -39,7 +37,6 @@ where
             visits,
             rollup_prior,
             rollup_stats,
-            state_info,
             edges,
         }
     }
@@ -86,10 +83,7 @@ where
         &self.rollup_stats
     }
 
-    pub fn recompute_rollup(
-        &self,
-        nodes: &NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
-    ) {
+    pub fn recompute_rollup(&self, nodes: &NodeArena<StateNode<A, R>, AfterState, Terminal<R>>) {
         let mut aggregated = R::Snapshot::zero();
         let edges = self.iter_edge_rollups(nodes);
         let visited_edges = edges.map(|(e, s)| (e.visits(), s)).filter(|(v, _)| *v > 0);
@@ -103,13 +97,13 @@ where
     }
 }
 
-impl<A, R, SI> StateNode<A, R, SI>
+impl<A, R> StateNode<A, R>
 where
     R: RollupStats,
 {
     pub fn iter_edge_rollups<'a>(
         &'a self,
-        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+        nodes: &'a NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = (&'a PUCTEdge, R::Snapshot)> + 'a {
         self.iter_edges().filter_map(move |edge| {
             edge.child()
@@ -119,7 +113,7 @@ where
 
     pub fn iter_edge_info<'a>(
         &'a self,
-        nodes: &'a NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+        nodes: &'a NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
         self.edges.iter_edges_with_policy().enumerate().map(
             move |(edge_index, (edge, action_with_policy))| {
@@ -140,7 +134,7 @@ where
 
     fn child_snapshot(
         child_id: NodeId,
-        nodes: &NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+        nodes: &NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     ) -> R::Snapshot {
         match child_id.node_type() {
             NodeType::State => nodes.get_state_node(child_id).rollup_stats().snapshot(),

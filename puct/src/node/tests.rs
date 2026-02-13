@@ -10,7 +10,7 @@ use crate::{
 
 use super::StateNode;
 
-type TestStateNode = StateNode<u32, DummyRollup, ()>;
+type TestStateNode = StateNode<u32, DummyRollup>;
 type TestArena = NodeArena<TestStateNode, AfterState, Terminal<DummyRollup>>;
 
 #[derive(Default)]
@@ -50,7 +50,7 @@ fn make_node(priors: &[(u32, f32)]) -> TestStateNode {
         .collect::<Vec<_>>()
         .into_boxed_slice();
 
-    StateNode::new(0, priors, (), DummyRollup::default())
+    StateNode::new(0, priors, DummyRollup::default())
 }
 
 fn edge_count(node: &TestStateNode) -> usize {
@@ -239,7 +239,7 @@ fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
     let nodes: TestArena = NodeArena::new();
 
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
-    let state_id = nodes.push_state(StateNode::new(1, empty_priors, (), DummyRollup::default()));
+    let state_id = nodes.push_state(StateNode::new(1, empty_priors, DummyRollup::default()));
     nodes
         .get_state_node(state_id)
         .rollup_stats()
@@ -281,7 +281,7 @@ fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
     let nodes: TestArena = NodeArena::new();
 
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
-    let state_id = nodes.push_state(StateNode::new(1, empty_priors, (), DummyRollup::default()));
+    let state_id = nodes.push_state(StateNode::new(1, empty_priors, DummyRollup::default()));
     nodes
         .get_state_node(state_id)
         .rollup_stats()

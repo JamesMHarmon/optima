@@ -12,7 +12,7 @@ criterion_main!(benches);
 
 const EDGE_COUNT: usize = 500;
 
-type BenchNode = StateNode<u32, DummyRollup, ()>;
+type BenchNode = StateNode<u32, DummyRollup>;
 
 #[derive(Default)]
 struct DummyRollup {
@@ -65,7 +65,7 @@ fn bench_edge_store(c: &mut Criterion) {
 
 fn make_node_with_edges(edge_count: usize) -> BenchNode {
     let priors = make_action_with_policy_items(edge_count, 0xC0FFEE).into_boxed_slice();
-    let node = StateNode::new(0, priors, (), DummyRollup::default());
+    let node = StateNode::new(0, priors, DummyRollup::default());
 
     let mut i = 0;
     while i < edge_count {

@@ -4,11 +4,11 @@ use super::{
     AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, RollupStats, StateNode, Terminal,
 };
 
-pub struct RebuiltArena<A, R, SI>
+pub struct RebuiltArena<A, R>
 where
     R: RollupStats,
 {
-    pub arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+    pub arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     pub root: NodeId,
     /// Optional helper for rebuilding a transposition table.
     pub transpositions: Vec<(u64, NodeId)>,
@@ -22,10 +22,10 @@ where
 /// Assumptions:
 /// - No other threads are reading/writing the arena while this runs.
 /// - No NodeIds/references from the old arena are used after this returns.
-pub fn rebuild_from_root<A, R, SI>(
-    arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>,
+pub fn rebuild_from_root<A, R>(
+    arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     root: NodeId,
-) -> RebuiltArena<A, R, SI>
+) -> RebuiltArena<A, R>
 where
     R: RollupStats,
 {
@@ -82,14 +82,13 @@ where
     }
 
     // 2) Move live nodes into a new arena, recording old->new ID mappings.
-    let mut old_states: Vec<Option<StateNode<A, R, SI>>> =
-        state_nodes.into_iter().map(Some).collect();
+    let mut old_states: Vec<Option<StateNode<A, R>>> = state_nodes.into_iter().map(Some).collect();
     let mut old_after_states: Vec<Option<AfterState>> =
         after_state_nodes.into_iter().map(Some).collect();
     let mut old_terminals: Vec<Option<Terminal<R>>> =
         terminal_nodes.into_iter().map(Some).collect();
 
-    let mut new_arena: NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>> = NodeArena::new();
+    let mut new_arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>> = NodeArena::new();
 
     let mut state_map: Vec<Option<NodeId>> = vec![None; old_states.len()];
     let mut after_state_map: Vec<Option<NodeId>> = vec![None; old_after_states.len()];

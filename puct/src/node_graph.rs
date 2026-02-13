@@ -3,15 +3,15 @@ use super::{
     Terminal,
 };
 
-type GraphArena<A, R, SI> = NodeArena<StateNode<A, R, SI>, AfterState, Terminal<R>>;
+type GraphArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 
 /// Graph operations wrapper around NodeArena for node traversal and mutation.
-pub struct NodeGraph<'a, A, R: RollupStats, SI> {
-    arena: &'a GraphArena<A, R, SI>,
+pub struct NodeGraph<'a, A, R: RollupStats> {
+    arena: &'a GraphArena<A, R>,
 }
 
-impl<'a, A, R: RollupStats, SI> NodeGraph<'a, A, R, SI> {
-    pub fn new(arena: &'a GraphArena<A, R, SI>) -> Self {
+impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
+    pub fn new(arena: &'a GraphArena<A, R>) -> Self {
         Self { arena }
     }
 
