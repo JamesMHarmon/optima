@@ -10,6 +10,31 @@ use tensorflow_model::{InputMap, Mode, PredictionsMap};
 use super::deblunder;
 use super::q_mix::{PredictionStore, QMix};
 
+type SampleState<S> = <S as Sample>::State;
+type SampleAction<S> = <S as Sample>::Action;
+type SamplePredictions<S> = <S as Sample>::Predictions;
+type SamplePropagatedValues<S> = <S as Sample>::PropagatedValues;
+type SamplePredictionStore<S> = <S as Sample>::PredictionStore;
+
+type SampleSelfPlayMetrics<S> =
+    SelfPlayMetrics<SampleAction<S>, SamplePredictions<S>, SamplePropagatedValues<S>>;
+
+type SamplePositionMetrics<S> = PositionMetrics<
+    SampleState<S>,
+    SampleAction<S>,
+    SamplePredictions<S>,
+    SamplePropagatedValues<S>,
+>;
+
+type SamplePositionMetricsExtended<S> = PositionMetricsExtended<
+    SampleState<S>,
+    SampleAction<S>,
+    SamplePredictions<S>,
+    SamplePropagatedValues<S>,
+>;
+
+type OutputTargets = HashMap<String, Vec<f32>>;
+
 #[allow(clippy::type_complexity)]
 pub trait Sample {
     type State;
@@ -20,41 +45,28 @@ pub trait Sample {
 
     fn metrics_to_samples(
         &self,
-        metrics: SelfPlayMetrics<
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
+        metrics: SampleSelfPlayMetrics<Self>,
         min_visits: usize,
         q_diff_threshold: f32,
         q_diff_width: f32,
-    ) -> Vec<
-        PositionMetricsExtended<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    >
+    ) -> Vec<SamplePositionMetricsExtended<Self>>
     where
         Self: Sized,
-        <Self as Sample>::State: GameState,
-        <Self as Sample>::Action: PartialEq + Clone,
-        <Self as Sample>::Predictions: Clone,
-        <Self as Sample>::PropagatedValues: PropagatedValue,
-        Self::PredictionStore: PredictionStore<
-                State = <Self as Sample>::State,
-                Predictions = <Self as Sample>::Predictions,
-            >,
+        SampleState<Self>: GameState,
+        SampleAction<Self>: PartialEq + Clone,
+        SamplePredictions<Self>: Clone,
+        SamplePropagatedValues<Self>: PropagatedValue,
+        SamplePredictionStore<Self>:
+            PredictionStore<State = SampleState<Self>, Predictions = SamplePredictions<Self>>,
         Self: QMix<
-                State = <Self as Sample>::State,
-                Predictions = <Self as Sample>::Predictions,
-                PropagatedValues = <Self as Sample>::PropagatedValues,
+                State = SampleState<Self>,
+                Predictions = SamplePredictions<Self>,
+                PropagatedValues = SamplePropagatedValues<Self>,
             >,
     {
         let mut metrics = get_positions(metrics, |s, a| self.take_action(s, a));
 
-        deblunder::deblunder::<_, _, _, _, <Self as Sample>::PredictionStore, Self>(
+        deblunder::deblunder::<_, _, _, _, SamplePredictionStore<Self>, Self>(
             &mut metrics,
             q_diff_threshold,
             q_diff_width,
@@ -79,40 +91,17 @@ pub trait Sample {
             .collect()
     }
 
-    fn symmetries(
-        &self,
-        metric: PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    ) -> Vec<
-        PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    >;
+    fn symmetries(&self, metric: SamplePositionMetrics<Self>) -> Vec<SamplePositionMetrics<Self>>;
 
-    fn sample_filter(
-        &self,
-        _metric: &PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    ) -> bool {
+    fn sample_filter(&self, _metric: &SamplePositionMetrics<Self>) -> bool {
         true
     }
 
     fn take_action(
         &self,
-        game_state: &<Self as Sample>::State,
-        action: &<Self as Sample>::Action,
-    ) -> <Self as Sample>::State;
+        game_state: &SampleState<Self>,
+        action: &SampleAction<Self>,
+    ) -> SampleState<Self>;
 
     fn input_size(&self) -> usize;
 
@@ -144,21 +133,16 @@ pub trait Sample {
 
     fn metric_to_input_and_targets(
         &self,
-        targets: <Self as Sample>::Predictions,
-        metric: &PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
+        targets: SamplePredictions<Self>,
+        metric: &SamplePositionMetrics<Self>,
     ) -> InputAndTargets
     where
-        Self: InputMap<State = <Self as Sample>::State>,
+        Self: InputMap<State = SampleState<Self>>,
         Self: PredictionsMap<
-                State = <Self as Sample>::State,
-                Action = <Self as Sample>::Action,
-                Predictions = <Self as Sample>::Predictions,
-                PropagatedValues = <Self as Sample>::PropagatedValues,
+                State = SampleState<Self>,
+                Action = SampleAction<Self>,
+                Predictions = SamplePredictions<Self>,
+                PropagatedValues = SamplePropagatedValues<Self>,
             >,
     {
         let targets = self.to_output(&metric.game_state, targets, &metric.node_metrics);
@@ -171,11 +155,7 @@ pub trait Sample {
         self.input_and_targets(&input, &targets)
     }
 
-    fn input_and_targets(
-        &self,
-        input: &[f32],
-        targets: &HashMap<String, Vec<f32>>,
-    ) -> InputAndTargets {
+    fn input_and_targets(&self, input: &[f32], targets: &OutputTargets) -> InputAndTargets {
         let mut values = Vec::with_capacity(self.sample_size());
 
         assert_eq!(input.len(), self.input_size(), "Input size mismatch");

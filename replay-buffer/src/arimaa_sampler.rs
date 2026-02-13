@@ -1,14 +1,21 @@
+use std::collections::HashMap;
+
 use arimaa::{Action, GameState, Mapper, Predictions, Value};
 use arimaa::{INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
-use model::NodeMetrics;
+use model::{NodeMetrics, PositionMetrics};
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
 use crate::q_mix::{PredictionStore, QMix};
 
 use super::sample::Sample;
+
+type ArimaaPositionMetrics =
+    PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>;
+type ArimaaNodeMetrics = NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>;
+type OutputMap = HashMap<String, Vec<f32>>;
 
 pub struct ArimaaSampler {
     engine: arimaa::Engine,
@@ -38,30 +45,11 @@ impl Sample for ArimaaSampler {
     type PropagatedValues = MovesLeftPropagatedValue;
     type PredictionStore = ArimaaPStore;
 
-    fn take_action(
-        &self,
-        game_state: &<Self as Sample>::State,
-        action: &<Self as Sample>::Action,
-    ) -> <Self as Sample>::State {
+    fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         self.engine.take_action(game_state, action)
     }
 
-    fn symmetries(
-        &self,
-        metric: model::PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    ) -> Vec<
-        model::PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    > {
+    fn symmetries(&self, metric: ArimaaPositionMetrics) -> Vec<ArimaaPositionMetrics> {
         arimaa::get_symmetries(metric)
     }
 
@@ -96,8 +84,8 @@ impl PredictionsMap for ArimaaSampler {
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
-    ) -> std::collections::HashMap<String, Vec<f32>> {
+        node_metrics: &ArimaaNodeMetrics,
+    ) -> OutputMap {
         self.mapper.to_output(game_state, targets, node_metrics)
     }
 }

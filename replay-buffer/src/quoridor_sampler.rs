@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use common::{PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
@@ -8,9 +10,15 @@ use quoridor::{
 };
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
-use crate::q_mix::{PredictionStore, QMix};
-
+use super::q_mix::{PredictionStore, QMix};
 use super::sample::Sample;
+
+type QuoridorPositionMetrics =
+    model::PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>;
+
+type QuoridorNodeMetrics = NodeMetrics<Action, Predictions, QuoridorPropagatedValue>;
+
+type OutputMap = HashMap<String, Vec<f32>>;
 
 pub struct QuoridorSampler {
     engine: quoridor::Engine,
@@ -39,30 +47,11 @@ impl Sample for QuoridorSampler {
     type PropagatedValues = QuoridorPropagatedValue;
     type PredictionStore = QuoridorVStore;
 
-    fn take_action(
-        &self,
-        game_state: &<Self as Sample>::State,
-        action: &<Self as Sample>::Action,
-    ) -> <Self as Sample>::State {
+    fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
         self.engine.take_action(game_state, action)
     }
 
-    fn symmetries(
-        &self,
-        metric: model::PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    ) -> Vec<
-        model::PositionMetrics<
-            <Self as Sample>::State,
-            <Self as Sample>::Action,
-            <Self as Sample>::Predictions,
-            <Self as Sample>::PropagatedValues,
-        >,
-    > {
+    fn symmetries(&self, metric: QuoridorPositionMetrics) -> Vec<QuoridorPositionMetrics> {
         quoridor::get_symmetries(metric)
     }
 
@@ -98,8 +87,8 @@ impl PredictionsMap for QuoridorSampler {
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
-    ) -> std::collections::HashMap<String, Vec<f32>> {
+        node_metrics: &QuoridorNodeMetrics,
+    ) -> OutputMap {
         self.mapper.to_output(game_state, targets, node_metrics)
     }
 }

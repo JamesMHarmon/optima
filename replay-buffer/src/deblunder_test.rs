@@ -12,16 +12,12 @@ mod test {
         sample::PositionMetricsExtended,
     };
 
-    fn deblunder(
-        metrics: &mut [PositionMetricsExtended<
-            GameState,
-            Action,
-            Predictions,
-            MovesLeftPropagatedValue,
-        >],
-        q_diff_threshold: f32,
-        q_diff_width: f32,
-    ) {
+    type Metric = PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue>;
+    type MetricNode = NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>;
+    type MetricEdge = EdgeMetrics<Action, MovesLeftPropagatedValue>;
+    type MetricPosition = PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>;
+
+    fn deblunder(metrics: &mut [Metric], q_diff_threshold: f32, q_diff_width: f32) {
         crate::deblunder::deblunder::<_, _, _, _, ArimaaPStore, ArimaaSampler>(
             metrics,
             q_diff_threshold,
@@ -38,12 +34,7 @@ mod test {
         game_state
     }
 
-    fn node_child<As>(
-        action: As,
-        Q: f32,
-        M: f32,
-        visits: usize,
-    ) -> EdgeMetrics<Action, MovesLeftPropagatedValue>
+    fn node_child<As>(action: As, Q: f32, M: f32, visits: usize) -> MetricEdge
     where
         As: AsRef<str>,
     {
@@ -52,9 +43,7 @@ mod test {
         EdgeMetrics::new(action, visits, propagated_values)
     }
 
-    fn node_metrics(
-        children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>,
-    ) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
+    fn node_metrics(children: Vec<MetricEdge>) -> MetricNode {
         let predictions = Predictions::new(Value::new([0.0, 0.0]), 0.0);
 
         NodeMetrics {
@@ -69,12 +58,12 @@ mod test {
         score: Value,
         game_length: f32,
         chosen_action: impl AsRef<str>,
-        children: Vec<EdgeMetrics<Action, MovesLeftPropagatedValue>>,
-    ) -> PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue> {
+        children: Vec<MetricEdge>,
+    ) -> Metric {
         let target_score = Predictions::new(score, game_length);
 
         PositionMetricsExtended {
-            metrics: PositionMetrics {
+            metrics: MetricPosition {
                 game_state: game_state(is_player_one),
                 node_metrics: node_metrics(children),
             },
