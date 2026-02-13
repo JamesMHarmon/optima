@@ -1,13 +1,8 @@
-use super::RollupStats;
-
 /// Policy for selecting edges during tree traversal
 ///
 /// Used by read-only selection workers to compute PUCT values and choose edges.
 /// Implementations define the exploration formula (standard PUCT, AlphaZero variant, etc.)
-pub trait SelectionPolicy<R>
-where
-    R: RollupStats,
-{
+pub trait SelectionPolicy<S> {
     type State;
 
     fn select_edge<'a, I, A: 'a>(
@@ -18,8 +13,8 @@ where
         depth: u16,
     ) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R::Snapshot>>,
-        R::Snapshot: 'a;
+        I: Iterator<Item = EdgeInfo<'a, A, S>>,
+        S: 'a;
 }
 
 /// Read-only information about an edge for selection

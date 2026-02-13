@@ -39,7 +39,7 @@ where
     E: GameEngine,
     M: GameAnalyzer<State = E::State, Action = E::Action>,
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
-    Sel: SelectionPolicy<VM::Rollup, State = E::State>,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {

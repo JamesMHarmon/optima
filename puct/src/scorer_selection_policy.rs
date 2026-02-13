@@ -1,10 +1,12 @@
-use crate::{EdgeInfo, RollupStats, SelectionPolicy};
+use crate::{EdgeInfo, SelectionPolicy};
 
-pub trait ScorerSelectionPolicy<R: RollupStats>: EdgeScorer<R> {
+type ScSnapshot<Sc> = <Sc as EdgeScorer>::Snapshot;
+
+pub trait ScorerSelectionPolicy: EdgeScorer {
     fn select_with_scorer<'a, I, A: 'a>(&self, edges: I, node_visits: u32, depth: u16) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R::Snapshot>>,
-        R::Snapshot: 'a,
+        I: Iterator<Item = EdgeInfo<'a, A, Self::Snapshot>>,
+        Self::Snapshot: 'a,
     {
         let ctx = NodeContext { node_visits, depth };
 
@@ -26,39 +28,35 @@ pub struct NodeContext {
     pub depth: u16,
 }
 
-pub trait PreparedEdgeScorer<R: RollupStats> {
-    fn score(&self, prior: f32, child: Option<&R::Snapshot>) -> f64;
+pub trait PreparedEdgeScorer<S> {
+    fn score(&self, prior: f32, child: Option<&S>) -> f64;
 }
 
-pub trait EdgeScorer<R: RollupStats> {
-    type Prepared<'a>: PreparedEdgeScorer<R>
+pub trait EdgeScorer {
+    type Snapshot;
+
+    type Prepared<'a>: PreparedEdgeScorer<Self::Snapshot>
     where
         Self: 'a;
 
     fn prepare<'a>(&'a self, ctx: &NodeContext) -> Self::Prepared<'a>;
 }
 
-impl<T, R> ScorerSelectionPolicy<R> for T
-where
-    T: EdgeScorer<R>,
-    R: RollupStats,
-{
+impl<T> ScorerSelectionPolicy for T where T: EdgeScorer {}
+
+pub struct CpuctPolicy<Sc> {
+    pub scorer: Sc,
 }
 
-pub struct CpuctPolicy<S> {
-    pub scorer: S,
-}
-
-impl<S> CpuctPolicy<S> {
-    pub fn new(scorer: S) -> Self {
+impl<Sc> CpuctPolicy<Sc> {
+    pub fn new(scorer: Sc) -> Self {
         Self { scorer }
     }
 }
 
-impl<R, S> SelectionPolicy<R> for CpuctPolicy<S>
+impl<Sc> SelectionPolicy<ScSnapshot<Sc>> for CpuctPolicy<Sc>
 where
-    R: RollupStats,
-    S: EdgeScorer<R>,
+    Sc: EdgeScorer,
 {
     type State = ();
 
@@ -70,8 +68,8 @@ where
         depth: u16,
     ) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, R::Snapshot>>,
-        R::Snapshot: 'a,
+        I: Iterator<Item = EdgeInfo<'a, A, ScSnapshot<Sc>>>,
+        ScSnapshot<Sc>: 'a,
     {
         self.scorer.select_with_scorer(edges, node_visits, depth)
     }
