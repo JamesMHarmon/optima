@@ -62,6 +62,18 @@ fn frontier_edge_count(node: &TestStateNode) -> usize {
 }
 
 #[test]
+fn state_node_visits_start_at_one_and_increment_exactly() {
+    let node = make_node(&[(0, 0.5)]);
+
+    assert_eq!(node.visits(), 1);
+    node.increment_visits();
+    assert_eq!(node.visits(), 2);
+    node.increment_visits();
+    node.increment_visits();
+    assert_eq!(node.visits(), 4);
+}
+
+#[test]
 fn ensure_frontier_edge_materializes_at_most_one_unvisited_edge() {
     let node = make_node(&[(0, 0.1), (1, 0.2), (2, 0.3)]);
 

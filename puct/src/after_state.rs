@@ -14,6 +14,9 @@ pub struct AfterState {
     pub outcomes: TinyVec<[AfterStateOutcome; 2]>,
 }
 
+#[cfg(test)]
+mod tests;
+
 type StateArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 
 impl AfterState {

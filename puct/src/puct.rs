@@ -170,7 +170,6 @@ where
         edge: &PUCTEdge,
         snapshot: SnapshotOf<VM>,
     ) -> Option<NodeId> {
-        // @TODO: If we find the edge, how are visits being properly incremented?
         if let Some(terminal_id) = self.graph.find_edge_terminal(edge) {
             let terminal_node = self.nodes.get_terminal_node(terminal_id);
             terminal_node.rollup_stats().accumulate(&snapshot);

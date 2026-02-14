@@ -10,6 +10,9 @@ pub struct NodeGraph<'a, A, R: RollupStats> {
     arena: &'a GraphArena<A, R>,
 }
 
+#[cfg(test)]
+mod tests;
+
 impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
     pub fn new(arena: &'a GraphArena<A, R>) -> Self {
         Self { arena }
