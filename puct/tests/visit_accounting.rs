@@ -120,8 +120,8 @@ fn harness_after_state_outcome_visits_should_increment_when_selecting_matching_s
     // Desired semantics test: when an edge points to an AfterState, selecting a specific outcome
     // (via matching transposition hash) should increment that outcome's visit count.
     //
-    // This test is expected to fail until NodeGraph::get_edge_state_with_hash accounts for
-    // outcome visits.
+    // This test models PUCT selection: first credit the matching afterstate outcome by hash,
+    // then query/link the resolved child.
 
     let arena = TestArena::new();
     let graph = NodeGraph::new(&arena);
@@ -144,6 +144,7 @@ fn harness_after_state_outcome_visits_should_increment_when_selecting_matching_s
         .map(|o| (o.child(), o.visits()))
         .collect::<Vec<_>>();
 
+    assert!(graph.increment_afterstate_visits(&edge, 200));
     assert_eq!(graph.get_edge_state_with_hash(&edge, 200), Some(s1));
 
     let after = arena
@@ -163,8 +164,7 @@ fn harness_after_state_terminal_outcome_visits_should_increment_when_detecting_t
     // Desired semantics test: if an edge points to an AfterState with a terminal outcome,
     // repeatedly observing that terminal should increment the terminal outcome's visits.
     //
-    // This test is expected to fail until NodeGraph::find_edge_terminal increments
-    // terminal outcome visits.
+    // This test models PUCT selection: when a terminal is observed, credit the terminal outcome.
 
     let arena = TestArena::new();
     let graph = NodeGraph::new(&arena);
@@ -187,6 +187,7 @@ fn harness_after_state_terminal_outcome_visits_should_increment_when_detecting_t
         .map(|o| (o.child(), o.visits()))
         .collect::<Vec<_>>();
 
+    assert!(graph.increment_afterstate_terminal_visits(&edge));
     assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
 
     let after = arena

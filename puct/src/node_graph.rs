@@ -48,17 +48,59 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
     /// Find terminal node reachable through edge and return its ID with visit count.
     /// Returns edge visits if pointing directly to terminal, or outcome visits if through AfterState.
     pub fn find_edge_terminal(&self, edge: &PUCTEdge) -> Option<NodeId> {
-        edge.child()
-            .and_then(|child_id| match child_id.node_type() {
-                NodeType::Terminal => Some(child_id),
+        let child_id = edge.child()?;
+        match child_id.node_type() {
+            NodeType::Terminal => Some(child_id),
+            NodeType::State => None,
+            NodeType::AfterState => self
+                .arena
+                .get_after_state_node(child_id)
+                .terminal_outcome()
+                .map(|outcome| outcome.child()),
+        }
+    }
 
-                NodeType::AfterState => self
-                    .arena
-                    .get_after_state_node(child_id)
-                    .terminal_outcome()
-                    .map(|outcome| outcome.child()),
-                NodeType::State => None,
+    /// If `edge` currently points to an AfterState, and that AfterState has a *direct* state
+    /// outcome matching `transposition_hash`, increment that outcome's visits.
+    ///
+    /// Returns true if an outcome was found and incremented.
+    pub fn increment_afterstate_visits(&self, edge: &PUCTEdge, transposition_hash: u64) -> bool {
+        let after_state = match self.edge_after_state(edge) {
+            None => return false,
+            Some(after_state) => after_state,
+        };
+
+        after_state
+            .outcomes
+            .iter()
+            .map(|outcome| (outcome, outcome.child()))
+            .filter(|(_, child_id)| child_id.node_type() == NodeType::State)
+            .find(|(_, child_id)| {
+                self.arena.get_state_node(*child_id).transposition_hash() == transposition_hash
             })
+            .map_or(false, |(outcome, _)| {
+                outcome.increment_visits();
+                true
+            })
+    }
+
+    /// If `edge` currently points to an AfterState, and that AfterState has a terminal outcome,
+    /// increment that terminal outcome's visits.
+    ///
+    /// Returns true if a terminal outcome existed and was incremented.
+    pub fn increment_afterstate_terminal_visits(&self, edge: &PUCTEdge) -> bool {
+        let after_state = match self.edge_after_state(edge) {
+            None => return false,
+            Some(after_state) => after_state,
+        };
+
+        match after_state.terminal_outcome() {
+            None => false,
+            Some(outcome) => {
+                outcome.increment_visits();
+                true
+            }
+        }
     }
 
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
@@ -85,8 +127,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             }
         }
 
-        // @TODO: Should this be visit of 1?
-        new_outcomes.push(AfterStateOutcome::new(0, child_id));
+        new_outcomes.push(AfterStateOutcome::new(1, child_id));
 
         // Create new AfterState and atomically update edge
         let new_after_state_id = self.arena.push_after_state(AfterState::new(new_outcomes));
@@ -98,5 +139,14 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
                 .is_valid(),
             "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
         );
+    }
+
+    fn edge_after_state(&self, edge: &PUCTEdge) -> Option<&'a AfterState> {
+        let child_id = edge.child()?;
+
+        match child_id.node_type() {
+            NodeType::AfterState => Some(self.arena.get_after_state_node(child_id)),
+            _ => None,
+        }
     }
 }

@@ -164,7 +164,7 @@ fn e2e_add_child_to_edge_converts_to_afterstate_and_preserves_existing_visits() 
     // - first child sets edge.child directly
     // - second distinct child converts edge.child into an AfterState
     // - the existing child becomes an outcome with visits == edge.visits()
-    // - the new outcome currently starts at 0 visits
+    // - the new outcome starts at 1 visit (credit this traversal)
 
     let arena = TestArena::new();
     let graph = NodeGraph::new(&arena);
@@ -197,7 +197,7 @@ fn e2e_add_child_to_edge_converts_to_afterstate_and_preserves_existing_visits() 
         .expect("new child outcome must exist");
 
     assert_eq!(o0.visits(), edge.visits());
-    assert_eq!(o1.visits(), 0);
+    assert_eq!(o1.visits(), 1);
 }
 
 #[test]

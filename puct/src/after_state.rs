@@ -30,6 +30,7 @@ impl AfterState {
         ids.len() == outcome_count
             && ids.iter().filter(|id| id.is_terminal()).count() <= 1
             && ids.iter().all(|id| !id.is_after_state())
+            && ids.iter().all(|id| !id.is_unset())
     }
 
     pub fn terminal_outcome(&self) -> Option<&AfterStateOutcome> {

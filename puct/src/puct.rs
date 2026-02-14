@@ -54,6 +54,7 @@ where
     }
 
     fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
+        let game_engine = &self.game_engine;
         let mut ctx = self.context_pool.acquire();
         let (path, visited) = ctx.split_mut();
         let mut current = node_id;
@@ -65,30 +66,55 @@ where
 
             if visited.insert(current) {
                 path.push(current);
-                node.increment_visits();
             }
 
             let edge_idx = self.select_edge(&game_state, node, depth);
             let (edge, action) = node.edge_and_action(edge_idx);
 
-            edge.increment_visits();
+            let next_game_state = game_engine.take_action(&game_state, action);
+            let terminal_state = game_engine.terminal_state(&next_game_state);
+            let transposition_hash = next_game_state.transposition_hash();
+            let is_terminal = terminal_state.is_some();
 
-            let next_game_state = self.game_engine.take_action(&game_state, action);
             game_state = BorrowedOrOwned::Owned(next_game_state);
-            depth += 1;
 
-            if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
-                return SelectionResult::new(ctx, edge, game_state, Some(terminal));
+            depth += 1;
+            self.increment_selection_visits(node, edge, transposition_hash, is_terminal);
+
+            if is_terminal {
+                return SelectionResult::new(ctx, edge, game_state, terminal_state);
             }
 
-            if let Some(child_id) =
-                self.get_or_link_transposition(edge, game_state.transposition_hash())
-            {
+            if let Some(child_id) = self.get_or_link_transposition(edge, transposition_hash) {
                 current = child_id;
                 continue;
             }
 
             return SelectionResult::new(ctx, edge, game_state, None);
+        }
+    }
+
+    /// Increment selection-time visits for the chosen `(node, edge)`.
+    ///
+    /// - Always increments `node` and `edge` visits.
+    /// - If `is_terminal`, increments the AfterState terminal outcome visits (if present).
+    /// - Otherwise, increments the AfterState state outcome whose transposition hash matches
+    ///   `transposition_hash` (if present).
+    fn increment_selection_visits(
+        &self,
+        node: &PuctStateNode<E, VM>,
+        edge: &PUCTEdge,
+        transposition_hash: u64,
+        is_terminal: bool,
+    ) {
+        let graph = &self.graph;
+        node.increment_visits();
+        edge.increment_visits();
+
+        if is_terminal {
+            graph.increment_afterstate_terminal_visits(edge);
+        } else {
+            graph.increment_afterstate_visits(edge, transposition_hash);
         }
     }
 

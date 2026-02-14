@@ -158,6 +158,7 @@ fn get_edge_state_with_hash_after_state_ignores_terminal_outcome() {
     edge.set_child(after_state_id);
 
     let before = after_state_outcome_visits(&arena, after_state_id);
+    assert!(graph.increment_afterstate_visits(&edge, 111));
     assert_eq!(graph.get_edge_state_with_hash(&edge, 111), Some(s0));
     let after = after_state_outcome_visits(&arena, after_state_id);
 
@@ -190,6 +191,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
         .map(|o| (o.child(), o.visits()))
         .collect::<Vec<_>>();
 
+    assert!(graph.increment_afterstate_visits(&edge, 200));
     let found = graph.get_edge_state_with_hash(&edge, 200);
     assert_eq!(found, Some(s1));
 
@@ -268,6 +270,7 @@ fn find_edge_terminal_after_state_increments_terminal_outcome_only() {
     edge.set_child(after_state_id);
 
     let before = after_state_outcome_visits(&arena, after_state_id);
+    assert!(graph.increment_afterstate_terminal_visits(&edge));
     assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
     let after = after_state_outcome_visits(&arena, after_state_id);
 
@@ -277,6 +280,7 @@ fn find_edge_terminal_after_state_increments_terminal_outcome_only() {
     assert_eq!(after[1].1, before[1].1 + 1);
 
     // Repeated calls continue to increment terminal outcome.
+    assert!(graph.increment_afterstate_terminal_visits(&edge));
     assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
     let after2 = after_state_outcome_visits(&arena, after_state_id);
     assert_eq!(after2[1].1, after[1].1 + 1);
@@ -600,6 +604,7 @@ fn get_edge_state_with_hash_after_state_three_outcomes_increments_only_matching(
     edge.set_child(after_state_id);
 
     let before = after_state_outcome_visits(&arena, after_state_id);
+    assert!(graph.increment_afterstate_visits(&edge, 30));
     assert_eq!(graph.get_edge_state_with_hash(&edge, 30), Some(s2));
     let after = after_state_outcome_visits(&arena, after_state_id);
 
@@ -627,6 +632,7 @@ fn get_edge_state_with_hash_after_state_hash_collision_increments_first_match_on
     edge.set_child(after_state_id);
 
     let before = after_state_outcome_visits(&arena, after_state_id);
+    assert!(graph.increment_afterstate_visits(&edge, 123));
     assert_eq!(graph.get_edge_state_with_hash(&edge, 123), Some(s0));
     let after = after_state_outcome_visits(&arena, after_state_id);
 
@@ -666,6 +672,7 @@ fn find_edge_terminal_after_state_multiple_terminal_outcomes_increments_first_te
     edge.set_child(after_state_id);
 
     let before = after_state_outcome_visits(&arena, after_state_id);
+    assert!(graph.increment_afterstate_terminal_visits(&edge));
     assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
     let after = after_state_outcome_visits(&arena, after_state_id);
 
