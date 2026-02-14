@@ -117,3 +117,170 @@ fn after_state_snapshot_weights_by_outcome_visits() {
     let snap2 = after_state.snapshot(&arena);
     assert_eq!(snap2, DummySnapshot(5 * 3 + 7 * 3));
 }
+
+#[test]
+fn after_state_snapshot_ignores_zero_visit_outcomes() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(10, 5));
+    let s1 = arena.push_state(make_state_node(20, 7));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(0, s0));
+    outcomes.push(AfterStateOutcome::new(3, s1));
+
+    let after_state = AfterState::new(outcomes);
+    let snap = after_state.snapshot(&arena);
+    assert_eq!(snap, DummySnapshot(7 * 3));
+}
+
+#[test]
+fn after_state_snapshot_all_zero_visits_is_zero() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(10, 5));
+    let s1 = arena.push_state(make_state_node(20, 7));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(0, s0));
+    outcomes.push(AfterStateOutcome::new(0, s1));
+
+    let after_state = AfterState::new(outcomes);
+    let snap = after_state.snapshot(&arena);
+    assert_eq!(snap, DummySnapshot(0));
+}
+
+#[test]
+#[should_panic]
+fn after_state_snapshot_panics_if_outcome_child_is_after_state() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(1, 10));
+
+    let mut inner: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    inner.push(AfterStateOutcome::new(1, s0));
+    let inner_id = arena.push_after_state(AfterState::new(inner));
+
+    let mut outer: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outer.push(AfterStateOutcome::new(1, inner_id));
+    let outer_after_state = AfterState::new(outer);
+
+    // `iter_outcomes` explicitly panics for AfterState children.
+    let _ = outer_after_state.snapshot(&arena);
+}
+
+#[test]
+#[should_panic]
+fn after_state_snapshot_panics_if_outcome_child_is_unset() {
+    let arena = TestArena::new();
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    let after_state = AfterState::new(outcomes);
+
+    // This should panic in debug builds (and would be invalid for traversal anyway).
+    let _ = after_state.snapshot(&arena);
+}
+
+#[test]
+fn terminal_outcome_is_independent_of_visits() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(1, 10));
+    let t0 = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(1));
+        arena.push_terminal(Terminal::new(r))
+    };
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(100, s0));
+    outcomes.push(AfterStateOutcome::new(0, t0));
+    let after_state = AfterState::new(outcomes);
+
+    assert_eq!(after_state.terminal_outcome().unwrap().child(), t0);
+    after_state.outcomes[1].increment_visits();
+    assert_eq!(after_state.terminal_outcome().unwrap().child(), t0);
+}
+
+#[test]
+fn after_state_outcome_clone_preserves_child_and_visits() {
+    let child = crate::NodeId::from_u32(0b11 << 30);
+    let outcome = AfterStateOutcome::new(123, child);
+    let cloned = outcome.clone();
+
+    assert_eq!(cloned.child(), outcome.child());
+    assert_eq!(cloned.visits(), outcome.visits());
+}
+
+#[test]
+fn after_state_outcome_as_tuple_matches_accessors() {
+    let child = crate::NodeId::from_u32(0b11 << 30);
+    let outcome = AfterStateOutcome::new(7, child);
+    assert_eq!(outcome.as_tuple(), (outcome.child(), outcome.visits()));
+}
+
+#[test]
+fn terminal_outcome_returns_none_when_no_terminal_child() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(1, 10));
+    let s1 = arena.push_state(make_state_node(2, 20));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, s0));
+    outcomes.push(AfterStateOutcome::new(2, s1));
+    let after_state = AfterState::new(outcomes);
+
+    assert!(after_state.terminal_outcome().is_none());
+}
+
+#[test]
+fn terminal_outcome_returns_first_terminal_when_multiple_present() {
+    let arena = TestArena::new();
+
+    let t0 = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(1));
+        arena.push_terminal(Terminal::new(r))
+    };
+    let t1 = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(2));
+        arena.push_terminal(Terminal::new(r))
+    };
+
+    // Invalid per is_valid, but terminal_outcome() should be deterministic.
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, t0));
+    outcomes.push(AfterStateOutcome::new(2, t1));
+    let after_state = AfterState::new(outcomes);
+
+    assert_eq!(after_state.terminal_outcome().unwrap().child(), t0);
+}
+
+#[test]
+fn after_state_is_valid_rejects_after_state_children() {
+    let arena = TestArena::new();
+
+    let s0 = arena.push_state(make_state_node(1, 10));
+    let mut inner: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    inner.push(AfterStateOutcome::new(1, s0));
+    let inner_id = arena.push_after_state(AfterState::new(inner));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, inner_id));
+    let after_state = AfterState::new(outcomes);
+
+    assert!(!after_state.is_valid());
+}
+
+#[test]
+fn after_state_is_valid_rejects_unset_children() {
+    // This is a stricter expectation than the current implementation enforces.
+    // Leaving it as a test to catch regressions once `is_valid` is tightened.
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    let after_state = AfterState::new(outcomes);
+    assert!(!after_state.is_valid());
+}

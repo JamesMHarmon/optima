@@ -434,3 +434,316 @@ fn add_child_to_edge_when_existing_child_is_after_state_clones_outcomes_without_
     assert!(after_new.iter().any(|(id, v)| *id == s1 && *v == 9));
     assert!(after_new.iter().any(|(id, v)| *id == new_child && *v == 1));
 }
+
+#[test]
+fn find_state_with_hash_terminal_root_returns_none() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let t0 = make_terminal_node(&arena, 1);
+    assert_eq!(graph.find_state_with_hash(t0, 123), None);
+}
+
+#[test]
+fn find_state_with_hash_state_root_matches_and_mismatches() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(999));
+    assert_eq!(graph.find_state_with_hash(s0, 999), Some(s0));
+    assert_eq!(graph.find_state_with_hash(s0, 1000), None);
+}
+
+#[test]
+fn find_state_with_hash_after_state_root_finds_state_depth_first() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(10));
+    let s1 = arena.push_state(make_state_node(20));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, s0));
+    outcomes.push(AfterStateOutcome::new(1, s1));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    assert_eq!(graph.find_state_with_hash(after_state_id, 20), Some(s1));
+}
+
+#[test]
+fn find_state_with_hash_does_not_mutate_after_state_outcome_visits() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(10));
+    let s1 = arena.push_state(make_state_node(20));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(2, s0));
+    outcomes.push(AfterStateOutcome::new(3, s1));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let before = after_state_outcome_visits(&arena, after_state_id);
+    assert_eq!(graph.find_state_with_hash(after_state_id, 20), Some(s1));
+    let after = after_state_outcome_visits(&arena, after_state_id);
+    assert_eq!(before, after);
+}
+
+#[test]
+fn get_edge_state_with_hash_can_find_state_through_nested_after_state_children() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(777));
+
+    let mut inner: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    inner.push(AfterStateOutcome::new(5, s0));
+    let inner_id = arena.push_after_state(AfterState::new(inner));
+
+    let mut outer: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outer.push(AfterStateOutcome::new(9, inner_id));
+    let outer_id = arena.push_after_state(AfterState::new(outer));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(outer_id);
+
+    assert_eq!(graph.get_edge_state_with_hash(&edge, 777), Some(s0));
+}
+
+#[test]
+fn find_edge_terminal_after_state_terminal_not_first_outcome_returns_terminal() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(1));
+    let t0 = make_terminal_node(&arena, 9);
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, s0));
+    outcomes.push(AfterStateOutcome::new(2, t0));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
+}
+
+#[test]
+fn add_child_to_edge_multiple_times_grows_after_state_outcomes_monotonically() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(100));
+    let s1 = arena.push_state(make_state_node(200));
+    let s2 = arena.push_state(make_state_node(300));
+
+    let edge = PUCTEdge::new();
+    for _ in 0..4 {
+        edge.increment_visits();
+    }
+    assert!(edge.try_set_child(s0));
+
+    graph.add_child_to_edge(&edge, s1);
+    let after_state_1 = edge.child().expect("child must exist");
+    assert!(after_state_1.is_after_state());
+    let out1 = after_state_outcome_visits(&arena, after_state_1);
+    assert_eq!(out1.len(), 2);
+
+    // Add a third child; should clone the current afterstate and append one more outcome.
+    graph.add_child_to_edge(&edge, s2);
+    let after_state_2 = edge.child().expect("child must exist");
+    assert!(after_state_2.is_after_state());
+    let out2 = after_state_outcome_visits(&arena, after_state_2);
+    assert_eq!(out2.len(), 3);
+
+    // The previous afterstate remains unchanged.
+    let out1_again = after_state_outcome_visits(&arena, after_state_1);
+    assert_eq!(out1, out1_again);
+}
+
+#[test]
+fn add_child_to_edge_does_not_mutate_edge_visits() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(1));
+    let s1 = arena.push_state(make_state_node(2));
+
+    let edge = PUCTEdge::new();
+    for _ in 0..9 {
+        edge.increment_visits();
+    }
+    let before = edge.visits();
+    assert!(edge.try_set_child(s0));
+
+    graph.add_child_to_edge(&edge, s1);
+    assert_eq!(edge.visits(), before);
+}
+
+#[test]
+fn get_edge_state_with_hash_after_state_three_outcomes_increments_only_matching() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(10));
+    let s1 = arena.push_state(make_state_node(20));
+    let s2 = arena.push_state(make_state_node(30));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, s0));
+    outcomes.push(AfterStateOutcome::new(2, s1));
+    outcomes.push(AfterStateOutcome::new(3, s2));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    let before = after_state_outcome_visits(&arena, after_state_id);
+    assert_eq!(graph.get_edge_state_with_hash(&edge, 30), Some(s2));
+    let after = after_state_outcome_visits(&arena, after_state_id);
+
+    assert_eq!(after[0], before[0]);
+    assert_eq!(after[1], before[1]);
+    assert_eq!(after[2].0, s2);
+    assert_eq!(after[2].1, before[2].1 + 1);
+}
+
+#[test]
+fn get_edge_state_with_hash_after_state_hash_collision_increments_first_match_only() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    // Two distinct state nodes with the same transposition hash (simulates a collision).
+    let s0 = arena.push_state(make_state_node(123));
+    let s1 = arena.push_state(make_state_node(123));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(5, s0));
+    outcomes.push(AfterStateOutcome::new(7, s1));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    let before = after_state_outcome_visits(&arena, after_state_id);
+    assert_eq!(graph.get_edge_state_with_hash(&edge, 123), Some(s0));
+    let after = after_state_outcome_visits(&arena, after_state_id);
+
+    assert_eq!(after[0].0, s0);
+    assert_eq!(after[0].1, before[0].1 + 1);
+    assert_eq!(after[1], before[1]);
+}
+
+#[test]
+fn find_edge_terminal_state_child_returns_none() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+    let s0 = arena.push_state(make_state_node(1));
+
+    let edge = PUCTEdge::new();
+    assert!(edge.try_set_child(s0));
+
+    assert_eq!(graph.find_edge_terminal(&edge), None);
+}
+
+#[test]
+fn find_edge_terminal_after_state_multiple_terminal_outcomes_increments_first_terminal_only() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let t0 = make_terminal_node(&arena, 1);
+    let t1 = make_terminal_node(&arena, 2);
+
+    // This AfterState is invalid per is_valid (two terminals), but NodeGraph should still behave
+    // deterministically: terminal_outcome() returns the first terminal.
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(10, t0));
+    outcomes.push(AfterStateOutcome::new(20, t1));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    let before = after_state_outcome_visits(&arena, after_state_id);
+    assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
+    let after = after_state_outcome_visits(&arena, after_state_id);
+
+    assert_eq!(after[0].0, t0);
+    assert_eq!(after[0].1, before[0].1 + 1);
+    assert_eq!(after[1], before[1]);
+}
+
+#[test]
+#[should_panic]
+fn get_edge_state_with_hash_panics_if_after_state_contains_unset_child() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    // This should panic due to attempting to treat `unset()` as a real node id.
+    let _ = graph.get_edge_state_with_hash(&edge, 0);
+}
+
+#[test]
+fn find_state_with_hash_can_traverse_nested_after_state_nodes() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(777));
+
+    let mut inner: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    inner.push(AfterStateOutcome::new(1, s0));
+    let inner_id = arena.push_after_state(AfterState::new(inner));
+
+    let mut outer: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outer.push(AfterStateOutcome::new(1, inner_id));
+    let outer_id = arena.push_after_state(AfterState::new(outer));
+
+    assert_eq!(graph.find_state_with_hash(outer_id, 777), Some(s0));
+}
+
+#[test]
+#[should_panic]
+fn add_child_to_edge_panics_in_debug_if_duplicate_child_is_added_to_after_state() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let s0 = arena.push_state(make_state_node(1));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(2, s0));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    // Adding the same child again creates a duplicate NodeId in outcomes -> debug_assert should fire.
+    graph.add_child_to_edge(&edge, s0);
+}
+
+#[test]
+#[should_panic]
+fn add_child_to_edge_panics_in_debug_if_second_terminal_outcome_is_added() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let t0 = make_terminal_node(&arena, 1);
+    let t1 = make_terminal_node(&arena, 2);
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(2, t0));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+
+    let edge = PUCTEdge::new();
+    edge.set_child(after_state_id);
+
+    // Adding a second terminal makes the AfterState invalid -> debug_assert should fire.
+    graph.add_child_to_edge(&edge, t1);
+}
