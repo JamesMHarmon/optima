@@ -3,7 +3,7 @@ use crate::{EdgeInfo, SelectionPolicy};
 type ScSnapshot<Sc> = <Sc as EdgeScorer>::Snapshot;
 
 pub trait ScorerSelectionPolicy: EdgeScorer {
-    fn select_with_scorer<'a, I, A: 'a>(&self, edges: I, node_visits: u32, depth: u16) -> usize
+    fn select_with_scorer<'a, I, A: 'a>(&self, edges: I, node_visits: u32, depth: u32) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, Self::Snapshot>>,
         Self::Snapshot: 'a,
@@ -25,7 +25,7 @@ pub trait ScorerSelectionPolicy: EdgeScorer {
 
 pub struct NodeContext {
     pub node_visits: u32,
-    pub depth: u16,
+    pub depth: u32,
 }
 
 pub trait PreparedEdgeScorer<S> {
@@ -65,7 +65,7 @@ where
         edges: I,
         node_visits: u32,
         _state: &Self::State,
-        depth: u16,
+        depth: u32,
     ) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, ScSnapshot<Sc>>>,

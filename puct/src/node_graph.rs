@@ -44,16 +44,16 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
 
     /// Find terminal node reachable through edge and return its ID with visit count.
     /// Returns edge visits if pointing directly to terminal, or outcome visits if through AfterState.
-    pub fn find_edge_terminal(&self, edge: &PUCTEdge) -> Option<(NodeId, u32)> {
+    pub fn find_edge_terminal(&self, edge: &PUCTEdge) -> Option<NodeId> {
         edge.child()
             .and_then(|child_id| match child_id.node_type() {
-                NodeType::Terminal => Some((child_id, edge.visits())),
+                NodeType::Terminal => Some(child_id),
 
                 NodeType::AfterState => self
                     .arena
                     .get_after_state_node(child_id)
                     .terminal_outcome()
-                    .map(|outcome| outcome.as_tuple()),
+                    .map(|outcome| outcome.child()),
                 NodeType::State => None,
             })
     }

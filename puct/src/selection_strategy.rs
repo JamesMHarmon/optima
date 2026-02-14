@@ -10,7 +10,7 @@ pub trait SelectionPolicy<S> {
         edges: I,
         node_visits: u32,
         state: &Self::State,
-        depth: u16,
+        depth: u32,
     ) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, S>>,

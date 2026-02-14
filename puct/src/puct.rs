@@ -58,6 +58,7 @@ where
         let (path, visited) = ctx.split_mut();
         let mut current = node_id;
         let mut game_state = BorrowedOrOwned::Borrowed(&self.game_state);
+        let mut depth = 0;
 
         loop {
             let node = self.nodes.get_state_node(current);
@@ -67,13 +68,14 @@ where
                 node.increment_visits();
             }
 
-            let edge_idx = self.select_edge(&game_state, node);
+            let edge_idx = self.select_edge(&game_state, node, depth);
             let (edge, action) = node.edge_and_action(edge_idx);
 
             edge.increment_visits();
 
             let next_game_state = self.game_engine.take_action(&game_state, action);
             game_state = BorrowedOrOwned::Owned(next_game_state);
+            depth += 1;
 
             if let Some(terminal) = self.game_engine.terminal_state(&game_state) {
                 return SelectionResult::new(ctx, edge, game_state, Some(terminal));
@@ -97,14 +99,13 @@ where
         }
     }
 
-    fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, VM>) -> usize {
-        // @TODO: Set Depth
+    fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, VM>, depth: u32) -> usize {
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
             node.iter_edge_info(&self.nodes),
             node.visits(),
             game_state,
-            0,
+            depth,
         )
     }
 
@@ -170,7 +171,7 @@ where
         snapshot: SnapshotOf<VM>,
     ) -> Option<NodeId> {
         // @TODO: If we find the edge, how are visits being properly incremented?
-        if let Some((terminal_id, _visits)) = self.graph.find_edge_terminal(edge) {
+        if let Some(terminal_id) = self.graph.find_edge_terminal(edge) {
             let terminal_node = self.nodes.get_terminal_node(terminal_id);
             terminal_node.rollup_stats().accumulate(&snapshot);
 
@@ -197,9 +198,8 @@ where
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            let existing_id = *existing_id;
-            self.graph.add_child_to_edge(edge, existing_id);
-            Some(existing_id)
+            self.graph.add_child_to_edge(edge, *existing_id);
+            Some(*existing_id)
         } else {
             None
         }
