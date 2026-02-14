@@ -82,8 +82,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             }
         }
 
-        // @TODO: Should this be visit of 1?
-        new_outcomes.push(AfterStateOutcome::new(0, child_id));
+        new_outcomes.push(AfterStateOutcome::new(1, child_id));
 
         // Create new AfterState and atomically update edge
         let new_after_state_id = self.arena.push_after_state(AfterState::new(new_outcomes));
