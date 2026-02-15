@@ -1,7 +1,7 @@
 use anyhow::Result;
 use common::{TranspositionTable, get_env_usize};
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use half::f16;
 use itertools::Itertools;
 use log::{debug, info};
@@ -340,10 +340,6 @@ impl<A, P> InFlightRequests<A, P> {
     fn take_channels(&self, key: u64) -> Option<SmallVec<[PredictResponseTx<A, P>; 2]>> {
         self.requests.remove(&key).map(|(_, v)| v)
     }
-
-    fn contains(&self, key: u64) -> bool {
-        self.requests.contains_key(&key)
-    }
 }
 
 type BatchingModelAndSender<S, A, P, Map, Te> = (
@@ -395,7 +391,6 @@ type StatesToInfer<S> = (S, u64); // State and its transposition key
 struct BatchingModel<Map, Te, A, P> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     _in_flight_requests: Arc<InFlightRequests<A, P>>,
-    _inference_started: Arc<DashSet<u64>>,
     mapper: Arc<Map>,
     _reporter: Arc<Reporter<Te>>,
 }
@@ -424,12 +419,10 @@ where
         states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> Self {
         let in_flight_requests = Arc::new(InFlightRequests::new());
-        let inference_started = Arc::new(DashSet::new());
 
         let inner_self = Self {
             transposition_table,
             _in_flight_requests: in_flight_requests.clone(),
-            _inference_started: inference_started.clone(),
             _reporter: reporter.clone(),
             mapper,
         };
@@ -441,7 +434,6 @@ where
             batch_size,
             analysis_request_threads,
             in_flight_requests,
-            inference_started,
         );
 
         inner_self
@@ -452,7 +444,6 @@ where
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
-        inference_started: Arc<DashSet<u64>>,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
         states_to_predict_tx: UnboundedSender<StatesToInfer<S>>,
         states_to_prefetch_tx: UnboundedSender<StatesToInfer<S>>,
@@ -463,7 +454,6 @@ where
         let states_to_predict_tx = &states_to_predict_tx;
         let states_to_prefetch_tx = &states_to_prefetch_tx;
         let in_flight_requests = &*in_flight_requests;
-        let inference_started = &*inference_started;
 
         rayon::scope_fifo(move |s| {
             while let Ok((state_to_analyse, request)) = receiver.recv() {
@@ -478,33 +468,29 @@ where
                             reporter.set_predict_cache_or_tt();
                             let _ = channel.send(analysis);
                         }
-                    } else {
-                        // Check if this state is already in-flight
-                        let key = mapper.get_transposition_key(&state_to_analyse);
-                        match request {
-                            AnalysisRequest::Predict(channel) => {
-                                let is_duplicate =
-                                    in_flight_requests.try_register_predict(key, channel);
+                        return;
+                    }
 
-                                if is_duplicate {
-                                    reporter.set_predict_in_flight();
+                    let key = mapper.get_transposition_key(&state_to_analyse);
+                    match request {
+                        AnalysisRequest::Predict(channel) => {
+                            let is_duplicate =
+                                in_flight_requests.try_register_predict(key, channel);
 
-                                    // A Predict arriving behind a queued Prefetch should be
-                                    // promoted to the high-priority inference queue.
-                                    // Duplicate inference is prevented by `inference_started`.
-                                    if !inference_started.contains(&key) {
-                                        let _ = states_to_predict_tx.send((state_to_analyse, key));
-                                    }
-                                } else {
-                                    reporter.set_predict_needs_infer();
-                                    let _ = states_to_predict_tx.send((state_to_analyse, key));
-                                }
+                            if is_duplicate {
+                                reporter.set_predict_in_flight();
+                            } else {
+                                reporter.set_predict_needs_infer();
                             }
-                            AnalysisRequest::Prefetch => {
-                                let is_duplicate = in_flight_requests.try_register_prefetch(key);
-                                if !is_duplicate {
-                                    let _ = states_to_prefetch_tx.send((state_to_analyse, key));
-                                }
+
+                            // Promote Predict to the high-priority inference queue even if
+                            // this state was already queued via Prefetch.
+                            let _ = states_to_predict_tx.send((state_to_analyse, key));
+                        }
+                        AnalysisRequest::Prefetch => {
+                            let is_duplicate = in_flight_requests.try_register_prefetch(key);
+                            if !is_duplicate {
+                                let _ = states_to_prefetch_tx.send((state_to_analyse, key));
                             }
                         }
                     }
@@ -514,7 +500,6 @@ where
 
         debug!("Exiting listen_then_transpose_or_infer");
     }
-
     #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
         &self,
@@ -524,7 +509,6 @@ where
         batch_size: usize,
         analysis_request_threads: usize,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
-        inference_started: Arc<DashSet<u64>>,
     ) {
         let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
         let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
@@ -533,7 +517,6 @@ where
         let mapper_clone = self.mapper.clone();
         let reporter_clone = reporter.clone();
         let in_flight_clone = in_flight_requests.clone();
-        let inference_started_clone = inference_started.clone();
 
         std::thread::spawn(move || {
             Self::listen_then_transpose_or_infer(
@@ -541,7 +524,6 @@ where
                 transposition_table_clone.clone(),
                 reporter_clone.clone(),
                 in_flight_clone,
-                inference_started_clone,
                 receiver,
                 states_to_predict_tx,
                 states_to_prefetch_tx,
@@ -560,7 +542,6 @@ where
             let filling_states_to_analyze = filling_states_to_analyze.clone();
             let transposition_table = self.transposition_table.clone();
             let in_flight_requests = in_flight_requests.clone();
-            let inference_started = inference_started.clone();
 
             std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
@@ -570,7 +551,7 @@ where
                 loop {
                     // Lock when getting states to analyze so that the pulled states maintain order. Otherwise when reordering later, any missed states will need to be waited for.
                     let lock = filling_states_to_analyze.lock().unwrap();
-                    let mut states_to_analyse = Self::recv_up_to_prioritized(
+                    let states_to_analyse = Self::recv_up_to_prioritized(
                         &states_to_predict_rx,
                         &states_to_prefetch_rx,
                         batch_size,
@@ -580,18 +561,6 @@ where
                     // If states is empty then the channel tx has been closed.
                     if states_to_analyse.is_empty() {
                         return;
-                    }
-
-                    // Ensure only one thread runs inference per key.
-                    states_to_analyse.retain(|(_state, key)| {
-                        if !in_flight_requests.contains(*key) {
-                            return false;
-                        }
-                        inference_started.insert(*key)
-                    });
-
-                    if states_to_analyse.is_empty() {
-                        continue;
                     }
 
                     let tensor: &mut Tensor<f16> =
@@ -614,7 +583,6 @@ where
                     let mapper = mapper.clone();
                     let transposition_table = transposition_table.clone();
                     let in_flight_requests = in_flight_requests.clone();
-                    let inference_started = inference_started.clone();
 
                     Self::process_predictions(
                         predictions,
@@ -622,7 +590,6 @@ where
                         transposition_table,
                         mapper,
                         in_flight_requests,
-                        inference_started,
                     );
                 }
             });
@@ -671,7 +638,6 @@ where
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         mapper: Arc<Map>,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
-        inference_started: Arc<DashSet<u64>>,
     ) {
         states_to_analyse
             .into_par_iter()
@@ -704,8 +670,6 @@ where
                         let _ = channel.send(analysis.clone());
                     }
                 }
-
-                inference_started.remove(&key);
             });
     }
 

@@ -35,12 +35,6 @@ where
             .fetch_max(analysis_len, Ordering::Relaxed);
     }
 
-    pub fn set_terminal(&self) {
-        self.inner
-            .num_nodes_analysed
-            .fetch_add(1, Ordering::Relaxed);
-    }
-
     pub fn set_cache_hit(&self) {
         self.inner.cache_hits.fetch_add(1, Ordering::Relaxed);
     }
