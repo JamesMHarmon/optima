@@ -1,10 +1,7 @@
 use anyhow::Result;
 use common::{TranspositionTable, get_env_usize};
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
-use dashmap::DashMap;
-use engine::GameEngine;
-use engine::Value;
-use engine::game_state::GameState;
+use dashmap::{DashMap, DashSet};
 use half::f16;
 use itertools::Itertools;
 use log::{debug, info};
@@ -14,15 +11,11 @@ use rayon::iter::{
 };
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::future::Future;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Weak;
-use std::task::{Context, Poll};
 use tensorflow::*;
-use tokio::sync::oneshot;
 
 use super::*;
 use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
@@ -32,35 +25,20 @@ use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
 static ALLOCATOR: std::alloc::System = std::alloc::System;
 
 #[allow(clippy::type_complexity)]
-pub struct TensorflowModel<S, A, P, E, Map, Te> {
+pub struct TensorflowModel<S, A, P, Map, Te> {
     model_info: ModelInfo,
     model_dir: PathBuf,
-    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, P, E, Map, Te>>>,
+    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, P, Map, Te>>>,
     analysis_request_threads: usize,
-    engine: Arc<E>,
     mapper: Arc<Map>,
     batch_size: usize,
     tt_cache_size: usize,
 }
 
-impl<S, A, P, E, Map, Te> TensorflowModel<S, A, P, E, Map, Te>
-where
-    S: Send + Sync + 'static,
-    A: Clone + Send + Sync + 'static,
-    P: Clone + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
-    Map: Dimension
-        + InputMap<State = S>
-        + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
-        + Send
-        + Sync
-        + 'static,
-    Te: Send + Sync + 'static,
-{
+impl<S, A, P, Map, Te> TensorflowModel<S, A, P, Map, Te> {
     pub fn load(
         model_dir: PathBuf,
         model_info: ModelInfo,
-        engine: E,
         mapper: Map,
         tt_cache_size: usize,
     ) -> Result<Self> {
@@ -81,7 +59,6 @@ where
         );
 
         let mapper = Arc::new(mapper);
-        let engine = Arc::new(engine);
         let batching_model = Mutex::new(Weak::new());
 
         Ok(Self {
@@ -90,7 +67,6 @@ where
             model_info,
             model_dir,
             batching_model,
-            engine,
             mapper,
             tt_cache_size,
         })
@@ -99,7 +75,19 @@ where
     fn create_batching_model(
         &self,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
-    ) -> BatchingModel<E, Map, Te, A, P> {
+    ) -> BatchingModel<Map, Te, A, P>
+    where
+        S: Send + Sync + 'static,
+        A: Clone + Send + 'static,
+        P: Clone + Send + 'static,
+        Map: Dimension
+            + InputMap<State = S>
+            + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
+            + Send
+            + Sync
+            + 'static,
+        Te: Send + 'static,
+    {
         let transposition_table = Arc::new(if self.tt_cache_size > 0 {
             Some(TranspositionTable::new(self.tt_cache_size))
         } else {
@@ -109,7 +97,6 @@ where
         let reporter = Arc::new(Reporter::new(transposition_table.clone()));
 
         BatchingModel::new(
-            self.engine.clone(),
             self.mapper.clone(),
             self.model_dir.clone(),
             transposition_table,
@@ -121,25 +108,23 @@ where
     }
 }
 
-impl<S, A, P, E, Map, Te> Analyzer for TensorflowModel<S, A, P, E, Map, Te>
+impl<S, A, P, Map, Te> Analyzer for TensorflowModel<S, A, P, Map, Te>
 where
-    S: GameState + Send + Sync + Unpin + 'static,
-    A: Clone + Send + Sync + 'static,
-    P: Value + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
+    A: Clone + Send + 'static,
+    P: Clone + Send + 'static,
     Map: Dimension
         + InputMap<State = S>
         + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
-        + Clone
         + Send
         + Sync
         + 'static,
-    Te: Send + Sync + 'static,
+    Te: Send + 'static,
 {
     type State = S;
     type Action = A;
     type Predictions = P;
-    type Analyzer = GameAnalyzer<S, A, P, E, Map, Te>;
+    type Analyzer = GameAnalyzer<S, A, P, Map, Te>;
 
     fn analyzer(&self) -> Self::Analyzer {
         let batching_model_ref = &mut *self.batching_model.lock();
@@ -161,7 +146,7 @@ where
     }
 }
 
-impl<S, A, P, E, Map, Te> Info for TensorflowModel<S, A, P, E, Map, Te> {
+impl<S, A, P, Map, Te> Info for TensorflowModel<S, A, P, Map, Te> {
     fn info(&self) -> &ModelInfo {
         &self.model_info
     }
@@ -295,35 +280,20 @@ impl OperationWithIndex {
     }
 }
 
-/// Enum to support both async (tokio oneshot) and blocking (crossbeam) response channels
-enum ResponseChannel<A, P> {
-    Async(oneshot::Sender<GameStateAnalysis<A, P>>),
-    Blocking(crossbeam::channel::Sender<GameStateAnalysis<A, P>>),
+type PredictResponseTx<A, P> = crossbeam::channel::Sender<GameStateAnalysis<A, P>>;
+
+/// An analysis request can be a real prediction request (expects a response) or a prefetch request
+/// (fire-and-forget, intended to warm TT / in-flight coalescing).
+enum AnalysisRequest<A, P> {
+    Predict(PredictResponseTx<A, P>),
+    Prefetch,
 }
 
-impl<A, P> ResponseChannel<A, P> {
-    fn send(self, analysis: GameStateAnalysis<A, P>)
-    where
-        A: Clone,
-        P: Clone,
-    {
-        match self {
-            ResponseChannel::Async(tx) => {
-                let _ = tx.send(analysis);
-            }
-            ResponseChannel::Blocking(tx) => {
-                let _ = tx.send(analysis);
-            }
-        }
-    }
-}
-
-/// Tracks in-flight analysis requests to coalesce duplicate requests
+/// Tracks in-flight analysis requests to coalesce duplicate requests.
+/// Maps transposition key to list of channels waiting for that state's analysis.
+/// For prefetch, we insert an entry but do not store any channel.
 struct InFlightRequests<A, P> {
-    /// Maps transposition key to list of channels waiting for that state's analysis
-    /// Using DashMap for lock-free sharded concurrent access
-    /// SmallVec with inline capacity of 2 optimizes for the common case of 1-2 duplicates
-    requests: DashMap<u64, SmallVec<[ResponseChannel<A, P>; 2]>>,
+    requests: DashMap<u64, SmallVec<[PredictResponseTx<A, P>; 2]>>,
 }
 
 impl<A, P> InFlightRequests<A, P> {
@@ -333,19 +303,17 @@ impl<A, P> InFlightRequests<A, P> {
         }
     }
 
-    /// Try to register a request. Returns true if this is a duplicate and should not be processed.
-    /// Returns false if this is the first request for this state.
-    fn try_register(&self, key: u64, channel: ResponseChannel<A, P>) -> bool {
+    /// Try to register a Predict request.
+    /// Returns true if this key was already in-flight.
+    fn try_register_predict(&self, key: u64, channel: PredictResponseTx<A, P>) -> bool {
         use dashmap::mapref::entry::Entry;
 
         match self.requests.entry(key) {
             Entry::Occupied(mut entry) => {
-                // Duplicate request - add channel to waiting list
                 entry.get_mut().push(channel);
                 true
             }
             Entry::Vacant(entry) => {
-                // First request - insert new entry with this channel
                 let mut sv = SmallVec::new();
                 sv.push(channel);
                 entry.insert(sv);
@@ -354,106 +322,89 @@ impl<A, P> InFlightRequests<A, P> {
         }
     }
 
+    /// Try to register a Prefetch request.
+    /// Returns true if this key was already in-flight.
+    fn try_register_prefetch(&self, key: u64) -> bool {
+        use dashmap::mapref::entry::Entry;
+
+        match self.requests.entry(key) {
+            Entry::Occupied(_entry) => true,
+            Entry::Vacant(entry) => {
+                entry.insert(SmallVec::new());
+                false
+            }
+        }
+    }
+
     /// Remove and return all channels waiting for this state's analysis
-    fn take_channels(&self, key: u64) -> Option<SmallVec<[ResponseChannel<A, P>; 2]>> {
+    fn take_channels(&self, key: u64) -> Option<SmallVec<[PredictResponseTx<A, P>; 2]>> {
         self.requests.remove(&key).map(|(_, v)| v)
+    }
+
+    fn contains(&self, key: u64) -> bool {
+        self.requests.contains_key(&key)
     }
 }
 
-type BatchingModelAndSender<S, A, P, E, Map, Te> = (
-    BatchingModel<E, Map, Te, A, P>,
+type BatchingModelAndSender<S, A, P, Map, Te> = (
+    BatchingModel<Map, Te, A, P>,
     UnboundedSender<StatesToAnalyse<S, A, P>>,
 );
 
-pub struct GameAnalyzer<S, A, P, E, Map, Te> {
-    batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>,
+pub struct GameAnalyzer<S, A, P, Map, Te> {
+    batching_model: Arc<BatchingModelAndSender<S, A, P, Map, Te>>,
 }
 
-impl<S, A, P, E, Map, Te> GameAnalyzer<S, A, P, E, Map, Te> {
-    fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, E, Map, Te>>) -> Self {
+impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te> {
+    fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, Map, Te>>) -> Self {
         Self { batching_model }
     }
 }
 
-impl<S, A, P, E, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, E, Map, Te>
+impl<S, A, P, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, Map, Te>
 where
-    S: Clone + Unpin,
-    A: Clone,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
-    Te: Send + Sync + 'static,
+    S: Clone,
 {
     type State = S;
     type Action = A;
     type Predictions = P;
-    type Future = AnalysisFuture<Self::Action, Self::Predictions>;
 
-    fn analyze_async(&self, game_state: &S) -> Self::Future {
-        let (tx, rx) = oneshot::channel();
-        let sender = &self.batching_model.1;
-        sender
-            .send((game_state.to_owned(), ResponseChannel::Async(tx)))
-            .unwrap_or_else(|_| debug!("Channel closed"));
-
-        AnalysisFuture { receiver: rx }
-    }
-
-    /// Blocking version of analyze_async.
-    ///
-    /// WARNING: This blocks the current thread and should NOT be used in async contexts
-    /// or within the MCTS parallel search. Use `analyze_async()` instead for
-    /// async/concurrent scenarios.
-    ///
-    /// This method is primarily intended for:
-    /// - Simple testing scenarios
-    /// - Single-threaded evaluation
-    /// - Command-line tools
     fn analyze(&self, game_state: &S) -> GameStateAnalysis<A, P> {
         let (tx, rx) = crossbeam::channel::bounded(1);
         let sender = &self.batching_model.1;
         sender
-            .send((game_state.to_owned(), ResponseChannel::Blocking(tx)))
+            .send((game_state.to_owned(), AnalysisRequest::Predict(tx)))
             .unwrap_or_else(|_| debug!("Channel closed"));
 
         rx.recv()
             .expect("Analysis channel closed before receiving result")
     }
-}
 
-/// A future that resolves to a GameStateAnalysis
-pub struct AnalysisFuture<A, P> {
-    receiver: oneshot::Receiver<GameStateAnalysis<A, P>>,
-}
-
-impl<A, P> Future for AnalysisFuture<A, P> {
-    type Output = GameStateAnalysis<A, P>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match Pin::new(&mut self.receiver).poll(cx) {
-            Poll::Ready(Ok(analysis)) => Poll::Ready(analysis),
-            Poll::Ready(Err(_)) => panic!("Analysis channel closed before receiving result"),
-            Poll::Pending => Poll::Pending,
-        }
+    fn prefetch(&self, game_state: &Self::State) {
+        let sender = &self.batching_model.1;
+        sender
+            .send((game_state.to_owned(), AnalysisRequest::Prefetch))
+            .unwrap_or_else(|_| debug!("Channel closed"));
     }
 }
 
-type StatesToAnalyse<S, A, P> = (S, ResponseChannel<A, P>);
+type StatesToAnalyse<S, A, P> = (S, AnalysisRequest<A, P>);
 
 type StatesToInfer<S> = (S, u64); // State and its transposition key
 
-struct BatchingModel<E, Map, Te, A, P> {
+struct BatchingModel<Map, Te, A, P> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     _in_flight_requests: Arc<InFlightRequests<A, P>>,
-    _engine: Arc<E>,
+    _inference_started: Arc<DashSet<u64>>,
     mapper: Arc<Map>,
     _reporter: Arc<Reporter<Te>>,
 }
 
-impl<S, A, P, E, Map, Te> BatchingModel<E, Map, Te, A, P>
+impl<S, A, P, Map, Te> BatchingModel<Map, Te, A, P>
 where
     S: Send + Sync + 'static,
     A: Clone + Send + 'static,
     P: Clone + Send + 'static,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Send + Sync + 'static,
     Map: Dimension
         + InputMap<State = S>
         + TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>
@@ -464,7 +415,6 @@ where
 {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        engine: Arc<E>,
         mapper: Arc<Map>,
         model_dir: PathBuf,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
@@ -474,65 +424,89 @@ where
         states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> Self {
         let in_flight_requests = Arc::new(InFlightRequests::new());
+        let inference_started = Arc::new(DashSet::new());
 
         let inner_self = Self {
             transposition_table,
             _in_flight_requests: in_flight_requests.clone(),
+            _inference_started: inference_started.clone(),
             _reporter: reporter.clone(),
-            _engine: engine.clone(),
             mapper,
         };
 
         inner_self.create_analysis_tasks(
-            engine,
             reporter,
             model_dir,
             states_to_analyse_receiver,
             batch_size,
             analysis_request_threads,
             in_flight_requests,
+            inference_started,
         );
 
         inner_self
     }
 
     fn listen_then_transpose_or_infer(
-        engine: Arc<E>,
         mapper: Arc<Map>,
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
+        inference_started: Arc<DashSet<u64>>,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
         states_to_predict_tx: UnboundedSender<StatesToInfer<S>>,
+        states_to_prefetch_tx: UnboundedSender<StatesToInfer<S>>,
     ) {
-        let engine = &*engine;
         let mapper = &*mapper;
         let transposition_table = &*transposition_table;
         let reporter = &*reporter;
         let states_to_predict_tx = &states_to_predict_tx;
+        let states_to_prefetch_tx = &states_to_prefetch_tx;
         let in_flight_requests = &*in_flight_requests;
+        let inference_started = &*inference_started;
 
         rayon::scope_fifo(move |s| {
-            while let Ok((state_to_analyse, tx)) = receiver.recv() {
+            while let Ok((state_to_analyse, request)) = receiver.recv() {
                 s.spawn_fifo(move |_| {
                     if let Some(analysis) = Self::try_immediate_analysis(
                         &state_to_analyse,
                         transposition_table,
-                        engine,
                         mapper,
                         reporter,
                     ) {
-                        tx.send(analysis);
+                        if let AnalysisRequest::Predict(channel) = request {
+                            reporter.set_predict_cache_or_tt();
+                            let _ = channel.send(analysis);
+                        }
                     } else {
                         // Check if this state is already in-flight
                         let key = mapper.get_transposition_key(&state_to_analyse);
-                        let is_duplicate = in_flight_requests.try_register(key, tx);
+                        match request {
+                            AnalysisRequest::Predict(channel) => {
+                                let is_duplicate =
+                                    in_flight_requests.try_register_predict(key, channel);
 
-                        if !is_duplicate {
-                            // First request for this state - send it for inference
-                            let _ = states_to_predict_tx.send((state_to_analyse, key));
+                                if is_duplicate {
+                                    reporter.set_predict_in_flight();
+
+                                    // A Predict arriving behind a queued Prefetch should be
+                                    // promoted to the high-priority inference queue.
+                                    // Duplicate inference is prevented by `inference_started`.
+                                    if !inference_started.contains(&key) {
+                                        let _ = states_to_predict_tx.send((state_to_analyse, key));
+                                    }
+                                } else {
+                                    reporter.set_predict_needs_infer();
+                                    let _ = states_to_predict_tx.send((state_to_analyse, key));
+                                }
+                            }
+                            AnalysisRequest::Prefetch => {
+                                let is_duplicate = in_flight_requests.try_register_prefetch(key);
+                                if !is_duplicate {
+                                    let _ = states_to_prefetch_tx.send((state_to_analyse, key));
+                                }
+                            }
                         }
-                        // If duplicate, the channel is already registered and will be notified
                     }
                 });
             }
@@ -544,30 +518,33 @@ where
     #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
         &self,
-        engine: Arc<E>,
         reporter: Arc<Reporter<Te>>,
         model_dir: PathBuf,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
         batch_size: usize,
         analysis_request_threads: usize,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
+        inference_started: Arc<DashSet<u64>>,
     ) {
         let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
+        let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
 
         let transposition_table_clone = self.transposition_table.clone();
         let mapper_clone = self.mapper.clone();
         let reporter_clone = reporter.clone();
         let in_flight_clone = in_flight_requests.clone();
+        let inference_started_clone = inference_started.clone();
 
         std::thread::spawn(move || {
             Self::listen_then_transpose_or_infer(
-                engine,
                 mapper_clone.clone(),
                 transposition_table_clone.clone(),
                 reporter_clone.clone(),
                 in_flight_clone,
+                inference_started_clone,
                 receiver,
                 states_to_predict_tx,
+                states_to_prefetch_tx,
             );
         });
 
@@ -579,9 +556,11 @@ where
             let reporter = reporter.clone();
             let predictor = predictor.clone();
             let states_to_predict_rx = states_to_predict_rx.clone();
+            let states_to_prefetch_rx = states_to_prefetch_rx.clone();
             let filling_states_to_analyze = filling_states_to_analyze.clone();
             let transposition_table = self.transposition_table.clone();
             let in_flight_requests = in_flight_requests.clone();
+            let inference_started = inference_started.clone();
 
             std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
@@ -591,12 +570,28 @@ where
                 loop {
                     // Lock when getting states to analyze so that the pulled states maintain order. Otherwise when reordering later, any missed states will need to be waited for.
                     let lock = filling_states_to_analyze.lock().unwrap();
-                    let states_to_analyse = states_to_predict_rx.recv_up_to(batch_size);
+                    let mut states_to_analyse = Self::recv_up_to_prioritized(
+                        &states_to_predict_rx,
+                        &states_to_prefetch_rx,
+                        batch_size,
+                    );
                     drop(lock);
 
                     // If states is empty then the channel tx has been closed.
                     if states_to_analyse.is_empty() {
                         return;
+                    }
+
+                    // Ensure only one thread runs inference per key.
+                    states_to_analyse.retain(|(_state, key)| {
+                        if !in_flight_requests.contains(*key) {
+                            return false;
+                        }
+                        inference_started.insert(*key)
+                    });
+
+                    if states_to_analyse.is_empty() {
+                        continue;
                     }
 
                     let tensor: &mut Tensor<f16> =
@@ -619,6 +614,7 @@ where
                     let mapper = mapper.clone();
                     let transposition_table = transposition_table.clone();
                     let in_flight_requests = in_flight_requests.clone();
+                    let inference_started = inference_started.clone();
 
                     Self::process_predictions(
                         predictions,
@@ -626,10 +622,47 @@ where
                         transposition_table,
                         mapper,
                         in_flight_requests,
+                        inference_started,
                     );
                 }
             });
         }
+    }
+
+    fn recv_up_to_prioritized(
+        high: &crossbeam::channel::Receiver<StatesToInfer<S>>,
+        low: &crossbeam::channel::Receiver<StatesToInfer<S>>,
+        limit: usize,
+    ) -> Vec<StatesToInfer<S>> {
+        let mut out = Vec::with_capacity(limit);
+
+        // Block for at least one item, preferring high-priority if both are ready.
+        crossbeam::channel::select_biased! {
+            recv(high) -> msg => {
+                if let Ok(v) = msg { out.push(v); }
+            }
+            recv(low) -> msg => {
+                if let Ok(v) = msg { out.push(v); }
+            }
+        }
+
+        // Drain high-priority first.
+        while out.len() < limit {
+            match high.try_recv() {
+                Ok(v) => out.push(v),
+                Err(_) => break,
+            }
+        }
+
+        // Fill remaining capacity from low-priority.
+        while out.len() < limit {
+            match low.try_recv() {
+                Ok(v) => out.push(v),
+                Err(_) => break,
+            }
+        }
+
+        out
     }
 
     fn process_predictions(
@@ -638,6 +671,7 @@ where
         transposition_table: Arc<Option<TranspositionTable<Te>>>,
         mapper: Arc<Map>,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
+        inference_started: Arc<DashSet<u64>>,
     ) {
         states_to_analyse
             .into_par_iter()
@@ -667,9 +701,11 @@ where
                 // Send result to all channels waiting for this state
                 if let Some(channels) = in_flight_requests.take_channels(key) {
                     for channel in channels {
-                        channel.send(analysis.clone());
+                        let _ = channel.send(analysis.clone());
                     }
                 }
+
+                inference_started.remove(&key);
             });
     }
 
@@ -688,16 +724,9 @@ where
     fn try_immediate_analysis(
         game_state: &S,
         transposition_table: &Option<TranspositionTable<Te>>,
-        engine: &E,
         mapper: &Map,
         reporter: &Reporter<Te>,
     ) -> Option<GameStateAnalysis<A, P>> {
-        if let Some(value) = engine.terminal_state(game_state) {
-            reporter.set_terminal();
-
-            return Some(GameStateAnalysis::new(Vec::new(), value));
-        }
-
         if let Some(transposition_table) = transposition_table {
             if let Some(transposition_entry) =
                 transposition_table.get(mapper.get_transposition_key(game_state))

@@ -1,13 +1,9 @@
 use half::*;
-use std::future::Future;
 
 pub trait GameAnalyzer {
     type Action;
     type State;
     type Predictions;
-    type Future: Future<Output = GameStateAnalysis<Self::Action, Self::Predictions>>;
-
-    fn analyze_async(&self, game_state: &Self::State) -> Self::Future;
 
     fn analyze(
         &self,

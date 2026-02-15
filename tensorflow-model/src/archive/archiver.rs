@@ -12,7 +12,7 @@ use tar::Header;
 use tempfile::{TempDir, tempdir};
 
 use super::super::tensorflow::TensorflowModelOptions;
-use ::model::{Analyzer, GameAnalyzer, ModelInfo};
+use ::model::{Analyzer, GameAnalyzer, GameStateAnalysis, ModelInfo};
 
 pub struct Archive<M> {
     inner: M,
@@ -45,10 +45,16 @@ where
     type Action = An::Action;
     type State = An::State;
     type Predictions = An::Predictions;
-    type Future = An::Future;
 
-    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
-        self.inner.get_state_analysis(game_state)
+    fn analyze(
+        &self,
+        game_state: &Self::State,
+    ) -> GameStateAnalysis<Self::Action, Self::Predictions> {
+        self.inner.analyze(game_state)
+    }
+
+    fn prefetch(&self, game_state: &Self::State) {
+        self.inner.prefetch(game_state)
     }
 }
 
