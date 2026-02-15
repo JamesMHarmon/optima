@@ -2,6 +2,7 @@ use anyhow::Result;
 use common::{TranspositionTable, get_env_usize};
 use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 use half::f16;
 use itertools::Itertools;
 use log::{debug, info};
@@ -13,8 +14,7 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tensorflow::*;
 
 use super::*;
@@ -293,7 +293,12 @@ enum AnalysisRequest<A, P> {
 /// Maps transposition key to list of channels waiting for that state's analysis.
 /// For prefetch, we insert an entry but do not store any channel.
 struct InFlightRequests<A, P> {
-    requests: DashMap<u64, SmallVec<[PredictResponseTx<A, P>; 2]>>,
+    requests: DashMap<u64, InFlightEntry<A, P>>,
+}
+
+struct InFlightEntry<A, P> {
+    waiters: SmallVec<[PredictResponseTx<A, P>; 2]>,
+    high_enqueued: bool,
 }
 
 impl<A, P> InFlightRequests<A, P> {
@@ -303,21 +308,29 @@ impl<A, P> InFlightRequests<A, P> {
         }
     }
 
-    /// Try to register a Predict request.
-    /// Returns true if this key was already in-flight.
-    fn try_register_predict(&self, key: u64, channel: PredictResponseTx<A, P>) -> bool {
-        use dashmap::mapref::entry::Entry;
-
+    /// Register a Predict request.
+    /// Returns (is_duplicate, should_enqueue_high).
+    fn try_register_predict(&self, key: u64, channel: PredictResponseTx<A, P>) -> (bool, bool) {
         match self.requests.entry(key) {
             Entry::Occupied(mut entry) => {
-                entry.get_mut().push(channel);
-                true
+                let in_flight = entry.get_mut();
+                in_flight.waiters.push(channel);
+
+                if in_flight.high_enqueued {
+                    (true, false)
+                } else {
+                    in_flight.high_enqueued = true;
+                    (true, true)
+                }
             }
             Entry::Vacant(entry) => {
-                let mut sv = SmallVec::new();
-                sv.push(channel);
-                entry.insert(sv);
-                false
+                let mut waiters = SmallVec::new();
+                waiters.push(channel);
+                entry.insert(InFlightEntry {
+                    waiters,
+                    high_enqueued: true,
+                });
+                (false, true)
             }
         }
     }
@@ -325,12 +338,13 @@ impl<A, P> InFlightRequests<A, P> {
     /// Try to register a Prefetch request.
     /// Returns true if this key was already in-flight.
     fn try_register_prefetch(&self, key: u64) -> bool {
-        use dashmap::mapref::entry::Entry;
-
         match self.requests.entry(key) {
             Entry::Occupied(_entry) => true,
             Entry::Vacant(entry) => {
-                entry.insert(SmallVec::new());
+                entry.insert(InFlightEntry {
+                    waiters: SmallVec::new(),
+                    high_enqueued: false,
+                });
                 false
             }
         }
@@ -338,7 +352,7 @@ impl<A, P> InFlightRequests<A, P> {
 
     /// Remove and return all channels waiting for this state's analysis
     fn take_channels(&self, key: u64) -> Option<SmallVec<[PredictResponseTx<A, P>; 2]>> {
-        self.requests.remove(&key).map(|(_, v)| v)
+        self.requests.remove(&key).map(|(_, v)| v.waiters)
     }
 }
 
@@ -474,7 +488,7 @@ where
                     let key = mapper.get_transposition_key(&state_to_analyse);
                     match request {
                         AnalysisRequest::Predict(channel) => {
-                            let is_duplicate =
+                            let (is_duplicate, should_enqueue_high) =
                                 in_flight_requests.try_register_predict(key, channel);
 
                             if is_duplicate {
@@ -483,9 +497,12 @@ where
                                 reporter.set_predict_needs_infer();
                             }
 
-                            // Promote Predict to the high-priority inference queue even if
-                            // this state was already queued via Prefetch.
-                            let _ = states_to_predict_tx.send((state_to_analyse, key));
+                            // Enqueue exactly one high-priority inference per key.
+                            // If this key was first queued via Prefetch, the first Predict
+                            // promotes it by enqueuing to the high-priority queue once.
+                            if should_enqueue_high {
+                                let _ = states_to_predict_tx.send((state_to_analyse, key));
+                            }
                         }
                         AnalysisRequest::Prefetch => {
                             let is_duplicate = in_flight_requests.try_register_prefetch(key);
