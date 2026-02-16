@@ -35,4 +35,8 @@ bench = []
 [dev-dependencies]
 criterion = "0.5"
 
+[[bench]]
+name = "edge_store"
+harness = false
+
 

@@ -22,3 +22,8 @@ pub use rollup::*;
 pub use scorer_selection_policy::*;
 pub use selection_strategy::*;
 pub use value_model::*;
+
+#[doc(hidden)]
+pub mod internal {
+	pub use crate::node::StateNode;
+}

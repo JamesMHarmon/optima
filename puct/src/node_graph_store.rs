@@ -1,6 +1,12 @@
-use super::{
-    AfterState, EdgeInfo, NodeArena, NodeGraph, NodeId, PUCTEdge, RollupStats, StateNode, Terminal,
-};
+use crate::after_state::AfterState;
+use crate::edge::PUCTEdge;
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId};
+use crate::node_graph::NodeGraph;
+use crate::prune::rebuild_from_root;
+use crate::rollup::RollupStats;
+use crate::selection_strategy::EdgeInfo;
+use crate::terminal_node::Terminal;
 use dashmap::DashMap;
 use model::ActionWithPolicy;
 
@@ -99,6 +105,13 @@ where
         self.prune_to_root(root);
     }
 
+    #[inline]
+    pub(super) fn get_node_id(&self, transposition_hash: u64) -> Option<NodeId> {
+        self.transposition_table
+            .get(&transposition_hash)
+            .map(|v| *v)
+    }
+
     /// Get child from edge if cached, otherwise lookup in transposition table and link.
     /// Returns None if this is a new position that needs expansion.
     pub(super) fn get_or_link_transposition(
@@ -122,7 +135,7 @@ where
 
     fn prune_to_root(&mut self, root: NodeId) {
         let old_arena = std::mem::replace(&mut self.arena, NodeArena::new());
-        let rebuilt = super::rebuild_from_root(old_arena, root);
+        let rebuilt = rebuild_from_root(old_arena, root);
 
         self.arena = rebuilt.arena;
         self.rebuild_transpositions(rebuilt.transpositions);

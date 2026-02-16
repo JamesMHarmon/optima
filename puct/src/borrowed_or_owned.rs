@@ -21,15 +21,3 @@ impl<'a, T> std::convert::AsRef<T> for BorrowedOrOwned<'a, T> {
         self
     }
 }
-
-impl<'a, T> BorrowedOrOwned<'a, T> {
-    pub fn into_owned(self) -> T
-    where
-        T: Clone,
-    {
-        match self {
-            BorrowedOrOwned::Borrowed(r) => r.clone(),
-            BorrowedOrOwned::Owned(v) => v,
-        }
-    }
-}

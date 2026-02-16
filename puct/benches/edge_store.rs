@@ -2,7 +2,7 @@ use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main
 use half::f16;
 use model::ActionWithPolicy;
 
-use puct::StateNode;
+use puct::internal::StateNode;
 use puct::{RollupStats, WeightedMerge};
 
 use std::sync::atomic::{AtomicU32, Ordering};
