@@ -48,20 +48,17 @@ struct RebuildCtx<A, R>
 where
     R: RollupStats,
 {
-    old_states: Vec<Option<StateNode<A, R>>>,
-    old_after_states: Vec<Option<AfterState>>,
-    old_terminals: Vec<Option<Terminal<R>>>,
+    old_states: Vec<StateNode<A, R>>,
+    old_after_states: Vec<AfterState>,
+    old_terminals: Vec<Terminal<R>>,
 
-    live_states: Vec<bool>,
-    live_after_states: Vec<bool>,
-    live_terminals: Vec<bool>,
+    live_states: BitSet,
+    live_after_states: BitSet,
+    live_terminals: BitSet,
 
-    state_map: Vec<Option<NodeId>>,
-    after_state_map: Vec<Option<NodeId>>,
-    terminal_map: Vec<Option<NodeId>>,
-
-    new_state_ids: Vec<NodeId>,
-    new_after_state_ids: Vec<NodeId>,
+    state_map: Vec<NodeId>,
+    after_state_map: Vec<NodeId>,
+    terminal_map: Vec<NodeId>,
 
     new_arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
 }
@@ -73,27 +70,22 @@ where
     fn new(arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>) -> Self {
         let (state_nodes, after_state_nodes, terminal_nodes) = arena.into_vecs();
 
-        let old_states: Vec<Option<StateNode<A, R>>> = state_nodes.into_iter().map(Some).collect();
-        let old_after_states: Vec<Option<AfterState>> =
-            after_state_nodes.into_iter().map(Some).collect();
-        let old_terminals: Vec<Option<Terminal<R>>> =
-            terminal_nodes.into_iter().map(Some).collect();
+        let old_states = state_nodes;
+        let old_after_states = after_state_nodes;
+        let old_terminals = terminal_nodes;
 
         Self {
-            live_states: vec![false; old_states.len()],
-            live_after_states: vec![false; old_after_states.len()],
-            live_terminals: vec![false; old_terminals.len()],
+            live_states: BitSet::new(old_states.len()),
+            live_after_states: BitSet::new(old_after_states.len()),
+            live_terminals: BitSet::new(old_terminals.len()),
 
-            state_map: vec![None; old_states.len()],
-            after_state_map: vec![None; old_after_states.len()],
-            terminal_map: vec![None; old_terminals.len()],
+            state_map: vec![NodeId::unset(); old_states.len()],
+            after_state_map: vec![NodeId::unset(); old_after_states.len()],
+            terminal_map: vec![NodeId::unset(); old_terminals.len()],
 
             old_states,
             old_after_states,
             old_terminals,
-
-            new_state_ids: Vec::new(),
-            new_after_state_ids: Vec::new(),
 
             new_arena: NodeArena::new(),
         }
@@ -111,14 +103,11 @@ where
             match id.node_type() {
                 NodeType::State => {
                     let idx = usize::from(id);
-                    if self.live_states.get(idx).copied().unwrap_or(false) {
+                    if self.live_states.test_and_set(idx) {
                         continue;
                     }
-                    self.live_states[idx] = true;
 
-                    let node = self.old_states[idx]
-                        .as_ref()
-                        .expect("live state node must exist");
+                    let node = &self.old_states[idx];
                     for edge in node.iter_edges() {
                         if let Some(child) = edge.child() {
                             queue.push_back(child);
@@ -127,85 +116,76 @@ where
                 }
                 NodeType::AfterState => {
                     let idx = usize::from(id);
-                    if self.live_after_states.get(idx).copied().unwrap_or(false) {
+                    if self.live_after_states.test_and_set(idx) {
                         continue;
                     }
-                    self.live_after_states[idx] = true;
 
-                    let node = self.old_after_states[idx]
-                        .as_ref()
-                        .expect("live after-state node must exist");
+                    let node = &self.old_after_states[idx];
                     for outcome in node.outcomes.iter() {
                         queue.push_back(outcome.child());
                     }
                 }
                 NodeType::Terminal => {
                     let idx = usize::from(id);
-                    if self.live_terminals.get(idx).copied().unwrap_or(false) {
+                    if self.live_terminals.test_and_set(idx) {
                         continue;
                     }
-                    self.live_terminals[idx] = true;
                 }
             }
         }
     }
 
     fn move_live_nodes(&mut self) {
-        for (old_idx, is_live) in self.live_states.iter().copied().enumerate() {
-            if !is_live {
+        let old_states = std::mem::take(&mut self.old_states);
+        for (old_idx, node) in old_states.into_iter().enumerate() {
+            if !self.live_states.test(old_idx) {
                 continue;
             }
 
-            let node = self.old_states[old_idx]
-                .take()
-                .expect("live state node must exist");
             let new_id = self.new_arena.push_state(node);
-            self.state_map[old_idx] = Some(new_id);
-            self.new_state_ids.push(new_id);
+            self.state_map[old_idx] = new_id;
         }
 
-        for (old_idx, is_live) in self.live_after_states.iter().copied().enumerate() {
-            if !is_live {
+        let old_after_states = std::mem::take(&mut self.old_after_states);
+        for (old_idx, node) in old_after_states.into_iter().enumerate() {
+            if !self.live_after_states.test(old_idx) {
                 continue;
             }
 
-            let node = self.old_after_states[old_idx]
-                .take()
-                .expect("live after-state node must exist");
             let new_id = self.new_arena.push_after_state(node);
-            self.after_state_map[old_idx] = Some(new_id);
-            self.new_after_state_ids.push(new_id);
+            self.after_state_map[old_idx] = new_id;
         }
 
-        for (old_idx, is_live) in self.live_terminals.iter().copied().enumerate() {
-            if !is_live {
+        let old_terminals = std::mem::take(&mut self.old_terminals);
+        for (old_idx, node) in old_terminals.into_iter().enumerate() {
+            if !self.live_terminals.test(old_idx) {
                 continue;
             }
 
-            let node = self.old_terminals[old_idx]
-                .take()
-                .expect("live terminal node must exist");
             let new_id = self.new_arena.push_terminal(node);
-            self.terminal_map[old_idx] = Some(new_id);
+            self.terminal_map[old_idx] = new_id;
         }
     }
 
     fn remap_id(
         old: NodeId,
-        state_map: &[Option<NodeId>],
-        after_state_map: &[Option<NodeId>],
-        terminal_map: &[Option<NodeId>],
+        state_map: &[NodeId],
+        after_state_map: &[NodeId],
+        terminal_map: &[NodeId],
     ) -> NodeId {
         if old.is_unset() {
             return NodeId::unset();
         }
 
         let old_idx = usize::from(old);
-        match old.node_type() {
-            NodeType::State => state_map[old_idx].expect("missing state remap"),
-            NodeType::AfterState => after_state_map[old_idx].expect("missing after-state remap"),
-            NodeType::Terminal => terminal_map[old_idx].expect("missing terminal remap"),
-        }
+        let new_id = match old.node_type() {
+            NodeType::State => state_map[old_idx],
+            NodeType::AfterState => after_state_map[old_idx],
+            NodeType::Terminal => terminal_map[old_idx],
+        };
+
+        debug_assert!(!new_id.is_unset(), "missing remap for live node");
+        new_id
     }
 
     fn patch_child_links(&mut self) {
@@ -214,7 +194,10 @@ where
         let remap = |old: NodeId| Self::remap_id(old, state_map, after_state_map, terminal_map);
 
         // State edges
-        for &state_id in &self.new_state_ids {
+        for &state_id in &self.state_map {
+            if state_id.is_unset() {
+                continue;
+            }
             let node = self.new_arena.get_state_node(state_id);
             for edge in node.iter_edges() {
                 if let Some(child) = edge.child() {
@@ -224,7 +207,10 @@ where
         }
 
         // AfterState outcomes
-        for &after_state_id in &self.new_after_state_ids {
+        for &after_state_id in &self.after_state_map {
+            if after_state_id.is_unset() {
+                continue;
+            }
             let after_state = self.new_arena.get_after_state_node_mut(after_state_id);
             for outcome in after_state.outcomes.iter_mut() {
                 let child = outcome.child();
@@ -240,8 +226,11 @@ where
     }
 
     fn build_transpositions(&self) -> Vec<(u64, NodeId)> {
-        let mut transpositions = Vec::with_capacity(self.new_state_ids.len());
-        for &state_id in &self.new_state_ids {
+        let mut transpositions = Vec::new();
+        for &state_id in &self.state_map {
+            if state_id.is_unset() {
+                continue;
+            }
             let node = self.new_arena.get_state_node(state_id);
             transpositions.push((node.transposition_hash(), state_id));
         }
@@ -259,6 +248,37 @@ where
                 &self.terminal_map,
             )
         }
+    }
+}
+
+struct BitSet {
+    bits: Vec<u64>,
+}
+
+impl BitSet {
+    fn new(len: usize) -> Self {
+        let words = len.div_ceil(64);
+        Self {
+            bits: vec![0; words],
+        }
+    }
+
+    #[inline]
+    fn test(&self, index: usize) -> bool {
+        let word = index / 64;
+        let bit = index % 64;
+        (self.bits[word] >> bit) & 1 == 1
+    }
+
+    /// Returns previous value.
+    #[inline]
+    fn test_and_set(&mut self, index: usize) -> bool {
+        let word = index / 64;
+        let bit = index % 64;
+        let mask = 1u64 << bit;
+        let was_set = (self.bits[word] & mask) != 0;
+        self.bits[word] |= mask;
+        was_set
     }
 }
 
