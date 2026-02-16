@@ -1699,9 +1699,9 @@ mod tests {
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        assert_eq!(output[0].action, "a1n".parse().unwrap());
-        assert_eq!(output[0].policy_score, f16::from_f32(0.04316948));
-        assert_eq!(output[1].policy_score, f16::from_f32(0.018761378));
+        assert_eq!(output[0].action(), &"a1n".parse().unwrap());
+        assert_eq!(output[0].policy_score(), f16::from_f32(0.04316948));
+        assert_eq!(output[1].policy_score(), f16::from_f32(0.018761378));
         assert_eq!(output.len(), 52);
     }
 
@@ -1732,11 +1732,11 @@ mod tests {
         policy_scores[map_action_to_policy_output_idx(&"p".parse().unwrap())] = f16::from_f32(5.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        assert_eq!(output[0].action, "d4n".parse().unwrap());
-        assert_eq!(output[0].policy_score, f16::from_f32(0.025623035));
-        assert_eq!(output[1].policy_score, f16::from_f32(0.011135726));
-        assert_eq!(output[24].action, "p".parse().unwrap());
-        assert_eq!(output[24].policy_score, f16::from_f32(0.7182553));
+        assert_eq!(output[0].action(), &"d4n".parse().unwrap());
+        assert_eq!(output[0].policy_score(), f16::from_f32(0.025623035));
+        assert_eq!(output[1].policy_score(), f16::from_f32(0.011135726));
+        assert_eq!(output[24].action(), &"p".parse().unwrap());
+        assert_eq!(output[24].policy_score(), f16::from_f32(0.7182553));
         assert_eq!(output.len(), 25);
     }
 
@@ -1767,11 +1767,11 @@ mod tests {
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        assert_eq!(output[0].action, "b8e".parse().unwrap());
-        assert_eq!(output[0].policy_score, f16::from_f32(0.07518246));
-        assert_eq!(output[1].action, "b8s".parse().unwrap());
-        assert_eq!(output[1].policy_score, f16::from_f32(0.17299303));
-        assert_eq!(output[11].policy_score, f16::from_f32(0.07518246));
+        assert_eq!(output[0].action(), &"b8e".parse().unwrap());
+        assert_eq!(output[0].policy_score(), f16::from_f32(0.07518246));
+        assert_eq!(output[1].action(), &"b8s".parse().unwrap());
+        assert_eq!(output[1].policy_score(), f16::from_f32(0.17299303));
+        assert_eq!(output[11].policy_score(), f16::from_f32(0.07518246));
         assert_eq!(output.len(), 12);
     }
 
@@ -1787,12 +1787,12 @@ mod tests {
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        assert_eq!(output[0].action, "b2".parse().unwrap());
-        assert_eq!(output[0].policy_score, f16::from_f32(0.06134603));
-        assert_eq!(output[1].action, "c2".parse().unwrap());
-        assert_eq!(output[1].policy_score, f16::from_f32(0.14115575));
-        assert_eq!(output[14].action, "h1".parse().unwrap());
-        assert_eq!(output[14].policy_score, f16::from_f32(0.06134603));
+        assert_eq!(output[0].action(), &"b2".parse().unwrap());
+        assert_eq!(output[0].policy_score(), f16::from_f32(0.06134603));
+        assert_eq!(output[1].action(), &"c2".parse().unwrap());
+        assert_eq!(output[1].policy_score(), f16::from_f32(0.14115575));
+        assert_eq!(output[14].action(), &"h1".parse().unwrap());
+        assert_eq!(output[14].policy_score(), f16::from_f32(0.06134603));
         assert_eq!(output.len(), 15);
     }
 
@@ -1808,12 +1808,12 @@ mod tests {
             f16::from_f32(1.0);
         let output = Mapper::new().policy_to_valid_actions(&game_state, &policy_scores);
 
-        assert_eq!(output[0].action, "a8".parse().unwrap());
-        assert_eq!(output[0].policy_score, f16::from_f32(0.057800222));
-        assert_eq!(output[1].action, "b8".parse().unwrap());
-        assert_eq!(output[1].policy_score, f16::from_f32(0.13299692));
-        assert_eq!(output[15].action, "h7".parse().unwrap());
-        assert_eq!(output[15].policy_score, f16::from_f32(0.057800222));
+        assert_eq!(output[0].action(), &"a8".parse().unwrap());
+        assert_eq!(output[0].policy_score(), f16::from_f32(0.057800222));
+        assert_eq!(output[1].action(), &"b8".parse().unwrap());
+        assert_eq!(output[1].policy_score(), f16::from_f32(0.13299692));
+        assert_eq!(output[15].action(), &"h7".parse().unwrap());
+        assert_eq!(output[15].policy_score(), f16::from_f32(0.057800222));
         assert_eq!(output.len(), 16);
     }
 

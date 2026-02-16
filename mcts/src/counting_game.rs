@@ -1,6 +1,5 @@
 use engine::engine::GameEngine;
 use engine::game_state::GameState;
-use futures::future;
 use half::f16;
 use model::{
     GameStateAnalysis,
@@ -121,32 +120,29 @@ impl CountingAnalyzer {
 impl GameAnalyzer for CountingAnalyzer {
     type Action = CountingAction;
     type State = CountingGameState;
-    type Future = future::Ready<GameStateAnalysis<Self::Action, Self::Predictions>>;
     type Predictions = CountingGamePredictions;
 
-    fn get_state_analysis(&self, game_state: &Self::State) -> Self::Future {
+    fn analyze(
+        &self,
+        game_state: &Self::State,
+    ) -> GameStateAnalysis<Self::Action, Self::Predictions> {
         let count = game_state.count as f32;
 
         if let Some(value_score) = game_state.is_terminal_state() {
-            return future::ready(GameStateAnalysis::new(Vec::new(), value_score));
+            return GameStateAnalysis::new(Vec::new(), value_score);
         }
 
         let value_score = CountingGamePredictions([count / 100.0, (100.0 - count) / 100.0]);
         let policy_scores = vec![
-            ActionWithPolicy {
-                action: CountingAction::Increment,
-                policy_score: self.policy_scores[0],
-            },
-            ActionWithPolicy {
-                action: CountingAction::Decrement,
-                policy_score: self.policy_scores[1],
-            },
-            ActionWithPolicy {
-                action: CountingAction::Stay,
-                policy_score: self.policy_scores[2],
-            },
+            ActionWithPolicy::new(CountingAction::Increment, self.policy_scores[0]),
+            ActionWithPolicy::new(CountingAction::Decrement, self.policy_scores[1]),
+            ActionWithPolicy::new(CountingAction::Stay, self.policy_scores[2]),
         ];
 
-        future::ready(GameStateAnalysis::new(policy_scores, value_score))
+        GameStateAnalysis::new(policy_scores, value_score)
+    }
+
+    fn prefetch(&self, _game_state: &Self::State) {
+        // No-op for this simple test analyzer.
     }
 }

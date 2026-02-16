@@ -19,6 +19,18 @@ use tokio::sync::mpsc;
 const NAME: &str = "UGI";
 const AUTHOR: &str = "Author";
 
+type MctsFor<'a, S, A, E, An, B, Sel> = MCTS<
+    'a,
+    S,
+    A,
+    E,
+    An,
+    B,
+    Sel,
+    <E as GameEngine>::Terminal,
+    <B as BackpropagationStrategy>::PropagatedValues,
+>;
+
 pub struct GameManager<S, A> {
     command_channel: mpsc::Sender<CommandInner<S, A>>,
     output: OutputHandle,
@@ -256,7 +268,7 @@ where
         &self,
         actions: &[A],
         game_state: &S,
-        mcts: &MCTS<S, A, E, M::Analyzer, B, Sel, E::Terminal, B::PropagatedValues>,
+        mcts: &MctsFor<'_, S, A, E, M::Analyzer, B, Sel>,
     ) -> Vec<A> {
         // Convert to valid composite actions (for games like Arimaa with step actions)
         let actions = self
@@ -271,7 +283,7 @@ where
         &self,
         actions: &[A],
         game_state: &S,
-        mcts: &MCTS<S, A, E, M::Analyzer, B, Sel, E::Terminal, B::PropagatedValues>,
+        mcts: &MctsFor<'_, S, A, E, M::Analyzer, B, Sel>,
     ) -> Vec<A> {
         let now = Instant::now();
         let mut transposed_actions =
