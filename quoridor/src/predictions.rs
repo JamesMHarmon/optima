@@ -1,5 +1,5 @@
 use super::{Value, VictoryMargin};
-use mcts::GameLength;
+use common::GameLength;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -6,7 +6,7 @@ use model::{Latest, Move};
 use tensorflow_model::latest;
 
 #[cfg(feature = "model")]
-use crate::{Engine, Mapper, Model};
+use crate::{Mapper, Model};
 #[cfg(feature = "model")]
 use common::get_env_usize;
 #[cfg(feature = "model")]
@@ -55,7 +55,6 @@ impl Load for ModelFactory {
         let tensorflow_model = tensorflow_model::TensorflowModel::load(
             model_temp_dir.path().to_path_buf(),
             model_info,
-            Engine::new(),
             Mapper::new(),
             table_size,
         )?;

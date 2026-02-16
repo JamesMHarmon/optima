@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use mcts::GameLength;
+use common::GameLength;
 use serde::{Deserialize, Serialize};
 
 use super::Value;

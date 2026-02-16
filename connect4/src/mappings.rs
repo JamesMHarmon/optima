@@ -8,8 +8,8 @@ use super::{
     Value, map_board_to_arr,
 };
 use common::MovesLeftPropagatedValue;
+use common::map_moves_left_to_one_hot;
 use engine::Value as ValueTrait;
-use mcts::map_moves_left_to_one_hot;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics, PositionMetrics};
 use tensorflow_model::{InputMap, Mode, PredictionsMap, TranspositionMap};

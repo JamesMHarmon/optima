@@ -630,6 +630,8 @@ dependencies = [
  "append-only-vec",
  "arc-swap",
  "criterion 0.5.1",
+ "half 1.8.3",
+ "model",
  "parking_lot",
 ]
 
@@ -3133,6 +3135,7 @@ dependencies = [
  "common",
  "criterion 0.3.6",
  "crossbeam",
+ "dashmap",
  "engine",
  "flate2",
  "half 1.8.3",
@@ -3146,6 +3149,7 @@ dependencies = [
  "retry",
  "serde",
  "serde_json",
+ "smallvec",
  "tar",
  "tempfile",
  "tensorflow",

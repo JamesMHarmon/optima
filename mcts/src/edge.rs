@@ -86,10 +86,14 @@ where
 
 impl<A, PV> From<ActionWithPolicy<A>> for MCTSEdge<A, PV>
 where
+    A: Clone,
     PV: Default,
 {
     fn from(action_with_policy: ActionWithPolicy<A>) -> Self {
-        MCTSEdge::new(action_with_policy.action, action_with_policy.policy_score)
+        MCTSEdge::new(
+            action_with_policy.action().clone(),
+            action_with_policy.policy_score(),
+        )
     }
 }
 

@@ -1,5 +1,5 @@
+use common::GameLength;
 use engine::Value as ValueTrait;
-use mcts::GameLength;
 use serde::{Deserialize, Serialize};
 
 use super::Value;

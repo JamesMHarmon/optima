@@ -276,7 +276,7 @@ where
     }
 
     async fn analyse_and_create_node(game_state: &S, analyzer: &M) -> MCTSNode<A, P, PV> {
-        let analysis = analyzer.get_state_analysis(game_state).await;
+        let analysis = analyzer.analyze(game_state);
         let (policy_scores, predictions) = analysis.into_inner();
         MCTSNode::new(policy_scores, predictions)
     }

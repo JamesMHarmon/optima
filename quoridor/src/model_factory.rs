@@ -4,7 +4,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::Model;
-use super::engine::Engine;
 use super::mappings::Mapper;
 use model::{Latest, Load, Move};
 use tensorflow_model::TensorflowModel;
@@ -50,7 +49,6 @@ impl Load for ModelFactory {
         let tensorflow_model = TensorflowModel::load(
             model_temp_dir.path().to_path_buf(),
             model_info,
-            Engine::new(),
             Mapper::new(),
             table_size,
         )?;

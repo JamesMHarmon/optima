@@ -70,6 +70,7 @@ where
 
 impl<A, P, PV> MCTSNode<A, P, PV>
 where
+    A: Clone,
     PV: Default,
 {
     pub fn iter_visited_edges_and_top_unvisited_edge(
@@ -110,12 +111,13 @@ where
             .iter()
             .enumerate()
             .max_by(|(_, e), (_, e2)| {
-                e.policy_score
-                    .partial_cmp(&e2.policy_score)
+                e.policy_score()
+                    .partial_cmp(&e2.policy_score())
                     .unwrap_or_else(|| {
                         panic!(
                             "Could not compare two floats {} {}",
-                            e.policy_score, e2.policy_score,
+                            e.policy_score().to_f32(),
+                            e2.policy_score().to_f32(),
                         )
                     })
             })
@@ -144,11 +146,11 @@ where
 
 impl<A, P, PV> MCTSNode<A, P, PV>
 where
-    A: Eq,
+    A: Eq + Clone,
     PV: Default,
 {
     pub fn get_child_of_action(&mut self, action: &A) -> Option<&mut MCTSEdge<A, PV>> {
-        self.iter_all_edges().find(|e| e.action() == action)
+        self.iter_all_edges().find(|edge| edge.action() == action)
     }
 
     pub fn get_position_of_action(&mut self, action: &A) -> Option<usize> {
@@ -159,7 +161,7 @@ where
         let unvisited_idx = self
             .unvisited_edges
             .iter()
-            .position(|a| &a.action == action)?;
+            .position(|a| a.action() == action)?;
 
         self.move_unvisited_to_visited(unvisited_idx);
         Some(self.visited_edges.len() - 1)
