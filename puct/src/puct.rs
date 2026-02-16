@@ -1,7 +1,8 @@
 use super::{
-    BorrowedOrOwned, EdgeRef, NodeGraph, NodeGraphStore, NodeId, PUCTEdge, RollupStats,
-    SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, Terminal, ValueModel,
+    BorrowedOrOwned, EdgeRef, NodeGraph, NodeId, PUCTEdge, RollupStats,
+    SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, ValueModel,
 };
+use super::node_graph_store::NodeGraphStore;
 use common::TranspositionHash;
 use engine::GameEngine;
 use model::ActionWithPolicy;
@@ -87,7 +88,7 @@ where
         let mut depth = 0;
 
         loop {
-            let node = store.arena().get_state_node(current);
+            let node = store.state_node(current);
 
             if visited.insert(current) {
                 path.push(current);
@@ -145,16 +146,14 @@ where
 
     fn backpropagate(&self, path: &[NodeId]) {
         for &node_id in path.iter().rev() {
-            let arena = self.store.arena();
-            let node = arena.get_state_node(node_id);
-            node.recompute_rollup(arena);
+            self.store.recompute_rollup(node_id);
         }
     }
 
     fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, VM>, depth: u32) -> usize {
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
-            node.iter_edge_info(self.store.arena()),
+            self.store.iter_edge_info(node),
             node.visits(),
             game_state,
             depth,
@@ -187,25 +186,11 @@ where
         game_state: &E::State,
         predictions: &M::Predictions,
     ) -> NodeId {
-        debug_assert!(
-            !policy_priors.is_empty(),
-            "Cannot create state node without actions - should be terminal"
-        );
-
         let store = &self.store;
         let snapshot = self.value_model.pred_snapshot(game_state, predictions);
         let rollup_stats = snapshot.into();
-        let new_node = StateNode::new(transposition_hash, policy_priors, rollup_stats);
 
-        let new_node_id = store.arena().push_state(new_node);
-        let previous_entry = store.insert_transposition(transposition_hash, new_node_id);
-
-        debug_assert!(
-            previous_entry.is_none(),
-            "Transposition table entry for hash already exists"
-        );
-
-        new_node_id
+        store.create_and_insert_state_node(transposition_hash, policy_priors, rollup_stats)
     }
 
     fn analyze_and_create_node(&self, game_state: &E::State) -> NodeId {
@@ -224,15 +209,14 @@ where
         edge: &PUCTEdge,
         snapshot: SnapshotOf<VM>,
     ) -> Option<NodeId> {
-        let arena = &self.store.arena();
         if let Some(terminal_id) = self.graph().find_edge_terminal(edge) {
-            let terminal_node = arena.get_terminal_node(terminal_id);
+            let terminal_node = self.store.terminal_node(terminal_id);
             terminal_node.rollup_stats().accumulate(&snapshot);
 
             None
         } else {
             let rollup_stats = snapshot.into();
-            let terminal_id = arena.push_terminal(Terminal::new(rollup_stats));
+            let terminal_id = self.store.create_and_insert_terminal_node(rollup_stats);
             Some(terminal_id)
         }
     }

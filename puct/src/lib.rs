@@ -21,7 +21,6 @@ pub use edge::*;
 pub use node::*;
 pub use node_arena::*;
 pub use node_graph::*;
-pub use node_graph_store::*;
 pub use prune::*;
 pub use puct::*;
 pub use rollup::*;
