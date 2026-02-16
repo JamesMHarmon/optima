@@ -7,6 +7,7 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use common::{ConfigLoader, FsExt, get_env_usize};
 use dotenv::dotenv;
+use engine::GameEngine;
 use env_logger::Env;
 use game::{
     BackpropagationStrategy, Engine, ModelFactory, ModelRef, SelectionStrategy, StrategyOptions,
@@ -15,10 +16,21 @@ use game::{
 use log::info;
 use mcts::DynamicCPUCT;
 use model::Load;
+use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
 use std::borrow::Cow;
 use std::path::Path;
+use std::sync::OnceLock;
 use ugi::{UGIOptions, run_perft, run_ugi};
+
+static UGI_ENGINE: OnceLock<&'static Engine> = OnceLock::new();
+
+fn ugi_player_to_move(state: &<Engine as GameEngine>::State) -> usize {
+    UGI_ENGINE
+        .get()
+        .expect("UGI engine was not initialized")
+        .player_to_move(state)
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -184,10 +196,9 @@ async fn async_main(cli: Cli) -> Result<()> {
             let model = model_factory.load(&ModelRef::new(model_path))?;
             let engine = Engine::new();
 
-            fn leak_engine() -> &'static Engine {
-                let engine = Box::new(Engine::new());
-                Box::leak(engine)
-            }
+            // We need a `'static` player-to-move callback for the PUCT selection policy.
+            // Store a leaked engine in a global OnceLock and use a plain fn pointer.
+            let _ = UGI_ENGINE.set(Box::leak(Box::new(Engine::new())));
 
             let cpuct = |options: &UGIOptions| {
                 DynamicCPUCT::new(
@@ -198,32 +209,22 @@ async fn async_main(cli: Cli) -> Result<()> {
                 )
             };
 
-            #[cfg(feature = "quoridor")]
-            let selection_strategy_opts = |options: &UGIOptions| {
-                StrategyOptions::new(
-                    options.fpu,
-                    options.fpu_root,
-                    options.victory_margin_threshold,
-                    options.victory_margin_factor,
-                )
+            let selection_strategy_opts = |options: &UGIOptions| MovesLeftStrategyOptions {
+                fpu: options.fpu,
+                fpu_root: options.fpu_root,
+                moves_left_threshold: options.moves_left_threshold,
+                moves_left_scale: options.moves_left_scale,
+                moves_left_factor: options.moves_left_factor,
             };
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
-            let selection_strategy_opts = |options: &UGIOptions| {
-                StrategyOptions::new(
-                    options.fpu,
-                    options.fpu_root,
-                    options.moves_left_threshold,
-                    options.moves_left_scale,
-                    options.moves_left_factor,
-                )
-            };
-
-            let backpropagation_strategy =
-                move |_options: &UGIOptions| BackpropagationStrategy::new(leak_engine());
+            let value_model = move |_options: &UGIOptions| MovesLeftValueModel::<_, _, _>::new();
 
             let selection_strategy = move |options: &UGIOptions| {
-                SelectionStrategy::new(cpuct(options), selection_strategy_opts(options))
+                MovesLeftSelectionPolicy::new(
+                    cpuct(options),
+                    selection_strategy_opts(options),
+                    ugi_player_to_move,
+                )
             };
 
             let time_strategy = TimeStrategy::new();
@@ -232,7 +233,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 ugi,
                 engine,
                 model,
-                backpropagation_strategy,
+                value_model,
                 selection_strategy,
                 time_strategy,
             )

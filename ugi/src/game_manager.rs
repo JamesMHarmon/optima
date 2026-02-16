@@ -5,8 +5,9 @@ use crate::{
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
-use mcts::{BackpropagationStrategy, EdgeDetails, MCTS, NodeDetails, SelectionStrategy};
+use mcts::{EdgeDetails, MCTS, NodeDetails, PuctMCTS, UgiSnapshot};
 use model::Analyzer;
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};
@@ -19,17 +20,7 @@ use tokio::sync::mpsc;
 const NAME: &str = "UGI";
 const AUTHOR: &str = "Author";
 
-type MctsFor<'a, S, A, E, An, B, Sel> = MCTS<
-    'a,
-    S,
-    A,
-    E,
-    An,
-    B,
-    Sel,
-    <E as GameEngine>::Terminal,
-    <B as BackpropagationStrategy>::PropagatedValues,
->;
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
 pub struct GameManager<S, A> {
     command_channel: mpsc::Sender<CommandInner<S, A>>,
@@ -141,22 +132,14 @@ where
             + Send
             + 'static,
         M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>
-            + Send
-            + 'static,
+        B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Send + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-        Sel: SelectionStrategy<
-                State = S,
-                Action = A,
-                Predictions = E::Terminal,
-                PropagatedValues = B::PropagatedValues,
-            > + Send
-            + 'static,
+        Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
         T: TimeStrategy<S> + Send + 'static,
         M::Analyzer: Send,
-        B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
-        E::Terminal: Clone,
+        SnapshotOf<B>: Clone + UgiSnapshot,
+        E::Terminal: Clone + engine::Value + common::GameLength,
         Ps: Display,
         Pr: Display,
     {
@@ -223,18 +206,13 @@ where
         + PlayerScore<State = S, PlayerScore = Ps>
         + PlayerResult<State = S, PlayerResult = Pr>,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal>,
+    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
-    Sel: SelectionStrategy<
-            State = S,
-            Action = A,
-            Predictions = E::Terminal,
-            PropagatedValues = B::PropagatedValues,
-        >,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S>,
     T: TimeStrategy<S>,
-    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
-    E::Terminal: Clone,
+    SnapshotOf<B>: Clone + UgiSnapshot,
+    E::Terminal: Clone + engine::Value + common::GameLength,
     Ps: Display,
     Pr: Display,
 {
@@ -264,50 +242,9 @@ where
         }
     }
 
-    fn normalize_actions(
-        &self,
-        actions: &[A],
-        game_state: &S,
-        mcts: &MctsFor<'_, S, A, E, M::Analyzer, B, Sel>,
-    ) -> Vec<A> {
-        // Convert to valid composite actions (for games like Arimaa with step actions)
-        let actions = self
-            .ugi_mapper
-            .convert_to_valid_composite_actions(actions, game_state);
-
-        // Find transpositions to follow the most-explored branch
-        self.find_transposition_path(&actions, game_state, mcts)
-    }
-
-    fn find_transposition_path(
-        &self,
-        actions: &[A],
-        game_state: &S,
-        mcts: &MctsFor<'_, S, A, E, M::Analyzer, B, Sel>,
-    ) -> Vec<A> {
-        let now = Instant::now();
-        let mut transposed_actions =
-            find_transpositions(actions, game_state, mcts, &self.engine, |gs| {
-                gs.transposition_hash()
-            });
-        let elapsed = now.elapsed();
-
-        if !transposed_actions.is_empty() {
-            transposed_actions.sort_by(|a, b| b.1.cmp(&a.1));
-
-            self.output.info(&format!(
-                "Transpositions found: {:?} in {} milliseconds",
-                transposed_actions
-                    .iter()
-                    .map(|(actions, visits)| (actions.len(), visits))
-                    .collect::<Vec<_>>(),
-                elapsed.as_millis()
-            ));
-
-            return transposed_actions.swap_remove(0).0;
-        }
-
-        actions.to_vec()
+    fn normalize_actions(&self, actions: &[A], game_state: &S) -> Vec<A> {
+        self.ugi_mapper
+            .convert_to_valid_composite_actions(actions, game_state)
     }
 
     async fn run_game_loop(&mut self) {
@@ -319,24 +256,35 @@ where
         let ponder_active = self.ponder_active.clone();
         let analyzer = self.model.analyzer();
 
-        let mut backpropagation_strategy;
-        let mut selection_strategy;
+        let mut value_model_container: Option<B> = None;
+        let mut selection_container: Option<Sel> = None;
 
         while let Some(command) = self.command_rx.recv().await {
             if mcts_container.is_none() {
-                let options = options.lock().unwrap();
+                let options_lock = options.lock().unwrap();
 
-                backpropagation_strategy = Some((self.backpropagation_strategy)(&options));
-                selection_strategy = Some((self.selection_strategy)(&options));
+                if value_model_container.is_none() {
+                    value_model_container = Some((self.backpropagation_strategy)(&options_lock));
+                }
 
-                mcts_container = Some(MCTS::with_capacity(
+                if selection_container.is_none() {
+                    selection_container = Some((self.selection_strategy)(&options_lock));
+                }
+
+                let value_model = value_model_container
+                    .as_ref()
+                    .expect("value model should have been created");
+
+                let selection = selection_container
+                    .as_ref()
+                    .expect("selection policy should have been created");
+
+                mcts_container = Some(PuctMCTS::new(
                     game_state.clone(),
                     &self.engine,
                     &analyzer,
-                    backpropagation_strategy.as_ref().unwrap(),
-                    selection_strategy.as_ref().unwrap(),
-                    options.visits,
-                    options.parallelism,
+                    value_model,
+                    selection,
                 ));
             }
 
@@ -349,6 +297,8 @@ where
                     game_state = state;
                     focus_game_state = game_state.clone();
                     mcts_container = None;
+                    value_model_container = None;
+                    selection_container = None;
                     self.display_board(&game_state);
                 }
                 CommandInner::Ponder => {
@@ -441,7 +391,7 @@ where
                     }
                 }
                 CommandInner::MakeMove(actions) => {
-                    let actions = self.normalize_actions(&actions, &game_state, mcts);
+                    let actions = self.normalize_actions(&actions, &game_state);
 
                     self.output
                         .info(&format!("Updating tree with actions: {:?}", &actions));
@@ -472,7 +422,7 @@ where
                     self.display_board(&game_state);
                 }
                 CommandInner::FocusActions(actions) => {
-                    let actions = self.normalize_actions(&actions, &focus_game_state, mcts);
+                    let actions = self.normalize_actions(&actions, &focus_game_state);
 
                     for action in actions {
                         let is_valid_action = self

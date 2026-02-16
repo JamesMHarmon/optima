@@ -11,6 +11,7 @@ engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
 mcts = { path = "../mcts" }
+puct = { path = "../puct" }
 
 
 regex = "1.3"

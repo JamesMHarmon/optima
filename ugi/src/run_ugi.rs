@@ -1,8 +1,9 @@
 use anyhow::Result;
-use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
+use common::TranspositionHash;
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
-use mcts::{BackpropagationStrategy, SelectionStrategy};
+use mcts::UgiSnapshot;
 use model::Analyzer;
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 use std::fmt::{Debug, Display};
 use std::io::stdin;
@@ -16,6 +17,8 @@ use crate::{GameManager, InputParser};
 use crate::{
     Output, UGICommand, UGIOptions, log_debug, log_warning, output_ugi_cmd, output_ugi_info,
 };
+
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
 pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
     ugi_mapper: U,
@@ -45,19 +48,13 @@ where
         + 'static,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-    B::PropagatedValues: PropagatedValue + PropagatedGameLength + Default + Ord + Debug,
+    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Send + 'static,
+    SnapshotOf<B>: Clone + UgiSnapshot,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-    Sel: SelectionStrategy<
-            State = S,
-            Action = A,
-            Predictions = E::Terminal,
-            PropagatedValues = B::PropagatedValues,
-        > + Send
-        + 'static,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
     T: TimeStrategy<S> + Send + 'static,
-    E::Terminal: Clone,
+    E::Terminal: Clone + engine::Value + common::GameLength,
     Ps: Display,
     Pr: Display,
 {

@@ -17,6 +17,8 @@ model = { path = "../model" }
 arimaa = { path = "../arimaa", optional = true }
 common = { path = "../common" }
 mcts = { path = "../mcts" }
+puct = { path = "../puct" }
+engine = { path = "../engine" }
 arena = { path = "../arena" }
 connect4 = { path = "../connect4", optional = true }
 quoridor = { path = "../quoridor", optional = true }
