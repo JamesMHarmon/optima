@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Mutex};
 
-use common::GameLength;
+use common::{CPUCT, GameLength};
 use engine::Value;
 
 use crate::{EdgeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
@@ -152,10 +152,6 @@ pub struct MovesLeftStrategyOptions {
     pub moves_left_factor: f32,
 }
 
-pub trait CpuctFn<S> {
-    fn cpuct(&self, state: &S, node_visits: u32, is_root: bool) -> f32;
-}
-
 pub struct MovesLeftSelectionPolicy<C, F, S> {
     cpuct: C,
     options: MovesLeftStrategyOptions,
@@ -245,7 +241,7 @@ impl<C, F, S> MovesLeftSelectionPolicy<C, F, S> {
 
 impl<C, F, S> SelectionPolicy<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, F, S>
 where
-    C: CpuctFn<S>,
+    C: CPUCT<State = S>,
     F: Fn(&S) -> usize,
 {
     type State = S;

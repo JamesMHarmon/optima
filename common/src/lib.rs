@@ -1,5 +1,6 @@
 pub mod bits;
 pub mod config;
+pub mod cpuct;
 pub mod env;
 pub mod fs;
 pub mod linked_list;
@@ -11,6 +12,7 @@ pub mod transposition;
 
 pub use bits::*;
 pub use config::*;
+pub use cpuct::*;
 pub use env::*;
 pub use fs::*;
 pub use linked_list::*;

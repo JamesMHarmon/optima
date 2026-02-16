@@ -148,7 +148,8 @@ where
         };
         let Nsb = node.visits();
         let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
+        let nsb_u32 = Nsb.try_into().unwrap_or(u32::MAX);
+        let cpuct = self.cpuct.cpuct(game_state, nsb_u32, is_root);
         let game_length_baseline = &Self::get_game_length_baseline(
             node.iter_visited_edges_and_top_unvisited_edge(),
             options.moves_left_threshold,
@@ -194,7 +195,8 @@ where
         };
         let Nsb = node.visits();
         let root_Nsb = (Nsb as f32).sqrt();
-        let cpuct = self.cpuct.cpuct(game_state, Nsb, is_root);
+        let nsb_u32 = Nsb.try_into().unwrap_or(u32::MAX);
+        let cpuct = self.cpuct.cpuct(game_state, nsb_u32, is_root);
 
         let mut pucts = Vec::with_capacity(node.child_len());
 

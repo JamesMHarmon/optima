@@ -7,7 +7,7 @@ struct CPUCTTest {
 impl CPUCT for CPUCTTest {
     type State = CountingGameState;
 
-    fn cpuct(&self, _: &Self::State, _: usize, _: bool) -> f32 {
+    fn cpuct(&self, _: &Self::State, _: u32, _: bool) -> f32 {
         self.cpuct
     }
 }
@@ -89,7 +89,7 @@ mod tests {
         mcts2.search_visits(800).await.unwrap();
 
         let metrics = mcts.get_root_node_metrics().unwrap();
-        let metrics2 = mcts.get_root_node_metrics().unwrap();
+        let metrics2 = mcts2.get_root_node_metrics().unwrap();
 
         assert_metrics(&metrics, &metrics2);
     }
