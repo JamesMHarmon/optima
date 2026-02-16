@@ -1,20 +1,15 @@
 use super::{
-    AfterState, BorrowedOrOwned, EdgeRef, NodeArena, NodeGraph, NodeId, PUCTEdge, RollupStats,
+    BorrowedOrOwned, EdgeRef, NodeGraph, NodeGraphStore, NodeId, PUCTEdge, RollupStats,
     SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, Terminal, ValueModel,
 };
 use common::TranspositionHash;
-use dashmap::DashMap;
 use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 
-type PUCTNodeArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
-
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
-type PuctNodes<E, VM> = PUCTNodeArena<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
-
-type PuctGraph<'a, E, VM> = NodeGraph<'a, <E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
+type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
 type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
@@ -27,14 +22,11 @@ where
     analyzer: &'a M,
     value_model: &'a VM,
     selection_strategy: &'a Sel,
-    game_state: E::State,
-    nodes: PuctNodes<E, VM>,
-    graph: PuctGraph<'a, E, VM>,
-    transposition_table: DashMap<u64, NodeId>,
+    store: PuctStore<E, VM>,
     context_pool: SearchContextPool,
 }
 
-impl<E, M, VM, Sel> PUCT<'_, E, M, VM, Sel>
+impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
 where
     E: GameEngine,
     M: GameAnalyzer<State = E::State, Action = E::Action>,
@@ -43,26 +35,59 @@ where
     E::State: TranspositionHash,
     E::Terminal: engine::Value,
 {
-    pub fn search(&mut self) {
-        self.run_simulate();
+    pub fn new(
+        game_engine: &'a E,
+        analyzer: &'a M,
+        value_model: &'a VM,
+        selection_strategy: &'a Sel,
+    ) -> Self {
+        let store: PuctStore<E, VM> = NodeGraphStore::new();
+        let context_pool = SearchContextPool::new(32);
+
+        Self {
+            game_engine,
+            analyzer,
+            value_model,
+            selection_strategy,
+            store,
+            context_pool,
+        }
     }
 
-    fn run_simulate(&self) {
-        let root_node_id = NodeId::from_u32(0);
-        let selection = self.select_leaf(root_node_id);
+    pub fn prune(&mut self, game_state: &E::State) {
+        let transposition_hash = game_state.transposition_hash();
+        self.store.prune_to_transposition_hash(transposition_hash);
+    }
+
+    pub fn search(&mut self, root: NodeId, game_state: &E::State) {
+        self.run_simulate(root, game_state);
+    }
+
+    fn run_simulate(&self, root: NodeId, game_state: &E::State) {
+        let selection = self.select_leaf(root, game_state);
         self.expand_and_backpropagate(selection);
     }
 
-    fn select_leaf(&self, node_id: NodeId) -> SelectionResult<'_, E::State, E::Terminal> {
+    #[inline]
+    fn graph(&self) -> NodeGraph<'_, E::Action, <VM as ValueModel>::Rollup> {
+        self.store.graph()
+    }
+
+    fn select_leaf<'s>(
+        &self,
+        node_id: NodeId,
+        game_state: &'s E::State,
+    ) -> SelectionResult<'_, 's, E::State, E::Terminal> {
+        let store = &self.store;
         let game_engine = &self.game_engine;
         let mut ctx = self.context_pool.acquire();
         let (path, visited) = ctx.split_mut();
         let mut current = node_id;
-        let mut game_state = BorrowedOrOwned::Borrowed(&self.game_state);
+        let mut game_state = BorrowedOrOwned::Borrowed(game_state);
         let mut depth = 0;
 
         loop {
-            let node = self.nodes.get_state_node(current);
+            let node = store.arena().get_state_node(current);
 
             if visited.insert(current) {
                 path.push(current);
@@ -85,7 +110,7 @@ where
                 return SelectionResult::new(ctx, edge, game_state, terminal_state);
             }
 
-            if let Some(child_id) = self.get_or_link_transposition(edge, transposition_hash) {
+            if let Some(child_id) = store.get_or_link_transposition(edge, transposition_hash) {
                 current = child_id;
                 continue;
             }
@@ -107,7 +132,7 @@ where
         transposition_hash: u64,
         is_terminal: bool,
     ) {
-        let graph = &self.graph;
+        let graph = self.graph();
         node.increment_visits();
         edge.increment_visits();
 
@@ -120,22 +145,26 @@ where
 
     fn backpropagate(&self, path: &[NodeId]) {
         for &node_id in path.iter().rev() {
-            let node = self.nodes.get_state_node(node_id);
-            node.recompute_rollup(&self.nodes);
+            let arena = self.store.arena();
+            let node = arena.get_state_node(node_id);
+            node.recompute_rollup(arena);
         }
     }
 
     fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, VM>, depth: u32) -> usize {
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
-            node.iter_edge_info(&self.nodes),
+            node.iter_edge_info(self.store.arena()),
             node.visits(),
             game_state,
             depth,
         )
     }
 
-    fn expand_and_backpropagate(&self, selection: SelectionResult<'_, E::State, E::Terminal>) {
+    fn expand_and_backpropagate<'e, 's>(
+        &self,
+        selection: SelectionResult<'e, 's, E::State, E::Terminal>,
+    ) {
         let state = &selection.game_state;
         let edge = selection.edge;
 
@@ -145,7 +174,7 @@ where
         };
 
         if let Some(new_node_id) = new_node {
-            self.graph.add_child_to_edge(edge, new_node_id);
+            self.graph().add_child_to_edge(edge, new_node_id);
         }
 
         self.backpropagate(selection.path());
@@ -163,14 +192,13 @@ where
             "Cannot create state node without actions - should be terminal"
         );
 
+        let store = &self.store;
         let snapshot = self.value_model.pred_snapshot(game_state, predictions);
         let rollup_stats = snapshot.into();
         let new_node = StateNode::new(transposition_hash, policy_priors, rollup_stats);
 
-        let new_node_id = self.nodes.push_state(new_node);
-        let previous_entry = self
-            .transposition_table
-            .insert(transposition_hash, new_node_id);
+        let new_node_id = store.arena().push_state(new_node);
+        let previous_entry = store.insert_transposition(transposition_hash, new_node_id);
 
         debug_assert!(
             previous_entry.is_none(),
@@ -196,37 +224,16 @@ where
         edge: &PUCTEdge,
         snapshot: SnapshotOf<VM>,
     ) -> Option<NodeId> {
-        if let Some(terminal_id) = self.graph.find_edge_terminal(edge) {
-            let terminal_node = self.nodes.get_terminal_node(terminal_id);
+        let arena = &self.store.arena();
+        if let Some(terminal_id) = self.graph().find_edge_terminal(edge) {
+            let terminal_node = arena.get_terminal_node(terminal_id);
             terminal_node.rollup_stats().accumulate(&snapshot);
 
             None
         } else {
             let rollup_stats = snapshot.into();
-            let terminal_id = self.nodes.push_terminal(Terminal::new(rollup_stats));
+            let terminal_id = arena.push_terminal(Terminal::new(rollup_stats));
             Some(terminal_id)
-        }
-    }
-
-    /// Get child from edge if cached, otherwise lookup in transposition table and link.
-    /// Returns None if this is a new position that needs expansion.
-    fn get_or_link_transposition(
-        &self,
-        edge: &PUCTEdge,
-        transposition_hash: u64,
-    ) -> Option<NodeId> {
-        if let Some(nested_child_id) = self
-            .graph
-            .get_edge_state_with_hash(edge, transposition_hash)
-        {
-            return Some(nested_child_id);
-        }
-
-        if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            self.graph.add_child_to_edge(edge, *existing_id);
-            Some(*existing_id)
-        } else {
-            None
         }
     }
 
@@ -241,18 +248,18 @@ where
     }
 }
 
-struct SelectionResult<'a, S, T> {
+struct SelectionResult<'e, 's, S, T> {
     context: SearchContextGuard,
-    edge: EdgeRef<'a>,
-    game_state: BorrowedOrOwned<'a, S>,
+    edge: EdgeRef<'e>,
+    game_state: BorrowedOrOwned<'s, S>,
     terminal: Option<T>,
 }
 
-impl<'a, S, T> SelectionResult<'a, S, T> {
+impl<'e, 's, S, T> SelectionResult<'e, 's, S, T> {
     fn new(
         context: SearchContextGuard,
-        edge: EdgeRef<'a>,
-        game_state: BorrowedOrOwned<'a, S>,
+        edge: EdgeRef<'e>,
+        game_state: BorrowedOrOwned<'s, S>,
         terminal: Option<T>,
     ) -> Self {
         Self {

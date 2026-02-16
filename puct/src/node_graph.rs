@@ -78,7 +78,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             .find(|(_, child_id)| {
                 self.arena.get_state_node(*child_id).transposition_hash() == transposition_hash
             })
-            .map_or(false, |(outcome, _)| {
+            .is_some_and(|(outcome, _)| {
                 outcome.increment_visits();
                 true
             })

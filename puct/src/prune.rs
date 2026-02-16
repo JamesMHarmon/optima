@@ -98,30 +98,10 @@ where
     let mut new_after_state_ids = Vec::new();
     let mut new_terminal_ids = Vec::new();
 
-    // Ensure the root (state node) is first so callers can keep using "root == 0" conventions.
-    if !root.is_unset() {
-        debug_assert!(
-            root.is_state(),
-            "rebuild_from_root currently expects a State root"
-        );
-        let root_idx = usize::from(root);
-        debug_assert!(live_states.get(root_idx).copied().unwrap_or(false));
-
-        if let Some(node) = old_states[root_idx].take() {
-            let new_id = new_arena.push_state(node);
-            state_map[root_idx] = Some(new_id);
-            new_state_ids.push(new_id);
-        }
-    }
-
     for (old_idx, is_live) in live_states.iter().copied().enumerate() {
         if !is_live {
             continue;
         }
-        if !root.is_unset() && old_idx == usize::from(root) {
-            continue;
-        }
-
         let node = old_states[old_idx]
             .take()
             .expect("live state node must exist");
@@ -209,13 +189,8 @@ where
     let new_root = if root.is_unset() {
         root
     } else {
-        state_map[usize::from(root)].expect("root must be remapped")
+        remap(root, &state_map, &after_state_map, &terminal_map)
     };
-
-    // Sanity: if caller uses the "root == 0" convention, we preserved it by inserting root first.
-    if !new_root.is_unset() {
-        debug_assert_eq!(usize::from(new_root), 0);
-    }
 
     RebuiltArena {
         arena: new_arena,
@@ -223,3 +198,6 @@ where
         transpositions,
     }
 }
+
+#[cfg(test)]
+mod tests;
