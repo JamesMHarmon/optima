@@ -10,8 +10,13 @@ pub mod moves_left_strategy;
 mod node;
 pub mod node_details;
 pub mod options;
+pub mod puct_mcts;
+#[cfg(test)]
+mod puct_mcts_tests;
 pub mod selection_strategy;
 pub mod temp;
+
+pub use common::GameLength;
 
 pub use backpropagation_strategy::*;
 pub use cpuct::*;
@@ -21,5 +26,6 @@ pub use moves_left_strategy::*;
 pub use node::*;
 pub use node_details::*;
 pub use options::*;
+pub use puct_mcts::*;
 pub use selection_strategy::*;
 pub use temp::*;

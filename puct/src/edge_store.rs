@@ -5,7 +5,7 @@ use model::ActionWithPolicy;
 
 use collections::{Comparator, InPlaceMaxHeap};
 
-use super::PUCTEdge;
+use crate::edge::PUCTEdge;
 
 type PolicyPriorsHeap<A> = InPlaceMaxHeap<ActionWithPolicy<A>, PolicyScoreCmp>;
 

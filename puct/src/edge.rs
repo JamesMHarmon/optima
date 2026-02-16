@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::NodeId;
+use crate::node_arena::NodeId;
 
 pub struct PUCTEdge {
     visits: AtomicU32,

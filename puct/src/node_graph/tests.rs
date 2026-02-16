@@ -4,10 +4,13 @@ use half::f16;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
-use crate::{
-    AfterState, AfterStateOutcome, NodeArena, NodeGraph, PUCTEdge, RollupStats, StateNode,
-    Terminal, WeightedMerge,
-};
+use crate::after_state::{AfterState, AfterStateOutcome};
+use crate::edge::PUCTEdge;
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId};
+use crate::node_graph::NodeGraph;
+use crate::rollup::{RollupStats, WeightedMerge};
+use crate::terminal_node::Terminal;
 
 type TestStateNode = StateNode<u32, DummyRollup>;
 type TestArena = NodeArena<TestStateNode, AfterState, Terminal<DummyRollup>>;
@@ -52,22 +55,41 @@ fn make_state_node(hash: u64) -> TestStateNode {
     StateNode::new(hash, priors, DummyRollup::default())
 }
 
-fn make_terminal_node(arena: &TestArena, value: u32) -> crate::NodeId {
+fn make_terminal_node(arena: &TestArena, value: u32) -> NodeId {
     let r = DummyRollup::default();
     r.set(DummySnapshot(value));
     arena.push_terminal(Terminal::new(r))
 }
 
-fn after_state_outcome_visits(
-    arena: &TestArena,
-    after_state_id: crate::NodeId,
-) -> Vec<(crate::NodeId, u32)> {
+fn after_state_outcome_visits(arena: &TestArena, after_state_id: NodeId) -> Vec<(NodeId, u32)> {
     arena
         .get_after_state_node(after_state_id)
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
         .collect::<Vec<_>>()
+}
+
+#[test]
+fn terminal_merge_accumulates_when_terminal_already_reachable_via_edge() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let terminal_id = make_terminal_node(&arena, 10);
+
+    let edge = PUCTEdge::new();
+    edge.set_child(terminal_id);
+
+    let found_terminal_id = graph
+        .find_edge_terminal(&edge)
+        .expect("terminal must be reachable");
+    assert_eq!(found_terminal_id, terminal_id);
+
+    let terminal_node = arena.get_terminal_node(found_terminal_id);
+    assert_eq!(terminal_node.rollup_stats().snapshot(), DummySnapshot(10));
+
+    terminal_node.rollup_stats().accumulate(&DummySnapshot(7));
+    assert_eq!(terminal_node.rollup_stats().snapshot(), DummySnapshot(17));
 }
 
 #[test]
@@ -688,7 +710,7 @@ fn get_edge_state_with_hash_panics_if_after_state_contains_unset_child() {
     let graph = NodeGraph::new(&arena);
 
     let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
-    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    outcomes.push(AfterStateOutcome::new(1, NodeId::unset()));
     let after_state_id = arena.push_after_state(AfterState::new(outcomes));
 
     let edge = PUCTEdge::new();

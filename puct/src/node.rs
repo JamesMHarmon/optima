@@ -1,10 +1,13 @@
 use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::{
-    AfterState, EdgeInfo, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, Terminal,
-    WeightedMerge, edge_store::EdgeStore,
-};
+use crate::after_state::AfterState;
+use crate::edge::PUCTEdge;
+use crate::edge_store::EdgeStore;
+use crate::node_arena::{NodeArena, NodeId, NodeType};
+use crate::rollup::{RollupStats, WeightedMerge};
+use crate::selection_strategy::EdgeInfo;
+use crate::terminal_node::Terminal;
 
 type StateArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 

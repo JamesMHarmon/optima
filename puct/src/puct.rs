@@ -1,8 +1,13 @@
-use super::{
-    BorrowedOrOwned, EdgeRef, NodeGraph, NodeId, PUCTEdge, RollupStats,
-    SearchContextGuard, SearchContextPool, SelectionPolicy, StateNode, ValueModel,
-};
 use super::node_graph_store::NodeGraphStore;
+use crate::borrowed_or_owned::BorrowedOrOwned;
+use crate::edge::PUCTEdge;
+use crate::node::{EdgeRef, StateNode};
+use crate::node_arena::NodeId;
+use crate::node_graph::NodeGraph;
+use crate::rollup::RollupStats;
+use crate::search_context::{SearchContextGuard, SearchContextPool};
+use crate::selection_strategy::SelectionPolicy;
+use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use engine::GameEngine;
 use model::ActionWithPolicy;
@@ -13,6 +18,15 @@ type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
 type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
+
+#[derive(Clone, Debug)]
+pub struct EdgeView<A, S> {
+    pub edge_index: usize,
+    pub action: A,
+    pub policy_prior: f32,
+    pub visits: u32,
+    pub snapshot: Option<S>,
+}
 
 pub struct PUCT<'a, E, M, VM, Sel>
 where
@@ -60,8 +74,42 @@ where
         self.store.prune_to_transposition_hash(transposition_hash);
     }
 
-    pub fn search(&mut self, root: NodeId, game_state: &E::State) {
+    pub fn search(&mut self, game_state: &E::State) {
+        let root = self.get_or_create_root(game_state);
         self.run_simulate(root, game_state);
+    }
+
+    /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
+    pub fn edge_views(&self, game_state: &E::State) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
+    where
+        E::Action: Clone,
+        SnapshotOf<VM>: Clone,
+    {
+        let transposition_hash = game_state.transposition_hash();
+        let Some(node_id) = self.store.get_node_id(transposition_hash) else {
+            return Vec::new();
+        };
+
+        let node = self.store.state_node(node_id);
+        self.store
+            .iter_edge_info(node)
+            .map(|e| EdgeView {
+                edge_index: e.edge_index,
+                action: e.action.clone(),
+                policy_prior: e.policy_prior,
+                visits: e.visits,
+                snapshot: e.snapshot,
+            })
+            .collect()
+    }
+
+    fn get_or_create_root(&self, game_state: &E::State) -> NodeId {
+        let transposition_hash = game_state.transposition_hash();
+        if let Some(existing) = self.store.get_node_id(transposition_hash) {
+            return existing;
+        }
+
+        self.analyze_and_create_node(game_state)
     }
 
     fn run_simulate(&self, root: NodeId, game_state: &E::State) {

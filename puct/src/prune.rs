@@ -1,15 +1,16 @@
 use std::collections::VecDeque;
 
-use super::{
-    AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, RollupStats, StateNode, Terminal,
-};
+use crate::after_state::{AfterState, AfterStateOutcome};
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId, NodeType};
+use crate::rollup::RollupStats;
+use crate::terminal_node::Terminal;
 
 pub struct RebuiltArena<A, R>
 where
     R: RollupStats,
 {
     pub arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
-    pub root: NodeId,
     pub transpositions: Vec<(u64, NodeId)>,
 }
 
@@ -30,11 +31,9 @@ where
     ctx.patch_child_links();
 
     let transpositions = ctx.build_transpositions();
-    let new_root = ctx.remap_root(root);
 
     RebuiltArena {
         arena: ctx.new_arena,
-        root: new_root,
         transpositions,
     }
 }
@@ -230,19 +229,6 @@ where
             transpositions.push((node.transposition_hash(), state_id));
         }
         transpositions
-    }
-
-    fn remap_root(&self, root: NodeId) -> NodeId {
-        if root.is_unset() {
-            root
-        } else {
-            Self::remap_id(
-                root,
-                &self.state_map,
-                &self.after_state_map,
-                &self.terminal_map,
-            )
-        }
     }
 }
 

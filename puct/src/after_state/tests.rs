@@ -4,9 +4,11 @@ use half::f16;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
-use crate::{
-    AfterState, AfterStateOutcome, NodeArena, RollupStats, StateNode, Terminal, WeightedMerge,
-};
+use crate::after_state::{AfterState, AfterStateOutcome};
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId};
+use crate::rollup::{RollupStats, WeightedMerge};
+use crate::terminal_node::Terminal;
 
 type TestStateNode = StateNode<u32, DummyRollup>;
 type TestArena = NodeArena<TestStateNode, AfterState, Terminal<DummyRollup>>;
@@ -55,7 +57,7 @@ fn make_state_node(hash: u64, value: u32) -> TestStateNode {
 
 #[test]
 fn after_state_outcome_increment_visits_is_exact() {
-    let outcome = AfterStateOutcome::new(0, crate::NodeId::from_u32(0b11 << 30));
+    let outcome = AfterStateOutcome::new(0, NodeId::from_u32(0b11 << 30));
 
     assert_eq!(outcome.visits(), 0);
     outcome.increment_visits();
@@ -175,7 +177,7 @@ fn after_state_snapshot_panics_if_outcome_child_is_unset() {
     let arena = TestArena::new();
 
     let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
-    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    outcomes.push(AfterStateOutcome::new(1, NodeId::unset()));
     let after_state = AfterState::new(outcomes);
 
     // This should panic in debug builds (and would be invalid for traversal anyway).
@@ -205,7 +207,7 @@ fn terminal_outcome_is_independent_of_visits() {
 
 #[test]
 fn after_state_outcome_clone_preserves_child_and_visits() {
-    let child = crate::NodeId::from_u32(0b11 << 30);
+    let child = NodeId::from_u32(0b11 << 30);
     let outcome = AfterStateOutcome::new(123, child);
     let cloned = outcome.clone();
 
@@ -215,9 +217,9 @@ fn after_state_outcome_clone_preserves_child_and_visits() {
 
 #[test]
 fn after_state_outcome_as_tuple_matches_accessors() {
-    let child = crate::NodeId::from_u32(0b11 << 30);
+    let child = NodeId::from_u32(0b11 << 30);
     let outcome = AfterStateOutcome::new(7, child);
-    assert_eq!(outcome.as_tuple(), (outcome.child(), outcome.visits()));
+    assert_eq!((outcome.child(), outcome.visits()), (child, 7));
 }
 
 #[test]
@@ -280,7 +282,7 @@ fn after_state_is_valid_rejects_unset_children() {
     // This is a stricter expectation than the current implementation enforces.
     // Leaving it as a test to catch regressions once `is_valid` is tightened.
     let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
-    outcomes.push(AfterStateOutcome::new(1, crate::NodeId::unset()));
+    outcomes.push(AfterStateOutcome::new(1, NodeId::unset()));
     let after_state = AfterState::new(outcomes);
     assert!(!after_state.is_valid());
 }

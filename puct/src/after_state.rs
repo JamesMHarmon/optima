@@ -5,7 +5,10 @@ use std::{
 
 use tinyvec::TinyVec;
 
-use super::{NodeArena, NodeId, NodeType, RollupStats, StateNode, Terminal};
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId, NodeType};
+use crate::rollup::RollupStats;
+use crate::terminal_node::Terminal;
 
 /// Stochastic node representing (State, Action) pair before environment response.
 /// Contains multiple possible next states.
@@ -101,10 +104,6 @@ impl AfterStateOutcome {
 
     pub fn child(&self) -> NodeId {
         self.child
-    }
-
-    pub fn as_tuple(&self) -> (NodeId, u32) {
-        (self.child(), self.visits())
     }
 }
 

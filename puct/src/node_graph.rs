@@ -1,7 +1,9 @@
-use super::{
-    AfterState, AfterStateOutcome, NodeArena, NodeId, NodeType, PUCTEdge, RollupStats, StateNode,
-    Terminal,
-};
+use crate::after_state::{AfterState, AfterStateOutcome};
+use crate::edge::PUCTEdge;
+use crate::node::StateNode;
+use crate::node_arena::{NodeArena, NodeId, NodeType};
+use crate::rollup::RollupStats;
+use crate::terminal_node::Terminal;
 
 type GraphArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 

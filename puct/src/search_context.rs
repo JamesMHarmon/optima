@@ -1,4 +1,4 @@
-use super::NodeId;
+use crate::node_arena::NodeId;
 use crossbeam_queue::SegQueue;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -71,21 +71,9 @@ impl SearchContextGuard {
         self.ctx.as_ref().unwrap()
     }
 
-    pub fn get_mut(&mut self) -> &mut SearchContext {
-        self.ctx.as_mut().unwrap()
-    }
-
     pub fn split_mut(&mut self) -> (&mut Vec<NodeId>, &mut HashSet<NodeId>) {
         let ctx = self.ctx.as_mut().unwrap();
         (&mut ctx.path, &mut ctx.visited)
-    }
-
-    pub fn path(&mut self) -> &mut Vec<NodeId> {
-        &mut self.ctx.as_mut().unwrap().path
-    }
-
-    pub fn visited(&mut self) -> &mut HashSet<NodeId> {
-        &mut self.ctx.as_mut().unwrap().visited
     }
 }
 

@@ -4,9 +4,12 @@ use half::f16;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
-use crate::{
-    AfterState, AfterStateOutcome, EdgeInfo, NodeArena, RollupStats, Terminal, WeightedMerge,
-};
+use crate::after_state::{AfterState, AfterStateOutcome};
+use crate::node_arena::NodeArena;
+use crate::node_graph::NodeGraph;
+use crate::rollup::{RollupStats, WeightedMerge};
+use crate::selection_strategy::EdgeInfo;
+use crate::terminal_node::Terminal;
 
 use super::StateNode;
 
@@ -51,6 +54,23 @@ fn make_node(priors: &[(u32, f32)]) -> TestStateNode {
         .into_boxed_slice();
 
     StateNode::new(0, priors, DummyRollup::default())
+}
+
+fn make_node_with_prior(
+    transposition_hash: u64,
+    prior_value: u32,
+    priors: &[(u32, f32)],
+) -> TestStateNode {
+    let priors = priors
+        .iter()
+        .map(|&(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
+    let r = DummyRollup::default();
+    r.set(DummySnapshot(prior_value));
+
+    StateNode::new(transposition_hash, priors, r)
 }
 
 fn edge_count(node: &TestStateNode) -> usize {
@@ -324,4 +344,140 @@ fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
         .expect("expected snapshot for afterstate child");
 
     assert_eq!(snap, DummySnapshot(5 * 2 + 7 * 3));
+}
+
+#[test]
+fn e2e_rollup_recompute_weights_children_by_edge_visits_and_includes_prior() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let root_id = arena.push_state(make_node_with_prior(1, 5, &[(0, 0.8), (1, 0.2)]));
+    let root = arena.get_state_node(root_id);
+
+    root.ensure_frontier_edge();
+    let (edge0, _) = root.edge_and_action(0);
+    // `ensure_frontier_edge` only materializes a new edge once the previous frontier edge has
+    // been visited.
+    edge0.increment_visits();
+    root.ensure_frontier_edge();
+    let (edge1, _) = root.edge_and_action(1);
+
+    let terminal_rollup = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(2));
+        r
+    };
+    let t0 = arena.push_terminal(Terminal::new(terminal_rollup));
+    graph.add_child_to_edge(edge0, t0);
+
+    let leaf_state_id = arena.push_state(make_node_with_prior(2, 7, &[(0, 1.0)]));
+    let leaf_terminal_rollup = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(11));
+        r
+    };
+    let leaf_terminal_id = arena.push_terminal(Terminal::new(leaf_terminal_rollup));
+
+    let mut outcomes: TinyVec<[AfterStateOutcome; 2]> = TinyVec::new();
+    outcomes.push(AfterStateOutcome::new(1, leaf_state_id));
+    outcomes.push(AfterStateOutcome::new(4, leaf_terminal_id));
+    let after_state_id = arena.push_after_state(AfterState::new(outcomes));
+    edge1.set_child(after_state_id);
+
+    for _ in 0..2 {
+        edge0.increment_visits();
+        edge1.increment_visits();
+    }
+
+    root.recompute_rollup(&arena);
+
+    // after_state_snapshot = 7*1 + 11*4 = 51
+    // root_rollup = prior(5)*1 + edge0(2)*3 + edge1(51)*2 = 5 + 6 + 102 = 113
+    assert_eq!(root.rollup_stats().snapshot(), DummySnapshot(113));
+}
+
+#[test]
+fn e2e_rollup_recompute_ignores_unvisited_edges() {
+    let arena = TestArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let root_id = arena.push_state(make_node_with_prior(1, 9, &[(0, 1.0), (1, 1.0)]));
+    let root = arena.get_state_node(root_id);
+
+    root.ensure_frontier_edge();
+    let (edge0, _) = root.edge_and_action(0);
+    edge0.increment_visits();
+    root.ensure_frontier_edge();
+    let (edge1, _) = root.edge_and_action(1);
+
+    let t0 = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(100));
+        arena.push_terminal(Terminal::new(r))
+    };
+    let t1 = {
+        let r = DummyRollup::default();
+        r.set(DummySnapshot(200));
+        arena.push_terminal(Terminal::new(r))
+    };
+    graph.add_child_to_edge(edge0, t0);
+    graph.add_child_to_edge(edge1, t1);
+
+    // edge0 already has 1 visit from materialization; bump once more -> total 2
+    edge0.increment_visits();
+    // edge1 stays at 0 visits -> should not contribute
+
+    root.recompute_rollup(&arena);
+
+    // prior 9 + (100*2) = 209
+    assert_eq!(root.rollup_stats().snapshot(), DummySnapshot(209));
+}
+
+#[test]
+fn harness_writer_traversal_increments_node_and_edge_visits_exactly() {
+    // Minimal harness validating the visit counters used by selection.
+    let arena: TestArena = NodeArena::new();
+    let graph = NodeGraph::new(&arena);
+
+    let root_id = arena.push_state(make_node(&[(0, 0.6), (1, 0.4), (2, 0.2)]));
+    let root = arena.get_state_node(root_id);
+
+    assert_eq!(root.visits(), 1);
+    assert_eq!(root.iter_edges().count(), 0);
+
+    // Step 1: materialize frontier edge and traverse it.
+    root.ensure_frontier_edge();
+    assert_eq!(root.iter_edges().count(), 1);
+
+    root.increment_visits();
+    let (e0, _a0) = root.edge_and_action(0);
+    assert_eq!(e0.visits(), 0);
+    e0.increment_visits();
+    assert_eq!(e0.visits(), 1);
+    assert_eq!(root.visits(), 2);
+
+    // Expansion: link a child state.
+    let child_id = arena.push_state(make_node(&[(0, 1.0)]));
+    graph.add_child_to_edge(e0, child_id);
+
+    // Step 2: since the last edge has visits>0, frontier should advance.
+    root.ensure_frontier_edge();
+    assert_eq!(root.iter_edges().count(), 2);
+
+    root.increment_visits();
+    let (e1, _a1) = root.edge_and_action(1);
+    assert_eq!(e1.visits(), 0);
+    e1.increment_visits();
+
+    assert_eq!(root.visits(), 3);
+    assert_eq!(e0.visits(), 1);
+    assert_eq!(e1.visits(), 1);
+
+    // Step 3: revisit edge0.
+    root.increment_visits();
+    e0.increment_visits();
+
+    assert_eq!(root.visits(), 4);
+    assert_eq!(e0.visits(), 2);
+    assert_eq!(e1.visits(), 1);
 }

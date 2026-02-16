@@ -6,7 +6,9 @@ use model::{
     analytics::{ActionWithPolicy, GameAnalyzer},
 };
 
-use crate::GameLength;
+use common::TranspositionHash;
+
+use common::GameLength;
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CountingGameState {
@@ -32,6 +34,12 @@ impl GameState for CountingGameState {
             p1_turn: true,
             count: 50,
         }
+    }
+}
+
+impl TranspositionHash for CountingGameState {
+    fn transposition_hash(&self) -> u64 {
+        (self.count as u64) << 1 | (self.p1_turn as u64)
     }
 }
 

@@ -3,7 +3,7 @@ use crate::{
     SelectionStrategy,
 };
 use anyhow::Result;
-use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
+use common::{GameLength, MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use engine::{GameEngine, Value};
 
 pub struct MovesLeftSelectionStrategy<S, A, P, C> {
@@ -256,10 +256,6 @@ impl<'e, E, S, A, P> MovesLeftBackpropagationStrategy<'e, E, S, A, P> {
 
 pub struct MovesLeftNodeInfo {
     pub player_to_move: usize,
-}
-
-pub trait GameLength {
-    fn game_length_score(&self) -> f32;
 }
 
 impl<E, S, A, P> BackpropagationStrategy for MovesLeftBackpropagationStrategy<'_, E, S, A, P>

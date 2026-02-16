@@ -3,7 +3,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use half::f16;
 use model::ActionWithPolicy;
 
-use crate::{AfterState, NodeArena, RollupStats, StateNode, Terminal, WeightedMerge};
+use crate::after_state::AfterState;
+use crate::node::StateNode;
+use crate::node_arena::NodeArena;
+use crate::rollup::{RollupStats, WeightedMerge};
+use crate::terminal_node::Terminal;
 
 use super::rebuild_from_root;
 
@@ -58,10 +62,6 @@ fn rebuild_from_root_does_not_force_root_to_zero() {
     edge.set_child(state0);
 
     let rebuilt = rebuild_from_root(arena, state1);
-
-    // With the natural old-index insertion order, state0 becomes new idx 0 and root (old idx 1)
-    // becomes new idx 1.
-    assert_eq!(usize::from(rebuilt.root), 1);
 
     let (states, _after_states, _terminals) = rebuilt.arena.into_vecs();
     assert_eq!(states.len(), 2);
