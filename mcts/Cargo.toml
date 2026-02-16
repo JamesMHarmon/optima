@@ -12,6 +12,7 @@ name = "mcts"
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
+puct = { path = "../puct" }
 
 anyhow = "1.0"
 itertools = "0.12"
