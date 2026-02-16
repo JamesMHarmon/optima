@@ -10,18 +10,13 @@ where
 {
     pub arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     pub root: NodeId,
-    /// Optional helper for rebuilding a transposition table.
     pub transpositions: Vec<(u64, NodeId)>,
 }
 
-/// Stop-the-world compaction: rebuild a new arena containing only nodes reachable from `root`.
+/// Rebuild a new arena containing only nodes reachable from `root`.
 ///
 /// This consumes the old arena and produces a compact one, remapping all NodeIds and updating
 /// edge/outcome child links accordingly.
-///
-/// Assumptions:
-/// - No other threads are reading/writing the arena while this runs.
-/// - No NodeIds/references from the old arena are used after this returns.
 pub fn rebuild_from_root<A, R>(
     arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     root: NodeId,
