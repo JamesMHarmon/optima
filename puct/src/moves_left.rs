@@ -346,3 +346,6 @@ pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) 
         .map(|(i, s)| (i + 1) as f32 * s)
         .fold(0.0f32, |s, e| s + e)
 }
+
+#[cfg(test)]
+mod tests;
