@@ -5,11 +5,11 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use engine::engine::GameEngine;
-use engine::game_state::GameState;
-use mcts::mcts::{MCTSOptions, MCTS};
-use model::analytics::GameAnalyzer;
-use model::model::Model;
+use common::{DynamicCPUCT, GameLength, PlayerToMove, TranspositionHash};
+use engine::{GameEngine, GameState};
+use mcts::PuctMCTS;
+use model::{Analyzer, GameAnalyzer};
+use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PlayOptions {
@@ -29,49 +29,46 @@ pub struct Play {}
 
 impl Play {
     #[allow(non_snake_case)]
-    pub async fn play<S, A, E, M, T>(
-        model: &M,
-        game_engine: &E,
-        options: &PlayOptions,
-    ) -> Result<()>
+    pub async fn play<S, A, E, M>(model: &M, game_engine: &E, options: &PlayOptions) -> Result<()>
     where
-        S: GameState + Display,
+        S: GameState + Display + TranspositionHash + PlayerToMove,
         A: FromStr + Display + Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin,
-        E: GameEngine<State = S, Action = A, Value = M::Value>,
-        M: Model<State = S, Action = A, Analyzer = T>,
-        T: GameAnalyzer<Action = A, State = S, Value = M::Value> + Send,
+        E: GameEngine<State = S, Action = A>,
+        M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
+        M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = E::Terminal>,
+        E::Terminal: Clone + engine::Value + GameLength,
     {
         let cpuct_base = options.cpuct_base;
         let cpuct_init = options.cpuct_init;
         let cpuct_root_scaling = options.cpuct_root_scaling;
         let visits = options.visits;
-        let analyzer = model.get_game_state_analyzer();
+        let analyzer = model.analyzer();
+
+        let value_model = MovesLeftValueModel::<S, E::Terminal, E::Terminal>::new();
+        let cpuct = DynamicCPUCT::<S>::new(cpuct_base, cpuct_init, 1.0, cpuct_root_scaling);
+        let selection = MovesLeftSelectionPolicy::<_, S>::new(
+            cpuct,
+            MovesLeftStrategyOptions {
+                fpu: options.fpu,
+                fpu_root: options.fpu_root,
+                moves_left_threshold: options.moves_left_threshold,
+                moves_left_scale: options.moves_left_scale,
+                moves_left_factor: options.moves_left_factor,
+            },
+        );
+
         let mut actions: Vec<A> = vec![];
 
         'outer: loop {
             let mut state: S = S::initial();
             let mut total_visits = 0;
 
-            let mut mcts = MCTS::with_capacity(
+            let mut mcts = PuctMCTS::new(
                 S::initial(),
                 game_engine,
                 &analyzer,
-                MCTSOptions::<S, _, _>::new(
-                    None,
-                    options.fpu,
-                    options.fpu_root,
-                    |_, Nsb, is_root| {
-                        (((Nsb as f32 + cpuct_base + 1.0) / cpuct_base).ln() + cpuct_init)
-                            * if is_root { cpuct_root_scaling } else { 1.0 }
-                    },
-                    |_| 0.0,
-                    0.0,
-                    options.moves_left_threshold,
-                    options.moves_left_scale,
-                    options.moves_left_factor,
-                    options.parallelism,
-                ),
-                visits,
+                &value_model,
+                &selection,
             );
 
             for action in actions.iter() {
@@ -82,7 +79,7 @@ impl Play {
                 state = game_engine.take_action(&state, action);
             }
 
-            while game_engine.is_terminal_state(&state).is_none() {
+            while game_engine.terminal_state(&state).is_none() {
                 println!("{}", state);
 
                 println!("Input action or Enter to play");
@@ -98,7 +95,7 @@ impl Play {
                     mcts.search_visits(total_visits).await?;
                     println!("{:?}", mcts.get_focus_node_details()?);
                     let pvs: Vec<_> = mcts
-                        .get_principal_variation()?
+                        .get_principal_variation(None, 10)?
                         .iter()
                         .map(|n| format!("\n\t{:?}", n))
                         .collect();

@@ -10,6 +10,7 @@ engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
 mcts = { path = "../mcts" }
+puct = { path = "../puct" }
 
 anyhow = "1.0"
 log = "0.4"

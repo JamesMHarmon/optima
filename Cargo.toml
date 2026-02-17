@@ -11,6 +11,7 @@ members = [
     "model",
     "mcts",
     "puct",
+    "play",
     "replay-buffer",
     "self-play",
 
