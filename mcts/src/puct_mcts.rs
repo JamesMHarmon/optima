@@ -1,13 +1,37 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::GameEngine;
 use model::GameAnalyzer;
 use puct::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel};
+use rand::Rng;
+use rand::distributions::WeightedIndex;
+use rand::prelude::Distribution;
+use rand::thread_rng;
 use std::time::{Duration, Instant};
 
+use crate::{DirichletOptions, Temperature};
 use crate::{EdgeDetails, NodeDetails};
+use common::{MovesLeftPropagatedValue, PlayerToMove};
+use model::{EdgeMetrics, NodeMetrics};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+
+/// Converts a PUCT rollup snapshot into a propagated-values payload.
+///
+/// The associated type is used so callers don't need to spell out `PV` everywhere.
+pub trait SnapshotToPropagated {
+    type PropagatedValues: Default;
+
+    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues;
+}
+
+impl SnapshotToPropagated for puct::MovesLeftSnapshot {
+    type PropagatedValues = MovesLeftPropagatedValue;
+
+    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues {
+        MovesLeftPropagatedValue::new(self.value_for_player(player_to_move), self.game_length())
+    }
+}
 
 /// Transitional wrapper that runs search via the `puct` crate while providing an
 /// MCTS-like container API.
@@ -24,6 +48,7 @@ where
     E::Terminal: engine::Value,
 {
     engine: &'a E,
+    analyzer: &'a M,
     state: E::State,
     puct: PUCT<'a, E, M, VM, Sel>,
     focus_actions: Vec<E::Action>,
@@ -49,6 +74,7 @@ where
 
         Self {
             engine,
+            analyzer,
             state,
             puct,
             focus_actions: Vec::new(),
@@ -57,6 +83,12 @@ where
 
     pub fn state(&self) -> &E::State {
         &self.state
+    }
+
+    /// PUCT implementation currently does not support persistent root prior mutation.
+    /// This is a compatibility stub for legacy callers; it intentionally no-ops.
+    pub async fn apply_noise_at_root(&mut self, _dirichlet: Option<&DirichletOptions>) {
+        // TODO: Implement true root prior noise once puct exposes prior mutation.
     }
 
     fn focus_state(&self) -> E::State
@@ -198,6 +230,92 @@ where
         }
 
         Ok(depth)
+    }
+
+    pub fn select_action<T>(&mut self, temp: &T) -> Result<E::Action>
+    where
+        T: Temperature<State = E::State>,
+        E::Action: Clone,
+        E::State: Clone,
+        SnapshotOf<VM>: Clone,
+    {
+        let state = self.focus_state();
+        let edges = self.puct.edge_views(&state);
+
+        if edges.is_empty() {
+            return Err(anyhow!(
+                "Root or focused node does not exist. Run search first."
+            ));
+        }
+
+        let temp_and_offset = temp.temp(&state);
+
+        if temp_and_offset.temperature > 0.0 {
+            let weights = edges.iter().map(|e| {
+                (e.visits as f32 + temp_and_offset.temperature_visit_offset)
+                    .max(0.0)
+                    .powf(1.0 / temp_and_offset.temperature)
+            });
+
+            let dist = WeightedIndex::new(weights);
+            let chosen_idx = match dist {
+                Err(_) => thread_rng().gen_range(0..edges.len()),
+                Ok(dist) => dist.sample(&mut thread_rng()),
+            };
+
+            return Ok(edges[chosen_idx].action.clone());
+        }
+
+        // Temperature == 0: choose the most visited edge.
+        edges
+            .into_iter()
+            .max_by_key(|e| e.visits)
+            .map(|e| e.action)
+            .ok_or_else(|| anyhow!("No available actions"))
+    }
+
+    pub fn get_root_node_metrics(
+        &mut self,
+    ) -> Result<
+        NodeMetrics<
+            E::Action,
+            M::Predictions,
+            <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues,
+        >,
+    >
+    where
+        E::Action: Clone,
+        E::State: Clone + PlayerToMove,
+        M::Predictions: Clone,
+        SnapshotOf<VM>: Clone + SnapshotToPropagated,
+    {
+        let state = self.focus_state();
+        let analysis = self.analyzer.analyze(&state);
+        let predictions = analysis.predictions().clone();
+
+        let edges: Vec<EdgeView<E::Action, SnapshotOf<VM>>> = self.puct.edge_views(&state);
+        let player_to_move = state.player_to_move();
+
+        let children = edges
+            .into_iter()
+            .map(|e| {
+                let pv = e
+                    .snapshot
+                    .as_ref()
+                    .map(|s| s.to_propagated_values(player_to_move))
+                    .unwrap_or_default();
+                EdgeMetrics::new(e.action, e.visits as usize, pv)
+            })
+            .collect::<Vec<_>>();
+
+        let visits_sum: u64 = children.iter().map(|c| c.visits() as u64).sum();
+        let visits = (visits_sum.saturating_add(1)).min(usize::MAX as u64) as usize;
+
+        Ok(NodeMetrics {
+            visits,
+            predictions,
+            children,
+        })
     }
 }
 

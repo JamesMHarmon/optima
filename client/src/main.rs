@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use arena::ArenaOptions;
 use clap::Parser;
 use cli::{Cli, Commands};
-use common::{ConfigLoader, FsExt, get_env_usize};
+use common::{ConfigLoader, DynamicCPUCT, FsExt, get_env_usize};
 use dotenv::dotenv;
 use env_logger::Env;
 use game::{
@@ -13,7 +13,6 @@ use game::{
     TimeStrategy, UGI,
 };
 use log::info;
-use mcts::DynamicCPUCT;
 use model::Load;
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
@@ -52,7 +51,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             let config = ConfigLoader::new(config_path, "self_play".to_string())?;
 
             let self_play_options: SelfPlayOptions = config.load()?;
-            let play_options = &self_play_options.play_options;
 
             let games_dir = config.get_relative_path("games_dir")?;
             let model_dir = config.get_relative_path("model_dir")?;
@@ -60,42 +58,35 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&games_dir)?;
             assert_dir_exists(&model_dir)?;
 
-            let cpuct = DynamicCPUCT::new(
+            let model_factory = ModelFactory::new(model_dir);
+            let engine = Engine::new();
+
+            let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
+
+            let play_options = &self_play_options.play_options;
+            let value_model = MovesLeftValueModel::<_, _, _>::new();
+            let cpuct = DynamicCPUCT::<_>::new(
                 play_options.cpuct_base,
                 play_options.cpuct_init,
                 1.0,
                 play_options.cpuct_root_scaling,
             );
-
-            #[cfg(feature = "quoridor")]
-            let selection_strategy_opts = StrategyOptions::new(
-                play_options.fpu,
-                play_options.fpu_root,
-                play_options.victory_margin_threshold,
-                play_options.victory_margin_factor,
+            let selection_policy = MovesLeftSelectionPolicy::new(
+                cpuct,
+                MovesLeftStrategyOptions {
+                    fpu: play_options.fpu,
+                    fpu_root: play_options.fpu_root,
+                    moves_left_threshold: play_options.moves_left_threshold,
+                    moves_left_scale: play_options.moves_left_scale,
+                    moves_left_factor: play_options.moves_left_factor,
+                },
             );
-
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
-            let selection_strategy_opts = StrategyOptions::new(
-                play_options.fpu,
-                play_options.fpu_root,
-                play_options.moves_left_threshold,
-                play_options.moves_left_scale,
-                play_options.moves_left_factor,
-            );
-
-            let model_factory = ModelFactory::new(model_dir);
-            let engine = Engine::new();
-            let backpropagation_strategy = BackpropagationStrategy::new(&engine);
-            let selection_strategy = SelectionStrategy::new(cpuct, selection_strategy_opts);
-
-            let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
             play_self(
                 &model_factory,
                 &engine,
-                &backpropagation_strategy,
-                &selection_strategy,
+                &value_model,
+                &selection_policy,
                 &mut self_play_persistance,
                 &self_play_options,
             )?
@@ -117,7 +108,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&certified_dir)?;
             assert_dir_exists(&evaluated_dir)?;
 
-            let cpuct = DynamicCPUCT::new(
+            let cpuct = DynamicCPUCT::<_>::new(
                 play_options.cpuct_base,
                 play_options.cpuct_init,
                 1.0,
@@ -186,7 +177,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let engine = Engine::new();
 
             let cpuct = |options: &UGIOptions| {
-                DynamicCPUCT::new(
+                DynamicCPUCT::<_>::new(
                     options.cpuct_base,
                     options.cpuct_init,
                     options.cpuct_factor,

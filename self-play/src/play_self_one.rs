@@ -2,32 +2,35 @@ use anyhow::{Result, anyhow};
 use rand::Rng;
 use std::fmt::Debug;
 
-use engine::engine::GameEngine;
-use engine::game_state::GameState;
-use mcts::{
-    BackpropagationStrategy, DirichletOptions, MCTS, NoTemp, SelectionStrategy, TemperatureConstant,
-};
+use common::{GameLength, PlayerToMove, TranspositionHash};
+use engine::{GameEngine, GameState};
+use mcts::SnapshotToPropagated;
+use mcts::{DirichletOptions, NoTemp, PuctMCTS, TemperatureConstant};
 use model::GameAnalyzer;
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 use super::{SelfPlayMetrics, SelfPlayOptions};
 
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type PVOf<VM> = <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues;
+
 #[allow(non_snake_case)]
-pub async fn play_self_one<S, A, E, M, B, Sel, P, PV>(
+pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
     game_engine: &E,
     analyzer: &M,
-    backpropagation_strategy: &B,
-    selection_strategy: &Sel,
+    value_model: &VM,
+    selection: &Sel,
     options: &SelfPlayOptions,
-) -> Result<(SelfPlayMetrics<A, P, PV>, S)>
+) -> Result<(SelfPlayMetrics<A, P, PVOf<VM>>, S)>
 where
-    S: GameState,
+    S: GameState + Clone + TranspositionHash + PlayerToMove,
     A: Clone + Eq + Debug,
     E: GameEngine<State = S, Action = A, Terminal = P>,
     M: GameAnalyzer<State = S, Action = A, Predictions = P>,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    P: Clone,
-    PV: Default + Ord + Clone,
+    P: Clone + engine::Value + GameLength,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P>,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = S>,
+    SnapshotOf<VM>: Clone + SnapshotToPropagated,
 {
     let mut game_state: S = S::initial();
     let play_options = &options.play_options;
@@ -41,14 +44,12 @@ where
     );
     let no_temp = NoTemp::new();
 
-    let mut mcts = MCTS::with_capacity(
+    let mut mcts = PuctMCTS::new(
         game_state.clone(),
         game_engine,
         analyzer,
-        backpropagation_strategy,
-        selection_strategy,
-        options.visits,
-        play_options.parallelism,
+        value_model,
+        selection,
     );
 
     let mut analysis = Vec::new();
@@ -75,8 +76,5 @@ where
         .terminal_state(&game_state)
         .ok_or_else(|| anyhow!("Expected a terminal state"))?;
 
-    Ok((
-        SelfPlayMetrics::<A, P, PV>::new(analysis, terminal_score),
-        game_state,
-    ))
+    Ok((SelfPlayMetrics::new(analysis, terminal_score), game_state))
 }

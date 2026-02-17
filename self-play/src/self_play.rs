@@ -1,11 +1,9 @@
 use anyhow::Result;
-use common::TranspositionHash;
 use common::get_env_usize;
+use common::{GameLength, PlayerToMove, TranspositionHash};
 use futures::stream::{FuturesUnordered, StreamExt};
 use log::info;
 use log::warn;
-use mcts::BackpropagationStrategy;
-use mcts::SelectionStrategy;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -15,36 +13,37 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 
 use super::{SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance, play_self_one};
-use engine::engine::GameEngine;
-use engine::game_state::GameState;
-use model::analytics::GameAnalyzer;
+use engine::{GameEngine, GameState};
+use mcts::SnapshotToPropagated;
+use model::GameAnalyzer;
 use model::{Analyzer, Info, Latest, Load, ModelInfo};
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 
-pub fn play_self<F, M, E, B, Sel, T, S, A, P, PV>(
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type PVOf<VM> = <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues;
+
+pub fn play_self<F, M, E, S, A, P, VM, Sel>(
     model_factory: &F,
     engine: &E,
-    backpropagation_strategy: &B,
-    selection_strategy: &Sel,
+    value_model: &VM,
+    selection_policy: &Sel,
     self_play_persistance: &mut SelfPlayPersistance,
     self_play_options: &SelfPlayOptions,
 ) -> Result<()>
 where
     F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
-    M: Analyzer<State = S, Action = A, Predictions = P, Analyzer = T> + Info + Send + Sync,
+    M: Analyzer<State = S, Action = A, Predictions = P> + Info + Send + Sync,
+    M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
-    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-        + Send
-        + Sync,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-        + Send
-        + Sync,
-    P: Clone,
-    PV: Default + Ord + Clone + Serialize + Send,
-    S: GameState + TranspositionHash + Send,
+    P: Clone + engine::Value + GameLength,
+    S: GameState + Clone + TranspositionHash + PlayerToMove + Send,
     A: Serialize + Debug + Eq + Clone + Send,
     P: Serialize + Display + Send,
     <F as Latest>::MR: Debug + Eq + Send,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Send + Sync,
+    SnapshotOf<VM>: Clone + SnapshotToPropagated + Send + Sync,
+    PVOf<VM>: Serialize + Send,
 {
     let starting_run_time = Instant::now();
     let writer_channel_size = get_env_usize("WRITER_CHANNEL_SIZE").unwrap_or(1000);
@@ -60,6 +59,8 @@ where
             let game_results_tx = game_results_tx.clone();
             let runtime_handle = runtime_handle.clone();
             let latest_model = latest_model.clone();
+            let value_model = value_model;
+            let selection_policy = selection_policy;
 
             s.spawn(move |_| {
                 info!("Starting Thread: {}", thread_num);
@@ -73,8 +74,8 @@ where
                     game_results_tx,
                     engine,
                     latest_model_analyzer,
-                    backpropagation_strategy,
-                    selection_strategy,
+                    value_model,
+                    selection_policy,
                     self_play_options
                 );
 
@@ -130,24 +131,26 @@ where
     Ok(())
 }
 
-async fn play_games<M, E, S, A, B, Sel, P, PV, F: Fn() -> (M, ModelInfo)>(
+async fn play_games<M, E, S, A, P, F, VM, Sel>(
     self_play_batch_size: usize,
-    results_channel: Sender<(SelfPlayMetrics<A, P, PV>, S, ModelInfo)>,
+    results_channel: Sender<(SelfPlayMetrics<A, P, PVOf<VM>>, S, ModelInfo)>,
     game_engine: &E,
     latest_model_analyzer: F,
-    backpropagation_strategy: &B,
-    selection_strategy: &Sel,
+    value_model: &VM,
+    selection_policy: &Sel,
     self_play_options: &SelfPlayOptions,
 ) -> Result<()>
 where
-    S: GameState,
+    F: Fn() -> (M, ModelInfo),
+    S: GameState + Clone + TranspositionHash + PlayerToMove,
     A: Clone + Eq + Debug,
     E: GameEngine<State = S, Action = A, Terminal = P>,
     M: GameAnalyzer<State = S, Action = A, Predictions = P>,
-    B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>,
-    P: Clone,
-    PV: Default + Ord + Clone,
+    P: Clone + engine::Value + GameLength,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
+    SnapshotOf<VM>: Clone + SnapshotToPropagated,
+    PVOf<VM>: Serialize + Send,
 {
     let mut self_play_metric_stream = FuturesUnordered::new();
 
@@ -156,8 +159,8 @@ where
         let results = play_self_one(
             game_engine,
             &analyzer,
-            backpropagation_strategy,
-            selection_strategy,
+            value_model,
+            selection_policy,
             self_play_options,
         )
         .await

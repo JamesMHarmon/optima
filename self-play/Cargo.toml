@@ -12,6 +12,7 @@ all = [
     "dep:engine",
     "dep:common",
     "dep:mcts",
+    "dep:puct",
     "dep:anyhow",
     "dep:async-scoped",
     "dep:bson",
@@ -32,6 +33,7 @@ engine = { path = "../engine", optional = true }
 common = { path = "../common", optional = true }
 model = { path = "../model" }
 mcts = { path = "../mcts", optional = true }
+puct = { path = "../puct", optional = true }
 
 anyhow = { version = "1.0", optional = true }
 async-scoped = { version = "0.8", features = ["use-tokio"], optional = true }
