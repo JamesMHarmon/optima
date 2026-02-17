@@ -311,13 +311,12 @@ where
                 best_min_index = edge.edge_index;
             }
 
-            if nsa > 0 {
-                if let Some(snap) = edge.snapshot {
-                    if nsa > baseline_visits {
-                        baseline_visits = nsa;
-                        baseline_snap = Some(snap);
-                    }
-                }
+            if nsa > 0
+                && let Some(snap) = edge.snapshot
+                && nsa > baseline_visits
+            {
+                baseline_visits = nsa;
+                baseline_snap = Some(snap);
             }
         }
 

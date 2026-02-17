@@ -21,6 +21,7 @@ use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 type PVOf<VM> = <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues;
+type GameResult<VM, S, A, P> = (SelfPlayMetrics<A, P, PVOf<VM>>, S, ModelInfo);
 
 pub fn play_self<F, M, E, S, A, P, VM, Sel>(
     model_factory: &F,
@@ -133,7 +134,7 @@ where
 
 async fn play_games<M, E, S, A, P, F, VM, Sel>(
     self_play_batch_size: usize,
-    results_channel: Sender<(SelfPlayMetrics<A, P, PVOf<VM>>, S, ModelInfo)>,
+    results_channel: Sender<GameResult<VM, S, A, P>>,
     game_engine: &E,
     latest_model_analyzer: F,
     value_model: &VM,

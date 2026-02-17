@@ -18,6 +18,11 @@ use crate::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel};
 use model::{EdgeMetrics, NodeMetrics};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type RootNodeMetrics<E, M, VM> = NodeMetrics<
+    <E as GameEngine>::Action,
+    <M as GameAnalyzer>::Predictions,
+    <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues,
+>;
 
 /// Converts a PUCT rollup snapshot into a propagated-values payload.
 ///
@@ -289,15 +294,7 @@ where
             .ok_or_else(|| anyhow!("No available actions"))
     }
 
-    pub fn get_root_node_metrics(
-        &mut self,
-    ) -> Result<
-        NodeMetrics<
-            E::Action,
-            M::Predictions,
-            <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues,
-        >,
-    >
+    pub fn get_root_node_metrics(&mut self) -> Result<RootNodeMetrics<E, M, VM>>
     where
         E::Action: Clone,
         E::State: Clone + PlayerToMove,

@@ -1,5 +1,12 @@
 use super::*;
 
+type Scenario<'a> = (
+    TestState,
+    u32,
+    u32,
+    Vec<EdgeInfo<'a, u8, VictoryMarginSnapshot>>,
+);
+
 #[derive(Clone, Copy, Default)]
 struct TestState {
     ptm: usize,
@@ -162,12 +169,7 @@ fn select_matches_reference_multiple_scenarios() {
         },
     );
 
-    let scenarios: Vec<(
-        TestState,
-        u32,
-        u32,
-        Vec<EdgeInfo<'_, u8, VictoryMarginSnapshot>>,
-    )> = vec![
+    let scenarios: Vec<Scenario<'_>> = vec![
         (
             TestState { ptm: 1 },
             0,
