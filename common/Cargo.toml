@@ -11,7 +11,7 @@ name = "common"
 [dependencies]
 anyhow = "1.0"
 assert_approx_eq = "1.1"
-hocon = "0.9"
+hocon-rs = "0.1.3"
 log = { version = "0.4" }
 parking_lot = { version = "0.12" }
 serde = { version = "1.0", features = ["derive"] }

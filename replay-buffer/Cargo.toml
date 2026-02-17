@@ -43,7 +43,6 @@ flate2 = "1.0"
 half = "1.8"
 log = "0.4.17"
 lz4 = "1.23.3"
-npy = "0.4"
 numpy = "0.24.0"
 pyo3 = { version = "0.24.1", features = ["extension-module"] }
 rand = "0.8"

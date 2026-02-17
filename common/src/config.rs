@@ -4,11 +4,11 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use hocon::{Hocon, HoconLoader};
+use hocon_rs::{Config as HoconConfig, ConfigOptions, Value as HoconValue};
 
 #[derive(Debug)]
 pub struct ConfigLoader {
-    hocon: Hocon,
+    hocon: HoconValue,
     env: HashMap<String, String>,
     scope: String,
     path: PathBuf,
@@ -21,18 +21,19 @@ impl ConfigLoader {
 
         let env = std::env::vars().collect::<HashMap<_, _>>();
 
-        let hocon = HoconLoader::new()
-            .load_file(path)
-            .with_context(|| format!("Failed to find or load config file at: {:?}", path))?
-            .hocon()?;
-
-        if !matches!(hocon, Hocon::Hash(_)) {
-            return Err(anyhow!("Top level of config {:?} must be an object", path));
+        let mut options = ConfigOptions::default();
+        if let Some(parent) = path.parent().and_then(|p| p.to_str()) {
+            options.classpath = vec![parent.to_string()].into();
         }
 
-        if let Hocon::Hash(ref hash) = hocon
-            && hash.is_empty()
-        {
+        let hocon = HoconConfig::parse_file::<HoconValue>(path, Some(options))
+            .with_context(|| format!("Failed to find or load config file at: {:?}", path))?;
+
+        let Some(hash) = hocon.as_object() else {
+            return Err(anyhow!("Top level of config {:?} must be an object", path));
+        };
+
+        if hash.is_empty() {
             return Err(anyhow!("Configurations not found in file {:?}", path));
         }
 
@@ -49,11 +50,13 @@ impl ConfigLoader {
             return Some(Value::String(value.clone()));
         }
 
-        let scope = &self.hocon[self.scope.as_str()];
-        if matches!(scope, Hocon::Hash(_))
-            && let Some(value) = Self::map_hocon(scope, name)
+        if let Some(scope_value) = self
+            .hocon
+            .as_object()
+            .and_then(|hash| hash.get(self.scope.as_str()))
+            .and_then(|scope_value| Self::map_hocon(scope_value, name))
         {
-            return Some(value);
+            return Some(scope_value);
         }
 
         Self::map_hocon(&self.hocon, name)
@@ -78,12 +81,27 @@ impl ConfigLoader {
         Ok(res)
     }
 
-    fn map_hocon(hocon: &Hocon, name: &str) -> Option<Value> {
-        match &hocon[name] {
-            Hocon::Real(f64) => Some(Value::Float(*f64 as f32)),
-            Hocon::Integer(i64) => Some(Value::Integer(*i64 as usize)),
-            Hocon::String(string) => Some(Value::String(string.clone())),
-            Hocon::Boolean(bool) => Some(Value::Boolean(*bool)),
+    fn map_hocon(hocon: &HoconValue, name: &str) -> Option<Value> {
+        let value = hocon.as_object().and_then(|hash| hash.get(name))?;
+
+        match value {
+            HoconValue::Number(number) => {
+                if let Some(f64) = number.as_f64() {
+                    return Some(Value::Float(f64 as f32));
+                }
+
+                if let Some(u64) = number.as_u64() {
+                    return Some(Value::Integer(u64 as usize));
+                }
+
+                if let Some(i64) = number.as_i64() {
+                    return usize::try_from(i64).ok().map(Value::Integer);
+                }
+
+                None
+            }
+            HoconValue::String(string) => Some(Value::String(string.clone())),
+            HoconValue::Boolean(boolean) => Some(Value::Boolean(*boolean)),
             _ => None,
         }
     }
@@ -101,7 +119,15 @@ impl Value {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Boolean(val) => Some(*val),
-            Value::String(val) => Hocon::String(val.clone()).as_bool(),
+            Value::String(val) => {
+                if val.eq_ignore_ascii_case("true") {
+                    Some(true)
+                } else if val.eq_ignore_ascii_case("false") {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
