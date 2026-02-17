@@ -8,13 +8,14 @@ use cli::{Cli, Commands};
 use common::{ConfigLoader, DynamicCPUCT, FsExt, get_env_usize};
 use dotenv::dotenv;
 use env_logger::Env;
-use game::{
-    BackpropagationStrategy, Engine, ModelFactory, ModelRef, SelectionStrategy, StrategyOptions,
-    TimeStrategy, UGI,
-};
+use game::{Engine, ModelFactory, ModelRef, TimeStrategy, UGI};
 use log::info;
 use model::Load;
+#[cfg(any(feature = "connect4", feature = "arimaa"))]
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
+
+#[cfg(feature = "quoridor")]
+use puct::{VictoryMarginSelectionPolicy, VictoryMarginStrategyOptions, VictoryMarginValueModel};
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
 use std::borrow::Cow;
 use std::path::Path;
@@ -64,22 +65,40 @@ async fn async_main(cli: Cli) -> Result<()> {
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
             let play_options = &self_play_options.play_options;
-            let value_model = MovesLeftValueModel::<_, _, _>::new();
             let cpuct = DynamicCPUCT::<_>::new(
                 play_options.cpuct_base,
                 play_options.cpuct_init,
                 1.0,
                 play_options.cpuct_root_scaling,
             );
-            let selection_policy = MovesLeftSelectionPolicy::new(
-                cpuct,
-                MovesLeftStrategyOptions {
-                    fpu: play_options.fpu,
-                    fpu_root: play_options.fpu_root,
-                    moves_left_threshold: play_options.moves_left_threshold,
-                    moves_left_scale: play_options.moves_left_scale,
-                    moves_left_factor: play_options.moves_left_factor,
-                },
+
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            let (value_model, selection_policy) = (
+                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftSelectionPolicy::new(
+                    cpuct,
+                    MovesLeftStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        moves_left_threshold: play_options.moves_left_threshold,
+                        moves_left_scale: play_options.moves_left_scale,
+                        moves_left_factor: play_options.moves_left_factor,
+                    },
+                ),
+            );
+
+            #[cfg(feature = "quoridor")]
+            let (value_model, selection_policy) = (
+                VictoryMarginValueModel::<_, _, _>::new(),
+                VictoryMarginSelectionPolicy::new(
+                    cpuct,
+                    VictoryMarginStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        victory_margin_threshold: play_options.victory_margin_threshold,
+                        victory_margin_factor: play_options.victory_margin_factor,
+                    },
+                ),
             );
 
             play_self(
@@ -115,28 +134,38 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            #[cfg(feature = "quoridor")]
-            let selection_strategy_opts = StrategyOptions::new(
-                play_options.fpu,
-                play_options.fpu_root,
-                play_options.victory_margin_threshold,
-                play_options.victory_margin_factor,
-            );
-
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
-            let selection_strategy_opts = StrategyOptions::new(
-                play_options.fpu,
-                play_options.fpu_root,
-                play_options.moves_left_threshold,
-                play_options.moves_left_scale,
-                play_options.moves_left_factor,
-            );
-
             let champion_factory = ModelFactory::new(champions_dir.clone());
             let candidate_factory = ModelFactory::new(candidates_dir);
             let engine = Engine::new();
-            let backpropagation_strategy = BackpropagationStrategy::new(&engine);
-            let selection_strategy = SelectionStrategy::new(cpuct, selection_strategy_opts);
+
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            let (value_model, selection_policy) = (
+                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftSelectionPolicy::new(
+                    cpuct,
+                    MovesLeftStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        moves_left_threshold: play_options.moves_left_threshold,
+                        moves_left_scale: play_options.moves_left_scale,
+                        moves_left_factor: play_options.moves_left_factor,
+                    },
+                ),
+            );
+
+            #[cfg(feature = "quoridor")]
+            let (value_model, selection_policy) = (
+                VictoryMarginValueModel::<_, _, _>::new(),
+                VictoryMarginSelectionPolicy::new(
+                    cpuct,
+                    VictoryMarginStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        victory_margin_threshold: play_options.victory_margin_threshold,
+                        victory_margin_factor: play_options.victory_margin_factor,
+                    },
+                ),
+            );
 
             arena::championship(
                 &champion_factory,
@@ -145,8 +174,8 @@ async fn async_main(cli: Cli) -> Result<()> {
                 &certified_dir,
                 &evaluated_dir,
                 &engine,
-                &backpropagation_strategy,
-                &selection_strategy,
+                &value_model,
+                &selection_policy,
                 &"./".relative_to_cwd()?,
                 &arena_options,
             )?
@@ -185,6 +214,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 )
             };
 
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let selection_strategy_opts = |options: &UGIOptions| MovesLeftStrategyOptions {
                 fpu: options.fpu,
                 fpu_root: options.fpu_root,
@@ -193,10 +223,29 @@ async fn async_main(cli: Cli) -> Result<()> {
                 moves_left_factor: options.moves_left_factor,
             };
 
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let value_model = move |_options: &UGIOptions| MovesLeftValueModel::<_, _, _>::new();
 
+            #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let selection_strategy = move |options: &UGIOptions| {
                 MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options))
+            };
+
+            #[cfg(feature = "quoridor")]
+            let selection_strategy_opts = |options: &UGIOptions| VictoryMarginStrategyOptions {
+                fpu: options.fpu,
+                fpu_root: options.fpu_root,
+                victory_margin_threshold: options.victory_margin_threshold,
+                victory_margin_factor: options.victory_margin_factor,
+            };
+
+            #[cfg(feature = "quoridor")]
+            let value_model =
+                move |_options: &UGIOptions| VictoryMarginValueModel::<_, _, _>::new();
+
+            #[cfg(feature = "quoridor")]
+            let selection_strategy = move |options: &UGIOptions| {
+                VictoryMarginSelectionPolicy::new(cpuct(options), selection_strategy_opts(options))
             };
 
             let time_strategy = TimeStrategy::new();

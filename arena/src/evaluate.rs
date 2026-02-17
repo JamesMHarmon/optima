@@ -11,10 +11,14 @@ use std::sync::mpsc;
 use std::time::Instant;
 use tokio::runtime::Handle;
 
+use common::TranspositionHash;
 use engine::{GameEngine, GameState, Value};
-use mcts::{BackpropagationStrategy, MCTS, SelectionStrategy, TemperatureMaxMoves};
+use mcts::{PuctMCTS, TemperatureMaxMoves};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
+use puct::{RollupStats, SelectionPolicy, ValueModel};
+
+type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
 use super::{ArenaOptions, EVALUATE_PARALLELISM};
 
@@ -45,16 +49,16 @@ pub struct MatchResult {
 }
 
 impl Arena {
-    pub fn evaluate<S, P, E, M, T, B, Sel, PV>(
+    pub fn evaluate<S, P, E, M, T, VM, Sel>(
         models: &[M],
         engine: &E,
-        backpropagation_strategy: &B,
-        selection_strategy: &Sel,
+        value_model: &VM,
+        selection_policy: &Sel,
         results: Sender<EvalResult<E::Action>>,
         options: &ArenaOptions,
     ) -> Result<MatchResult>
     where
-        S: GameState,
+        S: GameState + Clone + TranspositionHash,
         E::Action:
             Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
         E: GameEngine<State = S, Terminal = P> + Sync,
@@ -63,18 +67,10 @@ impl Arena {
             + Send
             + Sync,
         T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send,
-        B: BackpropagationStrategy<
-                State = S,
-                Action = E::Action,
-                Predictions = P,
-                PropagatedValues = PV,
-            > + Send
-            + Sync,
-        Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
-            + Send
-            + Sync,
+        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
+        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
+        SnapshotOf<VM>: Clone,
         P: Value,
-        PV: Default + Ord,
     {
         let num_players = models.len();
         let starting_time = Instant::now();
@@ -115,8 +111,8 @@ impl Arena {
                         game_results_tx,
                         engine,
                         models,
-                        backpropagation_strategy,
-                        selection_strategy,
+                        value_model,
+                        selection_policy,
                         options,
                     );
 
@@ -200,31 +196,27 @@ impl Arena {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn play_games<S, A, P, E, M, T, B, Sel, PV>(
+    async fn play_games<S, A, P, E, M, T, VM, Sel>(
         num_games_to_play: usize,
         num_players: usize,
         batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         engine: &E,
         models: &[M],
-        backpropagation_strategy: &B,
-        selection_strategy: &Sel,
+        value_model: &VM,
+        selection_policy: &Sel,
         options: &ArenaOptions,
     ) -> Result<()>
     where
-        S: GameState,
+        S: GameState + Clone + TranspositionHash,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-            + Send
-            + Sync,
-        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-            + Send
-            + Sync,
+        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
+        SnapshotOf<VM>: Clone,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
         P: Value,
-        PV: Default + Ord,
     {
         let mut games_to_play_futures = FuturesUnordered::new();
         let repeated_models: Vec<_> = repeat_with(|| models.iter())
@@ -239,13 +231,8 @@ impl Arena {
 
         for _ in 0..batch_size {
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(
-                    engine,
-                    backpropagation_strategy,
-                    selection_strategy,
-                    players,
-                    options,
-                );
+                let game_to_play =
+                    Self::play_game(engine, value_model, selection_policy, players, options);
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -258,13 +245,8 @@ impl Arena {
                 .map_err(|_| anyhow!("Failed to send game_result"))?;
 
             if let Some(players) = games_to_play.pop() {
-                let game_to_play = Self::play_game(
-                    engine,
-                    backpropagation_strategy,
-                    selection_strategy,
-                    players,
-                    options,
-                );
+                let game_to_play =
+                    Self::play_game(engine, value_model, selection_policy, players, options);
                 games_to_play_futures.push(game_to_play);
             }
         }
@@ -273,27 +255,23 @@ impl Arena {
     }
 
     #[allow(non_snake_case)]
-    async fn play_game<S, A, E, B, Sel, T, M, P, PV>(
+    async fn play_game<S, A, E, VM, Sel, T, M, P>(
         engine: &E,
-        backpropagation_strategy: &B,
-        selection_strategy: &Sel,
+        value_model: &VM,
+        selection_policy: &Sel,
         players: Vec<&M>,
         options: &ArenaOptions,
     ) -> Result<GameResult<A>>
     where
-        S: GameState,
+        S: GameState + Clone + TranspositionHash,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        B: BackpropagationStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-            + Send
-            + Sync,
-        Sel: SelectionStrategy<State = S, Action = A, Predictions = P, PropagatedValues = PV>
-            + Send
-            + Sync,
+        VM: ValueModel<State = S, Predictions = P, Terminal = P>,
+        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S>,
+        SnapshotOf<VM>: Clone,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
         P: Value,
-        PV: Default + Ord,
     {
         let play_options = &options.play_options;
         let visits = options.visits;
@@ -308,17 +286,7 @@ impl Arena {
 
         let mut mctss: Vec<_> = analyzers
             .iter()
-            .map(|a| {
-                MCTS::with_capacity(
-                    S::initial(),
-                    engine,
-                    a,
-                    backpropagation_strategy,
-                    selection_strategy,
-                    visits,
-                    play_options.parallelism,
-                )
-            })
+            .map(|a| PuctMCTS::new(S::initial(), engine, a, value_model, selection_policy))
             .collect();
 
         let mut actions: Vec<A> = Vec::new();

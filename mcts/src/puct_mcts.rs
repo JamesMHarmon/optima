@@ -1,5 +1,7 @@
 use anyhow::{Result, anyhow};
-use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
+use common::{
+    PropagatedGameLength, PropagatedValue, TranspositionHash, VictoryMarginPropagatedValue,
+};
 use engine::GameEngine;
 use model::GameAnalyzer;
 use puct::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel};
@@ -30,6 +32,18 @@ impl SnapshotToPropagated for puct::MovesLeftSnapshot {
 
     fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues {
         MovesLeftPropagatedValue::new(self.value_for_player(player_to_move), self.game_length())
+    }
+}
+
+impl SnapshotToPropagated for puct::VictoryMarginSnapshot {
+    type PropagatedValues = VictoryMarginPropagatedValue;
+
+    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues {
+        VictoryMarginPropagatedValue::new(
+            self.value_for_player(player_to_move),
+            self.victory_margin(),
+            0.0,
+        )
     }
 }
 
@@ -371,6 +385,16 @@ impl UgiSnapshot for puct::MovesLeftSnapshot {
 
     fn game_length(&self) -> f32 {
         self.game_length()
+    }
+}
+
+impl UgiSnapshot for puct::VictoryMarginSnapshot {
+    fn value_for_player(&self, player_to_move: usize) -> f32 {
+        self.value_for_player(player_to_move)
+    }
+
+    fn game_length(&self) -> f32 {
+        0.0
     }
 }
 

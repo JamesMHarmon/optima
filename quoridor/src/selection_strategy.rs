@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::PropagatedValue;
+use common::{PropagatedValue, VictoryMargin};
 use engine::{GameEngine, Value};
 use mcts::{
     BackpropagationStrategy, CPUCT, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
@@ -229,10 +229,6 @@ impl<'e, E, S, A, P> QuoridorBackpropagationStrategy<'e, E, S, A, P> {
 
 pub struct VictoryMarginNodeInfo {
     pub player_to_move: usize,
-}
-
-pub trait VictoryMargin {
-    fn victory_margin_score(&self) -> f32;
 }
 
 impl<E, S, A, P> BackpropagationStrategy for QuoridorBackpropagationStrategy<'_, E, S, A, P>

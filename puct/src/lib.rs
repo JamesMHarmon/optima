@@ -3,6 +3,7 @@ mod borrowed_or_owned;
 mod edge;
 mod edge_store;
 mod moves_left;
+mod victory_margin;
 mod node;
 mod node_arena;
 mod node_graph;
@@ -17,6 +18,7 @@ mod terminal_node;
 mod value_model;
 
 pub use moves_left::*;
+pub use victory_margin::*;
 pub use puct::*;
 pub use rollup::*;
 pub use scorer_selection_policy::*;

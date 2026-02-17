@@ -1,8 +1,9 @@
 use anyhow::{Context, Result, anyhow};
+use common::TranspositionHash;
 use engine::{GameEngine, GameState, Value};
 use log::{error, info, warn};
-use mcts::{BackpropagationStrategy, SelectionStrategy};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -13,38 +14,30 @@ use super::ArenaOptions;
 use super::{EvaluatePersistance, evaluate::EvalResult};
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship<S, A, F, E, M, MR, T, B, Sel, P, PV>(
+pub fn championship<S, A, F, E, M, MR, T, VM, Sel, P>(
     champions: &F,
     champions_dir: &Path,
     candidates: &F,
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
-    backpropagation_strategy: &B,
-    selection_strategy: &Sel,
+    value_model: &VM,
+    selection_policy: &Sel,
     run_dir: &Path,
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState,
+    S: GameState + Clone + TranspositionHash,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<
-            State = S,
-            Action = E::Action,
-            Predictions = P,
-            PropagatedValues = PV,
-        > + Send
-        + Sync,
-    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
-        + Send
-        + Sync,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
+    Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
+    <VM::Rollup as RollupStats>::Snapshot: Clone,
     MR: Clone + Debug + Eq + Send + Sync,
     P: Value,
-    PV: Default + Ord,
 {
     let runtime_handle = Handle::current();
 
@@ -83,8 +76,8 @@ where
                                 certified_dir,
                                 evaluated_dir,
                                 engine,
-                                backpropagation_strategy,
-                                selection_strategy,
+                                value_model,
+                                selection_policy,
                                 run_dir,
                                 options,
                             );
@@ -117,7 +110,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship_single<S, A, F, E, M, MR, T, B, Sel, P, PV>(
+pub fn championship_single<S, A, F, E, M, MR, T, VM, Sel, P>(
     candidate: &MR,
     champions: &F,
     champions_dir: &Path,
@@ -125,31 +118,23 @@ pub fn championship_single<S, A, F, E, M, MR, T, B, Sel, P, PV>(
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
-    backpropagation_strategy: &B,
-    selection_strategy: &Sel,
+    value_model: &VM,
+    selection_policy: &Sel,
     run_dir: &Path,
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState,
+    S: GameState + Clone + TranspositionHash,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
-    B: BackpropagationStrategy<
-            State = S,
-            Action = E::Action,
-            Predictions = P,
-            PropagatedValues = PV,
-        > + Send
-        + Sync,
-    Sel: SelectionStrategy<State = S, Action = E::Action, Predictions = P, PropagatedValues = PV>
-        + Send
-        + Sync,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
+    Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
+    <VM::Rollup as RollupStats>::Snapshot: Clone,
     MR: Debug + Send + Sync,
     P: Value,
-    PV: Default + Ord,
 {
     let promote_candidate_to_champion = || {
         info!("Promoting {:?} to champion.", candidate);
@@ -219,8 +204,8 @@ where
             super::evaluate::Arena::evaluate(
                 &[champion, candidate],
                 engine,
-                backpropagation_strategy,
-                selection_strategy,
+                value_model,
+                selection_policy,
                 tx,
                 options,
             )
