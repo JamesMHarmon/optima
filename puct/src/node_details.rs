@@ -265,9 +265,9 @@ mod tests {
             action: (),
             Nsa: 1,
             propagated_values: 1,
-            Psa: 2.0,
+            Psa: 1.0,
             Usa: 1.0,
-            cpuct: 2.0,
+            cpuct: 1.0,
             puct_score: 2.0,
         };
 
@@ -292,8 +292,8 @@ mod tests {
             action: (),
             Nsa: 1,
             propagated_values: 1,
-            Psa: 2.0,
-            Usa: 2.0,
+            Psa: 1.0,
+            Usa: 1.0,
             cpuct: 1.0,
             puct_score: 2.0,
         };
