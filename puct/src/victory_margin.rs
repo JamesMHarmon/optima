@@ -1,3 +1,4 @@
+use core::panic;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
@@ -44,7 +45,7 @@ impl VictoryMarginSnapshot {
         match player_index {
             1 => (self.p1_sum / denom) as f32,
             2 => (self.p2_sum / denom) as f32,
-            _ => (self.p1_sum / denom) as f32,
+            _ => panic!("Invalid player index: {}", player_index),
         }
     }
 
