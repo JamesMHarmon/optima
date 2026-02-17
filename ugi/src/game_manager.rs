@@ -5,7 +5,7 @@ use crate::{
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
-use mcts::{EdgeDetails, MCTS, NodeDetails, PuctMCTS, UgiSnapshot};
+use mcts::{EdgeDetails, NodeDetails, PuctMCTS, UgiSnapshot};
 use model::Analyzer;
 use puct::{RollupStats, SelectionPolicy, ValueModel};
 use rand::seq::IteratorRandom;
@@ -132,7 +132,9 @@ where
             + Send
             + 'static,
         M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-        B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Send + 'static,
+        B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>
+            + Send
+            + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
         Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
@@ -716,100 +718,4 @@ fn init_options() -> UGIOptions {
     }
 
     options
-}
-
-/// Find transpositions for a given sequence of actions
-/// Returns a list of alternative action sequences that lead to the same game state,
-/// sorted by visit count (most visited first)
-pub fn find_transpositions<S, A, E, M, B, Sel, P, PV>(
-    actions: &[A],
-    game_state: &S,
-    mcts: &MCTS<S, A, E, M, B, Sel, P, PV>,
-    engine: &E,
-    get_hash: impl Fn(&S) -> u64,
-) -> Vec<(Vec<A>, usize)>
-where
-    S: GameState + Clone,
-    A: Clone + Eq + Debug,
-    E: GameEngine<State = S, Action = A, Terminal = P>,
-    M: model::GameAnalyzer<State = S, Action = A, Predictions = P>,
-    PV: Default,
-{
-    // Calculate target hash after applying all actions
-    let target_hash = actions.iter().fold(game_state.clone(), |gs, action| {
-        engine.take_action(&gs, action)
-    });
-    let target_hash = get_hash(&target_hash);
-
-    let player_to_move = engine.player_to_move(game_state);
-
-    mcts.get_root_node()
-        .ok()
-        .map(|root_node| {
-            find_transposition_paths(
-                &*root_node,
-                game_state,
-                player_to_move,
-                target_hash,
-                mcts,
-                engine,
-                &get_hash,
-            )
-        })
-        .unwrap_or_default()
-}
-
-fn find_transposition_paths<S, A, E, M, B, Sel, P, PV>(
-    node: &mcts::MCTSNode<A, P, PV>,
-    game_state: &S,
-    player_to_move: usize,
-    target_hash: u64,
-    mcts: &MCTS<S, A, E, M, B, Sel, P, PV>,
-    engine: &E,
-    get_hash: &impl Fn(&S) -> u64,
-) -> Vec<(Vec<A>, usize)>
-where
-    S: GameState + Clone,
-    A: Clone + Eq + Debug,
-    E: GameEngine<State = S, Action = A, Terminal = P>,
-    M: model::GameAnalyzer<State = S, Action = A, Predictions = P>,
-    PV: Default,
-{
-    let mut transpositions = vec![];
-
-    for edge in node.iter_visited_edges() {
-        if let Some(child_node) = mcts.get_node_of_edge(edge) {
-            let new_game_state = engine.take_action(game_state, edge.action());
-
-            // Check if this action leads directly to the target
-            if get_hash(&new_game_state) == target_hash {
-                transpositions.push((vec![edge.action().clone()], edge.visits()));
-                continue;
-            }
-
-            // Stop if terminal or if we've switched players
-            if child_node.is_terminal() || engine.player_to_move(&new_game_state) != player_to_move
-            {
-                continue;
-            }
-
-            // Recursively search for transpositions in child nodes
-            let child_transpositions = find_transposition_paths(
-                &*child_node,
-                &new_game_state,
-                player_to_move,
-                target_hash,
-                mcts,
-                engine,
-                get_hash,
-            );
-
-            for (mut actions, visits) in child_transpositions {
-                actions.insert(0, edge.action().clone());
-                transpositions.push((actions, visits));
-            }
-        }
-    }
-
-    transpositions
 }

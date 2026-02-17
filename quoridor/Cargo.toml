@@ -19,7 +19,7 @@ common = { path = "../common" }
 engine = { path = "../engine" }
 model = { path = "../model" }
 ugi = { path = "../ugi" }
-mcts = { path = "../mcts" }
+puct = { path = "../puct" }
 tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
 ] }
 

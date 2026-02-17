@@ -6,7 +6,6 @@ pub mod engine;
 pub mod game_state;
 pub mod mappings;
 pub mod predictions;
-pub mod selection_strategy;
 pub mod transposition_entry;
 pub mod ugi;
 pub mod value;
@@ -29,7 +28,6 @@ pub use engine::*;
 pub use game_state::*;
 pub use mappings::*;
 pub use predictions::*;
-pub use selection_strategy::*;
 pub use ugi::*;
 pub use value::*;
 

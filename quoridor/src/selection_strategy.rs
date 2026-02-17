@@ -1,7 +1,7 @@
 use anyhow::Result;
 use common::{PropagatedValue, VictoryMargin};
 use engine::{GameEngine, Value};
-use mcts::{
+use puct::{
     BackpropagationStrategy, CPUCT, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
     SelectionStrategy,
 };

@@ -19,28 +19,16 @@ compile_error!("Features 'arimaa' and 'connect4' are mutually exclusive. Choose 
 compile_error!("At least one game feature must be enabled: 'quoridor', 'arimaa', or 'connect4'.");
 
 #[cfg(feature = "quoridor")]
-pub use quoridor::{
-    Engine, ModelFactory, ModelRef, QuoridorBackpropagationStrategy as BackpropagationStrategy,
-    QuoridorSelectionStrategy as SelectionStrategy, QuoridorStrategyOptions as StrategyOptions,
-    UGI,
-};
+pub use quoridor::{Engine, ModelFactory, ModelRef, UGI};
 
 #[cfg(feature = "quoridor")]
 pub use ugi::BaseTimeStrategy as TimeStrategy;
 
 #[cfg(feature = "arimaa")]
-pub use arimaa::{
-    ArimaaBackpropagationStrategy as BackpropagationStrategy,
-    ArimaaSelectionStrategy as SelectionStrategy, ArimaaStrategyOptions as StrategyOptions,
-    ArimaaTimeStrategy as TimeStrategy, Engine, ModelFactory, ModelRef, UGI,
-};
+pub use arimaa::{ArimaaTimeStrategy as TimeStrategy, Engine, ModelFactory, ModelRef, UGI};
 
 #[cfg(feature = "connect4")]
-pub use connect4::{
-    Connect4BackpropagationStrategy as BackpropagationStrategy,
-    Connect4SelectionStrategy as SelectionStrategy, Connect4StrategyOptions as StrategyOptions,
-    Engine, ModelFactory, ModelRef, UGI,
-};
+pub use connect4::{Engine, ModelFactory, ModelRef, UGI};
 
 #[cfg(feature = "connect4")]
 pub use ugi::BaseTimeStrategy as TimeStrategy;

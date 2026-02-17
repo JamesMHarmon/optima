@@ -1,7 +1,7 @@
 use common::MovesLeftPropagatedValue;
 use half::f16;
-use mcts::{map_moves_left_to_one_hot, moves_left_expected_value};
 use once_cell::sync::OnceCell;
+use puct::{map_moves_left_to_one_hot, moves_left_expected_value};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tinyvec::ArrayVec;
