@@ -1,9 +1,8 @@
 use anyhow::Result;
 use common::TranspositionHash;
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
-use mcts::UgiSnapshot;
 use model::Analyzer;
-use puct::{RollupStats, SelectionPolicy, ValueModel};
+use puct::{RollupStats, SelectionPolicy, UgiSnapshot, ValueModel};
 
 use std::fmt::{Debug, Display};
 use std::io::stdin;

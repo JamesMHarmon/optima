@@ -5,9 +5,8 @@ use crate::{
 use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
-use mcts::{EdgeDetails, NodeDetails, PuctMCTS, UgiSnapshot};
 use model::Analyzer;
-use puct::{RollupStats, SelectionPolicy, ValueModel};
+use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, UgiSnapshot, ValueModel};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};

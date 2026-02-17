@@ -14,9 +14,9 @@ use tokio::sync::mpsc::Sender;
 
 use super::{SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance, play_self_one};
 use engine::{GameEngine, GameState};
-use mcts::SnapshotToPropagated;
 use model::GameAnalyzer;
 use model::{Analyzer, Info, Latest, Load, ModelInfo};
+use puct::SnapshotToPropagated;
 use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;

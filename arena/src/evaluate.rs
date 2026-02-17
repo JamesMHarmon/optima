@@ -13,10 +13,9 @@ use tokio::runtime::Handle;
 
 use common::TranspositionHash;
 use engine::{GameEngine, GameState, Value};
-use mcts::{PuctMCTS, TemperatureMaxMoves};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
-use puct::{RollupStats, SelectionPolicy, ValueModel};
+use puct::{PuctMCTS, RollupStats, SelectionPolicy, TemperatureMaxMoves, ValueModel};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 

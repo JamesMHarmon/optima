@@ -1,42 +1,7 @@
-use anyhow::Result;
-use common::{PropagatedValue, VictoryMargin};
-use engine::{GameEngine, Value};
-use puct::{
-    BackpropagationStrategy, CPUCT, EdgeDetails, MCTSEdge, MCTSNode, NodeLendingIterator,
-    SelectionStrategy,
-};
-
-use crate::QuoridorPropagatedValue;
-
-pub struct QuoridorSelectionStrategy<S, A, P, C> {
-    cpuct: C,
-    options: QuoridorStrategyOptions,
-    _phantom: std::marker::PhantomData<(S, A, P)>,
-}
-
-pub struct QuoridorStrategyOptions {
-    pub fpu: f32,
-    pub fpu_root: f32,
-    pub victory_margin_threshold: f32,
-    pub victory_margin_factor: f32,
-}
-
-#[allow(clippy::too_many_arguments)]
-impl QuoridorStrategyOptions {
-    pub fn new(
-        fpu: f32,
-        fpu_root: f32,
-        victory_margin_threshold: f32,
-        victory_margin_factor: f32,
-    ) -> Self {
-        QuoridorStrategyOptions {
-            fpu,
-            fpu_root,
-            victory_margin_threshold,
-            victory_margin_factor,
-        }
-    }
-}
+//! Legacy (pre-PUCT-migration) selection-strategy module.
+//!
+//! This file is intentionally unused: `quoridor/src/lib.rs` no longer includes it.
+//! It is kept as a placeholder during the staged removal of the `mcts` crate.
 
 #[allow(non_snake_case)]
 impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {

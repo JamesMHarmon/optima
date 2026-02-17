@@ -1,3 +1,1 @@
-pub struct DirichletOptions {
-    pub epsilon: f32,
-}
+pub use puct::DirichletOptions;

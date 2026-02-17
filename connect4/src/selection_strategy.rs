@@ -1,5 +1,4 @@
-pub use puct::{
-    GameLength
-    MovesLeftNodeInfo as Connect4NodeInfo, MovesLeftSelectionStrategy as Connect4SelectionStrategy,
-    MovesLeftStrategyOptions as Connect4StrategyOptions,
-};
+//! Legacy (pre-PUCT-migration) selection-strategy module.
+//!
+//! This file is intentionally unused: `connect4/src/lib.rs` no longer includes it.
+//! It is kept as a placeholder during the staged removal of the `mcts` crate.

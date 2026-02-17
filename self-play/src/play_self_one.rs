@@ -4,10 +4,12 @@ use std::fmt::Debug;
 
 use common::{GameLength, PlayerToMove, TranspositionHash};
 use engine::{GameEngine, GameState};
-use mcts::SnapshotToPropagated;
-use mcts::{DirichletOptions, NoTemp, PuctMCTS, TemperatureConstant};
 use model::GameAnalyzer;
-use puct::{RollupStats, SelectionPolicy, ValueModel};
+use puct::SnapshotToPropagated;
+use puct::{
+    DirichletOptions, NoTemp, PuctMCTS, RollupStats, SelectionPolicy, TemperatureConstant,
+    ValueModel,
+};
 
 use super::{SelfPlayMetrics, SelfPlayOptions};
 

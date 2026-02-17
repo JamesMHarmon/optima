@@ -7,8 +7,8 @@ use std::str::FromStr;
 
 use common::{DynamicCPUCT, GameLength, PlayerToMove, TranspositionHash};
 use engine::{GameEngine, GameState};
-use mcts::PuctMCTS;
 use model::{Analyzer, GameAnalyzer};
+use puct::PuctMCTS;
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 
 #[derive(Serialize, Deserialize, Debug)]
