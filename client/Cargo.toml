@@ -16,7 +16,6 @@ self-play = { path = "../self-play" }
 model = { path = "../model" }
 arimaa = { path = "../arimaa", optional = true }
 common = { path = "../common" }
-mcts = { path = "../mcts" }
 puct = { path = "../puct" }
 arena = { path = "../arena" }
 connect4 = { path = "../connect4", optional = true }

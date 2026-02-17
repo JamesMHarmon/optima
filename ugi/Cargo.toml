@@ -10,7 +10,6 @@ edition.workspace = true
 engine = { path = "../engine" }
 common = { path = "../common" }
 model = { path = "../model" }
-mcts = { path = "../mcts" }
 puct = { path = "../puct" }
 
 

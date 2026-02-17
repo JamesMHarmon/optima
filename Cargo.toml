@@ -9,7 +9,6 @@ members = [
     "engine",
     "ugi",
     "model",
-    "mcts",
     "puct",
     "play",
     "replay-buffer",
