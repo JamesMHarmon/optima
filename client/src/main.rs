@@ -7,7 +7,6 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use common::{ConfigLoader, FsExt, get_env_usize};
 use dotenv::dotenv;
-use engine::GameEngine;
 use env_logger::Env;
 use game::{
     BackpropagationStrategy, Engine, ModelFactory, ModelRef, SelectionStrategy, StrategyOptions,
@@ -20,17 +19,7 @@ use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueMod
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
 use std::borrow::Cow;
 use std::path::Path;
-use std::sync::OnceLock;
 use ugi::{UGIOptions, run_perft, run_ugi};
-
-static UGI_ENGINE: OnceLock<&'static Engine> = OnceLock::new();
-
-fn ugi_player_to_move(state: &<Engine as GameEngine>::State) -> usize {
-    UGI_ENGINE
-        .get()
-        .expect("UGI engine was not initialized")
-        .player_to_move(state)
-}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -196,10 +185,6 @@ async fn async_main(cli: Cli) -> Result<()> {
             let model = model_factory.load(&ModelRef::new(model_path))?;
             let engine = Engine::new();
 
-            // We need a `'static` player-to-move callback for the PUCT selection policy.
-            // Store a leaked engine in a global OnceLock and use a plain fn pointer.
-            let _ = UGI_ENGINE.set(Box::leak(Box::new(Engine::new())));
-
             let cpuct = |options: &UGIOptions| {
                 DynamicCPUCT::new(
                     options.cpuct_base,
@@ -220,11 +205,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let value_model = move |_options: &UGIOptions| MovesLeftValueModel::<_, _, _>::new();
 
             let selection_strategy = move |options: &UGIOptions| {
-                MovesLeftSelectionPolicy::new(
-                    cpuct(options),
-                    selection_strategy_opts(options),
-                    ugi_player_to_move,
-                )
+                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options))
             };
 
             let time_strategy = TimeStrategy::new();

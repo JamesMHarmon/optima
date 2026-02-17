@@ -71,6 +71,12 @@ impl GameState {
     }
 }
 
+impl common::PlayerToMove for GameState {
+    fn player_to_move(&self) -> usize {
+        GameState::player_to_move(self)
+    }
+}
+
 impl Display for GameState {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         ArimaaGameState::fmt(&self.0, fmt)

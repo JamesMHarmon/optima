@@ -591,6 +591,12 @@ impl GameState {
     }
 }
 
+impl common::PlayerToMove for GameState {
+    fn player_to_move(&self) -> usize {
+        GameState::player_to_move(self)
+    }
+}
+
 pub struct PlayerInfo {
     player_num: usize,
     num_walls: usize,

@@ -160,6 +160,12 @@ impl GameState {
     }
 }
 
+impl common::PlayerToMove for GameState {
+    fn player_to_move(&self) -> usize {
+        GameState::player_to_move(self)
+    }
+}
+
 impl Display for GameState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let p1_board = map_board_to_arr(self.p1_piece_board);

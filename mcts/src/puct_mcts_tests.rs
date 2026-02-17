@@ -1,7 +1,7 @@
 use crate::DynamicCPUCT;
 use crate::counting_game::{CountingAnalyzer, CountingGameEngine, CountingGameState};
 
-use engine::{GameEngine, GameState};
+use engine::GameState;
 
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 
@@ -26,9 +26,7 @@ fn puct_mcts_can_search_and_return_pv() {
 
     let cpuct = DynamicCPUCT::<CountingGameState>::default();
 
-    let selection = MovesLeftSelectionPolicy::new(cpuct, options, |s: &CountingGameState| {
-        engine.player_to_move(s)
-    });
+    let selection = MovesLeftSelectionPolicy::new(cpuct, options);
 
     let state = CountingGameState::initial();
     let mut mcts = crate::PuctMCTS::new(state, &engine, &analyzer, &value_model, &selection);

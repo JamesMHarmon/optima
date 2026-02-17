@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, sync::Mutex};
 
-use common::{CPUCT, GameLength};
+use common::{CPUCT, GameLength, PlayerToMove};
 use engine::Value;
 
 use crate::{EdgeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
@@ -152,19 +152,17 @@ pub struct MovesLeftStrategyOptions {
     pub moves_left_factor: f32,
 }
 
-pub struct MovesLeftSelectionPolicy<C, F, S> {
+pub struct MovesLeftSelectionPolicy<C, S> {
     cpuct: C,
     options: MovesLeftStrategyOptions,
-    player_to_move: F,
     _phantom: PhantomData<S>,
 }
 
-impl<C, F, S> MovesLeftSelectionPolicy<C, F, S> {
-    pub fn new(cpuct: C, options: MovesLeftStrategyOptions, player_to_move: F) -> Self {
+impl<C, S> MovesLeftSelectionPolicy<C, S> {
+    pub fn new(cpuct: C, options: MovesLeftStrategyOptions) -> Self {
         Self {
             cpuct,
             options,
-            player_to_move,
             _phantom: PhantomData,
         }
     }
@@ -239,10 +237,10 @@ impl<C, F, S> MovesLeftSelectionPolicy<C, F, S> {
     }
 }
 
-impl<C, F, S> SelectionPolicy<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, F, S>
+impl<C, S> SelectionPolicy<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S>
 where
     C: CPUCT<State = S>,
-    F: Fn(&S) -> usize,
+    S: PlayerToMove,
 {
     type State = S;
 
@@ -268,7 +266,7 @@ where
         let root_nsb = (node_visits as f32).sqrt();
         let cpuct = self.cpuct.cpuct(state, node_visits, is_root);
 
-        let player_to_move = (self.player_to_move)(state);
+        let player_to_move = state.player_to_move();
         let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
         let baseline =
             Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);

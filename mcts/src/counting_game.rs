@@ -28,6 +28,12 @@ impl CountingGameState {
     }
 }
 
+impl common::PlayerToMove for CountingGameState {
+    fn player_to_move(&self) -> usize {
+        if self.p1_turn { 1 } else { 2 }
+    }
+}
+
 impl GameState for CountingGameState {
     fn initial() -> Self {
         Self {
