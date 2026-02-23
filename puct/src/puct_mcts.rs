@@ -6,6 +6,7 @@ use rand::Rng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::thread_rng;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::node_details::{EdgeDetails, NodeDetails};
@@ -180,10 +181,25 @@ where
         self.search(|node_visits| node_visits < visits).await
     }
 
+    pub async fn search_visits_active(
+        &mut self,
+        visits: usize,
+        active: &AtomicBool,
+    ) -> Result<usize>
+    where
+        E::Action: Clone,
+        E::State: Clone,
+        SnapshotOf<VM>: Clone,
+    {
+        self.search(|node_visits| active.load(Ordering::SeqCst) && node_visits < visits)
+            .await
+    }
+
     pub async fn search_time_max_visits(
         &mut self,
         duration: Duration,
         max_visits: usize,
+        active: &AtomicBool,
     ) -> Result<usize>
     where
         E::Action: Clone,
@@ -191,8 +207,12 @@ where
         SnapshotOf<VM>: Clone,
     {
         let start = Instant::now();
-        self.search(|visits| start.elapsed() < duration && visits < max_visits)
-            .await
+        self.search(|visits| {
+            active.load(Ordering::SeqCst)
+                && start.elapsed() < duration
+                && (max_visits == 0 || visits < max_visits)
+        })
+        .await
     }
 
     pub async fn search<Fn>(&mut self, mut alive: Fn) -> Result<usize>

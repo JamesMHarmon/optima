@@ -25,7 +25,7 @@ pub struct GameManager<S, A> {
     command_channel: mpsc::Sender<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
-    ponder_active: Arc<AtomicBool>,
+    search_active: Arc<AtomicBool>,
 }
 
 enum CommandInner<S, A> {
@@ -71,15 +71,15 @@ impl<S, A> GameManager<S, A> {
                 self.send_command(CommandInner::SetPosition(state)).await
             }
             UGICommand::Go => {
-                self.ponder_active.store(false, Ordering::SeqCst);
+                self.search_active.store(true, Ordering::SeqCst);
                 self.send_command(CommandInner::Go).await
             }
             UGICommand::GoPonder => {
-                self.ponder_active.store(true, Ordering::SeqCst);
+                self.search_active.store(true, Ordering::SeqCst);
                 self.send_command(CommandInner::Ponder).await
             }
             UGICommand::MakeMove(actions) => {
-                self.ponder_active.store(false, Ordering::SeqCst);
+                self.search_active.store(false, Ordering::SeqCst);
                 self.send_command(CommandInner::MakeMove(actions)).await
             }
             UGICommand::ClearFocus => self.send_command(CommandInner::ClearFocus).await,
@@ -87,7 +87,7 @@ impl<S, A> GameManager<S, A> {
                 self.send_command(CommandInner::FocusActions(actions)).await
             }
             UGICommand::Quit | UGICommand::Stop => {
-                self.ponder_active.store(false, Ordering::SeqCst);
+                self.search_active.store(false, Ordering::SeqCst);
             }
             UGICommand::SetOption(option) => self.set_option(option),
             UGICommand::Noop => {}
@@ -147,20 +147,20 @@ where
         let (output_tx, output_rx) = mpsc::unbounded_channel();
         let output = OutputHandle { output_tx };
         let options = Arc::new(Mutex::new(init_options()));
-        let ponder_active = Arc::new(AtomicBool::new(false));
+        let search_active = Arc::new(AtomicBool::new(false));
 
         let game_manager = Self {
             command_channel: command_tx,
             output: output.clone(),
             options: options.clone(),
-            ponder_active: ponder_active.clone(),
+            search_active: search_active.clone(),
         };
 
         let game_manager_inner = GameManagerInner::new(
             command_rx,
             output,
             options,
-            ponder_active,
+            search_active,
             ugi_mapper,
             engine,
             model,
@@ -183,7 +183,7 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel, T> {
     command_rx: mpsc::Receiver<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
-    ponder_active: Arc<AtomicBool>,
+    search_active: Arc<AtomicBool>,
     ugi_mapper: Arc<U>,
     engine: E,
     model: M,
@@ -219,7 +219,7 @@ where
         command_rx: mpsc::Receiver<CommandInner<S, A>>,
         output: OutputHandle,
         options: Arc<Mutex<UGIOptions>>,
-        ponder_active: Arc<AtomicBool>,
+        search_active: Arc<AtomicBool>,
         ugi_mapper: Arc<U>,
         engine: E,
         model: M,
@@ -231,7 +231,7 @@ where
             command_rx,
             output,
             options,
-            ponder_active,
+            search_active,
             ugi_mapper,
             engine,
             model,
@@ -252,7 +252,7 @@ where
         let mut focus_game_state = game_state.clone();
 
         let options: Arc<Mutex<UGIOptions>> = self.options.clone();
-        let ponder_active = self.ponder_active.clone();
+        let search_active = self.search_active.clone();
         let analyzer = self.model.analyzer();
 
         let mut value_model_container: Option<B> = None;
@@ -315,13 +315,13 @@ where
 
                         self.output.info("ponder started");
 
-                        while ponder_active.load(Ordering::SeqCst)
+                        while search_active.load(Ordering::SeqCst)
                             && self.command_rx.is_empty()
                             && (max_visits == 0 || mcts.num_focus_node_visits() < max_visits)
                         {
                             let depth = mcts
                                 .search(|visits| {
-                                    ponder_active.load(Ordering::SeqCst)
+                                    search_active.load(Ordering::SeqCst)
                                         && visits < max_visits
                                         && last_output.elapsed().as_secs() < 1
                                 })
@@ -481,6 +481,7 @@ where
                         );
                     }
 
+                    let search_active = Arc::clone(&self.search_active);
                     let mut actions = Vec::new();
                     let mut depths = Vec::new();
                     let mut visits = Vec::new();
@@ -489,17 +490,24 @@ where
                     let mut node_details_container = None;
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
+                        && search_active.load(Ordering::SeqCst)
                     {
                         let depth = if options_visits != 0 {
                             self.output
                                 .info(&format!("search visits: {}", options_visits));
-                            mcts.search_visits(options_visits).await.unwrap()
+                            mcts.search_visits_active(options_visits, &search_active)
+                                .await
+                                .unwrap()
                         } else {
                             self.output
                                 .info(&format!("search duration: {:?}", search_duration));
-                            mcts.search_time_max_visits(search_duration, options_max_visits)
-                                .await
-                                .unwrap()
+                            mcts.search_time_max_visits_active(
+                                search_duration,
+                                options_max_visits,
+                                &search_active,
+                            )
+                            .await
+                            .unwrap()
                         };
 
                         // Safety step to ensure there is at least one visit for the steps when in play phase and using time. An additional visit is added for PUCT to select the best action.
