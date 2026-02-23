@@ -501,7 +501,7 @@ where
                         } else {
                             self.output
                                 .info(&format!("search duration: {:?}", search_duration));
-                            mcts.search_time_max_visits_active(
+                            mcts.search_time_max_visits(
                                 search_duration,
                                 options_max_visits,
                                 &search_active,
