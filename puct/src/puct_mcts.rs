@@ -1,8 +1,5 @@
 use anyhow::{Result, anyhow};
-use common::{
-    MovesLeftPropagatedValue, PlayerToMove, PropagatedGameLength, PropagatedValue,
-    TranspositionHash, VictoryMarginPropagatedValue,
-};
+use common::{PlayerToMove, TranspositionHash};
 use engine::GameEngine;
 use model::GameAnalyzer;
 use rand::Rng;
@@ -14,44 +11,12 @@ use std::time::{Duration, Instant};
 use crate::node_details::{EdgeDetails, NodeDetails};
 use crate::options::DirichletOptions;
 use crate::temp::Temperature;
-use crate::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel};
+use crate::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
 use model::{EdgeMetrics, NodeMetrics};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
-type RootNodeMetrics<E, M, VM> = NodeMetrics<
-    <E as GameEngine>::Action,
-    <M as GameAnalyzer>::Predictions,
-    <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues,
->;
-
-/// Converts a PUCT rollup snapshot into a propagated-values payload.
-///
-/// The associated type is used so callers don't need to spell out `PV` everywhere.
-pub trait SnapshotToPropagated {
-    type PropagatedValues: Default;
-
-    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues;
-}
-
-impl SnapshotToPropagated for crate::MovesLeftSnapshot {
-    type PropagatedValues = MovesLeftPropagatedValue;
-
-    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues {
-        MovesLeftPropagatedValue::new(self.value_for_player(player_to_move), self.game_length())
-    }
-}
-
-impl SnapshotToPropagated for crate::VictoryMarginSnapshot {
-    type PropagatedValues = VictoryMarginPropagatedValue;
-
-    fn to_propagated_values(&self, player_to_move: usize) -> Self::PropagatedValues {
-        VictoryMarginPropagatedValue::new(
-            self.value_for_player(player_to_move),
-            self.victory_margin(),
-            0.0,
-        )
-    }
-}
+type RootNodeMetrics<E, M, VM> =
+    NodeMetrics<<E as GameEngine>::Action, <M as GameAnalyzer>::Predictions, SnapshotOf<VM>>;
 
 /// Transitional wrapper that runs search via the `puct` crate while providing an
 /// MCTS-like container API.
@@ -65,7 +30,6 @@ where
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
     E::State: TranspositionHash,
-    E::Terminal: engine::Value,
 {
     engine: &'a E,
     analyzer: &'a M,
@@ -81,7 +45,6 @@ where
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
     E::State: TranspositionHash,
-    E::Terminal: engine::Value,
 {
     pub fn new(
         state: E::State,
@@ -299,24 +262,23 @@ where
         E::Action: Clone,
         E::State: Clone + PlayerToMove,
         M::Predictions: Clone,
-        SnapshotOf<VM>: Clone + SnapshotToPropagated,
+        SnapshotOf<VM>: Clone,
     {
         let state = self.focus_state();
         let analysis = self.analyzer.analyze(&state);
         let predictions = analysis.predictions().clone();
 
         let edges: Vec<EdgeView<E::Action, SnapshotOf<VM>>> = self.puct.edge_views(&state);
-        let player_to_move = state.player_to_move();
 
         let children = edges
             .into_iter()
             .map(|e| {
-                let pv = e
+                let snap = e
                     .snapshot
                     .as_ref()
-                    .map(|s| s.to_propagated_values(player_to_move))
-                    .unwrap_or_default();
-                EdgeMetrics::new(e.action, e.visits as usize, pv)
+                    .cloned()
+                    .unwrap_or_else(SnapshotOf::<VM>::zero);
+                EdgeMetrics::new(e.action, e.visits as usize, snap)
             })
             .collect::<Vec<_>>();
 
@@ -331,71 +293,6 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct PuctUgiValues {
-    value: f32,
-    game_length: f32,
-}
-
-impl PuctUgiValues {
-    pub fn new(value: f32, game_length: f32) -> Self {
-        Self { value, game_length }
-    }
-}
-
-impl PropagatedValue for PuctUgiValues {
-    fn value(&self) -> f32 {
-        self.value
-    }
-}
-
-impl PropagatedGameLength for PuctUgiValues {
-    fn game_length(&self) -> f32 {
-        self.game_length
-    }
-}
-
-impl Eq for PuctUgiValues {}
-
-impl Ord for PuctUgiValues {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.game_length, self.value)
-            .partial_cmp(&(other.game_length, other.value))
-            .expect("Failed to compare")
-    }
-}
-
-impl PartialOrd for PuctUgiValues {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-pub trait UgiSnapshot {
-    fn value_for_player(&self, player_to_move: usize) -> f32;
-    fn game_length(&self) -> f32;
-}
-
-impl UgiSnapshot for crate::MovesLeftSnapshot {
-    fn value_for_player(&self, player_to_move: usize) -> f32 {
-        self.value_for_player(player_to_move)
-    }
-
-    fn game_length(&self) -> f32 {
-        self.game_length()
-    }
-}
-
-impl UgiSnapshot for crate::VictoryMarginSnapshot {
-    fn value_for_player(&self, player_to_move: usize) -> f32 {
-        self.value_for_player(player_to_move)
-    }
-
-    fn game_length(&self) -> f32 {
-        0.0
-    }
-}
-
 impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
 where
     E: GameEngine,
@@ -403,13 +300,11 @@ where
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
     E::State: TranspositionHash + Clone,
-    E::Terminal: engine::Value,
     E::Action: Clone + PartialEq,
-    SnapshotOf<VM>: Clone + UgiSnapshot,
 {
     pub fn get_focus_node_details(
         &mut self,
-    ) -> Result<Option<NodeDetails<E::Action, PuctUgiValues>>> {
+    ) -> Result<Option<NodeDetails<E::Action, SnapshotOf<VM>>>> {
         let state = self.focus_state();
         let edges = self.puct.edge_views(&state);
         if edges.is_empty() {
@@ -420,23 +315,20 @@ where
         let edge_details = edges
             .into_iter()
             .map(|e| {
-                let propagated_values = e
-                    .snapshot
-                    .as_ref()
-                    .map(|s| {
-                        PuctUgiValues::new(s.value_for_player(player_to_move), s.game_length())
-                    })
-                    .unwrap_or_default();
+                let snapshot: <<VM as ValueModel>::Rollup as RollupStats>::Snapshot =
+                    e.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
 
-                let qsa = propagated_values.value();
+                //@TODO: Analyze this implementation of values.
+
                 EdgeDetails {
                     action: e.action,
                     Nsa: e.visits as usize,
                     Psa: e.policy_prior,
                     Usa: 0.0,
                     cpuct: 0.0,
-                    puct_score: qsa,
-                    propagated_values,
+                    puct_score: 0.0,
+                    snapshot,
+                    player_to_move,
                 }
             })
             .collect::<Vec<_>>();
@@ -454,10 +346,14 @@ where
         &mut self,
         action: Option<&E::Action>,
         depth: usize,
-    ) -> Result<Vec<EdgeDetails<E::Action, PuctUgiValues>>> {
+    ) -> Result<Vec<EdgeDetails<E::Action, SnapshotOf<VM>>>> {
         let mut state = self.focus_state();
-        let player_to_move_root = self.engine.player_to_move(&state);
-        let mut pv = Vec::new();
+        let mut pv: Vec<
+            EdgeDetails<
+                <E as GameEngine>::Action,
+                <<VM as ValueModel>::Rollup as RollupStats>::Snapshot,
+            >,
+        > = Vec::new();
 
         for ply in 0..depth {
             let edges = self.puct.edge_views(&state);
@@ -485,23 +381,19 @@ where
                 break;
             };
 
-            let propagated_values = chosen
-                .snapshot
-                .as_ref()
-                .map(|s| {
-                    PuctUgiValues::new(s.value_for_player(player_to_move_root), s.game_length())
-                })
-                .unwrap_or_default();
-            let qsa = propagated_values.value();
+            let snapshot = chosen.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
+            let player_to_move = self.engine.player_to_move(&state);
 
+            //@TODO: Analyze this implementation of values.
             let details = EdgeDetails {
                 action: chosen.action.clone(),
                 Nsa: chosen.visits as usize,
                 Psa: chosen.policy_prior,
                 Usa: 0.0,
                 cpuct: 0.0,
-                puct_score: qsa,
-                propagated_values,
+                puct_score: 0.0,
+                snapshot,
+                player_to_move,
             };
 
             state = self.engine.take_action(&state, &chosen.action);

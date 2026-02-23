@@ -1,13 +1,13 @@
-use common::MovesLeftPropagatedValue;
 use model::position_metrics::PositionMetrics;
 use model::{EdgeMetrics, node_metrics::NodeMetrics};
+use puct::MovesLeftSnapshot;
 
 use super::Predictions;
 use super::{Action, GameState};
 
 pub fn get_symmetries(
-    metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
-) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
+    metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>,
+) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>> {
     let PositionMetrics {
         game_state,
         node_metrics,
@@ -24,11 +24,11 @@ pub fn get_symmetries(
 }
 
 fn symmetrical_node_metrics(
-    metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
-) -> NodeMetrics<Action, Predictions, MovesLeftPropagatedValue> {
+    metrics: &NodeMetrics<Action, Predictions, MovesLeftSnapshot>,
+) -> NodeMetrics<Action, Predictions, MovesLeftSnapshot> {
     let children_symmetry = metrics.children.iter().map(|m| {
         let symmetrical_action = m.action().vertical_symmetry();
-        EdgeMetrics::new(symmetrical_action, m.visits(), m.propagatedValues().clone())
+        EdgeMetrics::new(symmetrical_action, m.visits(), *m.snapshot())
     });
 
     NodeMetrics {
@@ -45,6 +45,7 @@ mod tests {
     use arimaa_engine::{Action, take_actions};
     use engine::GameState as GameStateTrait;
     use model::EdgeMetrics;
+    use puct::{MovesLeftSnapshot, WeightedMerge};
 
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
@@ -274,21 +275,9 @@ mod tests {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new(
-                        "c2n".parse().unwrap(),
-                        500,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "a2e".parse().unwrap(),
-                        250,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "c2w".parse().unwrap(),
-                        50,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
+                    EdgeMetrics::new("c2n".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("a2e".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("c2w".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
             },
         });
@@ -334,7 +323,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
+            assert_eq!(original.snapshot(), symmetrical.snapshot());
         }
 
         assert_eq!(
@@ -384,21 +373,9 @@ mod tests {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new(
-                        "a2".parse().unwrap(),
-                        500,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "c2".parse().unwrap(),
-                        250,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "d1".parse().unwrap(),
-                        50,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
+                    EdgeMetrics::new("a2".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("c2".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("d1".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
             },
         });
@@ -440,7 +417,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
+            assert_eq!(original.snapshot(), symmetrical.snapshot());
         }
 
         assert_eq!(
@@ -490,21 +467,9 @@ mod tests {
                 visits: 800,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
                 children: vec![
-                    EdgeMetrics::new(
-                        "g7".parse().unwrap(),
-                        500,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "d8".parse().unwrap(),
-                        250,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "e7".parse().unwrap(),
-                        50,
-                        MovesLeftPropagatedValue::new(0.0, 0.0),
-                    ),
+                    EdgeMetrics::new("g7".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("d8".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
+                    EdgeMetrics::new("e7".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
             },
         });
@@ -546,7 +511,7 @@ mod tests {
             }
 
             assert_eq!(original.visits(), symmetrical.visits());
-            assert_eq!(original.propagatedValues(), symmetrical.propagatedValues());
+            assert_eq!(original.snapshot(), symmetrical.snapshot());
         }
 
         assert_eq!(

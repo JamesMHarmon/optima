@@ -16,12 +16,11 @@ use super::{SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance, play_self_one
 use engine::{GameEngine, GameState};
 use model::GameAnalyzer;
 use model::{Analyzer, Info, Latest, Load, ModelInfo};
-use puct::SnapshotToPropagated;
 use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
-type PVOf<VM> = <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues;
-type GameResult<VM, S, A, P> = (SelfPlayMetrics<A, P, PVOf<VM>>, S, ModelInfo);
+type SSOf<VM> = SnapshotOf<VM>;
+type GameResult<VM, S, A, P> = (SelfPlayMetrics<A, P, SSOf<VM>>, S, ModelInfo);
 
 pub fn play_self<F, M, E, S, A, P, VM, Sel>(
     model_factory: &F,
@@ -36,15 +35,15 @@ where
     M: Analyzer<State = S, Action = A, Predictions = P> + Info + Send + Sync,
     M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
-    P: Clone + engine::Value + GameLength,
+    P: Clone + GameLength,
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send,
     A: Serialize + Debug + Eq + Clone + Send,
     P: Serialize + Display + Send,
     <F as Latest>::MR: Debug + Eq + Send,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Send + Sync,
-    SnapshotOf<VM>: Clone + SnapshotToPropagated + Send + Sync,
-    PVOf<VM>: Serialize + Send,
+    SnapshotOf<VM>: Clone + Send + Sync,
+    SSOf<VM>: Serialize + Send,
 {
     let starting_run_time = Instant::now();
     let writer_channel_size = get_env_usize("WRITER_CHANNEL_SIZE").unwrap_or(1000);
@@ -147,11 +146,11 @@ where
     A: Clone + Eq + Debug,
     E: GameEngine<State = S, Action = A, Terminal = P>,
     M: GameAnalyzer<State = S, Action = A, Predictions = P>,
-    P: Clone + engine::Value + GameLength,
+    P: Clone + GameLength,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
-    SnapshotOf<VM>: Clone + SnapshotToPropagated,
-    PVOf<VM>: Serialize + Send,
+    SnapshotOf<VM>: Clone,
+    SSOf<VM>: Serialize + Send,
 {
     let mut self_play_metric_stream = FuturesUnordered::new();
 

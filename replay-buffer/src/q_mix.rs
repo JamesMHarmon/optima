@@ -2,12 +2,12 @@
 pub trait QMix {
     type State;
     type Predictions;
-    type PropagatedValues;
+    type Snapshot;
 
     fn mix_q(
         game_state: &Self::State,
         post_blunder_prediction: &Self::Predictions,
-        pre_blunder_propagated_values: &Self::PropagatedValues,
+        pre_blunder_snapshot: &Self::Snapshot,
         q_mix: f32,
     ) -> Self::Predictions;
 }

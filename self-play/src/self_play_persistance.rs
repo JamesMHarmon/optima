@@ -23,9 +23,9 @@ impl SelfPlayPersistance {
         Ok(Self { game_directory })
     }
 
-    pub fn write<A: Serialize, P: Serialize, PV: Serialize>(
+    pub fn write<A: Serialize, P: Serialize, SS: Serialize>(
         &mut self,
-        self_play_metrics: &SelfPlayMetrics<A, P, PV>,
+        self_play_metrics: &SelfPlayMetrics<A, P, SS>,
         model_info: &ModelInfo,
     ) -> Result<()> {
         let file_path = self.generate_file_path_for_game(model_info);
@@ -55,9 +55,9 @@ impl SelfPlayPersistance {
         Ok(res)
     }
 
-    pub fn read<A: DeserializeOwned, V: DeserializeOwned, PV: DeserializeOwned>(
+    pub fn read<A: DeserializeOwned, V: DeserializeOwned, SS: DeserializeOwned>(
         path: &PathBuf,
-    ) -> Result<SelfPlayMetrics<A, V, PV>> {
+    ) -> Result<SelfPlayMetrics<A, V, SS>> {
         let file = File::open(path)?;
         let content = GzDecoder::new(file);
         let metrics = serde_json::from_reader(content)?;

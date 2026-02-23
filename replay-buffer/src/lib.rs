@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use common::PropagatedValue;
+use common::{PlayerToMove, PlayerValue};
 use engine::GameState;
 use env_logger::Env;
 use flate2::read::GzDecoder;
@@ -213,6 +213,8 @@ struct SampleLoader<S> {
     q_diff_width: f32,
 }
 
+// @TODO: Cleanup types
+
 impl<S> SampleLoader<S> {
     fn load_and_sample_metrics(
         &self,
@@ -221,28 +223,23 @@ impl<S> SampleLoader<S> {
     where
         S: Sample,
         S: Sized,
-        <S as Sample>::State: GameState,
+        <S as Sample>::State: GameState + PlayerToMove,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
                 State = <S as Sample>::State,
                 Action = <S as Sample>::Action,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
-        S: Sample,
-        <S as Sample>::State: GameState,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
-        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
                 State = <S as Sample>::State,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
     {
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
@@ -267,28 +264,23 @@ impl<S> SampleLoader<S> {
     where
         S: Sample,
         S: Sized,
-        <S as Sample>::State: GameState,
+        <S as Sample>::State: GameState + PlayerToMove,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
                 State = <S as Sample>::State,
                 Action = <S as Sample>::Action,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
-        S: Sample,
-        <S as Sample>::State: GameState,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq,
-        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
                 State = <S as Sample>::State,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
     {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
@@ -350,30 +342,30 @@ impl<S> SampleLoader<S> {
                 <S as Sample>::State,
                 <S as Sample>::Action,
                 <S as Sample>::Predictions,
-                <S as Sample>::PropagatedValues,
+                <S as Sample>::Snapshot,
             >,
         >,
     >
     where
         S: Sample,
         S: Sized,
-        <S as Sample>::State: GameState,
+        <S as Sample>::State: GameState + PlayerToMove,
         <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
         <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::PropagatedValues: PropagatedValue + de::DeserializeOwned + Serialize,
+        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
         S: InputMap<State = <S as Sample>::State>,
         S: PredictionsMap<
                 State = <S as Sample>::State,
                 Action = <S as Sample>::Action,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
         S::PredictionStore:
             PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
         S: QMix<
                 State = <S as Sample>::State,
                 Predictions = <S as Sample>::Predictions,
-                PropagatedValues = <S as Sample>::PropagatedValues,
+                Snapshot = <S as Sample>::Snapshot,
             >,
     {
         let file = std::fs::File::open(&metrics_path)
@@ -382,7 +374,7 @@ impl<S> SampleLoader<S> {
         let metrics: SelfPlayMetrics<
             <S as Sample>::Action,
             <S as Sample>::Predictions,
-            <S as Sample>::PropagatedValues,
+            <S as Sample>::Snapshot,
         > = serde_json::from_reader(file)
             .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 

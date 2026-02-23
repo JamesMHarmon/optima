@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
-use common::TranspositionHash;
-use engine::{GameEngine, GameState, Value};
+use common::{PlayerValue, TranspositionHash};
+use engine::{GameEngine, GameState};
 use log::{error, info, warn};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
 use puct::{RollupStats, SelectionPolicy, ValueModel};
@@ -12,6 +12,8 @@ use tokio::runtime::Handle;
 
 use super::ArenaOptions;
 use super::{EvaluatePersistance, evaluate::EvalResult};
+
+// @TODO: Update generics
 
 #[allow(clippy::too_many_arguments)]
 pub fn championship<S, A, F, E, M, MR, T, VM, Sel, P>(
@@ -37,7 +39,7 @@ where
     Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
     <VM::Rollup as RollupStats>::Snapshot: Clone,
     MR: Clone + Debug + Eq + Send + Sync,
-    P: Value,
+    P: PlayerValue,
 {
     let runtime_handle = Handle::current();
 
@@ -134,7 +136,7 @@ where
     Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
     <VM::Rollup as RollupStats>::Snapshot: Clone,
     MR: Debug + Send + Sync,
-    P: Value,
+    P: PlayerValue,
 {
     let promote_candidate_to_champion = || {
         info!("Promoting {:?} to champion.", candidate);

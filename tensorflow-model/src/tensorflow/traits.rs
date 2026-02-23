@@ -31,13 +31,13 @@ pub trait PredictionsMap {
     type State;
     type Action;
     type Predictions;
-    type PropagatedValues;
+    type Snapshot;
 
     fn to_output(
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::Snapshot>,
     ) -> HashMap<String, Vec<f32>>;
 }
 

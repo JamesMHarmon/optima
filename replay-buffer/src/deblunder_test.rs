@@ -3,19 +3,20 @@
 mod test {
     use approx::assert_abs_diff_eq;
     use arimaa::{Action, GameState, Predictions, Value};
-    use common::MovesLeftPropagatedValue;
-    use engine::{GameState as GameStateTrait, Value as ValueTrait};
+    use common::{GameLength, PlayerValue};
+    use engine::GameState as GameStateTrait;
     use model::{EdgeMetrics, NodeMetrics, PositionMetrics};
+    use puct::MovesLeftSnapshot;
 
     use crate::{
         arimaa_sampler::{ArimaaPStore, ArimaaSampler},
         sample::PositionMetricsExtended,
     };
 
-    type Metric = PositionMetricsExtended<GameState, Action, Predictions, MovesLeftPropagatedValue>;
-    type MetricNode = NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>;
-    type MetricEdge = EdgeMetrics<Action, MovesLeftPropagatedValue>;
-    type MetricPosition = PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>;
+    type Metric = PositionMetricsExtended<GameState, Action, Predictions, MovesLeftSnapshot>;
+    type MetricNode = NodeMetrics<Action, Predictions, MovesLeftSnapshot>;
+    type MetricEdge = EdgeMetrics<Action, MovesLeftSnapshot>;
+    type MetricPosition = PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>;
 
     fn deblunder(metrics: &mut [Metric], q_diff_threshold: f32, q_diff_width: f32) {
         crate::deblunder::deblunder::<_, _, _, _, ArimaaPStore, ArimaaSampler>(
@@ -39,8 +40,13 @@ mod test {
         As: AsRef<str>,
     {
         let action = action.as_ref().parse::<Action>().unwrap();
-        let propagated_values = MovesLeftPropagatedValue::new(Q, M);
-        EdgeMetrics::new(action, visits, propagated_values)
+        let snapshot = MovesLeftSnapshot {
+            p1_sum: Q as f64,
+            p2_sum: Q as f64,
+            game_length_sum: M as f64,
+            total_weight: 1,
+        };
+        EdgeMetrics::new(action, visits, snapshot)
     }
 
     fn node_metrics(children: Vec<MetricEdge>) -> MetricNode {
@@ -101,12 +107,12 @@ mod test {
 
         deblunder(&mut metrics, 0.1, 0.1);
 
-        assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 1.0);
-        assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(2), 0.0);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 1.0);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(2), 0.0);
         assert_abs_diff_eq!(metrics[0].target_score.game_length(), 98.0);
 
-        assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(1), 1.0);
-        assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(2), 0.0);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(1), 1.0);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.0);
         assert_abs_diff_eq!(metrics[1].target_score.game_length(), 98.0);
     }
 
@@ -161,13 +167,13 @@ mod test {
 
         deblunder(&mut metrics, 0.1, 0.1);
 
-        assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 0.6);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.6);
         assert_abs_diff_eq!(metrics[0].target_score.game_length(), 105.0);
 
-        assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(2), 0.8);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.8);
         assert_abs_diff_eq!(metrics[1].target_score.game_length(), 105.0);
 
-        assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[2].target_score.value().player_value(1), 1.0);
         assert_abs_diff_eq!(metrics[2].target_score.game_length(), 100.0);
     }
 
@@ -211,14 +217,11 @@ mod test {
 
         deblunder(&mut metrics, 0.1, 0.2);
 
-        assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 0.8);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.8);
 
-        assert_abs_diff_eq!(
-            metrics[1].target_score.value().get_value_for_player(2),
-            0.35
-        );
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.35);
 
-        assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[2].target_score.value().player_value(1), 1.0);
     }
 
     #[test]
@@ -283,28 +286,19 @@ mod test {
 
         deblunder(&mut metrics, 0.1, 0.2);
 
-        assert_abs_diff_eq!(
-            metrics[0].target_score.value().get_value_for_player(1),
-            0.775
-        );
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.775);
         assert_abs_diff_eq!(metrics[0].target_score.game_length(), 70.00001);
 
-        assert_abs_diff_eq!(
-            metrics[1].target_score.value().get_value_for_player(2),
-            0.525
-        );
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.525);
         assert_abs_diff_eq!(metrics[1].target_score.game_length(), 70.00001);
 
-        assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 0.9);
+        assert_abs_diff_eq!(metrics[2].target_score.value().player_value(1), 0.9);
         assert_eq!(metrics[2].target_score.game_length(), 100.0);
 
-        assert_abs_diff_eq!(
-            metrics[3].target_score.value().get_value_for_player(2),
-            0.35
-        );
+        assert_abs_diff_eq!(metrics[3].target_score.value().player_value(2), 0.35);
         assert_abs_diff_eq!(metrics[3].target_score.game_length(), 100.0);
 
-        assert_abs_diff_eq!(metrics[4].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[4].target_score.value().player_value(1), 1.0);
         assert_abs_diff_eq!(metrics[4].target_score.game_length(), 100.0);
     }
 
@@ -370,19 +364,19 @@ mod test {
 
         deblunder(&mut metrics, 0.0, 0.2);
 
-        assert_abs_diff_eq!(metrics[0].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 1.0);
         assert_eq!(metrics[0].target_score.game_length(), 10.0);
 
-        assert_abs_diff_eq!(metrics[1].target_score.value().get_value_for_player(2), 0.0);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.0);
         assert_eq!(metrics[1].target_score.game_length(), 9.0);
 
-        assert_abs_diff_eq!(metrics[2].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[2].target_score.value().player_value(1), 1.0);
         assert_eq!(metrics[2].target_score.game_length(), 8.0);
 
-        assert_abs_diff_eq!(metrics[3].target_score.value().get_value_for_player(2), 0.0);
+        assert_abs_diff_eq!(metrics[3].target_score.value().player_value(2), 0.0);
         assert_eq!(metrics[3].target_score.game_length(), 7.0);
 
-        assert_abs_diff_eq!(metrics[4].target_score.value().get_value_for_player(1), 1.0);
+        assert_abs_diff_eq!(metrics[4].target_score.value().player_value(1), 1.0);
         assert_eq!(metrics[4].target_score.game_length(), 6.0);
     }
 }

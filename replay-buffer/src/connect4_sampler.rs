@@ -1,20 +1,19 @@
 use std::collections::HashMap;
 
-use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
 use connect4::{Action, GameState, Mapper, Predictions, Value};
 use connect4::{INPUT_C, INPUT_H, INPUT_W, MOVES_LEFT_SIZE, OUTPUT_SIZE};
 use engine::{GameEngine, Value as ValueTrait};
 use half::f16;
 use model::{NodeMetrics, PositionMetrics};
+use puct::MovesLeftSnapshot;
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
 use crate::q_mix::{PredictionStore, QMix};
 
 use super::sample::Sample;
 
-type Connect4PositionMetrics =
-    PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>;
-type Connect4NodeMetrics = NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>;
+type Connect4PositionMetrics = PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>;
+type Connect4NodeMetrics = NodeMetrics<Action, Predictions, MovesLeftSnapshot>;
 type OutputMap = HashMap<String, Vec<f32>>;
 
 const INPUT_SIZE: usize = INPUT_H * INPUT_W * INPUT_C;
@@ -43,7 +42,7 @@ impl Sample for Connect4Sampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
     type PredictionStore = Connect4PStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
@@ -79,7 +78,7 @@ impl PredictionsMap for Connect4Sampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn to_output(
         &self,
@@ -94,23 +93,23 @@ impl PredictionsMap for Connect4Sampler {
 impl QMix for Connect4Sampler {
     type State = GameState;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn mix_q(
         game_state: &Self::State,
         post_blunder_prediction: &Self::Predictions,
-        pre_blunder_propagated_values: &Self::PropagatedValues,
+        pre_blunder_snapshot: &Self::Snapshot,
         q_mix: f32,
     ) -> Self::Predictions {
         if q_mix == 0.0 {
             return post_blunder_prediction.clone();
         }
-
-        let pre_blunder_value = pre_blunder_propagated_values.value();
-        let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
-
         let player_to_move = game_state.player_to_move();
-        let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
+
+        let pre_blunder_value = pre_blunder_snapshot.player_value(player_to_move);
+        let pre_blunder_game_length = pre_blunder_snapshot.game_length();
+
+        let post_blunder_value = post_blunder_prediction.player_value(player_to_move);
         let post_blunder_game_length = post_blunder_prediction.game_length();
 
         assert!(

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use common::{PropagatedGameLength, PropagatedValue};
-use engine::{GameEngine, Value as ValueTrait};
+use common::{GameLength, PlayerValue, VictoryMargin};
+use engine::GameEngine;
 use half::f16;
 use model::NodeMetrics;
+use puct::VictoryMarginSnapshot;
 use quoridor::{
-    Action, GameState, INPUT_SIZE, MOVES_LEFT_SIZE, Mapper, OUTPUT_SIZE, Predictions,
-    QuoridorPropagatedValue, Value,
+    Action, GameState, INPUT_SIZE, MOVES_LEFT_SIZE, Mapper, OUTPUT_SIZE, Predictions, Value,
 };
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
@@ -14,9 +14,9 @@ use super::q_mix::{PredictionStore, QMix};
 use super::sample::Sample;
 
 type QuoridorPositionMetrics =
-    model::PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>;
+    model::PositionMetrics<GameState, Action, Predictions, VictoryMarginSnapshot>;
 
-type QuoridorNodeMetrics = NodeMetrics<Action, Predictions, QuoridorPropagatedValue>;
+type QuoridorNodeMetrics = NodeMetrics<Action, Predictions, VictoryMarginSnapshot>;
 
 type OutputMap = HashMap<String, Vec<f32>>;
 
@@ -44,7 +44,7 @@ impl Sample for QuoridorSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = VictoryMarginSnapshot;
     type PredictionStore = QuoridorVStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
@@ -81,7 +81,7 @@ impl PredictionsMap for QuoridorSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = VictoryMarginSnapshot;
 
     fn to_output(
         &self,
@@ -96,12 +96,12 @@ impl PredictionsMap for QuoridorSampler {
 impl QMix for QuoridorSampler {
     type State = GameState;
     type Predictions = Predictions;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = VictoryMarginSnapshot;
 
     fn mix_q(
         game_state: &Self::State,
         post_blunder_prediction: &Self::Predictions,
-        pre_blunder_propagated_values: &Self::PropagatedValues,
+        pre_blunder_snapshot: &Self::Snapshot,
         q_mix: f32,
     ) -> Self::Predictions {
         if q_mix == 0.0 {
@@ -112,13 +112,13 @@ impl QMix for QuoridorSampler {
             (0.0..=1.0).contains(&q_mix),
             "Q mix must be between 0.0 and 1.0"
         );
-
-        let pre_blunder_value = pre_blunder_propagated_values.value();
-        let pre_blunder_victory_margin = pre_blunder_propagated_values.victory_margin();
-        let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
-
         let player_to_move = game_state.player_to_move();
-        let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
+
+        let pre_blunder_value = pre_blunder_snapshot.player_value(player_to_move);
+        let pre_blunder_victory_margin = pre_blunder_snapshot.victory_margin();
+        let pre_blunder_game_length = pre_blunder_snapshot.game_length();
+
+        let post_blunder_value = post_blunder_prediction.player_value(player_to_move);
         let post_blunder_victory_margin = post_blunder_prediction.victory_margin();
         let post_blunder_game_length = post_blunder_prediction.game_length();
 

@@ -1,5 +1,6 @@
 use super::{Action, GameState, Predictions};
-use engine::{PlayerResult, PlayerScore, Players, ValidActions, Value, engine::GameEngine};
+use common::PlayerValue;
+use engine::{PlayerResult, PlayerScore, Players, ValidActions, engine::GameEngine};
 
 #[derive(Default)]
 pub struct Engine {}
@@ -64,7 +65,7 @@ impl PlayerScore for Engine {
 
     fn score(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerScore> {
         state.is_terminal().map(|value| {
-            if value.get_value_for_player(player_id) > 0.5 {
+            if value.player_value(player_id) > 0.5 {
                 state.victory_margin() as usize
             } else {
                 0
@@ -80,7 +81,7 @@ impl PlayerResult for Engine {
     fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
         state
             .is_terminal()
-            .map(|value| match value.get_value_for_player(player_id) {
+            .map(|value| match value.player_value(player_id) {
                 v if v > 0.5 => "win",
                 v if v < 0.5 => "loss",
                 _ => "draw",

@@ -1,3 +1,3 @@
 pub trait VictoryMargin {
-    fn victory_margin_score(&self) -> f32;
+    fn victory_margin(&self) -> f32;
 }

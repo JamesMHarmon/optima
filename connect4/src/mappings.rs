@@ -7,11 +7,10 @@ use super::{
     Action, GameState, INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE, Predictions, TranspositionEntry,
     Value, map_board_to_arr,
 };
-use common::MovesLeftPropagatedValue;
-use common::map_moves_left_to_one_hot;
-use engine::Value as ValueTrait;
+use common::{GameLength, PlayerValue, map_moves_left_to_one_hot};
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics, PositionMetrics};
+use puct::MovesLeftSnapshot;
 use tensorflow_model::{InputMap, Mode, PredictionsMap, TranspositionMap};
 
 use half::f16;
@@ -26,8 +25,8 @@ impl Mapper {
 
     pub fn symmetries(
         &self,
-        metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>,
-    ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>> {
+        metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>,
+    ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>> {
         //@TODO: Add symmetries.
         vec![metrics]
     }
@@ -35,7 +34,7 @@ impl Mapper {
     fn metrics_to_policy_output(
         &self,
         _game_state: &GameState,
-        node_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
+        node_metrics: &NodeMetrics<Action, Predictions, MovesLeftSnapshot>,
     ) -> Vec<f32> {
         //@TODO: Make invalid actions -1.0
         let total_visits = node_metrics.visits as f32 - 1.0;
@@ -74,7 +73,7 @@ impl Mapper {
 
     fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f32> {
         let player_to_move = if game_state.p1_turn_to_move { 1 } else { 2 };
-        let val = value.get_value_for_player(player_to_move);
+        let val = value.player_value(player_to_move);
         vec![(val * 2.0) - 1.0]
     }
 
@@ -123,13 +122,13 @@ impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn to_output(
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::Snapshot>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
         let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
         let value_output = self.metrics_to_value_output(game_state, targets.value());

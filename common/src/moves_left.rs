@@ -1,5 +1,5 @@
 pub trait GameLength {
-    fn game_length_score(&self) -> f32;
+    fn game_length(&self) -> f32;
 }
 
 pub fn moves_left_expected_value<I: Iterator<Item = f32>>(moves_left_scores: I) -> f32 {

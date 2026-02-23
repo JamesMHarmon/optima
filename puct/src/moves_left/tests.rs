@@ -115,7 +115,7 @@ where
 
         let qsa = e
             .snapshot
-            .map(|s| s.value_for_player(player_to_move))
+            .map(|s| s.player_value(player_to_move))
             .unwrap_or(fpu);
 
         let msa = MovesLeftSelectionPolicy::<ConstantCpuct, TestState>::msa(
@@ -145,8 +145,8 @@ fn default_options() -> MovesLeftStrategyOptions {
 #[test]
 fn snapshot_value_and_length_are_weighted_means() {
     let s = snap(0.25, 0.75, 10.0, 4);
-    assert!((s.value_for_player(1) - 0.25).abs() < 1e-6);
-    assert!((s.value_for_player(2) - 0.75).abs() < 1e-6);
+    assert!((s.player_value(1) - 0.25).abs() < 1e-6);
+    assert!((s.player_value(2) - 0.75).abs() < 1e-6);
     assert!((s.game_length() - 10.0).abs() < 1e-6);
 }
 
@@ -158,8 +158,8 @@ fn weighted_merge_accumulates_sums_and_weight() {
     a.merge_weighted(&b, 2);
 
     assert_eq!(a.total_weight, 2);
-    assert!((a.value_for_player(1) - 0.4).abs() < 1e-6);
-    assert!((a.value_for_player(2) - 0.6).abs() < 1e-6);
+    assert!((a.player_value(1) - 0.4).abs() < 1e-6);
+    assert!((a.player_value(2) - 0.6).abs() < 1e-6);
     assert!((a.game_length() - 12.0).abs() < 1e-6);
 }
 

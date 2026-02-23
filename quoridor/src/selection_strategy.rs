@@ -18,7 +18,7 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
         victory_margin_threshold: f32,
     ) -> VictoryMarginDirective
     where
-        I: Iterator<Item = &'b MCTSEdge<A, QuoridorPropagatedValue>>,
+        I: Iterator<Item = &'b MCTSEdge<A, QuoridorSnapshot>>,
         A: 'b,
     {
         if victory_margin_threshold >= 1.0 {
@@ -29,8 +29,8 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
             .max_by_key(|n| n.visits())
             .filter(|n| n.visits() > 0)
             .map_or(VictoryMarginDirective::None, |e| {
-                let pv = e.propagated_values();
-                let Qsa = pv.value();
+                let snapshot = e.snapshot();
+                let Qsa = snapshot.value();
                 if Qsa >= victory_margin_threshold {
                     VictoryMarginDirective::MaximizeVictoryMargin
                 } else if Qsa <= (1.0 - victory_margin_threshold) {
@@ -42,7 +42,7 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
     }
 
     fn VMsa(
-        edge: &MCTSEdge<A, QuoridorPropagatedValue>,
+        edge: &MCTSEdge<A, QuoridorSnapshot>,
         victory_margin_baseline: &VictoryMarginDirective,
         options: &QuoridorStrategyOptions,
     ) -> f32 {
@@ -60,7 +60,7 @@ impl<S, A, P, C> QuoridorSelectionStrategy<S, A, P, C> {
             _ => 0.0,
         };
 
-        let victory_margin = edge.propagated_values().victory_margin();
+        let victory_margin = edge.snapshot().victory_margin();
         victory_margin * options.victory_margin_factor * direction
     }
 }
@@ -74,11 +74,11 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = QuoridorSnapshot;
 
     fn select_path(
         &self,
-        node: &mut MCTSNode<A, P, QuoridorPropagatedValue>,
+        node: &mut MCTSNode<A, P, QuoridorSnapshot>,
         game_state: &S,
         is_root: bool,
     ) -> Result<usize>
@@ -105,7 +105,7 @@ where
         let mut best_puct = f32::MIN;
 
         for (i, edge) in node.iter_visited_edges_and_top_unvisited_edge().enumerate() {
-            let W = edge.propagated_values().value();
+            let W = edge.snapshot().value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
@@ -125,10 +125,10 @@ where
 
     fn node_details(
         &self,
-        node: &mut MCTSNode<A, P, QuoridorPropagatedValue>,
+        node: &mut MCTSNode<A, P, QuoridorSnapshot>,
         game_state: &S,
         is_root: bool,
-    ) -> Vec<EdgeDetails<A, QuoridorPropagatedValue>>
+    ) -> Vec<EdgeDetails<A, QuoridorSnapshot>>
     where
         C: CPUCT<State = S>,
     {
@@ -148,9 +148,9 @@ where
 
         for edge in node.iter_visited_edges() {
             let action = edge.action().clone();
-            let propagated_values = edge.propagated_values().clone();
+            let snapshot = edge.snapshot().clone();
 
-            let W = propagated_values.value();
+            let W = snapshot.value();
             let Nsa = edge.visits();
             let Psa = edge.policy_score();
             let Usa = cpuct * Psa * root_Nsb / (1 + Nsa) as f32;
@@ -164,7 +164,7 @@ where
                 Nsa,
                 cpuct,
                 Usa,
-                propagated_values,
+                snapshot,
             });
         }
 
@@ -204,7 +204,7 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = QuoridorSnapshot;
     type NodeInfo = VictoryMarginNodeInfo;
 
     fn backpropagate<'node, I>(&self, visited_nodes: I, predictions: &Self::Predictions)
@@ -214,32 +214,32 @@ where
                 Self::NodeInfo,
                 Self::Action,
                 Self::Predictions,
-                Self::PropagatedValues,
+                Self::Snapshot,
             >,
     {
         let mut visited_nodes = visited_nodes;
-        let victory_margin_score = predictions.victory_margin_score();
+        let victory_margin_score = predictions.victory_margin();
 
         while let Some(node) = visited_nodes.next() {
             // Update value of W from the parent node's perspective.
             // This is because the parent chooses which child node to select, and as such will want the one with the
             // highest V from its perspective. A child node (or edge) does not care what its value (W or Q) is from its own perspective.
-            let value_score = predictions.get_value_for_player(node.node_info.player_to_move);
+            let value_score = predictions.player_value(node.node_info.player_to_move);
             let edge_to_update = node.node.get_edge_by_index_mut(node.selected_edge_index);
 
-            let propagated_values = edge_to_update.propagated_values_mut();
-            let num_updates = propagated_values.num_updates();
+            let snapshot = edge_to_update.snapshot_mut();
+            let num_updates = snapshot.num_updates();
 
-            let value = propagated_values.value();
+            let value = snapshot.value();
             let new_value = value + (value_score - value) / (num_updates + 1) as f32;
-            *propagated_values.value_mut() = new_value;
+            *snapshot.value_mut() = new_value;
 
-            let victory_margin = propagated_values.victory_margin();
+            let victory_margin = snapshot.victory_margin();
             let new_victory_margin =
                 victory_margin + (victory_margin_score - victory_margin) / (num_updates + 1) as f32;
-            *propagated_values.victory_margin_mut() = new_victory_margin;
+            *snapshot.victory_margin_mut() = new_victory_margin;
 
-            propagated_values.increment_num_updates();
+            snapshot.increment_num_updates();
         }
     }
 

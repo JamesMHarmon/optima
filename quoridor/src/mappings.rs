@@ -1,8 +1,9 @@
-use crate::{BOARD_SIZE, MOVES_LEFT_SIZE, Predictions, QuoridorPropagatedValue};
+use crate::{BOARD_SIZE, MOVES_LEFT_SIZE, Predictions};
 
 use super::transposition_entry::TranspositionEntry;
+use common::{GameLength, PlayerValue, VictoryMargin};
 use half::f16;
-use puct::{map_moves_left_to_one_hot, moves_left_expected_value};
+use puct::{VictoryMarginSnapshot, map_moves_left_to_one_hot, moves_left_expected_value};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::vec;
@@ -13,7 +14,6 @@ use super::constants::{
     OUTPUT_SIZE, PAWN_BOARD_SIZE, WALL_BOARD_SIZE,
 };
 use super::{Action, ActionType, Coordinate, GameState, Value};
-use engine::Value as ValueTrait;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, ConvInputBuilder, GameStateAnalysis, NodeMetrics};
 use tensorflow_model::Mode;
@@ -29,7 +29,7 @@ impl Mapper {
     fn metrics_to_policy_output(
         &self,
         game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action, Predictions, QuoridorPropagatedValue>,
+        policy_metrics: &NodeMetrics<Action, Predictions, VictoryMarginSnapshot>,
     ) -> Vec<f32> {
         let total_visits = policy_metrics.visits as f32 - 1.0;
         let rotate: bool = !game_state.p1_turn_to_move();
@@ -82,7 +82,7 @@ impl Mapper {
 
     fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f32> {
         let player_to_move = game_state.player_to_move();
-        let val = value.get_value_for_player(player_to_move);
+        let val = value.player_value(player_to_move);
         vec![(val * 2.0) - 1.0]
     }
 
@@ -145,13 +145,13 @@ impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = QuoridorPropagatedValue;
+    type Snapshot = VictoryMarginSnapshot;
 
     fn to_output(
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::Snapshot>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
         let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
         let value_output = self.metrics_to_value_output(game_state, targets.value());

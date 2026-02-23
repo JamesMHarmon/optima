@@ -2,10 +2,10 @@ use core::panic;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use common::{CPUCT, PlayerToMove, VictoryMargin};
+use common::{CPUCT, GameLength, PlayerToMove, PlayerValue, VictoryMargin};
+use serde::{Deserialize, Serialize};
 
 use crate::{EdgeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
-use engine::Value;
 
 #[derive(Clone, Copy)]
 pub struct VictoryMarginStrategyOptions {
@@ -15,11 +15,12 @@ pub struct VictoryMarginStrategyOptions {
     pub victory_margin_factor: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VictoryMarginSnapshot {
     pub p1_sum: f64,
     pub p2_sum: f64,
     pub victory_margin_sum: f64,
+    pub game_length_sum: f64,
     pub total_weight: u32,
 }
 
@@ -29,14 +30,15 @@ impl Default for VictoryMarginSnapshot {
             p1_sum: 0.0,
             p2_sum: 0.0,
             victory_margin_sum: 0.0,
+            game_length_sum: 0.0,
             total_weight: 0,
         }
     }
 }
 
-impl VictoryMarginSnapshot {
+impl PlayerValue for VictoryMarginSnapshot {
     #[inline]
-    pub fn value_for_player(&self, player_index: usize) -> f32 {
+    fn player_value(&self, player_index: usize) -> f32 {
         if self.total_weight == 0 {
             return 0.0;
         }
@@ -48,13 +50,24 @@ impl VictoryMarginSnapshot {
             _ => panic!("Invalid player index: {}", player_index),
         }
     }
+}
 
+impl GameLength for VictoryMarginSnapshot {
     #[inline]
-    pub fn victory_margin(&self) -> f32 {
+    fn game_length(&self) -> f32 {
         if self.total_weight == 0 {
             return 0.0;
         }
+        (self.game_length_sum / (self.total_weight as f64)) as f32
+    }
+}
 
+impl VictoryMargin for VictoryMarginSnapshot {
+    #[inline]
+    fn victory_margin(&self) -> f32 {
+        if self.total_weight == 0 {
+            return 0.0;
+        }
         (self.victory_margin_sum / (self.total_weight as f64)) as f32
     }
 }
@@ -75,6 +88,7 @@ impl WeightedMerge for VictoryMarginSnapshot {
 
         self.p1_sum += other.p1_sum * (weight as f64);
         self.p2_sum += other.p2_sum * (weight as f64);
+        self.game_length_sum += other.game_length_sum * (weight as f64);
         self.victory_margin_sum += other.victory_margin_sum * (weight as f64);
         self.total_weight = self.total_weight.saturating_add(scaled_weight);
     }
@@ -83,6 +97,7 @@ impl WeightedMerge for VictoryMarginSnapshot {
 pub struct VictoryMarginRollup {
     p1_sum_bits: AtomicU64,
     p2_sum_bits: AtomicU64,
+    game_length_sum_bits: AtomicU64,
     vm_sum_bits: AtomicU64,
     total_weight: AtomicU32,
 }
@@ -92,6 +107,7 @@ impl Default for VictoryMarginRollup {
         Self {
             p1_sum_bits: AtomicU64::new(0),
             p2_sum_bits: AtomicU64::new(0),
+            game_length_sum_bits: AtomicU64::new(0),
             vm_sum_bits: AtomicU64::new(0),
             total_weight: AtomicU32::new(0),
         }
@@ -127,6 +143,7 @@ impl RollupStats for VictoryMarginRollup {
             p1_sum: Self::load_f64(&self.p1_sum_bits),
             p2_sum: Self::load_f64(&self.p2_sum_bits),
             victory_margin_sum: Self::load_f64(&self.vm_sum_bits),
+            game_length_sum: Self::load_f64(&self.game_length_sum_bits),
             total_weight: self.total_weight.load(Ordering::Relaxed),
         }
     }
@@ -136,6 +153,7 @@ impl RollupStats for VictoryMarginRollup {
         Self::store_f64(&self.p1_sum_bits, value.p1_sum);
         Self::store_f64(&self.p2_sum_bits, value.p2_sum);
         Self::store_f64(&self.vm_sum_bits, value.victory_margin_sum);
+        Self::store_f64(&self.game_length_sum_bits, value.game_length_sum);
         self.total_weight
             .store(value.total_weight, Ordering::Relaxed);
     }
@@ -156,8 +174,8 @@ impl<S, P, T> VictoryMarginValueModel<S, P, T> {
 
 impl<S, P, T> ValueModel for VictoryMarginValueModel<S, P, T>
 where
-    P: Value + VictoryMargin,
-    T: Value,
+    P: PlayerValue + VictoryMargin + GameLength,
+    T: PlayerValue + VictoryMargin + GameLength,
 {
     type State = S;
     type Predictions = P;
@@ -170,9 +188,10 @@ where
         predictions: &Self::Predictions,
     ) -> VictoryMarginSnapshot {
         VictoryMarginSnapshot {
-            p1_sum: predictions.get_value_for_player(1) as f64,
-            p2_sum: predictions.get_value_for_player(2) as f64,
-            victory_margin_sum: predictions.victory_margin_score() as f64,
+            p1_sum: predictions.player_value(1) as f64,
+            p2_sum: predictions.player_value(2) as f64,
+            victory_margin_sum: predictions.victory_margin() as f64,
+            game_length_sum: predictions.game_length() as f64,
             total_weight: 1,
         }
     }
@@ -183,9 +202,10 @@ where
         terminal: &Self::Terminal,
     ) -> VictoryMarginSnapshot {
         VictoryMarginSnapshot {
-            p1_sum: terminal.get_value_for_player(1) as f64,
-            p2_sum: terminal.get_value_for_player(2) as f64,
-            victory_margin_sum: 0.0,
+            p1_sum: terminal.player_value(1) as f64,
+            p2_sum: terminal.player_value(2) as f64,
+            victory_margin_sum: terminal.victory_margin() as f64,
+            game_length_sum: terminal.game_length() as f64,
             total_weight: 1,
         }
     }
@@ -219,7 +239,7 @@ impl<C, S> VictoryMarginSelectionPolicy<C, S> {
             return VictoryMarginDirective::None;
         };
 
-        let qsa = baseline.value_for_player(player_index);
+        let qsa = baseline.player_value(player_index);
 
         if qsa >= threshold {
             VictoryMarginDirective::MaximizeVictoryMargin
@@ -282,7 +302,7 @@ where
 
             let qsa = edge
                 .snapshot
-                .map(|s| s.value_for_player(player_index))
+                .map(|s| s.player_value(player_index))
                 .unwrap_or(fpu);
 
             let base_score = qsa + usa;
@@ -329,6 +349,21 @@ where
             VictoryMarginDirective::MaximizeVictoryMargin => best_max_index,
             VictoryMarginDirective::MinimizeVictoryMargin => best_min_index,
         }
+    }
+}
+
+impl Eq for VictoryMarginSnapshot {}
+
+impl std::fmt::Display for VictoryMarginSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "p1: {:.3}, p2: {:.3}, vm: {:.3}, gl: {:.1}",
+            self.player_value(1),
+            self.player_value(2),
+            self.victory_margin(),
+            self.game_length(),
+        )
     }
 }
 

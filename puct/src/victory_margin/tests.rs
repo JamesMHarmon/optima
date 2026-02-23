@@ -34,6 +34,7 @@ fn snap(p1: f32, p2: f32, vm: f32, weight: u32) -> VictoryMarginSnapshot {
         p1_sum: (p1 as f64) * (weight as f64),
         p2_sum: (p2 as f64) * (weight as f64),
         victory_margin_sum: (vm as f64) * (weight as f64),
+        game_length_sum: 0.0,
         total_weight: weight,
     }
 }
@@ -129,7 +130,7 @@ where
         let usa = cpuct * psa * root_sqrt / (1.0 + nsa as f32);
         let qsa = e
             .snapshot
-            .map(|s| s.value_for_player(player_index))
+            .map(|s| s.player_value(player_index))
             .unwrap_or(fpu);
 
         let vm_adj = if nsa == 0 {

@@ -1,5 +1,4 @@
-use common::GameLength;
-use engine::Value as ValueTrait;
+use common::{GameLength, PlayerValue};
 use serde::{Deserialize, Serialize};
 
 use super::Value;
@@ -15,23 +14,19 @@ impl Predictions {
         Self { value, game_length }
     }
 
-    pub fn value(&self) -> &Value {
+    pub(super) fn value(&self) -> &Value {
         &self.value
-    }
-
-    pub fn game_length(&self) -> f32 {
-        self.game_length
     }
 }
 
-impl ValueTrait for Predictions {
-    fn get_value_for_player(&self, player: usize) -> f32 {
-        self.value.get_value_for_player(player)
+impl PlayerValue for Predictions {
+    fn player_value(&self, player: usize) -> f32 {
+        self.value.player_value(player)
     }
 }
 
 impl GameLength for Predictions {
-    fn game_length_score(&self) -> f32 {
+    fn game_length(&self) -> f32 {
         self.game_length
     }
 }
@@ -41,8 +36,7 @@ impl std::fmt::Display for Predictions {
         write!(
             f,
             "Predictions(value: {}, game_length: {})",
-            self.value(),
-            self.game_length()
+            self.value, self.game_length
         )
     }
 }

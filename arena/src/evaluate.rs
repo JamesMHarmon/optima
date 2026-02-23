@@ -11,8 +11,8 @@ use std::sync::mpsc;
 use std::time::Instant;
 use tokio::runtime::Handle;
 
-use common::TranspositionHash;
-use engine::{GameEngine, GameState, Value};
+use common::{PlayerValue, TranspositionHash};
+use engine::{GameEngine, GameState};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 use puct::{PuctMCTS, RollupStats, SelectionPolicy, TemperatureMaxMoves, ValueModel};
@@ -47,6 +47,8 @@ pub struct MatchResult {
     pub num_of_games_played: usize,
 }
 
+// @TODO: Simplify these generic params
+
 impl Arena {
     pub fn evaluate<S, P, E, M, T, VM, Sel>(
         models: &[M],
@@ -69,7 +71,7 @@ impl Arena {
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
         Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
         SnapshotOf<VM>: Clone,
-        P: Value,
+        P: PlayerValue,
     {
         let num_players = models.len();
         let starting_time = Instant::now();
@@ -215,7 +217,7 @@ impl Arena {
         Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
         SnapshotOf<VM>: Clone,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
-        P: Value,
+        P: PlayerValue,
     {
         let mut games_to_play_futures = FuturesUnordered::new();
         let repeated_models: Vec<_> = repeat_with(|| models.iter())
@@ -270,7 +272,7 @@ impl Arena {
         Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S>,
         SnapshotOf<VM>: Clone,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
-        P: Value,
+        P: PlayerValue,
     {
         let play_options = &options.play_options;
         let visits = options.visits;
@@ -313,7 +315,7 @@ impl Arena {
         let scores: Vec<_> = players
             .iter()
             .enumerate()
-            .map(|(i, m)| (m.info().clone(), final_score.get_value_for_player(i + 1)))
+            .map(|(i, m)| (m.info().clone(), final_score.player_value(i + 1)))
             .collect();
 
         Ok(GameResult { actions, scores })

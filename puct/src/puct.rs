@@ -20,12 +20,12 @@ type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, <VM as ValueMo
 type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
 
 #[derive(Clone, Debug)]
-pub struct EdgeView<A, S> {
+pub struct EdgeView<A, SS> {
     pub edge_index: usize,
     pub action: A,
     pub policy_prior: f32,
     pub visits: u32,
-    pub snapshot: Option<S>,
+    pub snapshot: Option<SS>,
 }
 
 pub struct PUCT<'a, E, M, VM, Sel>
@@ -48,7 +48,6 @@ where
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
     E::State: TranspositionHash,
-    E::Terminal: engine::Value,
 {
     pub fn new(
         game_engine: &'a E,
@@ -83,7 +82,6 @@ where
     pub fn edge_views(&self, game_state: &E::State) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
     where
         E::Action: Clone,
-        SnapshotOf<VM>: Clone,
     {
         let transposition_hash = game_state.transposition_hash();
         let Some(node_id) = self.store.get_node_id(transposition_hash) else {

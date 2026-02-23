@@ -1,4 +1,4 @@
-use common::{PropagatedGameLength, PropagatedValue};
+use common::{GameLength, PlayerValue};
 use serde::de::SeqAccess;
 use serde::de::{Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, SerializeTuple, Serializer};
@@ -7,39 +7,39 @@ use std::marker::PhantomData;
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
-pub struct NodeMetrics<A, P, PV> {
+pub struct NodeMetrics<A, P, SS> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
     pub visits: usize,
     /// Ancillary predictions by the neural network. Like score difference or moves left.
     pub predictions: P,
     /// The valid actions of the current game_state of the node.
-    pub children: Vec<EdgeMetrics<A, PV>>,
+    pub children: Vec<EdgeMetrics<A, SS>>,
 }
 
 #[allow(non_snake_case)]
-impl<A, P, PV> NodeMetrics<A, P, PV> {
-    pub fn child_max_visits(&self) -> &EdgeMetrics<A, PV> {
+impl<A, P, SS> NodeMetrics<A, P, SS> {
+    pub fn child_max_visits(&self) -> &EdgeMetrics<A, SS> {
         self.children.iter().max_by_key(|c| c.visits).unwrap()
     }
 }
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
-pub struct EdgeMetrics<A, PV> {
+pub struct EdgeMetrics<A, SS> {
     /// The action that this edge represents.
     action: A,
     /// The number of visits for the child node of this specific edge.
     visits: usize,
     /// Predictions by the neural network that have been propagated from child to parent nodes. Like score difference or moves left.
-    propagatedValues: PV,
+    snapshot: SS,
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeMetrics<A, PV> {
-    pub fn new(action: A, visits: usize, propagatedValues: PV) -> Self {
+impl<A, SS> EdgeMetrics<A, SS> {
+    pub fn new(action: A, visits: usize, snapshot: SS) -> Self {
         Self {
             action,
-            propagatedValues,
+            snapshot,
             visits,
         }
     }
@@ -52,36 +52,36 @@ impl<A, PV> EdgeMetrics<A, PV> {
         self.visits
     }
 
-    pub fn propagatedValues(&self) -> &PV {
-        &self.propagatedValues
+    pub fn snapshot(&self) -> &SS {
+        &self.snapshot
     }
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeMetrics<A, PV>
+impl<A, SS> EdgeMetrics<A, SS>
 where
-    PV: PropagatedValue,
+    SS: PlayerValue,
 {
-    pub fn value(&self) -> f32 {
-        self.propagatedValues().value()
+    pub fn player_value(&self, player: usize) -> f32 {
+        self.snapshot().player_value(player)
     }
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeMetrics<A, PV>
+impl<A, SS> EdgeMetrics<A, SS>
 where
-    PV: PropagatedGameLength,
+    SS: GameLength,
 {
     pub fn game_length(&self) -> f32 {
-        self.propagatedValues().game_length()
+        self.snapshot().game_length()
     }
 }
 
-impl<A, P, PV> Serialize for NodeMetrics<A, P, PV>
+impl<A, P, SS> Serialize for NodeMetrics<A, P, SS>
 where
     A: Serialize,
     P: Serialize,
-    PV: Serialize,
+    SS: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -96,11 +96,11 @@ where
     }
 }
 
-struct NodeMetricsVisitor<A, P, PV> {
-    marker: PhantomData<(A, P, PV)>,
+struct NodeMetricsVisitor<A, P, SS> {
+    marker: PhantomData<(A, P, SS)>,
 }
 
-impl<A, P, PV> NodeMetricsVisitor<A, P, PV> {
+impl<A, P, SS> NodeMetricsVisitor<A, P, SS> {
     fn new() -> Self {
         NodeMetricsVisitor {
             marker: PhantomData,
@@ -108,13 +108,13 @@ impl<A, P, PV> NodeMetricsVisitor<A, P, PV> {
     }
 }
 
-impl<'de, A, P, PV> Visitor<'de> for NodeMetricsVisitor<A, P, PV>
+impl<'de, A, P, SS> Visitor<'de> for NodeMetricsVisitor<A, P, SS>
 where
     A: Deserialize<'de>,
     P: Deserialize<'de>,
-    PV: Deserialize<'de>,
+    SS: Deserialize<'de>,
 {
-    type Value = NodeMetrics<A, P, PV>;
+    type Value = NodeMetrics<A, P, SS>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("NodeMetrics")
@@ -132,11 +132,11 @@ where
     }
 }
 
-impl<'de, A, P, PV> Deserialize<'de> for NodeMetrics<A, P, PV>
+impl<'de, A, P, SS> Deserialize<'de> for NodeMetrics<A, P, SS>
 where
     A: Deserialize<'de>,
     P: Deserialize<'de>,
-    PV: Deserialize<'de>,
+    SS: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -146,10 +146,10 @@ where
     }
 }
 
-impl<A, PV> Serialize for EdgeMetrics<A, PV>
+impl<A, SS> Serialize for EdgeMetrics<A, SS>
 where
     A: Serialize,
-    PV: Serialize,
+    SS: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -158,18 +158,18 @@ where
         let mut tup = serializer.serialize_tuple(3)?;
 
         tup.serialize_element(&self.action)?;
-        tup.serialize_element(&self.propagatedValues)?;
+        tup.serialize_element(&self.snapshot)?;
         tup.serialize_element(&self.visits)?;
 
         tup.end()
     }
 }
 
-struct NodeChildMetricsVisitor<A, PV> {
-    marker: PhantomData<(A, PV)>,
+struct NodeChildMetricsVisitor<A, SS> {
+    marker: PhantomData<(A, SS)>,
 }
 
-impl<A, PV> NodeChildMetricsVisitor<A, PV> {
+impl<A, SS> NodeChildMetricsVisitor<A, SS> {
     fn new() -> Self {
         NodeChildMetricsVisitor {
             marker: PhantomData,
@@ -177,12 +177,12 @@ impl<A, PV> NodeChildMetricsVisitor<A, PV> {
     }
 }
 
-impl<'de, A, PV> Visitor<'de> for NodeChildMetricsVisitor<A, PV>
+impl<'de, A, SS> Visitor<'de> for NodeChildMetricsVisitor<A, SS>
 where
     A: Deserialize<'de>,
-    PV: Deserialize<'de>,
+    SS: Deserialize<'de>,
 {
-    type Value = EdgeMetrics<A, PV>;
+    type Value = EdgeMetrics<A, SS>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("NodeChildMetrics")
@@ -194,16 +194,16 @@ where
     {
         Ok(EdgeMetrics {
             action: seq.next_element()?.unwrap(),
-            propagatedValues: seq.next_element()?.unwrap(),
+            snapshot: seq.next_element()?.unwrap(),
             visits: seq.next_element()?.unwrap(),
         })
     }
 }
 
-impl<'de, A, PV> Deserialize<'de> for EdgeMetrics<A, PV>
+impl<'de, A, SS> Deserialize<'de> for EdgeMetrics<A, SS>
 where
     A: Deserialize<'de>,
-    PV: Deserialize<'de>,
+    SS: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

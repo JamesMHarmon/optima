@@ -1,18 +1,18 @@
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use common::PropagatedValue;
+use common::PlayerValue;
 
 #[allow(non_snake_case)]
-pub struct NodeDetails<A, PV> {
+pub struct NodeDetails<A, SS> {
     pub visits: usize,
-    pub children: Vec<EdgeDetails<A, PV>>,
+    pub children: Vec<EdgeDetails<A, SS>>,
 }
 
-impl<A, PV> Display for NodeDetails<A, PV>
+impl<A, SS> Display for NodeDetails<A, SS>
 where
     A: Display,
-    PV: Display,
+    SS: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
@@ -30,10 +30,10 @@ where
     }
 }
 
-impl<A, PV> Debug for NodeDetails<A, PV>
+impl<A, SS> Debug for NodeDetails<A, SS>
 where
     A: Debug,
-    PV: Debug,
+    SS: Debug,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let actions = format!(
@@ -53,86 +53,80 @@ where
 
 #[allow(non_snake_case)]
 #[derive(PartialEq)]
-pub struct EdgeDetails<A, PV> {
+pub struct EdgeDetails<A, SS> {
     pub action: A,
     pub Nsa: usize,
     pub Psa: f32,
     pub Usa: f32,
     pub cpuct: f32,
     pub puct_score: f32,
-    pub propagated_values: PV,
+    pub snapshot: SS,
+    pub player_to_move: usize,
 }
 
 #[allow(non_snake_case)]
-impl<A, PV> EdgeDetails<A, PV>
+impl<A, SS> EdgeDetails<A, SS>
 where
-    PV: PropagatedValue,
+    SS: PlayerValue,
 {
     pub fn Qsa(&self) -> f32 {
-        self.propagated_values.value()
+        self.snapshot.player_value(self.player_to_move)
     }
 }
 
-impl<A, PV> Display for EdgeDetails<A, PV>
+impl<A, SS> Display for EdgeDetails<A, SS>
 where
     A: Display,
-    PV: Display,
+    SS: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
-            "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values}, cpuct: {cpuct:.2}",
+            "A: {action}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, {snapshot}, cpuct: {cpuct:.2}",
             action = self.action,
             Nsa = self.Nsa,
             puct_score = self.puct_score,
             Psa = self.Psa,
             Usa = self.Usa,
-            propagated_values = self.propagated_values,
+            snapshot = self.snapshot,
             cpuct = self.cpuct
         )
     }
 }
 
-impl<A, PV> Debug for EdgeDetails<A, PV>
+impl<A, SS> Debug for EdgeDetails<A, SS>
 where
     A: Debug,
-    PV: Debug,
+    SS: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, values: {propagated_values:?}, cpuct: {cpuct:.2}",
+            "A: {action:?}, Nsa: {Nsa}, puct_score: {puct_score:.3}, Psa: {Psa:.3}, Usa: {Usa:.2}, {snapshot:?}, cpuct: {cpuct:.2}",
             action = self.action,
             Nsa = self.Nsa,
             puct_score = self.puct_score,
             Psa = self.Psa,
             Usa = self.Usa,
-            propagated_values = self.propagated_values,
+            snapshot = self.snapshot,
             cpuct = self.cpuct
         )
     }
 }
 
-impl<A, PV> Ord for EdgeDetails<A, PV>
+impl<A, SS> Ord for EdgeDetails<A, SS>
 where
     A: Eq,
-    PV: Ord,
+    SS: PlayerValue + Eq,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (
-            self.Nsa,
-            &self.propagated_values,
-            &self.Psa,
-            &self.Usa,
-            &self.cpuct,
-        )
-            .partial_cmp(&(
-                other.Nsa,
-                &other.propagated_values,
-                &other.Psa,
-                &other.Usa,
-                &other.cpuct,
-            )) {
+        match (self.Nsa, self.Qsa(), &self.Psa, &self.Usa, &self.cpuct).partial_cmp(&(
+            other.Nsa,
+            other.Qsa(),
+            &other.Psa,
+            &other.Usa,
+            &other.cpuct,
+        )) {
             Some(ordering) => ordering,
             None => {
                 panic!(
@@ -145,27 +139,38 @@ where
     }
 }
 
-impl<A, PV> PartialOrd for EdgeDetails<A, PV>
+impl<A, SS> PartialOrd for EdgeDetails<A, SS>
 where
     A: Eq,
-    PV: Ord + PartialOrd,
+    SS: PlayerValue + Eq,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<A, PV> Eq for EdgeDetails<A, PV>
+impl<A, SS> Eq for EdgeDetails<A, SS>
 where
     A: Eq,
-    PV: Eq,
+    SS: Eq,
 {
 }
+
+// @TODO: clean these tests
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::cmp::Ordering;
+
+    #[derive(PartialEq, Eq)]
+    struct FakeSnapshot(i32);
+
+    impl PlayerValue for FakeSnapshot {
+        fn player_value(&self, _player: usize) -> f32 {
+            self.0 as f32
+        }
+    }
 
     #[test]
     #[allow(non_snake_case)]
@@ -173,21 +178,23 @@ mod tests {
         let puct_greater = EdgeDetails {
             action: (),
             Nsa: 2,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
+            player_to_move: 1,
         };
 
         let puct_less = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 2.0,
             Usa: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
+            player_to_move: 1,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -200,21 +207,23 @@ mod tests {
         let puct_greater = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 2,
+            snapshot: FakeSnapshot(2),
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
+            player_to_move: 1,
         };
 
         let puct_less = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 2.0,
             Usa: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
+            player_to_move: 1,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -227,21 +236,23 @@ mod tests {
         let puct_greater = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 2.0,
             Usa: 1.0,
             cpuct: 1.0,
             puct_score: 1.0,
+            player_to_move: 1,
         };
 
         let puct_less = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 2.0,
             cpuct: 2.0,
             puct_score: 2.0,
+            player_to_move: 1,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -254,21 +265,23 @@ mod tests {
         let puct_greater = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 2.0,
             cpuct: 1.0,
             puct_score: 1.0,
+            player_to_move: 1,
         };
 
         let puct_less = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
             puct_score: 2.0,
+            player_to_move: 1,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);
@@ -281,21 +294,23 @@ mod tests {
         let puct_greater = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 2.0,
             puct_score: 1.0,
+            player_to_move: 1,
         };
 
         let puct_less = EdgeDetails {
             action: (),
             Nsa: 1,
-            propagated_values: 1,
+            snapshot: FakeSnapshot(1),
             Psa: 1.0,
             Usa: 1.0,
             cpuct: 1.0,
             puct_score: 2.0,
+            player_to_move: 1,
         };
 
         assert_eq!(puct_less.cmp(&puct_greater), Ordering::Less);

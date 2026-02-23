@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use common::GameLength;
+use common::{GameLength, PlayerValue};
 use serde::{Deserialize, Serialize};
 
 use super::Value;
@@ -19,10 +19,6 @@ impl Predictions {
     pub fn value(&self) -> &Value {
         &self.value
     }
-
-    pub fn game_length(&self) -> f32 {
-        self.game_length
-    }
 }
 
 impl Display for Predictions {
@@ -35,14 +31,14 @@ impl Display for Predictions {
     }
 }
 
-impl engine::Value for Predictions {
-    fn get_value_for_player(&self, player: usize) -> f32 {
-        self.value().get_value_for_player(player)
+impl PlayerValue for Predictions {
+    fn player_value(&self, player: usize) -> f32 {
+        self.value.player_value(player)
     }
 }
 
 impl GameLength for Predictions {
-    fn game_length_score(&self) -> f32 {
+    fn game_length(&self) -> f32 {
         self.game_length
     }
 }

@@ -1,8 +1,8 @@
 use anyhow::Result;
-use common::TranspositionHash;
+use common::{GameLength, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use model::Analyzer;
-use puct::{RollupStats, SelectionPolicy, UgiSnapshot, ValueModel};
+use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 use std::fmt::{Debug, Display};
 use std::io::stdin;
@@ -48,12 +48,11 @@ where
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send,
     B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Send + 'static,
-    SnapshotOf<B>: Clone + UgiSnapshot,
+    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
     Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
     T: TimeStrategy<S> + Send + 'static,
-    E::Terminal: Clone + engine::Value + common::GameLength,
     Ps: Display,
     Pr: Display,
 {

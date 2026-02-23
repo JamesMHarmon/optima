@@ -22,6 +22,7 @@ connect4 = ["dep:connect4"]
 engine = { path = "../engine" }
 model = { path = "../model" }
 common = { path = "../common" }
+puct = { path = "../puct" }
 tensorflow-model = { path = "../tensorflow-model", default-features = false, features = [
     "traits",
 ] }

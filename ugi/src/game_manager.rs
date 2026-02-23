@@ -2,11 +2,11 @@ use crate::{
     ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, TimeStrategy,
     UGICommand, UGIOption, UGIOptions,
 };
-use common::{PropagatedGameLength, PropagatedValue, TranspositionHash};
+use common::{GameLength, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use model::Analyzer;
-use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, UgiSnapshot, ValueModel};
+use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, ValueModel};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};
@@ -139,8 +139,7 @@ where
         Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
         T: TimeStrategy<S> + Send + 'static,
         M::Analyzer: Send,
-        SnapshotOf<B>: Clone + UgiSnapshot,
-        E::Terminal: Clone + engine::Value + common::GameLength,
+        SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
         Ps: Display,
         Pr: Display,
     {
@@ -212,8 +211,7 @@ where
     FnSel: Fn(&UGIOptions) -> Sel,
     Sel: SelectionPolicy<SnapshotOf<B>, State = S>,
     T: TimeStrategy<S>,
-    SnapshotOf<B>: Clone + UgiSnapshot,
-    E::Terminal: Clone + engine::Value + common::GameLength,
+    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
     Ps: Display,
     Pr: Display,
 {
@@ -354,7 +352,7 @@ where
                             let best_node = choose_action(&node_details.children, 0.0);
 
                             let player_to_move = self.engine.player_to_move(&focus_game_state);
-                            let game_length = best_node.propagated_values.game_length().max(0.0);
+                            let game_length = best_node.snapshot.game_length().max(0.0);
 
                             self.output_post_search_info(
                                 player_to_move,
@@ -388,7 +386,7 @@ where
                     let sorted_children = node_details.children.iter().sorted().rev().collect_vec();
 
                     for child in sorted_children {
-                        self.output.info(&format!("{:?}", &child));
+                        self.output.info(&format!("{}", &child));
                     }
                 }
                 CommandInner::MakeMove(actions) => {
@@ -520,7 +518,7 @@ where
                         );
 
                         scores.push(best_node.Qsa());
-                        game_lengths.push(best_node.propagated_values.game_length());
+                        game_lengths.push(best_node.snapshot.game_length());
                         visits.push(node_details.visits);
                         mcts.add_focus_to_action(best_node.action.clone());
 
@@ -602,10 +600,10 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn output_post_search_info<PV: PropagatedValue + PropagatedGameLength>(
+    fn output_post_search_info(
         &self,
         player_to_move: usize,
-        pv: &[Vec<EdgeDetails<A, PV>>],
+        pv: &[Vec<EdgeDetails<A, SnapshotOf<B>>>],
         pre_action_game_state: &S,
         focus_game_state: &S,
         search_start: Instant,
@@ -613,7 +611,7 @@ where
         visits: &[usize],
         game_lengths: &[f32],
         depths: &[usize],
-        node_details: &NodeDetails<A, PV>,
+        node_details: &NodeDetails<A, SnapshotOf<B>>,
     ) {
         self.output.info(&format!(
             "time {} playertomove {} root_score {:.3} score {:.3} game_length {:.1} visits {} depth {} root_transpositionid {} transpositionid {}",
@@ -630,6 +628,7 @@ where
 
         let visits_sum = (node_details.visits - 1).max(1);
 
+        // @TODO: Do we really zip up node_details with pv?
         for (i, (edge, pv_line)) in node_details.children.iter().zip(pv).enumerate() {
             let pv_actions = pv_line
                 .iter()
@@ -643,10 +642,10 @@ where
             self.output.info(&format!(
                 "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} game_length {game_length:.3} pv {pv}",
                 pv_num = i + 1,
-                score = edge.propagated_values.value(),
+                score = edge.Qsa(),
                 visits = edge.Nsa,
                 visitspct = edge.Nsa as f32 / visits_sum as f32,
-                game_length = edge.propagated_values.game_length(),
+                game_length = edge.snapshot.game_length(),
                 pv = &pv_string,
             ));
         }

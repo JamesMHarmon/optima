@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use common::PropagatedValue;
+use common::{PlayerToMove, PlayerValue};
 use engine::GameState;
 use half::f16;
 use model::PositionMetrics;
@@ -13,24 +13,20 @@ use super::q_mix::{PredictionStore, QMix};
 type SampleState<S> = <S as Sample>::State;
 type SampleAction<S> = <S as Sample>::Action;
 type SamplePredictions<S> = <S as Sample>::Predictions;
-type SamplePropagatedValues<S> = <S as Sample>::PropagatedValues;
+type SampleSnapshot<S> = <S as Sample>::Snapshot;
 type SamplePredictionStore<S> = <S as Sample>::PredictionStore;
 
 type SampleSelfPlayMetrics<S> =
-    SelfPlayMetrics<SampleAction<S>, SamplePredictions<S>, SamplePropagatedValues<S>>;
+    SelfPlayMetrics<SampleAction<S>, SamplePredictions<S>, SampleSnapshot<S>>;
 
-type SamplePositionMetrics<S> = PositionMetrics<
-    SampleState<S>,
-    SampleAction<S>,
-    SamplePredictions<S>,
-    SamplePropagatedValues<S>,
->;
+type SamplePositionMetrics<S> =
+    PositionMetrics<SampleState<S>, SampleAction<S>, SamplePredictions<S>, SampleSnapshot<S>>;
 
 type SamplePositionMetricsExtended<S> = PositionMetricsExtended<
     SampleState<S>,
     SampleAction<S>,
     SamplePredictions<S>,
-    SamplePropagatedValues<S>,
+    SampleSnapshot<S>,
 >;
 
 type OutputTargets = HashMap<String, Vec<f32>>;
@@ -40,7 +36,7 @@ pub trait Sample {
     type State;
     type Action;
     type Predictions;
-    type PropagatedValues;
+    type Snapshot;
     type PredictionStore;
 
     fn metrics_to_samples(
@@ -52,16 +48,16 @@ pub trait Sample {
     ) -> Vec<SamplePositionMetricsExtended<Self>>
     where
         Self: Sized,
-        SampleState<Self>: GameState,
+        SampleState<Self>: GameState + PlayerToMove,
         SampleAction<Self>: PartialEq + Clone,
         SamplePredictions<Self>: Clone,
-        SamplePropagatedValues<Self>: PropagatedValue,
+        SampleSnapshot<Self>: PlayerValue,
         SamplePredictionStore<Self>:
             PredictionStore<State = SampleState<Self>, Predictions = SamplePredictions<Self>>,
         Self: QMix<
                 State = SampleState<Self>,
                 Predictions = SamplePredictions<Self>,
-                PropagatedValues = SamplePropagatedValues<Self>,
+                Snapshot = SampleSnapshot<Self>,
             >,
     {
         let mut metrics = get_positions(metrics, |s, a| self.take_action(s, a));
@@ -142,7 +138,7 @@ pub trait Sample {
                 State = SampleState<Self>,
                 Action = SampleAction<Self>,
                 Predictions = SamplePredictions<Self>,
-                PropagatedValues = SamplePropagatedValues<Self>,
+                Snapshot = SampleSnapshot<Self>,
             >,
     {
         let targets = self.to_output(&metric.game_state, targets, &metric.node_metrics);
@@ -187,16 +183,16 @@ impl From<Vec<f32>> for InputAndTargets {
     }
 }
 
-pub struct PositionMetricsExtended<S, A, P, PV> {
-    pub metrics: PositionMetrics<S, A, P, PV>,
+pub struct PositionMetricsExtended<S, A, P, SS> {
+    pub metrics: PositionMetrics<S, A, P, SS>,
     pub target_score: P,
     pub chosen_action: A,
 }
 
-fn get_positions<S, A, P, PV, FA>(
-    metrics: SelfPlayMetrics<A, P, PV>,
+fn get_positions<S, A, P, SS, FA>(
+    metrics: SelfPlayMetrics<A, P, SS>,
     take_action: FA,
-) -> Vec<PositionMetricsExtended<S, A, P, PV>>
+) -> Vec<PositionMetricsExtended<S, A, P, SS>>
 where
     S: GameState,
     P: Clone,
@@ -224,8 +220,8 @@ where
     samples
 }
 
-fn filter_full_visits<S, A, P, PV>(
-    metrics: &mut Vec<PositionMetricsExtended<S, A, P, PV>>,
+fn filter_full_visits<S, A, P, SS>(
+    metrics: &mut Vec<PositionMetricsExtended<S, A, P, SS>>,
     min_visits: usize,
 ) {
     metrics.retain(|m| m.metrics.node_metrics.visits >= min_visits)

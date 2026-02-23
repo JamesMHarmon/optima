@@ -1,42 +1,17 @@
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use common::{CPUCT, GameLength, PlayerToMove};
-use engine::Value;
+use common::{CPUCT, GameLength, PlayerToMove, PlayerValue};
+use serde::{Deserialize, Serialize};
 
 use crate::{EdgeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MovesLeftSnapshot {
     pub p1_sum: f64,
     pub p2_sum: f64,
     pub game_length_sum: f64,
     pub total_weight: u32,
-}
-
-impl MovesLeftSnapshot {
-    #[inline]
-    pub fn value_for_player(&self, player_to_move: usize) -> f32 {
-        if self.total_weight == 0 {
-            return 0.0;
-        }
-
-        let denom = self.total_weight as f64;
-        match player_to_move {
-            1 => (self.p1_sum / denom) as f32,
-            2 => (self.p2_sum / denom) as f32,
-            _ => panic!("Invalid player index: {}", player_to_move),
-        }
-    }
-
-    #[inline]
-    pub fn game_length(&self) -> f32 {
-        if self.total_weight == 0 {
-            return 0.0;
-        }
-
-        (self.game_length_sum / (self.total_weight as f64)) as f32
-    }
 }
 
 impl WeightedMerge for MovesLeftSnapshot {
@@ -60,6 +35,46 @@ impl WeightedMerge for MovesLeftSnapshot {
         self.p2_sum += other.p2_sum * (weight as f64);
         self.game_length_sum += other.game_length_sum * (weight as f64);
         self.total_weight = self.total_weight.saturating_add(scaled_weight);
+    }
+}
+
+impl PlayerValue for MovesLeftSnapshot {
+    #[inline]
+    fn player_value(&self, player: usize) -> f32 {
+        if self.total_weight == 0 {
+            return 0.0;
+        }
+
+        let denom = self.total_weight as f64;
+        match player {
+            1 => (self.p1_sum / denom) as f32,
+            2 => (self.p2_sum / denom) as f32,
+            _ => panic!("Invalid player index: {}", player),
+        }
+    }
+}
+
+impl GameLength for MovesLeftSnapshot {
+    #[inline]
+    fn game_length(&self) -> f32 {
+        if self.total_weight == 0 {
+            return 0.0;
+        }
+        (self.game_length_sum / (self.total_weight as f64)) as f32
+    }
+}
+
+impl Eq for MovesLeftSnapshot {}
+
+impl std::fmt::Display for MovesLeftSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "p1: {:.3}, p2: {:.3}, gl: {:.1}",
+            self.player_value(1),
+            self.player_value(2),
+            self.game_length(),
+        )
     }
 }
 
@@ -127,8 +142,8 @@ impl<S, P, T> MovesLeftValueModel<S, P, T> {
 
 impl<S, P, T> ValueModel for MovesLeftValueModel<S, P, T>
 where
-    P: Value + GameLength,
-    T: Value,
+    P: PlayerValue + GameLength,
+    T: PlayerValue,
 {
     type State = S;
     type Predictions = P;
@@ -141,9 +156,9 @@ where
         predictions: &Self::Predictions,
     ) -> MovesLeftSnapshot {
         MovesLeftSnapshot {
-            p1_sum: predictions.get_value_for_player(1) as f64,
-            p2_sum: predictions.get_value_for_player(2) as f64,
-            game_length_sum: predictions.game_length_score() as f64,
+            p1_sum: predictions.player_value(1) as f64,
+            p2_sum: predictions.player_value(2) as f64,
+            game_length_sum: predictions.game_length() as f64,
             total_weight: 1,
         }
     }
@@ -154,8 +169,8 @@ where
         terminal: &Self::Terminal,
     ) -> MovesLeftSnapshot {
         MovesLeftSnapshot {
-            p1_sum: terminal.get_value_for_player(1) as f64,
-            p2_sum: terminal.get_value_for_player(2) as f64,
+            p1_sum: terminal.player_value(1) as f64,
+            p2_sum: terminal.player_value(2) as f64,
             game_length_sum: 0.0,
             total_weight: 1,
         }
@@ -218,7 +233,7 @@ impl<C, S> MovesLeftSelectionPolicy<C, S> {
             return GameLengthBaseline::None;
         };
 
-        let qsa = snap.value_for_player(player_to_move);
+        let qsa = snap.player_value(player_to_move);
         let expected_game_length = snap.game_length();
 
         if qsa >= moves_left_threshold {
@@ -299,7 +314,7 @@ where
 
             let qsa = edge
                 .snapshot
-                .map(|s| s.value_for_player(player_to_move))
+                .map(|s| s.player_value(player_to_move))
                 .unwrap_or(fpu);
 
             let msa = Self::msa(edge.snapshot, &baseline, options);

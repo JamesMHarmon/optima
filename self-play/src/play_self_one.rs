@@ -5,7 +5,6 @@ use std::fmt::Debug;
 use common::{GameLength, PlayerToMove, TranspositionHash};
 use engine::{GameEngine, GameState};
 use model::GameAnalyzer;
-use puct::SnapshotToPropagated;
 use puct::{
     DirichletOptions, NoTemp, PuctMCTS, RollupStats, SelectionPolicy, TemperatureConstant,
     ValueModel,
@@ -14,7 +13,7 @@ use puct::{
 use super::{SelfPlayMetrics, SelfPlayOptions};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
-type PVOf<VM> = <SnapshotOf<VM> as SnapshotToPropagated>::PropagatedValues;
+type SSOf<VM> = SnapshotOf<VM>;
 
 #[allow(non_snake_case)]
 pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
@@ -23,16 +22,16 @@ pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
     value_model: &VM,
     selection: &Sel,
     options: &SelfPlayOptions,
-) -> Result<(SelfPlayMetrics<A, P, PVOf<VM>>, S)>
+) -> Result<(SelfPlayMetrics<A, P, SSOf<VM>>, S)>
 where
     S: GameState + Clone + TranspositionHash + PlayerToMove,
     A: Clone + Eq + Debug,
     E: GameEngine<State = S, Action = A, Terminal = P>,
     M: GameAnalyzer<State = S, Action = A, Predictions = P>,
-    P: Clone + engine::Value + GameLength,
+    P: Clone + GameLength,
     VM: ValueModel<State = S, Predictions = P, Terminal = P>,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S>,
-    SnapshotOf<VM>: Clone + SnapshotToPropagated,
+    SnapshotOf<VM>: Clone,
 {
     let mut game_state: S = S::initial();
     let play_options = &options.play_options;

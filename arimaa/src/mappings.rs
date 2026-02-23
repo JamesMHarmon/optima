@@ -1,7 +1,7 @@
-use common::MovesLeftPropagatedValue;
+use common::{GameLength, PlayerValue};
 use half::f16;
 use once_cell::sync::OnceCell;
-use puct::{map_moves_left_to_one_hot, moves_left_expected_value};
+use puct::{MovesLeftSnapshot, map_moves_left_to_one_hot, moves_left_expected_value};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tinyvec::ArrayVec;
@@ -10,7 +10,6 @@ use super::{
     GameState, Predictions, TranspositionEntry, Value, constants::*, set_board_bits_invertable,
 };
 use arimaa_engine::{Action, MoveDirection, Path, Piece, PushPullDirection, Square};
-use engine::value::Value as ValueTrait;
 use model::analytics::{ActionWithPolicy, GameStateAnalysis};
 use model::logits::update_logit_policies_to_softmax;
 use model::node_metrics::NodeMetrics;
@@ -43,7 +42,7 @@ impl Mapper {
     fn metrics_to_policy_output(
         &self,
         game_state: &GameState,
-        policy_metrics: &NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>,
+        policy_metrics: &NodeMetrics<Action, Predictions, MovesLeftSnapshot>,
     ) -> Vec<f32> {
         let move_map = static_sparse_piece_move_map().as_slice();
         let push_pull_map = static_sparse_push_pull_map().as_slice();
@@ -118,7 +117,7 @@ impl Mapper {
 
     fn metrics_to_value_output(&self, game_state: &GameState, value: &Value) -> Vec<f32> {
         let player_to_move = game_state.player_to_move();
-        let val = value.get_value_for_player(player_to_move);
+        let val = value.player_value(player_to_move);
         vec![(val * 2.0) - 1.0]
     }
 
@@ -159,13 +158,13 @@ impl PredictionsMap for Mapper {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn to_output(
         &self,
         game_state: &Self::State,
         targets: Self::Predictions,
-        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::PropagatedValues>,
+        node_metrics: &NodeMetrics<Self::Action, Self::Predictions, Self::Snapshot>,
     ) -> std::collections::HashMap<String, Vec<f32>> {
         let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
         let value_output = self.metrics_to_value_output(game_state, targets.value());
@@ -463,6 +462,7 @@ mod tests {
     use engine::GameState as GameStateTrait;
     use itertools::Itertools;
     use model::EdgeMetrics;
+    use puct::WeightedMerge;
 
     fn map_action_to_policy_output_idx(action: &Action) -> usize {
         let move_map = static_sparse_piece_move_map().as_slice();
@@ -1583,21 +1583,9 @@ mod tests {
             visits: 11,
             predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
             children: vec![
-                EdgeMetrics::new(
-                    "a7n".parse().unwrap(),
-                    7,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
-                EdgeMetrics::new(
-                    "pa7nn".parse().unwrap(),
-                    2,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
-                EdgeMetrics::new(
-                    "p".parse().unwrap(),
-                    1,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
+                EdgeMetrics::new("a7n".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
+                EdgeMetrics::new("pa7nn".parse().unwrap(), 2, MovesLeftSnapshot::zero()),
+                EdgeMetrics::new("p".parse().unwrap(), 1, MovesLeftSnapshot::zero()),
             ],
         };
 
@@ -1640,21 +1628,9 @@ mod tests {
             visits: 11,
             predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
             children: vec![
-                EdgeMetrics::new(
-                    "h2s".parse().unwrap(),
-                    7,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
-                EdgeMetrics::new(
-                    "ph2ss".parse().unwrap(),
-                    2,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
-                EdgeMetrics::new(
-                    "p".parse().unwrap(),
-                    1,
-                    MovesLeftPropagatedValue::new(0.0, 0.0),
-                ),
+                EdgeMetrics::new("h2s".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
+                EdgeMetrics::new("ph2ss".parse().unwrap(), 2, MovesLeftSnapshot::zero()),
+                EdgeMetrics::new("p".parse().unwrap(), 1, MovesLeftSnapshot::zero()),
             ],
         };
 

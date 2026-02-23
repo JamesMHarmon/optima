@@ -1,11 +1,10 @@
-use crate::QuoridorPropagatedValue;
-
 use super::{Action, GameState, Predictions};
 use model::{EdgeMetrics, PositionMetrics, node_metrics::NodeMetrics};
+use puct::VictoryMarginSnapshot;
 
 pub fn get_symmetries(
-    metrics: PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>,
-) -> Vec<PositionMetrics<GameState, Action, Predictions, QuoridorPropagatedValue>> {
+    metrics: PositionMetrics<GameState, Action, Predictions, VictoryMarginSnapshot>,
+) -> Vec<PositionMetrics<GameState, Action, Predictions, VictoryMarginSnapshot>> {
     let PositionMetrics {
         game_state,
         node_metrics,
@@ -22,18 +21,12 @@ pub fn get_symmetries(
 }
 
 fn symmetrical_node_metrics(
-    metrics: &NodeMetrics<Action, Predictions, QuoridorPropagatedValue>,
-) -> NodeMetrics<Action, Predictions, QuoridorPropagatedValue> {
+    metrics: &NodeMetrics<Action, Predictions, VictoryMarginSnapshot>,
+) -> NodeMetrics<Action, Predictions, VictoryMarginSnapshot> {
     let children_symmetry = metrics
         .children
         .iter()
-        .map(|m| {
-            EdgeMetrics::new(
-                m.action().vertical_symmetry(),
-                m.visits(),
-                m.propagatedValues().clone(),
-            )
-        })
+        .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.visits(), *m.snapshot()))
         .collect();
     NodeMetrics {
         visits: metrics.visits,
@@ -48,6 +41,7 @@ mod tests {
     use crate::value::Value;
     use engine::GameState as GameStateTrait;
     use itertools::Itertools;
+    use puct::{VictoryMarginSnapshot, WeightedMerge};
 
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
@@ -254,46 +248,14 @@ mod tests {
                 visits: 0,
                 predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
                 children: vec![
-                    EdgeMetrics::new(
-                        "a9".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "b9".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "h9".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "a1".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "a1v".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "a1h".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "h3h".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
-                    EdgeMetrics::new(
-                        "h3v".parse().unwrap(),
-                        0,
-                        QuoridorPropagatedValue::new(0.0, 0.0, 0.0),
-                    ),
+                    EdgeMetrics::new("a9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("b9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("h9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("a1".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("a1v".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("a1h".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("h3h".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
+                    EdgeMetrics::new("h3v".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                 ],
             },
         });
@@ -333,7 +295,7 @@ mod tests {
         let actions = || move_actions().chain(wall_actions());
 
         let children = actions()
-            .map(|action| EdgeMetrics::new(action, 0, QuoridorPropagatedValue::new(0.0, 0.0, 0.0)))
+            .map(|action| EdgeMetrics::new(action, 0, VictoryMarginSnapshot::zero()))
             .collect_vec();
 
         let symmetries = get_symmetries(PositionMetrics {

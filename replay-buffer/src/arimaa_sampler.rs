@@ -2,19 +2,19 @@ use std::collections::HashMap;
 
 use arimaa::{Action, GameState, Mapper, Predictions, Value};
 use arimaa::{INPUT_SIZE, MOVES_LEFT_SIZE, OUTPUT_SIZE};
-use common::{MovesLeftPropagatedValue, PropagatedGameLength, PropagatedValue};
-use engine::{GameEngine, Value as ValueTrait};
+use common::{GameLength, PlayerValue};
+use engine::GameEngine;
 use half::f16;
 use model::{NodeMetrics, PositionMetrics};
+use puct::MovesLeftSnapshot;
 use tensorflow_model::{Dimension, InputMap, Mode, PredictionsMap};
 
 use crate::q_mix::{PredictionStore, QMix};
 
 use super::sample::Sample;
 
-type ArimaaPositionMetrics =
-    PositionMetrics<GameState, Action, Predictions, MovesLeftPropagatedValue>;
-type ArimaaNodeMetrics = NodeMetrics<Action, Predictions, MovesLeftPropagatedValue>;
+type ArimaaPositionMetrics = PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>;
+type ArimaaNodeMetrics = NodeMetrics<Action, Predictions, MovesLeftSnapshot>;
 type OutputMap = HashMap<String, Vec<f32>>;
 
 pub struct ArimaaSampler {
@@ -42,7 +42,7 @@ impl Sample for ArimaaSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
     type PredictionStore = ArimaaPStore;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
@@ -78,7 +78,7 @@ impl PredictionsMap for ArimaaSampler {
     type State = GameState;
     type Action = Action;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn to_output(
         &self,
@@ -93,23 +93,23 @@ impl PredictionsMap for ArimaaSampler {
 impl QMix for ArimaaSampler {
     type State = GameState;
     type Predictions = Predictions;
-    type PropagatedValues = MovesLeftPropagatedValue;
+    type Snapshot = MovesLeftSnapshot;
 
     fn mix_q(
         game_state: &Self::State,
         post_blunder_prediction: &Self::Predictions,
-        pre_blunder_propagated_values: &Self::PropagatedValues,
+        pre_blunder_snapshot: &Self::Snapshot,
         q_mix: f32,
     ) -> Self::Predictions {
         if q_mix == 0.0 {
             return post_blunder_prediction.clone();
         }
-
-        let pre_blunder_value = pre_blunder_propagated_values.value();
-        let pre_blunder_game_length = pre_blunder_propagated_values.game_length();
-
         let player_to_move = game_state.player_to_move();
-        let post_blunder_value = post_blunder_prediction.get_value_for_player(player_to_move);
+
+        let pre_blunder_value = pre_blunder_snapshot.player_value(player_to_move);
+        let pre_blunder_game_length = pre_blunder_snapshot.game_length();
+
+        let post_blunder_value = post_blunder_prediction.player_value(player_to_move);
         let post_blunder_game_length = post_blunder_prediction.game_length();
 
         assert!(
@@ -148,6 +148,8 @@ pub struct ArimaaPStore {
 impl PredictionStore for ArimaaPStore {
     type State = GameState;
     type Predictions = Predictions;
+
+    // @TODO: See if this should use snapshot over predictions and value.
 
     fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
         let player = game_state.player_to_move();
