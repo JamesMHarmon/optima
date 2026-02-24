@@ -96,7 +96,7 @@ where
 
         thread::scope(|s| {
             let handle = s.spawn(|| self.run_simulations(root, game_state, alive, &alive_flag, tx));
-            self.run_probes(&alive_flag, rx);
+            self.run_probes(game_state, &alive_flag, rx);
 
             depth = handle.join().expect("PUCT search thread panicked");
         });
@@ -132,16 +132,17 @@ where
         max_depth
     }
 
-    fn run_probes(&self, alive: &AtomicBool, search_leaf_rx: Receiver<u64>) {
+    fn run_probes(&self, game_state: &E::State, alive: &AtomicBool, search_leaf_rx: Receiver<u64>) {
         let probe = Probe::new(
             self.game_engine,
             self.analyzer,
             self.value_model,
             self.selection_strategy,
+            &self.store,
             search_leaf_rx,
         );
 
-        probe.run(alive);
+        probe.run(game_state, alive);
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
