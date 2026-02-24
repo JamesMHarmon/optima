@@ -90,9 +90,9 @@ impl Mapper {
         let curr_val = (f16::to_f32(value_output) + 1.0) / 2.0;
         let opp_val = 1.0 - curr_val;
         if game_state.p1_turn_to_move() {
-            Value([curr_val, opp_val])
+            Value::new(curr_val, opp_val)
         } else {
-            Value([opp_val, curr_val])
+            Value::new(opp_val, curr_val)
         }
     }
 }

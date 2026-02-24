@@ -122,11 +122,11 @@ impl GameState {
 
     pub fn is_terminal(&self) -> Option<Value> {
         if self.is_player_one_at_goal() {
-            Some(Value([1.0, 0.0]))
+            Some(Value::new(1.0, 0.0))
         } else if self.is_player_two_at_goal() {
-            Some(Value([0.0, 1.0]))
+            Some(Value::new(0.0, 1.0))
         } else if self.move_number > MAX_NUMBER_OF_MOVES {
-            Some(Value([0.5, 0.5]))
+            Some(Value::new(0.5, 0.5))
         } else {
             None
         }

@@ -1581,7 +1581,7 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
-            predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+            predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
             children: vec![
                 EdgeMetrics::new("a7n".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("pa7nn".parse().unwrap(), 2, MovesLeftSnapshot::zero()),
@@ -1626,7 +1626,7 @@ mod tests {
 
         let policy_metrics = NodeMetrics {
             visits: 11,
-            predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+            predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
             children: vec![
                 EdgeMetrics::new("h2s".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("ph2ss".parse().unwrap(), 2, MovesLeftSnapshot::zero()),

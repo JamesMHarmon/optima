@@ -100,14 +100,14 @@ impl GameState {
 
         if self.has_connected_4() {
             return Some(if self.p1_turn_to_move {
-                Value([0.0, 1.0])
+                Value::new(0.0, 1.0)
             } else {
-                Value([1.0, 0.0])
+                Value::new(1.0, 0.0)
             });
         }
 
         if all_pieces & TOP_ROW_MASK == TOP_ROW_MASK {
-            return Some(Value([0.5, 0.5]));
+            return Some(Value::new(0.5, 0.5));
         }
 
         None

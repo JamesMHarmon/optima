@@ -48,7 +48,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
                 children: vec![],
             },
         });
@@ -246,7 +246,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
                 children: vec![
                     EdgeMetrics::new("a9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                     EdgeMetrics::new("b9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
@@ -302,7 +302,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0, 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
                 children,
             },
         });

@@ -52,7 +52,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 0,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
                 children: vec![],
             },
         });
@@ -273,7 +273,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 800,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
                 children: vec![
                     EdgeMetrics::new("c2n".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("a2e".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
@@ -371,7 +371,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 800,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
                 children: vec![
                     EdgeMetrics::new("a2".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("c2".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
@@ -465,7 +465,7 @@ mod tests {
             game_state,
             node_metrics: NodeMetrics {
                 visits: 800,
-                predictions: Predictions::new(Value::new([0.0, 0.0]), 0.0),
+                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
                 children: vec![
                     EdgeMetrics::new("g7".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("d8".parse().unwrap(), 250, MovesLeftSnapshot::zero()),

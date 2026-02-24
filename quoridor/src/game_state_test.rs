@@ -353,7 +353,7 @@ mod tests {
         take_actions![game_state, ["e1"]];
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some(Value([0.0, 1.0])));
+        assert_eq!(is_terminal, Some(Value::new(0.0, 1.0)));
         assert_eq!(game_state.victory_margin(), 1);
     }
 
@@ -373,7 +373,7 @@ mod tests {
         take_actions![game_state, ["e3", "e9"]];
 
         let is_terminal = game_state.is_terminal();
-        assert_eq!(is_terminal, Some(Value([1.0, 0.0])));
+        assert_eq!(is_terminal, Some(Value::new(1.0, 0.0)));
         assert_eq!(game_state.victory_margin(), 2);
     }
 
@@ -436,7 +436,7 @@ mod tests {
             "Should be p2s turn to move after p1 reaches the goal."
         );
 
-        assert_eq!(game_state.is_terminal(), Some(Value([1.0, 0.0])));
+        assert_eq!(game_state.is_terminal(), Some(Value::new(1.0, 0.0)));
         assert_eq!(
             game_state.victory_margin(),
             2,
