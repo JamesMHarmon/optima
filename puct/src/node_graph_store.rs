@@ -5,7 +5,7 @@ use crate::node_arena::{NodeArena, NodeId};
 use crate::node_graph::NodeGraph;
 use crate::prune::rebuild_from_root;
 use crate::rollup::RollupStats;
-use crate::selection_strategy::EdgeInfo;
+use crate::selection_policy::EdgeInfo;
 use crate::terminal_node::Terminal;
 use dashmap::DashMap;
 use model::ActionWithPolicy;

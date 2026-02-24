@@ -8,7 +8,7 @@ use crate::after_state::{AfterState, AfterStateOutcome};
 use crate::node_arena::NodeArena;
 use crate::node_graph::NodeGraph;
 use crate::rollup::{RollupStats, WeightedMerge};
-use crate::selection_strategy::EdgeInfo;
+use crate::selection_policy::EdgeInfo;
 use crate::terminal_node::Terminal;
 
 use super::StateNode;

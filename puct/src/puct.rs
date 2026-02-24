@@ -6,7 +6,7 @@ use crate::node_arena::NodeId;
 use crate::node_graph::NodeGraph;
 use crate::rollup::RollupStats;
 use crate::search_context::{SearchContextGuard, SearchContextPool};
-use crate::selection_strategy::SelectionPolicy;
+use crate::selection_policy::SelectionPolicy;
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use engine::GameEngine;
