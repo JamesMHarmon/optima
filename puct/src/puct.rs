@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 
 use crossbeam::channel::{Receiver, Sender};
 
@@ -93,7 +94,7 @@ where
         let root = self.get_or_create_root(game_state);
         let mut depth = 0;
 
-        std::thread::scope(|s| {
+        thread::scope(|s| {
             let handle = s.spawn(|| self.run_simulations(root, game_state, alive, &alive_flag, tx));
             self.run_probes(&alive_flag, rx);
 
