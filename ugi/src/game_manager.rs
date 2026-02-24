@@ -103,11 +103,7 @@ impl<S, A> GameManager<S, A> {
     }
 }
 
-impl<S, A> GameManager<S, A>
-where
-    S: GameState + Clone + Display + TranspositionHash + Send + 'static,
-    A: Display + Debug + Eq + Clone + Send + 'static,
-{
+impl<S, A> GameManager<S, A> {
     pub fn new<U, E, M, FnB, B, FnSel, Sel, Pr, Ps, T>(
         ugi_mapper: Arc<U>,
         engine: E,
@@ -129,19 +125,24 @@ where
             + PlayerScore<State = S, PlayerScore = Ps>
             + PlayerResult<State = S, PlayerResult = Pr>
             + Send
+            + Sync
             + 'static,
-        M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
+        M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
         B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>
             + Send
+            + Sync
             + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-        Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
+        Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + Sync + 'static,
         T: TimeStrategy<S> + Send + 'static,
-        M::Analyzer: Send,
-        SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
+        M::Analyzer: Send + Sync,
+        <B as ValueModel>::Rollup: Send + Sync,
+        SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
         Ps: Display,
         Pr: Display,
+        S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
+        A: Display + Debug + Eq + Clone + Send + Sync + 'static,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
         let (output_tx, output_rx) = mpsc::unbounded_channel();
@@ -195,8 +196,8 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel, T> {
 #[allow(clippy::too_many_arguments)]
 impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr, T> GameManagerInner<S, A, U, E, M, FnB, FnSel, T>
 where
-    S: GameState + Clone + Display + TranspositionHash,
-    A: Display + Debug + Eq + Clone,
+    S: GameState + Clone + Display + TranspositionHash + Send + Sync,
+    A: Display + Debug + Eq + Clone + Send + Sync,
     U: InitialGameState<State = S>
         + ActionsToMoveString<State = S, Action = A>
         + ConvertToValidCompositeActions<State = S, Action = A>,
@@ -204,14 +205,17 @@ where
         + ValidActions<State = S, Action = A>
         + Players<State = S>
         + PlayerScore<State = S, PlayerScore = Ps>
-        + PlayerResult<State = S, PlayerResult = Pr>,
+        + PlayerResult<State = S, PlayerResult = Pr>
+        + Sync,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
-    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>,
+    <M as Analyzer>::Analyzer: Send + Sync,
+    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Sync,
+    <B as ValueModel>::Rollup: Send + Sync,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S>,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Sync,
     T: TimeStrategy<S>,
-    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
+    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     Ps: Display,
     Pr: Display,
 {

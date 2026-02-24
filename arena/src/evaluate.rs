@@ -59,7 +59,7 @@ impl Arena {
         options: &ArenaOptions,
     ) -> Result<MatchResult>
     where
-        S: GameState + Clone + TranspositionHash,
+        S: GameState + Clone + TranspositionHash + Send + Sync,
         E::Action:
             Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
         E: GameEngine<State = S, Terminal = P> + Sync,
@@ -67,10 +67,11 @@ impl Arena {
             + Info
             + Send
             + Sync,
-        T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send,
+        T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send + Sync,
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
         Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-        SnapshotOf<VM>: Clone,
+        <VM as ValueModel>::Rollup: Send + Sync,
+        SnapshotOf<VM>: Clone + Send + Sync,
         P: PlayerValue,
     {
         let num_players = models.len();
@@ -209,14 +210,15 @@ impl Arena {
         options: &ArenaOptions,
     ) -> Result<()>
     where
-        S: GameState + Clone + TranspositionHash,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+        S: GameState + Clone + TranspositionHash + Send + Sync,
+        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
         Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
-        SnapshotOf<VM>: Clone,
-        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
+        <VM as ValueModel>::Rollup: Send + Sync,
+        SnapshotOf<VM>: Clone + Send + Sync,
+        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send + Sync,
         P: PlayerValue,
     {
         let mut games_to_play_futures = FuturesUnordered::new();
@@ -264,14 +266,15 @@ impl Arena {
         options: &ArenaOptions,
     ) -> Result<GameResult<A>>
     where
-        S: GameState + Clone + TranspositionHash,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send,
+        S: GameState + Clone + TranspositionHash + Send + Sync,
+        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        VM: ValueModel<State = S, Predictions = P, Terminal = P>,
-        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S>,
-        SnapshotOf<VM>: Clone,
-        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send,
+        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
+        <VM as ValueModel>::Rollup: Send + Sync,
+        SnapshotOf<VM>: Clone + Send + Sync,
+        T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send + Sync,
         P: PlayerValue,
     {
         let play_options = &options.play_options;

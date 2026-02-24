@@ -29,15 +29,16 @@ pub fn championship<S, A, F, E, M, MR, T, VM, Sel, P>(
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState + Clone + TranspositionHash,
+    S: GameState + Clone + TranspositionHash + Send + Sync,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
+    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
     Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-    <VM::Rollup as RollupStats>::Snapshot: Clone,
+    VM::Rollup: Send + Sync,
+    <VM::Rollup as RollupStats>::Snapshot: Clone + Send + Sync,
     MR: Clone + Debug + Eq + Send + Sync,
     P: PlayerValue,
 {
@@ -126,15 +127,16 @@ pub fn championship_single<S, A, F, E, M, MR, T, VM, Sel, P>(
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState + Clone + TranspositionHash,
+    S: GameState + Clone + TranspositionHash + Send + Sync,
     A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
+    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
     Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-    <VM::Rollup as RollupStats>::Snapshot: Clone,
+    VM::Rollup: Send + Sync,
+    <VM::Rollup as RollupStats>::Snapshot: Clone + Send + Sync,
     MR: Debug + Send + Sync,
     P: PlayerValue,
 {

@@ -24,14 +24,16 @@ pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
     options: &SelfPlayOptions,
 ) -> Result<(SelfPlayMetrics<A, P, SSOf<VM>>, S)>
 where
-    S: GameState + Clone + TranspositionHash + PlayerToMove,
-    A: Clone + Eq + Debug,
+    S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
+    A: Clone + Eq + Debug + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P>,
-    M: GameAnalyzer<State = S, Action = A, Predictions = P>,
+    E: Sync,
+    M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,
-    VM: ValueModel<State = S, Predictions = P, Terminal = P>,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = S>,
-    SnapshotOf<VM>: Clone,
+    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
+    <VM as ValueModel>::Rollup: Send + Sync,
+    SnapshotOf<VM>: Clone + Send + Sync,
 {
     let mut game_state: S = S::initial();
     let play_options = &options.play_options;

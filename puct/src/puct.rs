@@ -43,11 +43,14 @@ where
 
 impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
 where
-    E: GameEngine,
-    M: GameAnalyzer<State = E::State, Action = E::Action>,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
-    E::State: TranspositionHash,
+    E: GameEngine + Sync,
+    M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
+    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
+    <VM as ValueModel>::Rollup: Send + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State> + Sync,
+    E::State: TranspositionHash + Sync,
+    E::Action: Send + Sync,
+    SnapshotOf<VM>: Send + Sync,
 {
     pub fn new(
         game_engine: &'a E,
@@ -73,9 +76,27 @@ where
         self.store.prune_to_transposition_hash(transposition_hash);
     }
 
-    pub fn search(&mut self, game_state: &E::State) {
+    pub fn search<Alive>(&mut self, game_state: &E::State, mut alive: Alive)
+    where
+        Alive: FnMut(usize) -> bool + Send,
+    {
         let root = self.get_or_create_root(game_state);
-        self.run_simulate(root, game_state);
+        let root_node = self.store.state_node(root);
+
+        std::thread::scope(|s| {
+            let handle = s.spawn(|| {
+                loop {
+                    let node_visits = root_node.visits() as usize;
+                    if !alive(node_visits) {
+                        break;
+                    }
+
+                    self.run_simulate(root, game_state);
+                }
+            });
+
+            handle.join().expect("PUCT search thread panicked");
+        });
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
@@ -315,8 +336,5 @@ impl<'e, 's, S, T> SelectionResult<'e, 's, S, T> {
 // Write: expands nodes
 
 // @TODO: Solve cycles
-// @TODO: Add proper child node average value updates
-// @TODO: When applying an expansion, need to link the parent edge to the new child node
 // @TODO: Check for and reduce clones
 // @TODO: Add repetition count to hash
-// @TODO: Maybe from_u32 isn't always the root

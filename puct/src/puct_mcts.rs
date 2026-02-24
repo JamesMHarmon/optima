@@ -41,11 +41,14 @@ where
 
 impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
 where
-    E: GameEngine,
-    M: GameAnalyzer<State = E::State, Action = E::Action>,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
-    E::State: TranspositionHash,
+    E: GameEngine + Sync,
+    M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
+    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
+    <VM as ValueModel>::Rollup: Send + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State> + Sync,
+    E::State: TranspositionHash + Clone + Send + Sync,
+    E::Action: Clone + PartialEq + Send + Sync,
+    SnapshotOf<VM>: Clone + Send + Sync,
 {
     pub fn new(
         state: E::State,
@@ -99,44 +102,18 @@ where
     }
 
     /// Returns an owned snapshot of focused root edge stats.
-    pub fn edge_views(&self) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    pub fn edge_views(&self) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>> {
         let state = self.focus_state();
         self.puct.edge_views(&state)
     }
 
-    /// Runs exactly `simulations` PUCT iterations from the current root.
-    pub fn search_simulations(&mut self, simulations: usize)
-    where
-        E::State: Clone,
-    {
-        let state = self.focus_state();
-        for _ in 0..simulations {
-            self.puct.search(&state);
-        }
-    }
-
-    pub fn num_focus_node_visits(&self) -> usize
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    pub fn num_focus_node_visits(&self) -> usize {
         let edges = self.edge_views();
         let sum: u64 = edges.iter().map(|e| e.visits as u64).sum();
         (sum.saturating_add(1)).min(usize::MAX as u64) as usize
     }
 
-    pub fn principal_variation(&self, max_depth: usize) -> Vec<E::Action>
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    pub fn principal_variation(&self, max_depth: usize) -> Vec<E::Action> {
         let mut pv = Vec::new();
         let mut state = self.focus_state();
 
@@ -168,16 +145,15 @@ where
     pub async fn advance_to_action(&mut self, action: E::Action) -> Result<()> {
         self.state = self.engine.take_action(&self.state, &action);
         self.focus_actions.clear();
-        self.puct.prune(&self.state);
+
+        tokio::task::block_in_place(move || {
+            self.puct.prune(&self.state);
+        });
+
         Ok(())
     }
 
-    pub async fn search_visits(&mut self, visits: usize) -> Result<usize>
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
         self.search(|node_visits| node_visits < visits).await
     }
 
@@ -185,12 +161,7 @@ where
         &mut self,
         visits: usize,
         active: &AtomicBool,
-    ) -> Result<usize>
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    ) -> Result<usize> {
         self.search(|node_visits| active.load(Ordering::SeqCst) && node_visits < visits)
             .await
     }
@@ -200,12 +171,7 @@ where
         duration: Duration,
         max_visits: usize,
         active: &AtomicBool,
-    ) -> Result<usize>
-    where
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
-    {
+    ) -> Result<usize> {
         let start = Instant::now();
         self.search(|visits| {
             active.load(Ordering::SeqCst)
@@ -217,22 +183,16 @@ where
 
     pub async fn search<Fn>(&mut self, mut alive: Fn) -> Result<usize>
     where
-        Fn: FnMut(usize) -> bool,
-        E::Action: Clone,
-        E::State: Clone,
-        SnapshotOf<VM>: Clone,
+        Fn: FnMut(usize) -> bool + Send,
     {
         let state = self.focus_state();
-        let mut visits = self.num_focus_node_visits();
-        let mut depth: usize = 0;
 
-        while alive(visits) {
-            self.puct.search(&state);
-            visits += 1;
-            depth = depth.max(1);
-        }
+        tokio::task::block_in_place(move || {
+            self.puct.search(&state, |node_visits| alive(node_visits));
+        });
 
-        Ok(depth)
+        // @TODO: Add in depth
+        Ok(0)
     }
 
     pub fn select_action<T>(&mut self, temp: &T) -> Result<E::Action>
@@ -311,17 +271,7 @@ where
             children,
         })
     }
-}
 
-impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
-where
-    E: GameEngine,
-    M: GameAnalyzer<State = E::State, Action = E::Action>,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State>,
-    E::State: TranspositionHash + Clone,
-    E::Action: Clone + PartialEq,
-{
     pub fn get_focus_node_details(
         &mut self,
     ) -> Result<Option<NodeDetails<E::Action, SnapshotOf<VM>>>> {

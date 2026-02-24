@@ -33,15 +33,16 @@ pub fn play_self<F, M, E, S, A, P, VM, Sel>(
 where
     F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
     M: Analyzer<State = S, Action = A, Predictions = P> + Info + Send + Sync,
-    M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send,
+    M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
     P: Clone + GameLength,
-    S: GameState + Clone + TranspositionHash + PlayerToMove + Send,
-    A: Serialize + Debug + Eq + Clone + Send,
+    S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
+    A: Serialize + Debug + Eq + Clone + Send + Sync,
     P: Serialize + Display + Send,
     <F as Latest>::MR: Debug + Eq + Send,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Send + Sync,
+    <VM as ValueModel>::Rollup: Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,
     SSOf<VM>: Serialize + Send,
 {
@@ -142,14 +143,15 @@ async fn play_games<M, E, S, A, P, F, VM, Sel>(
 ) -> Result<()>
 where
     F: Fn() -> (M, ModelInfo),
-    S: GameState + Clone + TranspositionHash + PlayerToMove,
-    A: Clone + Eq + Debug,
-    E: GameEngine<State = S, Action = A, Terminal = P>,
-    M: GameAnalyzer<State = S, Action = A, Predictions = P>,
+    S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
+    A: Clone + Eq + Debug + Send + Sync,
+    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+    M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
-    SnapshotOf<VM>: Clone,
+    <VM as ValueModel>::Rollup: Send + Sync,
+    SnapshotOf<VM>: Clone + Send + Sync,
     SSOf<VM>: Serialize + Send,
 {
     let mut self_play_metric_stream = FuturesUnordered::new();

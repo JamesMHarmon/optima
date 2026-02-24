@@ -28,8 +28,8 @@ pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
     time_strategy: T,
 ) -> Result<()>
 where
-    S: GameState + Clone + Display + TranspositionHash + Send + 'static,
-    A: Display + Debug + Eq + Clone + Send + 'static,
+    S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
+    A: Display + Debug + Eq + Clone + Send + Sync + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
         + InitialGameState<State = S>
@@ -44,14 +44,19 @@ where
         + PlayerScore<State = S, PlayerScore = Ps>
         + PlayerResult<State = S, PlayerResult = Pr>
         + Send
+        + Sync
         + 'static,
-    M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
-    M::Analyzer: Send,
-    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Send + 'static,
-    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq,
+    M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
+    M::Analyzer: Send + Sync,
+    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>
+        + Send
+        + Sync
+        + 'static,
+    <B as ValueModel>::Rollup: Send + Sync,
+    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + 'static,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + Sync + 'static,
     T: TimeStrategy<S> + Send + 'static,
     Ps: Display,
     Pr: Display,
