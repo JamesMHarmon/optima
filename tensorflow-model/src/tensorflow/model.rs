@@ -371,6 +371,7 @@ impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te> {
     }
 }
 
+// @TODO: Analyze and prefetch should probably check the TT before sending to the batching model, to avoid unnecessary latency when the TT can immediately answer the request.
 impl<S, A, P, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, Map, Te>
 where
     S: Clone,
