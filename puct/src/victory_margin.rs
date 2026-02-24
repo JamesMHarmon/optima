@@ -38,16 +38,16 @@ impl Default for VictoryMarginSnapshot {
 
 impl PlayerValue for VictoryMarginSnapshot {
     #[inline]
-    fn player_value(&self, player_index: usize) -> f32 {
+    fn player_value(&self, player: usize) -> f32 {
         if self.total_weight == 0 {
             return 0.0;
         }
 
         let denom = self.total_weight as f64;
-        match player_index {
+        match player {
             1 => (self.p1_sum / denom) as f32,
             2 => (self.p2_sum / denom) as f32,
-            _ => panic!("Invalid player index: {}", player_index),
+            _ => panic!("Invalid player index: {}", player),
         }
     }
 }
@@ -84,13 +84,15 @@ impl WeightedMerge for VictoryMarginSnapshot {
             return;
         }
 
-        let scaled_weight = other.total_weight.saturating_mul(weight);
+        let incoming_mass = weight as f64;
+        let mass_scale = incoming_mass / (other.total_weight as f64);
 
-        self.p1_sum += other.p1_sum * (weight as f64);
-        self.p2_sum += other.p2_sum * (weight as f64);
-        self.game_length_sum += other.game_length_sum * (weight as f64);
-        self.victory_margin_sum += other.victory_margin_sum * (weight as f64);
-        self.total_weight = self.total_weight.saturating_add(scaled_weight);
+        self.p1_sum += mass_scale * other.p1_sum;
+        self.p2_sum += mass_scale * other.p2_sum;
+        self.game_length_sum += mass_scale * other.game_length_sum;
+        self.victory_margin_sum += mass_scale * other.victory_margin_sum;
+
+        self.total_weight += weight;
     }
 }
 
