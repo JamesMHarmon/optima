@@ -29,3 +29,92 @@ pub fn map_moves_left_to_one_hot(moves_left: f32, moves_left_size: usize) -> Vec
 
     moves_left_one_hot
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // map_moves_left_to_one_hot
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn map_moves_left_empty_size_returns_empty() {
+        assert_eq!(map_moves_left_to_one_hot(10.0, 0), Vec::<f32>::new());
+    }
+
+    #[test]
+    fn map_moves_left_zero_rounds_to_one() {
+        assert_eq!(map_moves_left_to_one_hot(0.0, 4), vec![1.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn map_moves_left_one_sets_first_slot() {
+        assert_eq!(map_moves_left_to_one_hot(1.0, 4), vec![1.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn map_moves_left_two_sets_second_slot() {
+        assert_eq!(map_moves_left_to_one_hot(2.0, 4), vec![0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn map_moves_left_rounds_half_up() {
+        assert_eq!(map_moves_left_to_one_hot(2.49, 4), vec![0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(map_moves_left_to_one_hot(2.50, 4), vec![0.0, 0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn map_moves_left_clamps_to_size() {
+        assert_eq!(
+            map_moves_left_to_one_hot(999.0, 4),
+            vec![0.0, 0.0, 0.0, 1.0]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn map_moves_left_panics_on_nan() {
+        let _ = map_moves_left_to_one_hot(f32::NAN, 4);
+    }
+
+    #[test]
+    #[should_panic]
+    fn map_moves_left_panics_on_negative() {
+        let _ = map_moves_left_to_one_hot(-1.0, 4);
+    }
+
+    #[test]
+    #[should_panic]
+    fn map_moves_left_panics_on_infinity() {
+        let _ = map_moves_left_to_one_hot(f32::INFINITY, 4);
+    }
+
+    // -----------------------------------------------------------------------
+    // moves_left_expected_value
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn moves_left_ev_single_bucket_one_returns_one() {
+        let ev = moves_left_expected_value([1.0].into_iter());
+        assert!((ev - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn moves_left_ev_second_bucket_returns_two() {
+        let ev = moves_left_expected_value([0.0, 1.0, 0.0].into_iter());
+        assert!((ev - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn moves_left_ev_uniform_two_buckets_returns_one_point_five() {
+        let ev = moves_left_expected_value([0.5, 0.5].into_iter());
+        assert!((ev - 1.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn moves_left_ev_empty_returns_zero() {
+        let ev = moves_left_expected_value(std::iter::empty());
+        assert_eq!(ev, 0.0);
+    }
+}

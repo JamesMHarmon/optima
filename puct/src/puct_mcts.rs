@@ -181,14 +181,14 @@ where
         .await
     }
 
-    pub async fn search<Fn>(&mut self, mut alive: Fn) -> Result<usize>
+    pub async fn search<Fn>(&mut self, alive: Fn) -> Result<usize>
     where
         Fn: FnMut(usize) -> bool + Send,
     {
         let state = self.focus_state();
 
         tokio::task::block_in_place(move || {
-            self.puct.search(&state, |node_visits| alive(node_visits));
+            self.puct.search(&state, alive);
         });
 
         // @TODO: Add in depth

@@ -1,3 +1,5 @@
+use common::{GameLength, PlayerValue};
+
 use super::*;
 
 type Scenario<'a> = (
@@ -444,4 +446,193 @@ fn moves_left_expected_value_is_weighted_index_sum() {
 
     let ev = moves_left_expected_value([0.5, 0.5].into_iter());
     assert!((ev - 1.5).abs() < 1e-6);
+}
+
+#[test]
+fn moves_left_expected_value_empty_iterator_returns_zero() {
+    let ev = moves_left_expected_value(std::iter::empty());
+    assert_eq!(ev, 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// MovesLeftSnapshot unit tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn snapshot_zero_returns_zero_for_all_accessors() {
+    let s = MovesLeftSnapshot::default();
+    assert_eq!(s.player_value(1), 0.0);
+    assert_eq!(s.player_value(2), 0.0);
+    assert_eq!(s.game_length(), 0.0);
+}
+
+#[test]
+#[should_panic]
+fn snapshot_player_value_panics_on_invalid_player_index() {
+    let s = snap(0.5, 0.5, 10.0, 1);
+    let _ = s.player_value(0);
+}
+
+#[test]
+fn snapshot_display_includes_player_and_game_length_fields() {
+    let s = snap(0.35, 0.65, 20.0, 1);
+    let display = format!("{}", s);
+    assert!(display.contains("p1:"));
+    assert!(display.contains("p2:"));
+    assert!(display.contains("gl:"));
+}
+
+// ---------------------------------------------------------------------------
+// MovesLeftValueModel tests
+// ---------------------------------------------------------------------------
+
+struct StubPredictions {
+    p1: f32,
+    p2: f32,
+    gl: f32,
+}
+
+impl PlayerValue for StubPredictions {
+    fn player_value(&self, player: usize) -> f32 {
+        match player {
+            1 => self.p1,
+            2 => self.p2,
+            _ => panic!(),
+        }
+    }
+}
+
+impl GameLength for StubPredictions {
+    fn game_length(&self) -> f32 {
+        self.gl
+    }
+}
+
+struct StubTerminal {
+    p1: f32,
+    p2: f32,
+}
+
+impl PlayerValue for StubTerminal {
+    fn player_value(&self, player: usize) -> f32 {
+        match player {
+            1 => self.p1,
+            2 => self.p2,
+            _ => panic!(),
+        }
+    }
+}
+
+#[test]
+fn value_model_pred_snapshot_stores_player_values_and_game_length() {
+    let model = MovesLeftValueModel::<(), StubPredictions, StubTerminal>::new();
+    let preds = StubPredictions {
+        p1: 0.6,
+        p2: 0.4,
+        gl: 12.0,
+    };
+
+    let snap = model.pred_snapshot(&(), &preds);
+
+    assert_eq!(snap.total_weight, 1);
+    assert!((snap.player_value(1) - 0.6).abs() < 1e-6);
+    assert!((snap.player_value(2) - 0.4).abs() < 1e-6);
+    assert!((snap.game_length() - 12.0).abs() < 1e-6);
+}
+
+#[test]
+fn value_model_terminal_snapshot_sets_game_length_to_zero() {
+    let model = MovesLeftValueModel::<(), StubPredictions, StubTerminal>::new();
+    let terminal = StubTerminal { p1: 0.0, p2: 1.0 };
+
+    let snap = model.terminal_snapshot(&(), &terminal);
+
+    assert_eq!(snap.total_weight, 1);
+    assert!((snap.player_value(1) - 0.0).abs() < 1e-6);
+    assert!((snap.player_value(2) - 1.0).abs() < 1e-6);
+    // Terminal positions have no moves remaining; game_length_sum is stored as 0.
+    assert_eq!(snap.game_length(), 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// Player-2 perspective selection-policy tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn player_two_winning_baseline_prefers_shorter_game_length() {
+    let options = MovesLeftStrategyOptions {
+        moves_left_threshold: 0.7,
+        moves_left_scale: 20.0,
+        moves_left_factor: 1.0,
+        ..default_options()
+    };
+    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+    let a2 = 2u8;
+
+    // Baseline edge 0: most visited, p2=0.9 (winning for player 2), len=20.
+    // Candidates 1 and 2 have equal Q but shorter vs longer game; minimize should pick edge 1.
+    let edges = [
+        edge(0, &a0, 0.0, 10, Some(snap(0.1, 0.9, 20.0, 1))),
+        edge(1, &a1, 0.0, 1, Some(snap(0.5, 0.5, 10.0, 1))),
+        edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
+    ];
+
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 2 }, 1);
+    assert_eq!(idx, 1);
+}
+
+#[test]
+fn player_two_losing_baseline_prefers_longer_game_length() {
+    let options = MovesLeftStrategyOptions {
+        moves_left_threshold: 0.7,
+        moves_left_scale: 20.0,
+        moves_left_factor: 1.0,
+        ..default_options()
+    };
+    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+    let a2 = 2u8;
+
+    // Baseline edge 0: most visited, p2=0.1 (losing for player 2), len=20.
+    // When losing, maximize game length; candidate 2 (len=30) should win.
+    let edges = [
+        edge(0, &a0, 0.0, 10, Some(snap(0.9, 0.1, 20.0, 1))),
+        edge(1, &a1, 0.0, 1, Some(snap(0.5, 0.5, 10.0, 1))),
+        edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
+    ];
+
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 2 }, 1);
+    assert_eq!(idx, 2);
+}
+
+#[test]
+fn player_two_fpu_root_vs_non_root() {
+    let options = MovesLeftStrategyOptions {
+        fpu_root: 0.9,
+        fpu: 0.1,
+        ..default_options()
+    };
+    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+
+    // Edge 0 has a snapshot with p2=0.5; edge 1 has no snapshot (uses fpu).
+    let edges = [
+        edge(0, &a0, 0.0, 0, Some(snap(0.5, 0.5, 10.0, 1))),
+        edge(1, &a1, 0.0, 0, None),
+    ];
+
+    // Root: fpu_root=0.9 > p2=0.5, so edge 1 wins.
+    let root_idx = run_policy(&policy, &edges, 1, &TestState { ptm: 2 }, 0);
+    assert_eq!(root_idx, 1);
+
+    // Non-root: fpu=0.1 < p2=0.5, so edge 0 wins.
+    let child_idx = run_policy(&policy, &edges, 1, &TestState { ptm: 2 }, 1);
+    assert_eq!(child_idx, 0);
 }
