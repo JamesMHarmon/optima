@@ -162,7 +162,7 @@ where
         visits: usize,
         active: &AtomicBool,
     ) -> Result<usize> {
-        self.search(|node_visits| active.load(Ordering::SeqCst) && node_visits < visits)
+        self.search(|node_visits| active.load(Ordering::Acquire) && node_visits < visits)
             .await
     }
 
@@ -174,7 +174,7 @@ where
     ) -> Result<usize> {
         let start = Instant::now();
         self.search(|visits| {
-            active.load(Ordering::SeqCst)
+            active.load(Ordering::Acquire)
                 && start.elapsed() < duration
                 && (max_visits == 0 || visits < max_visits)
         })
@@ -187,12 +187,9 @@ where
     {
         let state = self.focus_state();
 
-        tokio::task::block_in_place(move || {
-            self.puct.search(&state, alive);
-        });
+        let depth = tokio::task::block_in_place(move || self.puct.search(&state, alive));
 
-        // @TODO: Add in depth
-        Ok(0)
+        Ok(depth as usize)
     }
 
     pub fn select_action<T>(&mut self, temp: &T) -> Result<E::Action>

@@ -9,6 +9,7 @@ mod node_details;
 mod node_graph;
 mod node_graph_store;
 mod options;
+mod probe;
 mod prune;
 mod puct;
 mod puct_mcts;

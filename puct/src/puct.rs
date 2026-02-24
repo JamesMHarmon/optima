@@ -1,4 +1,10 @@
+use std::cmp::max;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use crossbeam::channel::{Receiver, Sender};
+
 use super::node_graph_store::NodeGraphStore;
+use super::probe::Probe;
 use crate::borrowed_or_owned::BorrowedOrOwned;
 use crate::edge::PUCTEdge;
 use crate::node::{EdgeRef, StateNode};
@@ -13,11 +19,13 @@ use engine::GameEngine;
 use model::ActionWithPolicy;
 use model::GameAnalyzer;
 
-type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type RollupOf<VM> = <VM as ValueModel>::Rollup;
 
-type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
+type SnapshotOf<VM> = <RollupOf<VM> as RollupStats>::Snapshot;
 
-type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, <VM as ValueModel>::Rollup>;
+type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, RollupOf<VM>>;
+
+type PuctStateNode<E, VM> = StateNode<<E as GameEngine>::Action, RollupOf<VM>>;
 
 #[derive(Clone, Debug)]
 pub struct EdgeView<A, SS> {
@@ -46,7 +54,7 @@ where
     E: GameEngine + Sync,
     M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
-    <VM as ValueModel>::Rollup: Send + Sync,
+    RollupOf<VM>: Send + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State> + Sync,
     E::State: TranspositionHash + Sync,
     E::Action: Send + Sync,
@@ -76,27 +84,63 @@ where
         self.store.prune_to_transposition_hash(transposition_hash);
     }
 
-    pub fn search<Alive>(&mut self, game_state: &E::State, mut alive: Alive)
+    pub fn search<Alive>(&mut self, game_state: &E::State, alive: Alive) -> usize
     where
         Alive: FnMut(usize) -> bool + Send,
     {
+        let alive_flag = AtomicBool::new(true);
+        let (tx, rx) = crossbeam::channel::unbounded::<u64>();
         let root = self.get_or_create_root(game_state);
-        let root_node = self.store.state_node(root);
+        let mut depth = 0;
 
         std::thread::scope(|s| {
-            let handle = s.spawn(|| {
-                loop {
-                    let node_visits = root_node.visits() as usize;
-                    if !alive(node_visits) {
-                        break;
-                    }
+            let handle = s.spawn(|| self.run_simulations(root, game_state, alive, &alive_flag, tx));
+            self.run_probes(&alive_flag, rx);
 
-                    self.run_simulate(root, game_state);
-                }
-            });
-
-            handle.join().expect("PUCT search thread panicked");
+            depth = handle.join().expect("PUCT search thread panicked");
         });
+
+        depth
+    }
+
+    fn run_simulations<Alive>(
+        &self,
+        root: NodeId,
+        game_state: &E::State,
+        mut alive: Alive,
+        alive_flag: &AtomicBool,
+        search_leaf_tx: Sender<u64>,
+    ) -> usize
+    where
+        Alive: FnMut(usize) -> bool + Send,
+    {
+        let root_node = self.store.state_node(root);
+        let mut max_depth = 0;
+
+        loop {
+            let node_visits = root_node.visits() as usize;
+            if !alive(node_visits) {
+                alive_flag.store(false, Ordering::SeqCst);
+                break;
+            }
+
+            let depth = self.simulate_once(root, game_state, &search_leaf_tx);
+            max_depth = max(depth, max_depth);
+        }
+
+        max_depth
+    }
+
+    fn run_probes(&self, alive: &AtomicBool, search_leaf_rx: Receiver<u64>) {
+        let probe = Probe::new(
+            self.game_engine,
+            self.analyzer,
+            self.value_model,
+            self.selection_strategy,
+            search_leaf_rx,
+        );
+
+        probe.run(alive);
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
@@ -131,13 +175,15 @@ where
         self.analyze_and_create_node(game_state)
     }
 
-    fn run_simulate(&self, root: NodeId, game_state: &E::State) {
+    fn simulate_once(&self, root: NodeId, game_state: &E::State, tx: &Sender<u64>) -> usize {
         let selection = self.select_leaf(root, game_state);
-        self.expand_and_backpropagate(selection);
+        self.expand_and_backpropagate(&selection);
+        tx.send(selection.game_state.transposition_hash()).ok();
+        selection.depth
     }
 
     #[inline]
-    fn graph(&self) -> NodeGraph<'_, E::Action, <VM as ValueModel>::Rollup> {
+    fn graph(&self) -> NodeGraph<'_, E::Action, RollupOf<VM>> {
         self.store.graph()
     }
 
@@ -161,7 +207,7 @@ where
                 path.push(current);
             }
 
-            let edge_idx = self.select_edge(&game_state, node, depth);
+            let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
             let next_game_state = game_engine.take_action(&game_state, action);
@@ -175,7 +221,7 @@ where
             self.increment_selection_visits(node, edge, transposition_hash, is_terminal);
 
             if is_terminal {
-                return SelectionResult::new(ctx, edge, game_state, terminal_state);
+                return SelectionResult::new(ctx, edge, game_state, terminal_state, depth);
             }
 
             if let Some(child_id) = store.get_or_link_transposition(edge, transposition_hash) {
@@ -183,7 +229,7 @@ where
                 continue;
             }
 
-            return SelectionResult::new(ctx, edge, game_state, None);
+            return SelectionResult::new(ctx, edge, game_state, None, depth);
         }
     }
 
@@ -229,7 +275,7 @@ where
 
     fn expand_and_backpropagate<'e, 's>(
         &self,
-        selection: SelectionResult<'e, 's, E::State, E::Terminal>,
+        selection: &SelectionResult<'e, 's, E::State, E::Terminal>,
     ) {
         let state = &selection.game_state;
         let edge = selection.edge;
@@ -304,6 +350,7 @@ struct SelectionResult<'e, 's, S, T> {
     edge: EdgeRef<'e>,
     game_state: BorrowedOrOwned<'s, S>,
     terminal: Option<T>,
+    depth: usize,
 }
 
 impl<'e, 's, S, T> SelectionResult<'e, 's, S, T> {
@@ -312,12 +359,14 @@ impl<'e, 's, S, T> SelectionResult<'e, 's, S, T> {
         edge: EdgeRef<'e>,
         game_state: BorrowedOrOwned<'s, S>,
         terminal: Option<T>,
+        depth: usize,
     ) -> Self {
         Self {
             context,
             edge,
             game_state,
             terminal,
+            depth,
         }
     }
 
