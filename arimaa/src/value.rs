@@ -6,11 +6,11 @@ pub struct Value(arimaa_engine::Value);
 
 impl Value {
     pub fn new(player_1: f32, player_2: f32) -> Self {
-        Self(arimaa_engine::Value::new(player_1, player_2))
+        Self(arimaa_engine::Value([player_1, player_2]))
     }
 
     pub fn update_players_value(&mut self, player: usize, value: f32) {
-        self.0.update_players_value(player, value);
+        self.0.0[player - 1] = value;
     }
 }
 
@@ -22,12 +22,12 @@ impl From<arimaa_engine::Value> for Value {
 
 impl From<[f32; 2]> for Value {
     fn from(value: [f32; 2]) -> Self {
-        Self(arimaa_engine::Value::new(value[0], value[1]))
+        Self(arimaa_engine::Value(value))
     }
 }
 
 impl PlayerValue for Value {
     fn player_value(&self, player: usize) -> f32 {
-        self.0.player_value(player)
+        self.0.0[player - 1]
     }
 }

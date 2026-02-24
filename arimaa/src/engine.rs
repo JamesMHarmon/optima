@@ -71,13 +71,9 @@ impl PlayerScore for Engine {
     type PlayerScore = usize;
 
     fn score(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerScore> {
-        state.is_terminal().map(|value| {
-            if value.player_value(player_id) > 0.5 {
-                1
-            } else {
-                0
-            }
-        })
+        state
+            .is_terminal()
+            .map(|value| if value.0[player_id - 1] > 0.5 { 1 } else { 0 })
     }
 }
 
@@ -88,7 +84,7 @@ impl PlayerResult for Engine {
     fn result(&self, state: &Self::State, player_id: usize) -> Option<Self::PlayerResult> {
         state
             .is_terminal()
-            .map(|value| match value.player_value(player_id) {
+            .map(|value| match value.0[player_id - 1] {
                 v if v > 0.5 => "win",
                 v if v < 0.5 => "loss",
                 _ => "draw",
