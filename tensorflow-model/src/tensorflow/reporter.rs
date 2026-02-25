@@ -1,10 +1,9 @@
 use common::TranspositionTable;
 use log::info;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-};
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+use std::time::{Duration, Instant};
 use tokio::time;
 
 pub struct Reporter<Te> {
@@ -70,8 +69,8 @@ where
 
     fn spawn_timer(alive: Arc<AtomicBool>, inner: Arc<ReporterInner<Te>>) {
         tokio::task::spawn(async move {
-            let duration = Duration::from_secs(5);
-            let mut interval = time::interval(duration);
+            let mut interval = time::interval(Duration::from_secs(5));
+            let mut last_tick = Instant::now();
             loop {
                 interval.tick().await;
 
@@ -79,7 +78,9 @@ where
                     break;
                 }
 
-                inner.report(duration);
+                let elapsed = last_tick.elapsed();
+                last_tick = Instant::now();
+                inner.report(elapsed);
             }
         });
     }
@@ -136,7 +137,12 @@ impl<Te> ReporterInner<Te> {
         let num_infer_nodes = self.take_num_nodes_analysed();
         let num_transpo_nodes =
             transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
-        let (min_batch_size, max_batch_size) = self.take_min_max_batch_size();
+        let (min_batch_size_raw, max_batch_size) = self.take_min_max_batch_size();
+        let min_batch_size = if min_batch_size_raw == usize::MAX {
+            0
+        } else {
+            min_batch_size_raw
+        };
         let (predict_cache_or_tt, predict_in_flight, predict_needs_infer) =
             self.take_predict_stats();
         let infer_nps = num_infer_nodes as f32 * 1000.0 / elapsed_millis as f32;

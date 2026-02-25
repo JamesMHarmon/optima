@@ -3,7 +3,7 @@ use std::thread;
 
 use common::TranspositionHash;
 use crossbeam::channel::Receiver;
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 use engine::GameEngine;
 use model::GameAnalyzer;
 
@@ -30,7 +30,7 @@ where
 {
     game_engine: &'a E,
     analyzer: &'a M,
-    value_model: &'a VM,
+    _value_model: &'a VM,
     selection_strategy: &'a Sel,
     store: &'a PuctStore<E, VM>,
     virtual_visit_map: DashMap<NodeId, Vec<u32>>,
@@ -54,7 +54,7 @@ where
     pub(super) fn new(
         game_engine: &'a E,
         analyzer: &'a M,
-        value_model: &'a VM,
+        _value_model: &'a VM,
         selection_strategy: &'a Sel,
         store: &'a PuctStore<E, VM>,
         search_leaf_rx: Receiver<u64>,
@@ -62,7 +62,7 @@ where
         Self {
             game_engine,
             analyzer,
-            value_model,
+            _value_model,
             selection_strategy,
             search_leaf_rx,
             store,
@@ -75,14 +75,13 @@ where
 
     pub(super) fn run(&self, game_state: &E::State, alive: &AtomicBool) {
         thread::scope(|s| {
-            let mut handles = Vec::with_capacity(PROBE_THREADS + 1);
+            let mut handles = Vec::with_capacity(PROBE_THREADS);
 
             for _ in 0..PROBE_THREADS {
-                let handle = s.spawn(|| self.run_probes(game_state, alive));
-                handles.push(handle);
+                handles.push(s.spawn(|| self.run_probes(game_state, alive)));
             }
 
-            self.run_cleanup();
+            self.revert_virtual_visits();
 
             for handle in handles {
                 handle.join().expect("Probe thread panicked");
@@ -91,22 +90,21 @@ where
     }
 
     fn run_probes(&self, game_state: &E::State, alive: &AtomicBool) {
-        while alive.load(Ordering::Relaxed) {
+        while alive.load(Ordering::Acquire) {
             self.probe_one(game_state);
         }
     }
 
     fn probe_one(&self, game_state: &E::State) {
         let selection = self.select_leaf(game_state);
+        let new = self.store_search_leaf_path(selection.transposition_hash, selection.path);
 
-        if !selection.is_terminal {
+        if !selection.is_terminal && new {
             self.analyzer.prefetch(&selection.game_state);
         }
-
-        self.store_search_leaf_path(selection.transposition_hash, selection.path);
     }
 
-    fn run_cleanup(&self) {
+    fn revert_virtual_visits(&self) {
         while let Ok(transposition_hash) = self.search_leaf_rx.recv() {
             if let Some(paths) = self.search_leaf_map.remove(&transposition_hash) {
                 for path in paths.1 {
@@ -159,11 +157,11 @@ where
         }
     }
 
-    fn store_search_leaf_path(&self, transposition_hash: u64, path: Vec<(NodeId, usize)>) {
-        self.search_leaf_map
-            .entry(transposition_hash)
-            .or_default()
-            .push(path);
+    fn store_search_leaf_path(&self, transposition_hash: u64, path: Vec<(NodeId, usize)>) -> bool {
+        let entry = self.search_leaf_map.entry(transposition_hash);
+        let vacant = matches!(entry, Entry::Vacant(_));
+        entry.or_default().push(path);
+        vacant
     }
 
     fn select_edge(
@@ -173,6 +171,8 @@ where
         node_id: NodeId,
         depth: u32,
     ) -> usize {
+        node.ensure_frontier_edge();
+
         let vv_map_entry = self.virtual_visit_map.get(&node_id);
         let virtual_visits_map = vv_map_entry.map(|v| v.clone()).unwrap_or_default();
 

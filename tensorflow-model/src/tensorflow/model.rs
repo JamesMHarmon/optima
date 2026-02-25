@@ -371,9 +371,53 @@ impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te> {
     }
 }
 
+impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te>
+where
+    Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
+    Te: Send + 'static,
+{
+    fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, P>> {
+        let transposition_table = &*self.batching_model.0.transposition_table;
+        let mapper = &*self.batching_model.0.mapper;
+        let reporter = &*self.batching_model.0._reporter;
+
+        if let Some(transposition_entry) = transposition_table
+            .as_ref()
+            .and_then(|tt| tt.get(mapper.get_transposition_key(game_state)))
+        {
+            let analysis =
+                mapper.map_transposition_entry_to_analysis(game_state, &*transposition_entry);
+            drop(transposition_entry);
+            reporter.set_cache_hit();
+
+            return Some(analysis);
+        }
+
+        if self.batching_model.0.transposition_table.is_some() {
+            reporter.set_cache_miss();
+        }
+
+        reporter.set_analyzed_node();
+
+        None
+    }
+
+    fn has_analysis(&self, game_state: &S) -> bool {
+        let transposition_table = &*self.batching_model.0.transposition_table;
+        let mapper = &*self.batching_model.0.mapper;
+
+        transposition_table
+            .as_ref()
+            .and_then(|tt| tt.get(mapper.get_transposition_key(game_state)))
+            .is_some()
+    }
+}
+
 // @TODO: Analyze and prefetch should probably check the TT before sending to the batching model, to avoid unnecessary latency when the TT can immediately answer the request.
 impl<S, A, P, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, Map, Te>
 where
+    Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
+    Te: Send + 'static,
     S: Clone,
 {
     type State = S;
@@ -381,6 +425,10 @@ where
     type Predictions = P;
 
     fn analyze(&self, game_state: &S) -> GameStateAnalysis<A, P> {
+        if let Some(entry) = self.try_immediate_analysis(game_state) {
+            return entry;
+        }
+
         let (tx, rx) = crossbeam::channel::bounded(1);
         let sender = &self.batching_model.1;
         sender
@@ -392,6 +440,10 @@ where
     }
 
     fn prefetch(&self, game_state: &Self::State) {
+        if self.has_analysis(game_state) {
+            return;
+        }
+
         let sender = &self.batching_model.1;
         sender
             .send((game_state.to_owned(), AnalysisRequest::Prefetch))
@@ -456,7 +508,6 @@ where
 
     fn listen_then_transpose_or_infer(
         mapper: Arc<Map>,
-        transposition_table: Arc<Option<TranspositionTable<Te>>>,
         reporter: Arc<Reporter<Te>>,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
         receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
@@ -464,7 +515,6 @@ where
         states_to_prefetch_tx: UnboundedSender<StatesToInfer<S>>,
     ) {
         let mapper = &*mapper;
-        let transposition_table = &*transposition_table;
         let reporter = &*reporter;
         let states_to_predict_tx = &states_to_predict_tx;
         let states_to_prefetch_tx = &states_to_prefetch_tx;
@@ -473,19 +523,6 @@ where
         rayon::scope_fifo(move |s| {
             while let Ok((state_to_analyse, request)) = receiver.recv() {
                 s.spawn_fifo(move |_| {
-                    if let Some(analysis) = Self::try_immediate_analysis(
-                        &state_to_analyse,
-                        transposition_table,
-                        mapper,
-                        reporter,
-                    ) {
-                        if let AnalysisRequest::Predict(channel) = request {
-                            reporter.set_predict_cache_or_tt();
-                            let _ = channel.send(analysis);
-                        }
-                        return;
-                    }
-
                     let key = mapper.get_transposition_key(&state_to_analyse);
                     match request {
                         AnalysisRequest::Predict(channel) => {
@@ -531,7 +568,6 @@ where
         let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
         let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
 
-        let transposition_table_clone = self.transposition_table.clone();
         let mapper_clone = self.mapper.clone();
         let reporter_clone = reporter.clone();
         let in_flight_clone = in_flight_requests.clone();
@@ -539,7 +575,6 @@ where
         std::thread::spawn(move || {
             Self::listen_then_transpose_or_infer(
                 mapper_clone.clone(),
-                transposition_table_clone.clone(),
                 reporter_clone.clone(),
                 in_flight_clone,
                 receiver,
@@ -701,32 +736,6 @@ where
             let transposition_key = mapper.get_transposition_key(game_state);
             transposition_table.set(transposition_key, transposition_table_entry);
         }
-    }
-
-    fn try_immediate_analysis(
-        game_state: &S,
-        transposition_table: &Option<TranspositionTable<Te>>,
-        mapper: &Map,
-        reporter: &Reporter<Te>,
-    ) -> Option<GameStateAnalysis<A, P>> {
-        if let Some(transposition_table) = transposition_table {
-            if let Some(transposition_entry) =
-                transposition_table.get(mapper.get_transposition_key(game_state))
-            {
-                let analysis =
-                    mapper.map_transposition_entry_to_analysis(game_state, &*transposition_entry);
-                drop(transposition_entry);
-                reporter.set_cache_hit();
-
-                return Some(analysis);
-            }
-
-            reporter.set_cache_miss();
-        }
-
-        reporter.set_analyzed_node();
-
-        None
     }
 }
 
