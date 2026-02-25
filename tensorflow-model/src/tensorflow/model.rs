@@ -397,8 +397,6 @@ where
             reporter.set_cache_miss();
         }
 
-        reporter.set_analyzed_node();
-
         None
     }
 
@@ -620,6 +618,7 @@ where
                         tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
 
                     reporter.set_batch_size(states_to_analyse.len());
+                    reporter.set_analyzed_nodes(states_to_analyse.len());
 
                     states_to_analyse
                         .iter()
