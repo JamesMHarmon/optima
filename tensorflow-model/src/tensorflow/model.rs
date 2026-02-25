@@ -5,15 +5,14 @@ use dashmap::mapref::entry::Entry;
 use half::f16;
 use itertools::Itertools;
 use log::info;
-use parking_lot::{Condvar, Mutex};
+use parking_lot::Mutex;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelBridge, ParallelIterator,
 };
 use smallvec::SmallVec;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use tensorflow::*;
 
@@ -429,90 +428,18 @@ where
 
 type StatesToInfer<S> = (S, u64); // State and its transposition key
 
-struct PendingStatesToInfer<S> {
-    high: VecDeque<StatesToInfer<S>>,
-    low: VecDeque<StatesToInfer<S>>,
-}
-
-impl<S> PendingStatesToInfer<S> {
-    fn new() -> Self {
-        Self {
-            high: VecDeque::new(),
-            low: VecDeque::new(),
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.high.is_empty() && self.low.is_empty()
-    }
-}
-
-struct WorkQueue<S> {
-    pending: Mutex<PendingStatesToInfer<S>>,
-    cvar: Condvar,
-    closed: AtomicBool,
-}
-
-impl<S> WorkQueue<S> {
-    fn new() -> Self {
-        Self {
-            pending: Mutex::new(PendingStatesToInfer::new()),
-            cvar: Condvar::new(),
-            closed: AtomicBool::new(false),
-        }
-    }
-
-    fn close(&self) {
-        self.closed.store(true, Ordering::Release);
-        self.cvar.notify_all();
-    }
-
-    fn push_high(&self, v: StatesToInfer<S>) {
-        let mut guard = self.pending.lock();
-        guard.high.push_back(v);
-        self.cvar.notify_one();
-    }
-
-    fn push_low(&self, v: StatesToInfer<S>) {
-        let mut guard = self.pending.lock();
-        guard.low.push_back(v);
-        self.cvar.notify_one();
-    }
-
-    fn pop_batch(&self, limit: usize) -> Vec<StatesToInfer<S>> {
-        let mut guard = self.pending.lock();
-
-        while guard.is_empty() && !self.closed.load(Ordering::Acquire) {
-            self.cvar.wait(&mut guard);
-        }
-
-        if guard.is_empty() {
-            return Vec::new();
-        }
-
-        let mut out = Vec::with_capacity(limit);
-        while out.len() < limit {
-            if let Some(v) = guard.high.pop_front() {
-                out.push(v);
-                continue;
-            }
-            if let Some(v) = guard.low.pop_front() {
-                out.push(v);
-                continue;
-            }
-            break;
-        }
-
-        out
-    }
-}
+type StatesToPredictTx<S> = crossbeam::channel::Sender<StatesToInfer<S>>;
+type StatesToPredictRx<S> = crossbeam::channel::Receiver<StatesToInfer<S>>;
+type StatesToPrefetchTx<S> = crossbeam::channel::Sender<StatesToInfer<S>>;
+type StatesToPrefetchRx<S> = crossbeam::channel::Receiver<StatesToInfer<S>>;
 
 struct BatchingModel<S, A, P, Map, Te> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     in_flight_requests: Arc<InFlightRequests<A, P>>,
     mapper: Arc<Map>,
     reporter: Arc<Reporter<Te>>,
-    work_queue: Arc<WorkQueue<S>>,
+    states_to_predict_tx: StatesToPredictTx<S>,
+    states_to_prefetch_tx: StatesToPrefetchTx<S>,
 }
 
 impl<S, A, P, Map, Te> BatchingModel<S, A, P, Map, Te>
@@ -535,7 +462,7 @@ where
         // If this key was first queued via Prefetch, the first Predict
         // promotes it by enqueuing to the high-priority queue once.
         if should_enqueue_high {
-            self.work_queue.push_high((state_to_analyse, key));
+            let _ = self.states_to_predict_tx.send((state_to_analyse, key));
         }
     }
 
@@ -543,7 +470,7 @@ where
         let key = self.mapper.get_transposition_key(&state_to_analyse);
         let is_duplicate = self.in_flight_requests.try_register_prefetch(key);
         if !is_duplicate {
-            self.work_queue.push_low((state_to_analyse, key));
+            let _ = self.states_to_prefetch_tx.send((state_to_analyse, key));
         }
     }
 }
@@ -571,14 +498,17 @@ where
         analysis_request_threads: usize,
     ) -> Self {
         let in_flight_requests = Arc::new(InFlightRequests::new());
-        let work_queue = Arc::new(WorkQueue::new());
+
+        let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
+        let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
 
         let inner_self = Self {
             transposition_table,
             in_flight_requests: in_flight_requests.clone(),
             reporter: reporter.clone(),
             mapper,
-            work_queue: work_queue.clone(),
+            states_to_predict_tx,
+            states_to_prefetch_tx,
         };
 
         inner_self.create_analysis_tasks(
@@ -587,7 +517,8 @@ where
             batch_size,
             analysis_request_threads,
             in_flight_requests,
-            work_queue,
+            states_to_predict_rx,
+            states_to_prefetch_rx,
         );
 
         inner_self
@@ -601,7 +532,8 @@ where
         batch_size: usize,
         analysis_request_threads: usize,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
-        work_queue: Arc<WorkQueue<S>>,
+        states_to_predict_rx: StatesToPredictRx<S>,
+        states_to_prefetch_rx: StatesToPrefetchRx<S>,
     ) {
         let predictor = Arc::new(Predictor::new(&model_dir));
 
@@ -611,7 +543,8 @@ where
             let predictor = predictor.clone();
             let transposition_table = self.transposition_table.clone();
             let in_flight_requests = in_flight_requests.clone();
-            let work_queue = work_queue.clone();
+            let states_to_predict_rx = states_to_predict_rx.clone();
+            let states_to_prefetch_rx = states_to_prefetch_rx.clone();
 
             std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
@@ -619,9 +552,13 @@ where
                 let mut tensor_pool = TensorPool::<f16>::new(dimensions);
 
                 loop {
-                    let states_to_analyse = work_queue.pop_batch(batch_size);
+                    let states_to_analyse = Self::recv_up_to_prioritized(
+                        &states_to_predict_rx,
+                        &states_to_prefetch_rx,
+                        batch_size,
+                    );
 
-                    // If states is empty then the queue has been closed.
+                    // If states is empty then the high-priority channel has been closed.
                     if states_to_analyse.is_empty() {
                         return;
                     }
@@ -712,11 +649,30 @@ where
             transposition_table.set(transposition_key, transposition_table_entry);
         }
     }
-}
 
-impl<S, A, P, Map, Te> Drop for BatchingModel<S, A, P, Map, Te> {
-    fn drop(&mut self) {
-        self.work_queue.close();
+    fn recv_up_to_prioritized(
+        high: &StatesToPredictRx<S>,
+        low: &StatesToPrefetchRx<S>,
+        limit: usize,
+    ) -> Vec<StatesToInfer<S>> {
+        let mut out = Vec::with_capacity(limit);
+
+        // Block for the first item and require it to come from the high-priority queue.
+        // This intentionally deprioritizes prefetch so it never starts a batch by itself.
+        let Ok(v) = high.recv() else {
+            return out;
+        };
+        out.push(v);
+
+        // Drain high-priority first.
+        let remaining = limit.saturating_sub(out.len());
+        out.extend(high.try_iter().take(remaining));
+
+        // Fill remaining capacity from low-priority.
+        let remaining = limit.saturating_sub(out.len());
+        out.extend(low.try_iter().take(remaining));
+
+        out
     }
 }
 
