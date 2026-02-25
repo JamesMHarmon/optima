@@ -45,16 +45,19 @@ where
     type Action = An::Action;
     type State = An::State;
     type Predictions = An::Predictions;
+    type RequestId = An::RequestId;
 
-    fn analyze(
-        &self,
-        game_state: &Self::State,
-    ) -> GameStateAnalysis<Self::Action, Self::Predictions> {
-        self.inner.analyze(game_state)
+    fn analyze(&self, request_id: Self::RequestId, game_state: &Self::State) {
+        self.inner.analyze(request_id, game_state)
     }
 
-    fn prefetch(&self, game_state: &Self::State) {
-        self.inner.prefetch(game_state)
+    fn recv(
+        &self,
+    ) -> (
+        Self::RequestId,
+        GameStateAnalysis<Self::Action, Self::Predictions>,
+    ) {
+        self.inner.recv()
     }
 }
 

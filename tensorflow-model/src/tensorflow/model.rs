@@ -3,7 +3,6 @@ use common::{TranspositionTable, get_env_usize};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use half::f16;
-use itertools::Itertools;
 use log::info;
 use parking_lot::Mutex;
 use rayon::iter::{
@@ -11,11 +10,12 @@ use rayon::iter::{
 };
 use smallvec::SmallVec;
 use std::collections::HashMap;
-use std::os::raw::c_int;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use tensorflow::*;
+use tensorflow::Tensor;
 
+use super::predictor::{AnalysisResults, Predictor};
+use super::tensor_pool::TensorPool;
 use super::*;
 use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
 
@@ -23,11 +23,10 @@ use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
 #[cfg(feature = "tensorflow_system_alloc")]
 static ALLOCATOR: std::alloc::System = std::alloc::System;
 
-#[allow(clippy::type_complexity)]
 pub struct TensorflowModel<S, A, P, Map, Te> {
     model_info: ModelInfo,
     model_dir: PathBuf,
-    batching_model: Mutex<Weak<BatchingModel<S, A, P, Map, Te>>>,
+    batching_model: BatchingModelRef<S, A, P, Map, Te>,
     analysis_request_threads: usize,
     mapper: Arc<Map>,
     batch_size: usize,
@@ -146,146 +145,19 @@ impl<S, A, P, Map, Te> Info for TensorflowModel<S, A, P, Map, Te> {
     }
 }
 
-pub struct Predictor {
-    pub session: Session,
-    pub input: OperationWithIndex,
-    pub outputs: HashMap<String, OperationWithIndex>,
-}
-
-impl Predictor {
-    pub fn new(path: &Path) -> Self {
-        let mut graph = Graph::new();
-
-        let model: SavedModelBundle =
-            SavedModelBundle::load(&SessionOptions::new(), ["serve"], &mut graph, path)
-                .expect("Expected to be able to load model");
-
-        let signature = model
-            .meta_graph_def()
-            .get_signature(DEFAULT_SERVING_SIGNATURE_DEF_KEY)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to get signature: {}",
-                    DEFAULT_SERVING_SIGNATURE_DEF_KEY
-                )
-            });
-
-        let input = OperationWithIndex::new(
-            signature
-                .inputs()
-                .iter()
-                .next()
-                .expect("Expected to find input"),
-            &graph,
-        );
-        let outputs: HashMap<String, OperationWithIndex> = signature
-            .outputs()
-            .iter()
-            .map(|signature| {
-                (
-                    signature.0.to_owned(),
-                    OperationWithIndex::new(signature, &graph),
-                )
-            })
-            .collect::<HashMap<_, _>>();
-        let session = model.session;
-
-        Self {
-            session,
-            input,
-            outputs,
-        }
-    }
-
-    fn predict(&self, tensor: &Tensor<f16>) -> Result<AnalysisResults> {
-        let mut session_run_args = SessionRunArgs::new();
-
-        session_run_args.add_feed(&self.input.operation, self.input.index, tensor);
-
-        let fetch_tokens = self
-            .outputs
-            .iter()
-            .map(|(name, op)| {
-                (
-                    name.to_owned(),
-                    session_run_args.request_fetch(&op.operation, op.index),
-                    op.size,
-                )
-            })
-            .collect_vec();
-
-        self.session
-            .run(&mut session_run_args)
-            .expect("Expected to be able to run the model session");
-
-        let outputs = fetch_tokens
-            .into_iter()
-            .map(|(name, fetch_token, size)| {
-                (
-                    name,
-                    AnalysisResult {
-                        tensor: session_run_args
-                            .fetch(fetch_token)
-                            .expect("Expected to be able to load output"),
-                        size,
-                    },
-                )
-            })
-            .collect::<HashMap<String, AnalysisResult>>();
-
-        Ok(AnalysisResults { outputs })
-    }
-}
-
-struct AnalysisResult {
-    tensor: Tensor<f16>,
-    size: usize,
-}
-
-struct AnalysisResults {
-    outputs: HashMap<String, AnalysisResult>,
-}
-
-pub struct OperationWithIndex {
-    pub name: String,
-    pub operation: Operation,
-    pub index: c_int,
-    pub size: usize,
-}
-
-impl OperationWithIndex {
-    fn new(signature: (&String, &TensorInfo), graph: &Graph) -> Self {
-        let (name, tensor_info) = signature;
-        let shape: Option<Vec<Option<i64>>> = tensor_info.shape().clone().into();
-        let size = shape
-            .expect("Shape should be defined")
-            .into_iter()
-            .flatten()
-            .product::<i64>() as usize;
-
-        Self {
-            name: name.to_owned(),
-            operation: graph
-                .operation_by_name_required(&tensor_info.name().name)
-                .expect("Expected to find input operation"),
-            index: tensor_info.name().index,
-            size,
-        }
-    }
-}
-
-type PredictResponseTx<A, P> = crossbeam::channel::Sender<GameStateAnalysis<A, P>>;
+type ResultsTx<A, P> = crossbeam::channel::Sender<(usize, GameStateAnalysis<A, P>)>;
+type ResultsRx<A, P> = crossbeam::channel::Receiver<(usize, GameStateAnalysis<A, P>)>;
+type WaiterList<A, P> = SmallVec<[(usize, ResultsTx<A, P>); 2]>;
+type BatchingModelRef<S, A, P, Map, Te> = Mutex<Weak<BatchingModel<S, A, P, Map, Te>>>;
 
 /// Tracks in-flight analysis requests to coalesce duplicate requests.
-/// Maps transposition key to list of channels waiting for that state's analysis.
-/// For prefetch, we insert an entry but do not store any channel.
+/// Maps transposition key to list of waiters for that state's analysis result.
 struct InFlightRequests<A, P> {
     requests: DashMap<u64, InFlightEntry<A, P>>,
 }
 
 struct InFlightEntry<A, P> {
-    waiters: SmallVec<[PredictResponseTx<A, P>; 2]>,
-    high_enqueued: bool,
+    waiters: WaiterList<A, P>,
 }
 
 impl<A, P> InFlightRequests<A, P> {
@@ -295,61 +167,43 @@ impl<A, P> InFlightRequests<A, P> {
         }
     }
 
-    /// Register a Predict request.
-    /// Returns (is_duplicate, should_enqueue_high).
-    fn try_register_predict(&self, key: u64, channel: PredictResponseTx<A, P>) -> (bool, bool) {
+    /// Register a request.
+    /// Returns true if this key was already in-flight (duplicate).
+    fn try_register(&self, key: u64, request_id: usize, tx: ResultsTx<A, P>) -> bool {
         match self.requests.entry(key) {
             Entry::Occupied(mut entry) => {
-                let in_flight = entry.get_mut();
-                in_flight.waiters.push(channel);
-
-                if in_flight.high_enqueued {
-                    (true, false)
-                } else {
-                    in_flight.high_enqueued = true;
-                    (true, true)
-                }
+                entry.get_mut().waiters.push((request_id, tx));
+                true
             }
             Entry::Vacant(entry) => {
                 let mut waiters = SmallVec::new();
-                waiters.push(channel);
-                entry.insert(InFlightEntry {
-                    waiters,
-                    high_enqueued: true,
-                });
-                (false, true)
-            }
-        }
-    }
-
-    /// Try to register a Prefetch request.
-    /// Returns true if this key was already in-flight.
-    fn try_register_prefetch(&self, key: u64) -> bool {
-        match self.requests.entry(key) {
-            Entry::Occupied(_entry) => true,
-            Entry::Vacant(entry) => {
-                entry.insert(InFlightEntry {
-                    waiters: SmallVec::new(),
-                    high_enqueued: false,
-                });
+                waiters.push((request_id, tx));
+                entry.insert(InFlightEntry { waiters });
                 false
             }
         }
     }
 
-    /// Remove and return all channels waiting for this state's analysis
-    fn take_channels(&self, key: u64) -> Option<SmallVec<[PredictResponseTx<A, P>; 2]>> {
+    /// Remove and return all waiters for this state's analysis
+    fn take_waiters(&self, key: u64) -> Option<WaiterList<A, P>> {
         self.requests.remove(&key).map(|(_, v)| v.waiters)
     }
 }
 
 pub struct GameAnalyzer<S, A, P, Map, Te> {
     batching_model: Arc<BatchingModel<S, A, P, Map, Te>>,
+    results_tx: ResultsTx<A, P>,
+    results_rx: ResultsRx<A, P>,
 }
 
 impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te> {
     fn new(batching_model: Arc<BatchingModel<S, A, P, Map, Te>>) -> Self {
-        Self { batching_model }
+        let (results_tx, results_rx) = crossbeam::channel::unbounded();
+        Self {
+            batching_model,
+            results_tx,
+            results_rx,
+        }
     }
 }
 
@@ -381,65 +235,49 @@ where
 
         None
     }
-
-    fn has_analysis(&self, game_state: &S) -> bool {
-        let transposition_table = &*self.batching_model.transposition_table;
-        let mapper = &*self.batching_model.mapper;
-
-        transposition_table
-            .as_ref()
-            .and_then(|tt| tt.get(mapper.get_transposition_key(game_state)))
-            .is_some()
-    }
 }
 
-// @TODO: Analyze and prefetch should probably check the TT before sending to the batching model, to avoid unnecessary latency when the TT can immediately answer the request.
 impl<S, A, P, Map, Te> analytics::GameAnalyzer for GameAnalyzer<S, A, P, Map, Te>
 where
     Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
     Te: Send + 'static,
     S: Clone,
+    A: Clone,
+    P: Clone,
 {
     type State = S;
     type Action = A;
     type Predictions = P;
+    type RequestId = usize;
 
-    fn analyze(&self, game_state: &S) -> GameStateAnalysis<A, P> {
-        if let Some(entry) = self.try_immediate_analysis(game_state) {
-            return entry;
-        }
-
-        let (tx, rx) = crossbeam::channel::bounded(1);
-        self.batching_model
-            .enqueue_predict(game_state.to_owned(), tx);
-
-        rx.recv()
-            .expect("Analysis channel closed before receiving result")
-    }
-
-    fn prefetch(&self, game_state: &Self::State) {
-        if self.has_analysis(game_state) {
+    fn analyze(&self, request_id: usize, game_state: &S) {
+        if let Some(analysis) = self.try_immediate_analysis(game_state) {
+            let _ = self.results_tx.send((request_id, analysis));
             return;
         }
 
-        self.batching_model.enqueue_prefetch(game_state.to_owned());
+        self.batching_model
+            .enqueue(game_state.to_owned(), request_id, self.results_tx.clone());
+    }
+
+    fn recv(&self) -> (usize, GameStateAnalysis<A, P>) {
+        self.results_rx
+            .recv()
+            .expect("Results channel closed before receiving result")
     }
 }
 
 type StatesToInfer<S> = (S, u64); // State and its transposition key
 
-type StatesToPredictTx<S> = crossbeam::channel::Sender<StatesToInfer<S>>;
-type StatesToPredictRx<S> = crossbeam::channel::Receiver<StatesToInfer<S>>;
-type StatesToPrefetchTx<S> = crossbeam::channel::Sender<StatesToInfer<S>>;
-type StatesToPrefetchRx<S> = crossbeam::channel::Receiver<StatesToInfer<S>>;
+type StatesToAnalyzeTx<S> = crossbeam::channel::Sender<StatesToInfer<S>>;
+type StatesToAnalyzeRx<S> = crossbeam::channel::Receiver<StatesToInfer<S>>;
 
 struct BatchingModel<S, A, P, Map, Te> {
     transposition_table: Arc<Option<TranspositionTable<Te>>>,
     in_flight_requests: Arc<InFlightRequests<A, P>>,
     mapper: Arc<Map>,
     reporter: Arc<Reporter<Te>>,
-    states_to_predict_tx: StatesToPredictTx<S>,
-    states_to_prefetch_tx: StatesToPrefetchTx<S>,
+    states_to_analyze_tx: StatesToAnalyzeTx<S>,
 }
 
 impl<S, A, P, Map, Te> BatchingModel<S, A, P, Map, Te>
@@ -447,30 +285,15 @@ where
     Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
     Te: Send + 'static,
 {
-    fn enqueue_predict(&self, state_to_analyse: S, channel: PredictResponseTx<A, P>) {
+    fn enqueue(&self, state_to_analyse: S, request_id: usize, tx: ResultsTx<A, P>) {
         let key = self.mapper.get_transposition_key(&state_to_analyse);
-        let (is_duplicate, should_enqueue_high) =
-            self.in_flight_requests.try_register_predict(key, channel);
+        let is_duplicate = self.in_flight_requests.try_register(key, request_id, tx);
 
         if is_duplicate {
             self.reporter.set_predict_in_flight();
         } else {
             self.reporter.set_predict_needs_infer();
-        }
-
-        // Enqueue exactly one high-priority inference per key.
-        // If this key was first queued via Prefetch, the first Predict
-        // promotes it by enqueuing to the high-priority queue once.
-        if should_enqueue_high {
-            let _ = self.states_to_predict_tx.send((state_to_analyse, key));
-        }
-    }
-
-    fn enqueue_prefetch(&self, state_to_analyse: S) {
-        let key = self.mapper.get_transposition_key(&state_to_analyse);
-        let is_duplicate = self.in_flight_requests.try_register_prefetch(key);
-        if !is_duplicate {
-            let _ = self.states_to_prefetch_tx.send((state_to_analyse, key));
+            let _ = self.states_to_analyze_tx.send((state_to_analyse, key));
         }
     }
 }
@@ -499,16 +322,16 @@ where
     ) -> Self {
         let in_flight_requests = Arc::new(InFlightRequests::new());
 
-        let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
-        let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
+        let queue_capacity = batch_size * analysis_request_threads;
+        let (states_to_analyze_tx, states_to_analyze_rx) =
+            crossbeam::channel::bounded(queue_capacity);
 
         let inner_self = Self {
             transposition_table,
             in_flight_requests: in_flight_requests.clone(),
             reporter: reporter.clone(),
             mapper,
-            states_to_predict_tx,
-            states_to_prefetch_tx,
+            states_to_analyze_tx,
         };
 
         inner_self.create_analysis_tasks(
@@ -517,14 +340,12 @@ where
             batch_size,
             analysis_request_threads,
             in_flight_requests,
-            states_to_predict_rx,
-            states_to_prefetch_rx,
+            states_to_analyze_rx,
         );
 
         inner_self
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
         &self,
         reporter: Arc<Reporter<Te>>,
@@ -532,8 +353,7 @@ where
         batch_size: usize,
         analysis_request_threads: usize,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
-        states_to_predict_rx: StatesToPredictRx<S>,
-        states_to_prefetch_rx: StatesToPrefetchRx<S>,
+        states_to_analyze_rx: StatesToAnalyzeRx<S>,
     ) {
         let predictor = Arc::new(Predictor::new(&model_dir));
 
@@ -543,8 +363,7 @@ where
             let predictor = predictor.clone();
             let transposition_table = self.transposition_table.clone();
             let in_flight_requests = in_flight_requests.clone();
-            let states_to_predict_rx = states_to_predict_rx.clone();
-            let states_to_prefetch_rx = states_to_prefetch_rx.clone();
+            let states_to_analyze_rx = states_to_analyze_rx.clone();
 
             std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
@@ -552,13 +371,8 @@ where
                 let mut tensor_pool = TensorPool::<f16>::new(dimensions);
 
                 loop {
-                    let states_to_analyse = Self::recv_up_to_prioritized(
-                        &states_to_predict_rx,
-                        &states_to_prefetch_rx,
-                        batch_size,
-                    );
+                    let states_to_analyse = states_to_analyze_rx.recv_up_to(batch_size);
 
-                    // If states is empty then the high-priority channel has been closed.
                     if states_to_analyse.is_empty() {
                         return;
                     }
@@ -629,10 +443,9 @@ where
                     mapper,
                 );
 
-                // Send result to all channels waiting for this state
-                if let Some(channels) = in_flight_requests.take_channels(key) {
-                    for channel in channels {
-                        let _ = channel.send(analysis.clone());
+                if let Some(waiters) = in_flight_requests.take_waiters(key) {
+                    for (request_id, tx) in waiters {
+                        let _ = tx.send((request_id, analysis.clone()));
                     }
                 }
             });
@@ -648,65 +461,5 @@ where
             let transposition_key = mapper.get_transposition_key(game_state);
             transposition_table.set(transposition_key, transposition_table_entry);
         }
-    }
-
-    fn recv_up_to_prioritized(
-        high: &StatesToPredictRx<S>,
-        low: &StatesToPrefetchRx<S>,
-        limit: usize,
-    ) -> Vec<StatesToInfer<S>> {
-        let mut out = Vec::with_capacity(limit);
-
-        // Block for the first item and require it to come from the high-priority queue.
-        // This intentionally deprioritizes prefetch so it never starts a batch by itself.
-        let Ok(v) = high.recv() else {
-            return out;
-        };
-        out.push(v);
-
-        // Drain high-priority first.
-        let remaining = limit.saturating_sub(out.len());
-        out.extend(high.try_iter().take(remaining));
-
-        // Fill remaining capacity from low-priority.
-        let remaining = limit.saturating_sub(out.len());
-        out.extend(low.try_iter().take(remaining));
-
-        out
-    }
-}
-
-struct TensorPool<T: TensorType> {
-    tensors: Vec<Tensor<T>>,
-    dimensions: [u64; 3],
-}
-
-const BATCH_SIZE_INCR: usize = 32;
-
-impl<T: TensorType> TensorPool<T> {
-    fn new(dimensions: [u64; 3]) -> Self {
-        Self {
-            tensors: vec![],
-            dimensions,
-        }
-    }
-
-    fn get(&mut self, size: usize, fill: T) -> &mut Tensor<T> {
-        let idx = (size - 1) / BATCH_SIZE_INCR;
-        let tensors = &mut self.tensors;
-        while tensors.len() <= idx {
-            tensors.push(Tensor::new(&[
-                ((tensors.len() + 1) * BATCH_SIZE_INCR) as u64,
-                self.dimensions[0],
-                self.dimensions[1],
-                self.dimensions[2],
-            ]));
-        }
-
-        let tensor = &mut tensors[idx];
-
-        tensor[..].fill(fill);
-
-        tensor
     }
 }

@@ -4,13 +4,16 @@ pub trait GameAnalyzer {
     type Action;
     type State;
     type Predictions;
+    type RequestId;
 
-    fn analyze(
+    fn analyze(&self, request_id: Self::RequestId, game_state: &Self::State);
+
+    fn recv(
         &self,
-        game_state: &Self::State,
-    ) -> GameStateAnalysis<Self::Action, Self::Predictions>;
-
-    fn prefetch(&self, game_state: &Self::State);
+    ) -> (
+        Self::RequestId,
+        GameStateAnalysis<Self::Action, Self::Predictions>,
+    );
 }
 
 #[derive(Clone, Debug)]

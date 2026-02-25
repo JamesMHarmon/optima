@@ -19,6 +19,14 @@ pub use self::model::*;
 pub mod model;
 
 #[cfg(feature = "all")]
+pub mod predictor;
+#[cfg(feature = "all")]
+pub use predictor::{OperationWithIndex, Predictor};
+
+#[cfg(feature = "all")]
+mod tensor_pool;
+
+#[cfg(feature = "all")]
 mod reporter;
 #[cfg(feature = "all")]
 use reporter::*;
