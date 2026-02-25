@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 
 use common::TranspositionHash;
@@ -6,6 +6,7 @@ use crossbeam::channel::Receiver;
 use dashmap::{DashMap, Entry};
 use engine::GameEngine;
 use model::GameAnalyzer;
+use parking_lot::{Condvar, Mutex};
 
 use crate::borrowed_or_owned::BorrowedOrOwned;
 use crate::node::StateNode;
@@ -34,9 +35,11 @@ where
     selection_strategy: &'a Sel,
     store: &'a PuctStore<E, VM>,
     virtual_visit_map: DashMap<NodeId, Vec<u32>>,
-    search_leaf_map: DashMap<u64, Vec<Vec<EdgeKey>>>,
+    search_leaf_map: DashMap<u64, Vec<(u64, Vec<EdgeKey>)>>,
     num_probes: usize,
-    num_outstanding: AtomicU32,
+    probes_sent: AtomicU64,
+    probes_reverted: AtomicU64,
+    capacity_gate: CapacityGate,
     search_leaf_rx: Receiver<u64>,
 }
 
@@ -67,7 +70,9 @@ where
             search_leaf_rx,
             store,
             num_probes: 2048,
-            num_outstanding: AtomicU32::new(0),
+            probes_sent: AtomicU64::new(0),
+            probes_reverted: AtomicU64::new(0),
+            capacity_gate: CapacityGate::new(),
             virtual_visit_map: DashMap::new(),
             search_leaf_map: DashMap::new(),
         }
@@ -90,9 +95,30 @@ where
     }
 
     fn run_probes(&self, game_state: &E::State, alive: &AtomicBool) {
-        while alive.load(Ordering::Acquire) {
-            self.probe_one(game_state);
+        loop {
+            if !alive.load(Ordering::Acquire) {
+                break;
+            } else if self.has_capacity() {
+                self.probe_one(game_state);
+            } else {
+                self.wait_for_capacity(alive);
+            }
         }
+    }
+
+    fn outstanding(&self) -> u64 {
+        self.probes_sent
+            .load(Ordering::Acquire)
+            .saturating_sub(self.probes_reverted.load(Ordering::Acquire))
+    }
+
+    fn has_capacity(&self) -> bool {
+        self.outstanding() < self.num_probes as u64
+    }
+
+    fn wait_for_capacity(&self, alive: &AtomicBool) {
+        self.capacity_gate
+            .wait_while(|| alive.load(Ordering::Acquire) && !self.has_capacity());
     }
 
     fn probe_one(&self, game_state: &E::State) {
@@ -106,8 +132,8 @@ where
 
     fn revert_virtual_visits(&self) {
         while let Ok(transposition_hash) = self.search_leaf_rx.recv() {
-            if let Some(paths) = self.search_leaf_map.remove(&transposition_hash) {
-                for path in paths.1 {
+            if let Some((_, entries)) = self.search_leaf_map.remove(&transposition_hash) {
+                for (epoch, path) in entries {
                     for (node_id, edge_idx) in path {
                         self.virtual_visit_map.entry(node_id).and_modify(|v| {
                             if let Some(virtual_visits) = v.get_mut(edge_idx) {
@@ -115,6 +141,8 @@ where
                             }
                         });
                     }
+                    self.probes_reverted.fetch_max(epoch + 1, Ordering::Release);
+                    self.capacity_gate.notify_if(self.has_capacity());
                 }
             }
         }
@@ -158,9 +186,10 @@ where
     }
 
     fn store_search_leaf_path(&self, transposition_hash: u64, path: Vec<(NodeId, usize)>) -> bool {
+        let epoch = self.probes_sent.fetch_add(1, Ordering::Release);
         let entry = self.search_leaf_map.entry(transposition_hash);
         let vacant = matches!(entry, Entry::Vacant(_));
-        entry.or_default().push(path);
+        entry.or_default().push((epoch, path));
         vacant
     }
 
@@ -193,19 +222,11 @@ where
     }
 
     fn increment_virtual_visit(&self, node_id: NodeId, edge_idx: usize) {
-        self.virtual_visit_map
-            .entry(node_id)
-            .and_modify(|v| {
-                if v.len() <= edge_idx {
-                    v.resize(edge_idx + 1, 0);
-                }
-                v[edge_idx] += 1;
-            })
-            .or_insert_with(|| {
-                let mut vec = vec![0; edge_idx + 1];
-                vec[edge_idx] = 1;
-                vec
-            });
+        let mut v = self.virtual_visit_map.entry(node_id).or_default();
+        if v.len() <= edge_idx {
+            v.resize(edge_idx + 1, 0);
+        }
+        v[edge_idx] += 1;
     }
 }
 
@@ -232,6 +253,40 @@ impl<S> SelectionResult<S> {
             transposition_hash,
             is_terminal: false,
             path,
+        }
+    }
+}
+
+/// A condition variable gate that allows threads to wait until a condition
+/// is met and be notified when it becomes true.
+struct CapacityGate {
+    lock: Mutex<()>,
+    cvar: Condvar,
+}
+
+impl CapacityGate {
+    fn new() -> Self {
+        Self {
+            lock: Mutex::new(()),
+            cvar: Condvar::new(),
+        }
+    }
+
+    /// Acquires the lock and sleeps while `should_wait()` returns true.
+    /// The predicate is re-evaluated under the lock to prevent missed wakeups.
+    fn wait_while(&self, should_wait: impl Fn() -> bool) {
+        let mut guard = self.lock.lock();
+        if should_wait() {
+            self.cvar.wait(&mut guard);
+        }
+    }
+
+    /// Wakes all waiting threads if `condition` is true.
+    /// Acquires the lock before notifying to prevent missed wakeups.
+    fn notify_if(&self, condition: bool) {
+        if condition {
+            let _guard = self.lock.lock();
+            self.cvar.notify_all();
         }
     }
 }
