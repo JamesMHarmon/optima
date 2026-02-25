@@ -86,7 +86,7 @@ where
                 handles.push(s.spawn(|| self.run_probes(game_state, alive)));
             }
 
-            self.revert_virtual_visits();
+            self.process_leaf_completions();
 
             for handle in handles {
                 handle.join().expect("Probe thread panicked");
@@ -130,7 +130,7 @@ where
         }
     }
 
-    fn revert_virtual_visits(&self) {
+    fn process_leaf_completions(&self) {
         while let Ok(transposition_hash) = self.search_leaf_rx.recv() {
             if let Some((_, entries)) = self.search_leaf_map.remove(&transposition_hash) {
                 for (epoch, path) in entries {

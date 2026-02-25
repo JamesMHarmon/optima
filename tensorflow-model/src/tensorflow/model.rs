@@ -1,19 +1,19 @@
 use anyhow::Result;
 use common::{TranspositionTable, get_env_usize};
-use crossbeam::channel::{Receiver as UnboundedReceiver, Sender as UnboundedSender};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use half::f16;
 use itertools::Itertools;
-use log::{debug, info};
-use parking_lot::Mutex;
+use log::info;
+use parking_lot::{Condvar, Mutex};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelBridge, ParallelIterator,
 };
 use smallvec::SmallVec;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use tensorflow::*;
 
@@ -28,7 +28,7 @@ static ALLOCATOR: std::alloc::System = std::alloc::System;
 pub struct TensorflowModel<S, A, P, Map, Te> {
     model_info: ModelInfo,
     model_dir: PathBuf,
-    batching_model: Mutex<Weak<BatchingModelAndSender<S, A, P, Map, Te>>>,
+    batching_model: Mutex<Weak<BatchingModel<S, A, P, Map, Te>>>,
     analysis_request_threads: usize,
     mapper: Arc<Map>,
     batch_size: usize,
@@ -72,10 +72,7 @@ impl<S, A, P, Map, Te> TensorflowModel<S, A, P, Map, Te> {
         })
     }
 
-    fn create_batching_model(
-        &self,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
-    ) -> BatchingModel<Map, Te, A, P>
+    fn create_batching_model(&self) -> BatchingModel<S, A, P, Map, Te>
     where
         S: Send + Sync + 'static,
         A: Clone + Send + 'static,
@@ -103,7 +100,6 @@ impl<S, A, P, Map, Te> TensorflowModel<S, A, P, Map, Te> {
             reporter,
             self.batch_size,
             self.analysis_request_threads,
-            receiver,
         )
     }
 }
@@ -132,8 +128,7 @@ where
 
         let batching_model = match batching_model {
             None => {
-                let (sender, receiver) = crossbeam::channel::unbounded();
-                let batching_model_arc = Arc::new((self.create_batching_model(receiver), sender));
+                let batching_model_arc = Arc::new(self.create_batching_model());
 
                 *batching_model_ref = Arc::downgrade(&batching_model_arc);
 
@@ -282,13 +277,6 @@ impl OperationWithIndex {
 
 type PredictResponseTx<A, P> = crossbeam::channel::Sender<GameStateAnalysis<A, P>>;
 
-/// An analysis request can be a real prediction request (expects a response) or a prefetch request
-/// (fire-and-forget, intended to warm TT / in-flight coalescing).
-enum AnalysisRequest<A, P> {
-    Predict(PredictResponseTx<A, P>),
-    Prefetch,
-}
-
 /// Tracks in-flight analysis requests to coalesce duplicate requests.
 /// Maps transposition key to list of channels waiting for that state's analysis.
 /// For prefetch, we insert an entry but do not store any channel.
@@ -356,17 +344,12 @@ impl<A, P> InFlightRequests<A, P> {
     }
 }
 
-type BatchingModelAndSender<S, A, P, Map, Te> = (
-    BatchingModel<Map, Te, A, P>,
-    UnboundedSender<StatesToAnalyse<S, A, P>>,
-);
-
 pub struct GameAnalyzer<S, A, P, Map, Te> {
-    batching_model: Arc<BatchingModelAndSender<S, A, P, Map, Te>>,
+    batching_model: Arc<BatchingModel<S, A, P, Map, Te>>,
 }
 
 impl<S, A, P, Map, Te> GameAnalyzer<S, A, P, Map, Te> {
-    fn new(batching_model: Arc<BatchingModelAndSender<S, A, P, Map, Te>>) -> Self {
+    fn new(batching_model: Arc<BatchingModel<S, A, P, Map, Te>>) -> Self {
         Self { batching_model }
     }
 }
@@ -377,9 +360,9 @@ where
     Te: Send + 'static,
 {
     fn try_immediate_analysis(&self, game_state: &S) -> Option<GameStateAnalysis<A, P>> {
-        let transposition_table = &*self.batching_model.0.transposition_table;
-        let mapper = &*self.batching_model.0.mapper;
-        let reporter = &*self.batching_model.0._reporter;
+        let transposition_table = &*self.batching_model.transposition_table;
+        let mapper = &*self.batching_model.mapper;
+        let reporter = &*self.batching_model.reporter;
 
         if let Some(transposition_entry) = transposition_table
             .as_ref()
@@ -393,7 +376,7 @@ where
             return Some(analysis);
         }
 
-        if self.batching_model.0.transposition_table.is_some() {
+        if self.batching_model.transposition_table.is_some() {
             reporter.set_cache_miss();
         }
 
@@ -401,8 +384,8 @@ where
     }
 
     fn has_analysis(&self, game_state: &S) -> bool {
-        let transposition_table = &*self.batching_model.0.transposition_table;
-        let mapper = &*self.batching_model.0.mapper;
+        let transposition_table = &*self.batching_model.transposition_table;
+        let mapper = &*self.batching_model.mapper;
 
         transposition_table
             .as_ref()
@@ -428,10 +411,8 @@ where
         }
 
         let (tx, rx) = crossbeam::channel::bounded(1);
-        let sender = &self.batching_model.1;
-        sender
-            .send((game_state.to_owned(), AnalysisRequest::Predict(tx)))
-            .unwrap_or_else(|_| debug!("Channel closed"));
+        self.batching_model
+            .enqueue_predict(game_state.to_owned(), tx);
 
         rx.recv()
             .expect("Analysis channel closed before receiving result")
@@ -442,25 +423,132 @@ where
             return;
         }
 
-        let sender = &self.batching_model.1;
-        sender
-            .send((game_state.to_owned(), AnalysisRequest::Prefetch))
-            .unwrap_or_else(|_| debug!("Channel closed"));
+        self.batching_model.enqueue_prefetch(game_state.to_owned());
     }
 }
 
-type StatesToAnalyse<S, A, P> = (S, AnalysisRequest<A, P>);
-
 type StatesToInfer<S> = (S, u64); // State and its transposition key
 
-struct BatchingModel<Map, Te, A, P> {
-    transposition_table: Arc<Option<TranspositionTable<Te>>>,
-    _in_flight_requests: Arc<InFlightRequests<A, P>>,
-    mapper: Arc<Map>,
-    _reporter: Arc<Reporter<Te>>,
+struct PendingStatesToInfer<S> {
+    high: VecDeque<StatesToInfer<S>>,
+    low: VecDeque<StatesToInfer<S>>,
 }
 
-impl<S, A, P, Map, Te> BatchingModel<Map, Te, A, P>
+impl<S> PendingStatesToInfer<S> {
+    fn new() -> Self {
+        Self {
+            high: VecDeque::new(),
+            low: VecDeque::new(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.high.is_empty() && self.low.is_empty()
+    }
+}
+
+struct WorkQueue<S> {
+    pending: Mutex<PendingStatesToInfer<S>>,
+    cvar: Condvar,
+    closed: AtomicBool,
+}
+
+impl<S> WorkQueue<S> {
+    fn new() -> Self {
+        Self {
+            pending: Mutex::new(PendingStatesToInfer::new()),
+            cvar: Condvar::new(),
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+        self.cvar.notify_all();
+    }
+
+    fn push_high(&self, v: StatesToInfer<S>) {
+        let mut guard = self.pending.lock();
+        guard.high.push_back(v);
+        self.cvar.notify_one();
+    }
+
+    fn push_low(&self, v: StatesToInfer<S>) {
+        let mut guard = self.pending.lock();
+        guard.low.push_back(v);
+        self.cvar.notify_one();
+    }
+
+    fn pop_batch(&self, limit: usize) -> Vec<StatesToInfer<S>> {
+        let mut guard = self.pending.lock();
+
+        while guard.is_empty() && !self.closed.load(Ordering::Acquire) {
+            self.cvar.wait(&mut guard);
+        }
+
+        if guard.is_empty() {
+            return Vec::new();
+        }
+
+        let mut out = Vec::with_capacity(limit);
+        while out.len() < limit {
+            if let Some(v) = guard.high.pop_front() {
+                out.push(v);
+                continue;
+            }
+            if let Some(v) = guard.low.pop_front() {
+                out.push(v);
+                continue;
+            }
+            break;
+        }
+
+        out
+    }
+}
+
+struct BatchingModel<S, A, P, Map, Te> {
+    transposition_table: Arc<Option<TranspositionTable<Te>>>,
+    in_flight_requests: Arc<InFlightRequests<A, P>>,
+    mapper: Arc<Map>,
+    reporter: Arc<Reporter<Te>>,
+    work_queue: Arc<WorkQueue<S>>,
+}
+
+impl<S, A, P, Map, Te> BatchingModel<S, A, P, Map, Te>
+where
+    Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
+    Te: Send + 'static,
+{
+    fn enqueue_predict(&self, state_to_analyse: S, channel: PredictResponseTx<A, P>) {
+        let key = self.mapper.get_transposition_key(&state_to_analyse);
+        let (is_duplicate, should_enqueue_high) =
+            self.in_flight_requests.try_register_predict(key, channel);
+
+        if is_duplicate {
+            self.reporter.set_predict_in_flight();
+        } else {
+            self.reporter.set_predict_needs_infer();
+        }
+
+        // Enqueue exactly one high-priority inference per key.
+        // If this key was first queued via Prefetch, the first Predict
+        // promotes it by enqueuing to the high-priority queue once.
+        if should_enqueue_high {
+            self.work_queue.push_high((state_to_analyse, key));
+        }
+    }
+
+    fn enqueue_prefetch(&self, state_to_analyse: S) {
+        let key = self.mapper.get_transposition_key(&state_to_analyse);
+        let is_duplicate = self.in_flight_requests.try_register_prefetch(key);
+        if !is_duplicate {
+            self.work_queue.push_low((state_to_analyse, key));
+        }
+    }
+}
+
+impl<S, A, P, Map, Te> BatchingModel<S, A, P, Map, Te>
 where
     S: Send + Sync + 'static,
     A: Clone + Send + 'static,
@@ -481,118 +569,49 @@ where
         reporter: Arc<Reporter<Te>>,
         batch_size: usize,
         analysis_request_threads: usize,
-        states_to_analyse_receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
     ) -> Self {
         let in_flight_requests = Arc::new(InFlightRequests::new());
+        let work_queue = Arc::new(WorkQueue::new());
 
         let inner_self = Self {
             transposition_table,
-            _in_flight_requests: in_flight_requests.clone(),
-            _reporter: reporter.clone(),
+            in_flight_requests: in_flight_requests.clone(),
+            reporter: reporter.clone(),
             mapper,
+            work_queue: work_queue.clone(),
         };
 
         inner_self.create_analysis_tasks(
             reporter,
             model_dir,
-            states_to_analyse_receiver,
             batch_size,
             analysis_request_threads,
             in_flight_requests,
+            work_queue,
         );
 
         inner_self
     }
 
-    fn listen_then_transpose_or_infer(
-        mapper: Arc<Map>,
-        reporter: Arc<Reporter<Te>>,
-        in_flight_requests: Arc<InFlightRequests<A, P>>,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
-        states_to_predict_tx: UnboundedSender<StatesToInfer<S>>,
-        states_to_prefetch_tx: UnboundedSender<StatesToInfer<S>>,
-    ) {
-        let mapper = &*mapper;
-        let reporter = &*reporter;
-        let states_to_predict_tx = &states_to_predict_tx;
-        let states_to_prefetch_tx = &states_to_prefetch_tx;
-        let in_flight_requests = &*in_flight_requests;
-
-        rayon::scope_fifo(move |s| {
-            while let Ok((state_to_analyse, request)) = receiver.recv() {
-                s.spawn_fifo(move |_| {
-                    let key = mapper.get_transposition_key(&state_to_analyse);
-                    match request {
-                        AnalysisRequest::Predict(channel) => {
-                            let (is_duplicate, should_enqueue_high) =
-                                in_flight_requests.try_register_predict(key, channel);
-
-                            if is_duplicate {
-                                reporter.set_predict_in_flight();
-                            } else {
-                                reporter.set_predict_needs_infer();
-                            }
-
-                            // Enqueue exactly one high-priority inference per key.
-                            // If this key was first queued via Prefetch, the first Predict
-                            // promotes it by enqueuing to the high-priority queue once.
-                            if should_enqueue_high {
-                                let _ = states_to_predict_tx.send((state_to_analyse, key));
-                            }
-                        }
-                        AnalysisRequest::Prefetch => {
-                            let is_duplicate = in_flight_requests.try_register_prefetch(key);
-                            if !is_duplicate {
-                                let _ = states_to_prefetch_tx.send((state_to_analyse, key));
-                            }
-                        }
-                    }
-                });
-            }
-        });
-
-        debug!("Exiting listen_then_transpose_or_infer");
-    }
     #[allow(clippy::too_many_arguments)]
     fn create_analysis_tasks(
         &self,
         reporter: Arc<Reporter<Te>>,
         model_dir: PathBuf,
-        receiver: UnboundedReceiver<StatesToAnalyse<S, A, P>>,
         batch_size: usize,
         analysis_request_threads: usize,
         in_flight_requests: Arc<InFlightRequests<A, P>>,
+        work_queue: Arc<WorkQueue<S>>,
     ) {
-        let (states_to_predict_tx, states_to_predict_rx) = crossbeam::channel::unbounded();
-        let (states_to_prefetch_tx, states_to_prefetch_rx) = crossbeam::channel::unbounded();
-
-        let mapper_clone = self.mapper.clone();
-        let reporter_clone = reporter.clone();
-        let in_flight_clone = in_flight_requests.clone();
-
-        std::thread::spawn(move || {
-            Self::listen_then_transpose_or_infer(
-                mapper_clone.clone(),
-                reporter_clone.clone(),
-                in_flight_clone,
-                receiver,
-                states_to_predict_tx,
-                states_to_prefetch_tx,
-            );
-        });
-
         let predictor = Arc::new(Predictor::new(&model_dir));
-        let filling_states_to_analyze = Arc::new(std::sync::Mutex::new(()));
 
         for _ in 0..analysis_request_threads {
             let mapper = self.mapper.clone();
             let reporter = reporter.clone();
             let predictor = predictor.clone();
-            let states_to_predict_rx = states_to_predict_rx.clone();
-            let states_to_prefetch_rx = states_to_prefetch_rx.clone();
-            let filling_states_to_analyze = filling_states_to_analyze.clone();
             let transposition_table = self.transposition_table.clone();
             let in_flight_requests = in_flight_requests.clone();
+            let work_queue = work_queue.clone();
 
             std::thread::spawn(move || {
                 let dimensions = mapper.dimensions();
@@ -600,16 +619,9 @@ where
                 let mut tensor_pool = TensorPool::<f16>::new(dimensions);
 
                 loop {
-                    // Lock when getting states to analyze so that the pulled states maintain order. Otherwise when reordering later, any missed states will need to be waited for.
-                    let lock = filling_states_to_analyze.lock().unwrap();
-                    let states_to_analyse = Self::recv_up_to_prioritized(
-                        &states_to_predict_rx,
-                        &states_to_prefetch_rx,
-                        batch_size,
-                    );
-                    drop(lock);
+                    let states_to_analyse = work_queue.pop_batch(batch_size);
 
-                    // If states is empty then the channel tx has been closed.
+                    // If states is empty then the queue has been closed.
                     if states_to_analyse.is_empty() {
                         return;
                     }
@@ -646,42 +658,6 @@ where
                 }
             });
         }
-    }
-
-    fn recv_up_to_prioritized(
-        high: &crossbeam::channel::Receiver<StatesToInfer<S>>,
-        low: &crossbeam::channel::Receiver<StatesToInfer<S>>,
-        limit: usize,
-    ) -> Vec<StatesToInfer<S>> {
-        let mut out = Vec::with_capacity(limit);
-
-        // Block for at least one item, preferring high-priority if both are ready.
-        crossbeam::channel::select_biased! {
-            recv(high) -> msg => {
-                if let Ok(v) = msg { out.push(v); }
-            }
-            recv(low) -> msg => {
-                if let Ok(v) = msg { out.push(v); }
-            }
-        }
-
-        // Drain high-priority first.
-        while out.len() < limit {
-            match high.try_recv() {
-                Ok(v) => out.push(v),
-                Err(_) => break,
-            }
-        }
-
-        // Fill remaining capacity from low-priority.
-        while out.len() < limit {
-            match low.try_recv() {
-                Ok(v) => out.push(v),
-                Err(_) => break,
-            }
-        }
-
-        out
     }
 
     fn process_predictions(
@@ -735,6 +711,12 @@ where
             let transposition_key = mapper.get_transposition_key(game_state);
             transposition_table.set(transposition_key, transposition_table_entry);
         }
+    }
+}
+
+impl<S, A, P, Map, Te> Drop for BatchingModel<S, A, P, Map, Te> {
+    fn drop(&mut self) {
+        self.work_queue.close();
     }
 }
 
