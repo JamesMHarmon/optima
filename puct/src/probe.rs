@@ -14,7 +14,7 @@ use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::{RollupStats, SelectionPolicy, ValueModel};
 
-const PROBE_THREADS: usize = 2;
+const PROBE_THREADS: usize = 4;
 
 type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, RollupOf<VM>>;
 
@@ -35,7 +35,7 @@ where
     selection_strategy: &'a Sel,
     store: &'a PuctStore<E, VM>,
     virtual_visit_map: DashMap<NodeId, Vec<u32>>,
-    search_leaf_map: DashMap<u64, Vec<(u64, Vec<EdgeKey>)>>,
+    search_leaf_map: DashMap<u64, (u64, Vec<Vec<EdgeKey>>)>,
     num_probes: usize,
     probes_sent: AtomicU64,
     probes_reverted: AtomicU64,
@@ -69,7 +69,7 @@ where
             selection_strategy,
             search_leaf_rx,
             store,
-            num_probes: 2048,
+            num_probes: 10000,
             probes_sent: AtomicU64::new(0),
             probes_reverted: AtomicU64::new(0),
             capacity_gate: CapacityGate::new(),
@@ -132,8 +132,8 @@ where
 
     fn process_leaf_completions(&self) {
         while let Ok(transposition_hash) = self.search_leaf_rx.recv() {
-            if let Some((_, entries)) = self.search_leaf_map.remove(&transposition_hash) {
-                for (epoch, path) in entries {
+            if let Some((_, (epoch, paths))) = self.search_leaf_map.remove(&transposition_hash) {
+                for path in paths {
                     for (node_id, edge_idx) in path {
                         self.virtual_visit_map.entry(node_id).and_modify(|v| {
                             if let Some(virtual_visits) = v.get_mut(edge_idx) {
@@ -141,9 +141,10 @@ where
                             }
                         });
                     }
-                    self.probes_reverted.fetch_max(epoch + 1, Ordering::Release);
-                    self.capacity_gate.notify_if(self.has_capacity());
                 }
+
+                self.probes_reverted.fetch_max(epoch + 1, Ordering::Release);
+                self.capacity_gate.notify_if(self.has_capacity());
             }
         }
     }
@@ -186,11 +187,17 @@ where
     }
 
     fn store_search_leaf_path(&self, transposition_hash: u64, path: Vec<(NodeId, usize)>) -> bool {
-        let epoch = self.probes_sent.fetch_add(1, Ordering::Release);
-        let entry = self.search_leaf_map.entry(transposition_hash);
-        let vacant = matches!(entry, Entry::Vacant(_));
-        entry.or_default().push((epoch, path));
-        vacant
+        match self.search_leaf_map.entry(transposition_hash) {
+            Entry::Vacant(entry) => {
+                let epoch = self.probes_sent.fetch_add(1, Ordering::Release);
+                entry.insert((epoch, vec![path]));
+                true
+            }
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().1.push(path);
+                false
+            }
+        }
     }
 
     fn select_edge(
