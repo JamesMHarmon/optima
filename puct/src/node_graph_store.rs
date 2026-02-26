@@ -112,17 +112,6 @@ where
             .map(|v| *v)
     }
 
-    #[inline]
-    pub(super) fn get_state_node_id(
-        &self,
-        edge: &PUCTEdge,
-        transposition_hash: u64,
-    ) -> Option<NodeId> {
-        self.graph()
-            .get_edge_state_with_hash(edge, transposition_hash)
-            .or_else(|| self.get_node_id(transposition_hash))
-    }
-
     /// Get child from edge if cached, otherwise lookup in transposition table and link.
     /// Returns None if this is a new position that needs expansion.
     pub(super) fn get_or_link_transposition(

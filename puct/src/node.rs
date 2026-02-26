@@ -11,8 +11,6 @@ use crate::terminal_node::Terminal;
 
 type StateArena<A, R> = NodeArena<StateNode<A, R>, AfterState, Terminal<R>>;
 
-pub type EdgeRef<'a> = &'a PUCTEdge;
-
 pub struct StateNode<A, R>
 where
     R: RollupStats,
