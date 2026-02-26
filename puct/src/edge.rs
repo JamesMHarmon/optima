@@ -37,10 +37,10 @@ impl PUCTEdge {
 
     pub fn set_child(&self, node_id: NodeId) {
         let new_value = node_id.as_u32();
-        self.child.store(new_value, Ordering::Relaxed);
+        self.child.store(new_value, Ordering::Release);
     }
 
-    pub fn try_set_child(&self, new_child: NodeId) -> bool {
+    pub fn try_set_child(&self, new_child: NodeId) -> Result<(), NodeId> {
         self.child
             .compare_exchange(
                 NodeId::unset().as_u32(),
@@ -48,7 +48,8 @@ impl PUCTEdge {
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
-            .is_ok()
+            .map(|_| ())
+            .map_err(NodeId::from_u32)
     }
 
     pub fn increment_visits(&self) {

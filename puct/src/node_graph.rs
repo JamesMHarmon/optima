@@ -107,13 +107,16 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
 
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
     pub fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
-        if edge.try_set_child(child_id) {
+        // First try to set child directly on edge if it's currently unset
+        let existing_child_id = match edge.try_set_child(child_id) {
+            Ok(_) => return,
+            Err(existing) => existing,
+        };
+
+        // If edge already points to the same child, no update needed
+        if existing_child_id == child_id {
             return;
         }
-
-        let existing_child_id = edge
-            .child()
-            .expect("Child must be set if try_set_child failed");
 
         let mut new_outcomes = tinyvec::TinyVec::new();
 
@@ -132,6 +135,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         new_outcomes.push(AfterStateOutcome::new(1, child_id));
 
         // Create new AfterState and atomically update edge
+        // @TODO: Check if we need to be smarter about concurrent updates.
         let new_after_state_id = self.arena.push_after_state(AfterState::new(new_outcomes));
         edge.set_child(new_after_state_id);
 

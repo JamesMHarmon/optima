@@ -197,9 +197,9 @@ where
         let (edge, _) = parent.edge_and_action(step.edge_index);
         let new_node_id = self.create_or_merge_terminal(edge, &step.game_state, &step.terminal);
 
-        let link = new_node_id.map(|new_node_id| {
-            LinkChild::new(step.parent_node_id, step.edge_index, new_node_id)
-        });
+        // @TODO If we are creating the terminal here then don't defer the link.
+        let link = new_node_id
+            .map(|new_node_id| LinkChild::new(step.parent_node_id, step.edge_index, new_node_id));
 
         let _ = tx.send(SimMsg::Terminal {
             sim_id: step.sim_id,
