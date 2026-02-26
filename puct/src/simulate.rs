@@ -202,11 +202,9 @@ impl<S, T> SelectionResult<S, T> {
 
 /// Describes the outcome of one simulation step.
 pub(super) enum SimulationStep<S, T> {
-    /// The leaf was a terminal state; all needed data is immediately available.
+    /// The leaf was a terminal state
     Terminal(TerminalStep<S, T>),
     /// A previously-unseen position was reached.
-    ///
-    /// The caller must call `analyzer.analyze(sim_id, &game_state)`.
     NewLeaf(NewLeafStep<S>),
 }
 
@@ -237,12 +235,4 @@ impl<S, T> SimulationStep<S, T> {
             Self::NewLeaf(s) => s.depth,
         }
     }
-}
-
-/// Per-simulation data needed when the corresponding expansion result arrives.
-pub(super) struct WaiterInfo {
-    pub(super) sim_id: usize,
-    pub(super) path: Vec<NodeId>,
-    pub(super) parent_node_id: NodeId,
-    pub(super) edge_index: usize,
 }

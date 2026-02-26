@@ -1,4 +1,5 @@
 mod after_state;
+mod analysis_coordinator;
 mod backprop;
 mod edge;
 mod edge_store;

@@ -1,14 +1,14 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
-use crossbeam::channel::{Receiver, TryRecvError};
+use crossbeam::channel::Receiver;
 
+use crate::analysis_coordinator::InFlightExpansions;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
-use crate::simulate::WaiterInfo;
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
-use model::{ActionWithPolicy, GameAnalyzer};
+use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
 
 type PuctStore<M, R> = NodeGraphStore<<M as GameAnalyzer>::Action, R>;
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
@@ -16,131 +16,156 @@ type SimRx<S> = Receiver<SimMsg<S>>;
 
 /// Owns the receive-and-backprop loop; intended to run on a dedicated thread.
 ///
-/// Receives [`SimMsg`]s from the simulation thread, collects network results
-/// via [`GameAnalyzer::recv`], and drains [`BackpropQueue`] in strict
-/// simulation-ID order to guarantee unbiased backpropagation.
-pub(super) struct Backpropagator<'a, M, VM>
+/// This implementation processes one simulation message at a time by blocking
+/// on `rx.recv()`. Backpropagation is strictly ordered by `sim_id`: messages
+/// can arrive out of order and are buffered, but we only process the next
+/// expected `sim_id`.
+///
+/// When the next simulation is a [`SimMsg::State`], this thread blocks until
+/// the matching network analysis arrives via [`GameAnalyzer::recv`]. Any
+/// out-of-order analysis results are buffered in a `BTreeMap` keyed by request
+/// id.
+pub(super) struct Backpropagator<'a, M, VM, IE>
 where
     M: GameAnalyzer,
     VM: ValueModel,
+    IE: InFlightExpansions<State = M::State> + 'a,
 {
     analyzer: &'a M,
     store: &'a PuctStore<M, RollupOf<VM>>,
     value_model: &'a VM,
+    expansions: IE,
+    rx: SimRx<M::State>,
+
+    analysis_buffer: BTreeMap<usize, GameStateAnalysis<M::Action, M::Predictions>>,
+    pending_by_sim_id: BTreeMap<usize, PendingSim<M::State>>,
+    next_sim_id: usize,
+    sim_done: bool,
 }
 
-impl<'a, M, VM> Backpropagator<'a, M, VM>
+impl<'a, M, VM, IE> Backpropagator<'a, M, VM, IE>
 where
     M: GameAnalyzer<RequestId = usize>,
     VM: ValueModel<State = M::State, Predictions = M::Predictions>,
     RollupOf<VM>: RollupStats,
     M::State: TranspositionHash + Clone,
     M::Action: Send + Sync,
+    IE: InFlightExpansions<State = M::State> + 'a,
 {
     pub(super) fn new(
         analyzer: &'a M,
         store: &'a PuctStore<M, RollupOf<VM>>,
         value_model: &'a VM,
+        expansions: IE,
+        rx: SimRx<M::State>,
     ) -> Self {
         Self {
             analyzer,
             store,
             value_model,
+            expansions,
+            rx,
+
+            analysis_buffer: BTreeMap::new(),
+            pending_by_sim_id: BTreeMap::new(),
+            next_sim_id: 0,
+            sim_done: false,
         }
     }
 
-    pub(super) fn run(&self, rx: SimRx<M::State>) {
-        let mut backprop_queue = BackpropQueue::new();
-        // Maps transposition hash → (game_state, pending waiters).
-        let mut expanding: HashMap<u64, (M::State, Vec<WaiterInfo>)> = HashMap::new();
-        // Maps request_id → transposition hash for reverse lookup on recv.
-        let mut request_to_hash: HashMap<usize, u64> = HashMap::new();
-        // Remembers the NodeId created for each resolved hash so that late
-        // Waiter messages (racing with resolution) can still form their task.
-        let mut resolved: HashMap<u64, NodeId> = HashMap::new();
-        let mut sim_done = false;
+    pub(super) fn run(mut self) {
+        while let Some(pending) = self.next_sim() {
+            match pending {
+                PendingSim::Terminal(p) => {
+                    if let Some(link) = p.link {
+                        self.link_child(link.parent_node_id, link.edge_index, link.new_node_id);
+                    }
+                    self.backprop_path(p.path);
+                }
+                PendingSim::State(p) => {
+                    let analysis = self.recv_analysis_for(p.request_id);
 
+                    let new_node_id = if let Some(existing) = self.store.get_node_id(p.hash) {
+                        existing
+                    } else {
+                        let (policy_priors, predictions) = analysis.into_inner();
+                        self.create_state_node(p.hash, policy_priors, &p.game_state, &predictions)
+                    };
+
+                    self.expansions.complete(p.hash);
+
+                    self.link_child(p.parent_node_id, p.edge_index, new_node_id);
+                    self.backprop_path(p.path);
+                }
+            }
+        }
+    }
+
+    fn next_sim(&mut self) -> Option<PendingSim<M::State>> {
         loop {
-            // Drain all immediately available messages from the sim thread.
-            loop {
-                match rx.try_recv() {
-                    Ok(SimMsg::Terminal { sim_id, task }) => {
-                        backprop_queue.push(sim_id, task);
-                    }
-                    Ok(SimMsg::NewLeaf {
-                        request_id,
-                        hash,
-                        game_state,
-                        waiter,
-                    }) => {
-                        request_to_hash.insert(request_id, hash);
-                        expanding.insert(hash, (game_state, vec![waiter]));
-                    }
-                    Ok(SimMsg::Waiter { hash, waiter }) => {
-                        if let Some((_, waiters)) = expanding.get_mut(&hash) {
-                            // Expansion still in flight: queue with the rest.
-                            waiters.push(waiter);
-                        } else if let Some(&new_node_id) = resolved.get(&hash) {
-                            // Late waiter: expansion already completed.
-                            backprop_queue.push(
-                                waiter.sim_id,
-                                BackpropTask {
-                                    path: waiter.path,
-                                    parent_node_id: waiter.parent_node_id,
-                                    edge_index: waiter.edge_index,
-                                    new_node_id: Some(new_node_id),
-                                },
-                            );
-                        }
-                    }
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => {
-                        sim_done = true;
-                        break;
-                    }
-                }
+            if let Some(pending) = self.pending_by_sim_id.remove(&self.next_sim_id) {
+                self.next_sim_id += 1;
+                return Some(pending);
             }
 
-            // Block on one network result while there are outstanding requests.
-            if !request_to_hash.is_empty() {
-                let (request_id, analysis) = self.analyzer.recv();
-                if let Some(hash) = request_to_hash.remove(&request_id)
-                    && let Some((game_state, waiters)) = expanding.remove(&hash)
-                {
-                    let (policy_priors, predictions) = analysis.into_inner();
-                    let new_node_id: NodeId =
-                        self.create_state_node(hash, policy_priors, &game_state, &predictions);
-                    resolved.insert(hash, new_node_id);
-                    for waiter in waiters {
-                        backprop_queue.push(
-                            waiter.sim_id,
-                            BackpropTask {
-                                path: waiter.path,
-                                parent_node_id: waiter.parent_node_id,
-                                edge_index: waiter.edge_index,
-                                new_node_id: Some(new_node_id),
-                            },
-                        );
-                    }
+            if self.sim_done {
+                if self.pending_by_sim_id.is_empty() {
+                    return None;
                 }
+
+                // Should be unreachable in normal operation: sim ids are expected
+                // to be contiguous from 0. If the channel is closed early (or a
+                // bug drops a sim id), don't stall forever.
+                let min_id = *self
+                    .pending_by_sim_id
+                    .keys()
+                    .next()
+                    .expect("pending_by_sim_id is non-empty");
+                self.next_sim_id = min_id;
+                continue;
             }
 
-            // Drain backprop tasks in strict simulation-ID order.
-            let store = self.store;
-            backprop_queue.drain_ready(|task| {
-                if let Some(new_id) = task.new_node_id {
-                    let parent = store.state_node(task.parent_node_id);
-                    let (edge, _) = parent.edge_and_action(task.edge_index);
-                    store.graph().add_child_to_edge(edge, new_id);
+            match self.rx.recv() {
+                Ok(msg) => {
+                    let sim_id = msg.sim_id();
+                    self.pending_by_sim_id
+                        .insert(sim_id, PendingSim::from_msg(msg));
                 }
-                for &node_id in task.path.iter().rev() {
-                    store.recompute_rollup(node_id);
-                }
-            });
-
-            if sim_done && request_to_hash.is_empty() && !backprop_queue.has_pending() {
-                break;
+                Err(_) => self.sim_done = true,
             }
+        }
+    }
+
+    fn recv_analysis_for(
+        &mut self,
+        request_id: usize,
+    ) -> GameStateAnalysis<M::Action, M::Predictions> {
+        loop {
+            if let Some(analysis) = self.analysis_buffer.remove(&request_id) {
+                return analysis;
+            }
+
+            let (recv_request_id, analysis) = self.analyzer.recv();
+            if recv_request_id == request_id {
+                return analysis;
+            }
+
+            self.analysis_buffer.insert(recv_request_id, analysis);
+        }
+    }
+
+    fn link_child(&self, parent_node_id: NodeId, edge_index: usize, new_node_id: NodeId) {
+        let store = self.store;
+
+        let parent = store.state_node(parent_node_id);
+        let (edge, _) = parent.edge_and_action(edge_index);
+        store.graph().add_child_to_edge(edge, new_node_id);
+    }
+
+    fn backprop_path(&self, path: Vec<NodeId>) {
+        let store = self.store;
+        for &node_id in path.iter().rev() {
+            store.recompute_rollup(node_id);
         }
     }
 
@@ -158,64 +183,91 @@ where
     }
 }
 
-/// Accumulates backprop tasks and releases them in strict simulation-ID order.
-///
-/// Guarantees that terminal results never "skip ahead" of in-flight network
-/// expansions, eliminating the latency-induced visit-count bias that arises
-/// when fast paths are consistently propagated before slow ones.
-pub(super) struct BackpropQueue {
-    pending: BTreeMap<usize, BackpropTask>,
-    next_id: usize,
+enum PendingSim<S> {
+    Terminal(PendingTerminal),
+    State(PendingState<S>),
 }
 
-impl BackpropQueue {
-    pub(super) fn new() -> Self {
+impl<S> PendingSim<S> {
+    fn from_msg(msg: SimMsg<S>) -> Self {
+        match msg {
+            SimMsg::Terminal { path, link, .. } => Self::Terminal(PendingTerminal { path, link }),
+            SimMsg::State {
+                request_id,
+                hash,
+                game_state,
+                path,
+                parent_node_id,
+                edge_index,
+                ..
+            } => Self::State(PendingState {
+                request_id,
+                hash,
+                game_state,
+                path,
+                parent_node_id,
+                edge_index,
+            }),
+        }
+    }
+}
+
+struct PendingTerminal {
+    path: Vec<NodeId>,
+    link: Option<LinkChild>,
+}
+
+struct PendingState<S> {
+    request_id: usize,
+    hash: u64,
+    game_state: S,
+    path: Vec<NodeId>,
+    parent_node_id: NodeId,
+    edge_index: usize,
+}
+
+pub(super) struct LinkChild {
+    parent_node_id: NodeId,
+    edge_index: usize,
+    new_node_id: NodeId,
+}
+
+impl LinkChild {
+    pub(crate) fn new(parent_node_id: NodeId, edge_index: usize, new_node_id: NodeId) -> Self {
         Self {
-            pending: BTreeMap::new(),
-            next_id: 0,
+            parent_node_id,
+            edge_index,
+            new_node_id,
         }
     }
-
-    /// Enqueue a task to be processed when simulation `sim_id` is next in line.
-    pub(super) fn push(&mut self, sim_id: usize, task: BackpropTask) {
-        self.pending.insert(sim_id, task);
-    }
-
-    /// Call `f` for every consecutively-ready task (starting from the current
-    /// `next_id`), advancing the counter after each call.
-    pub(super) fn drain_ready(&mut self, mut f: impl FnMut(BackpropTask)) {
-        while let Some(task) = self.pending.remove(&self.next_id) {
-            f(task);
-            self.next_id += 1;
-        }
-    }
-
-    pub(super) fn has_pending(&self) -> bool {
-        !self.pending.is_empty()
-    }
-}
-
-/// All data needed to complete one backpropagation step.
-pub(super) struct BackpropTask {
-    pub(super) path: Vec<NodeId>,
-    pub(super) parent_node_id: NodeId,
-    pub(super) edge_index: usize,
-    /// When `Some`, this new node must be linked to the parent edge before backpropagating.
-    pub(super) new_node_id: Option<NodeId>,
 }
 
 /// Message sent from the simulation thread to the backprop thread.
 pub(super) enum SimMsg<S> {
-    /// A terminal leaf was reached; the backprop task is fully formed.
-    Terminal { sim_id: usize, task: BackpropTask },
+    Terminal {
+        sim_id: usize,
+        path: Vec<NodeId>,
+        /// When `Some`, link this newly-created child before backpropagating.
+        link: Option<LinkChild>,
+    },
     /// A new (not yet analysed) leaf was found. `analyzer.analyze` has already
     /// been called before this message is sent.
-    NewLeaf {
+    State {
+        sim_id: usize,
         request_id: usize,
         hash: u64,
         game_state: S,
-        waiter: WaiterInfo,
+        path: Vec<NodeId>,
+        parent_node_id: NodeId,
+        edge_index: usize,
     },
-    /// A leaf whose transposition hash is already in-flight; append to waiters.
-    Waiter { hash: u64, waiter: WaiterInfo },
+}
+
+impl<S> SimMsg<S> {
+    fn sim_id(&self) -> usize {
+        match self {
+            Self::Terminal { sim_id, .. } => *sim_id,
+            Self::State { sim_id, .. } => *sim_id,
+        }
+    }
 }

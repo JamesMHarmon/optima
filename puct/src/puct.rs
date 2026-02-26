@@ -1,18 +1,18 @@
 use std::cmp::max;
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
-use crate::backprop::{BackpropTask, Backpropagator, SimMsg};
+use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
+use crate::backprop::{Backpropagator, LinkChild, SimMsg};
 use crate::edge::PUCTEdge;
 use crate::node_arena::NodeId;
 use crate::rollup::RollupStats;
 use crate::search_context::SearchContextPool;
 use crate::selection_policy::SelectionPolicy;
-use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep, WaiterInfo};
+use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use engine::GameEngine;
@@ -26,7 +26,7 @@ type SimTx<S> = channel::Sender<SimMsg<S>>;
 
 /// Capacity of the sim→backprop channel. Controls how far ahead the simulation
 /// thread can run before it blocks waiting for the backprop thread to catch up.
-const ANALYSIS_PIPELINE_DEPTH: usize = 16;
+const ANALYSIS_PIPELINE_DEPTH: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub struct EdgeView<A, SS> {
@@ -68,7 +68,7 @@ where
         selection_strategy: &'a Sel,
     ) -> Self {
         let store: PuctStore<E, VM> = NodeGraphStore::new();
-        let context_pool = SearchContextPool::new(32);
+        let context_pool = SearchContextPool::new(ANALYSIS_PIPELINE_DEPTH);
 
         Self {
             game_engine,
@@ -104,16 +104,33 @@ where
     where
         Alive: FnMut(usize) -> bool + Send,
     {
-        let (tx, rx) = channel::bounded::<SimMsg<E::State>>(ANALYSIS_PIPELINE_DEPTH * 4);
-
         let mut max_depth = 0;
         thread::scope(|s| {
-            let backprop = Backpropagator::new(self.analyzer, &self.store, self.value_model);
-            let backprop_handle = s.spawn(move || backprop.run(rx));
-            let sim_handle = s.spawn(|| self.run_sim(root, game_state, alive, alive_flag, tx));
+            let (tx, rx) = channel::bounded::<SimMsg<E::State>>(ANALYSIS_PIPELINE_DEPTH);
+
+            let (expansions, coordinator) =
+                AnalysisCoordinator::new(self.analyzer, ANALYSIS_PIPELINE_DEPTH);
+
+            let analyzer = self.analyzer;
+            let store = &self.store;
+            let value_model = self.value_model;
+            let bp_expansions = expansions.clone();
+
+            let backprop_handle = s.spawn(move || {
+                let backprop = Backpropagator::new(analyzer, store, value_model, bp_expansions, rx);
+                backprop.run();
+            });
+
+            let sim_handle =
+                s.spawn(|| self.run_sim(root, game_state, alive, alive_flag, tx, expansions));
+
+            let coordinator_handle = s.spawn(move || coordinator.run());
 
             max_depth = sim_handle.join().expect("PUCT sim thread panicked");
             backprop_handle.join().expect("backprop thread panicked");
+            coordinator_handle
+                .join()
+                .expect("in-flight coordinator panicked");
         });
 
         max_depth
@@ -126,6 +143,7 @@ where
         mut alive: Alive,
         alive_flag: &AtomicBool,
         tx: SimTx<E::State>,
+        expansions: impl InFlightExpansions<State = E::State>,
     ) -> usize
     where
         Alive: FnMut(usize) -> bool,
@@ -152,7 +170,7 @@ where
             let step = simulator.simulate_once(root, game_state.clone(), sim_id);
             max_depth = max(max_depth, step.depth());
 
-            self.handle_step(step, &tx);
+            self.handle_step(step, &tx, &expansions);
 
             sim_id += 1;
         }
@@ -160,10 +178,17 @@ where
         max_depth
     }
 
-    fn handle_step(&self, step: SimulationStep<E::State, E::Terminal>, tx: &SimTx<E::State>) {
+    fn handle_step(
+        &self,
+        step: SimulationStep<E::State, E::Terminal>,
+        tx: &SimTx<E::State>,
+        expansions: &impl InFlightExpansions<State = E::State>,
+    ) {
         match step {
             SimulationStep::Terminal(terminal_step) => self.handle_terminal(terminal_step, tx),
-            SimulationStep::NewLeaf(new_leaf_step) => self.handle_new_leaf(new_leaf_step, tx),
+            SimulationStep::NewLeaf(new_leaf_step) => {
+                self.handle_new_leaf(new_leaf_step, tx, expansions)
+            }
         }
     }
 
@@ -171,41 +196,35 @@ where
         let parent = self.store.state_node(step.parent_node_id);
         let (edge, _) = parent.edge_and_action(step.edge_index);
         let new_node_id = self.create_or_merge_terminal(edge, &step.game_state, &step.terminal);
+
+        let link = new_node_id.map(|new_node_id| {
+            LinkChild::new(step.parent_node_id, step.edge_index, new_node_id)
+        });
+
         let _ = tx.send(SimMsg::Terminal {
             sim_id: step.sim_id,
-            task: BackpropTask {
-                path: step.path,
-                parent_node_id: step.parent_node_id,
-                edge_index: step.edge_index,
-                new_node_id,
-            },
+            path: step.path,
+            link,
         });
     }
 
-    fn handle_new_leaf(&self, step: NewLeafStep<E::State>, tx: &SimTx<E::State>) {
-        // @TODO fix this
-        let in_flight_hashes = &mut HashSet::new();
-        let waiter = WaiterInfo {
+    fn handle_new_leaf(
+        &self,
+        step: NewLeafStep<E::State>,
+        tx: &SimTx<E::State>,
+        expansions: &impl InFlightExpansions<State = E::State>,
+    ) {
+        expansions.analyze(step.sim_id, step.game_state.clone());
+
+        let _ = tx.send(SimMsg::State {
             sim_id: step.sim_id,
+            request_id: step.sim_id,
+            hash: step.transposition_hash,
+            game_state: step.game_state,
             path: step.path,
             parent_node_id: step.parent_node_id,
             edge_index: step.edge_index,
-        };
-        if in_flight_hashes.contains(&step.transposition_hash) {
-            let _ = tx.send(SimMsg::Waiter {
-                hash: step.transposition_hash,
-                waiter,
-            });
-        } else {
-            in_flight_hashes.insert(step.transposition_hash);
-            self.analyzer.analyze(step.sim_id, &step.game_state);
-            let _ = tx.send(SimMsg::NewLeaf {
-                request_id: step.sim_id,
-                hash: step.transposition_hash,
-                game_state: step.game_state,
-                waiter,
-            });
-        }
+        });
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
