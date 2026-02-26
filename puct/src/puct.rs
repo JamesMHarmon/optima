@@ -148,7 +148,8 @@ where
                 alive_flag.store(false, Ordering::SeqCst);
                 break;
             }
-            let step = simulator.simulate_once(root, game_state, sim_id);
+
+            let step = simulator.simulate_once(root, game_state.clone(), sim_id);
             max_depth = max(max_depth, step.depth());
 
             self.handle_step(step, &tx);

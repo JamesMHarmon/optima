@@ -1,7 +1,6 @@
 use common::TranspositionHash;
 use engine::GameEngine;
 
-use crate::borrowed_or_owned::BorrowedOrOwned;
 use crate::edge::PUCTEdge;
 use crate::node::StateNode;
 use crate::node_arena::NodeId;
@@ -13,8 +12,7 @@ use crate::selection_policy::SelectionPolicy;
 type PuctStore<E, R> = NodeGraphStore<<E as GameEngine>::Action, R>;
 type PuctStateNode<E, R> = StateNode<<E as GameEngine>::Action, R>;
 
-/// Handles the tree-traversal (selection) phase of PUCT and tracks which
-/// positions are currently being expanded by outstanding network requests.
+/// Handles the tree-traversal (selection) phase of PUCT
 pub(super) struct Simulator<'a, E, R, Sel>
 where
     E: GameEngine,
@@ -47,34 +45,20 @@ where
         }
     }
 
-    /// Run one simulation from `root`, returning a [`SimulationStep`] that
-    /// describes what the caller must do next.
-    ///
-    /// For `Suspended` steps the expanding map has already been updated; no
-    /// further action beyond depth tracking is needed.
+    /// Run one simulation from `root`.
     pub(super) fn simulate_once(
         &mut self,
         root: NodeId,
-        root_state: &E::State,
+        root_state: E::State,
         sim_id: usize,
-    ) -> SimulationStep<E::State, E::Terminal>
-    where
-        E::State: Clone,
-    {
+    ) -> SimulationStep<E::State, E::Terminal> {
         let result = self.select_leaf(root, root_state);
 
         let depth = result.depth;
         let path = result.path().to_vec();
         let parent_node_id = result.parent_node_id;
         let edge_index = result.edge_index;
-
-        // @TODO: Why even borrow own here if always going to clone?
-        // `game_state` is always Owned at the leaf because `take_action` is called
-        // at least once before any return from `select_leaf`.
-        let game_state = match result.game_state {
-            BorrowedOrOwned::Owned(s) => s,
-            BorrowedOrOwned::Borrowed(s) => s.clone(),
-        };
+        let game_state = result.game_state;
 
         if let Some(terminal) = result.terminal {
             return SimulationStep::Terminal(TerminalStep {
@@ -102,18 +86,17 @@ where
         })
     }
 
-    fn select_leaf<'s>(
+    fn select_leaf(
         &self,
         node_id: NodeId,
-        game_state: &'s E::State,
-    ) -> SelectionResult<'s, E::State, E::Terminal> {
+        game_state: E::State,
+    ) -> SelectionResult<E::State, E::Terminal> {
         let store = self.store;
         let game_engine = self.game_engine;
         let mut ctx = self.context_pool.acquire();
         let (path, visited) = ctx.split_mut();
 
         let mut current = node_id;
-        let mut game_state = BorrowedOrOwned::Borrowed(game_state);
         let mut depth = 0;
 
         loop {
@@ -126,12 +109,11 @@ where
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
-            let next_game_state = game_engine.take_action(&game_state, action);
-            let terminal_state = game_engine.terminal_state(&next_game_state);
-            let transposition_hash = next_game_state.transposition_hash();
+            let game_state = game_engine.take_action(&game_state, action);
+            let terminal_state = game_engine.terminal_state(&game_state);
+            let transposition_hash = game_state.transposition_hash();
             let is_terminal = terminal_state.is_some();
 
-            game_state = BorrowedOrOwned::Owned(next_game_state);
             depth += 1;
 
             self.increment_selection_visits(node, edge, transposition_hash, is_terminal);
@@ -185,21 +167,21 @@ where
     }
 }
 
-pub(super) struct SelectionResult<'s, S, T> {
+pub(super) struct SelectionResult<S, T> {
     context: SearchContextGuard,
     pub(super) parent_node_id: NodeId,
     pub(super) edge_index: usize,
-    pub(super) game_state: BorrowedOrOwned<'s, S>,
+    pub(super) game_state: S,
     pub(super) terminal: Option<T>,
     pub(super) depth: usize,
 }
 
-impl<'s, S, T> SelectionResult<'s, S, T> {
+impl<S, T> SelectionResult<S, T> {
     fn new(
         context: SearchContextGuard,
         parent_node_id: NodeId,
         edge_index: usize,
-        game_state: BorrowedOrOwned<'s, S>,
+        game_state: S,
         terminal: Option<T>,
         depth: usize,
     ) -> Self {
