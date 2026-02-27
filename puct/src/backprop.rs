@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::{BTreeMap, HashMap};
 
 use crossbeam::channel::Receiver;
@@ -76,20 +77,23 @@ where
     pub(super) fn run(mut self) {
         while let Some(pending) = self.next_sim() {
             if let PendingSim::State(p) = &pending {
-                self.expansions.complete(p.hash);
+                let game_state = &p.game_state;
+                let hash = p.game_state.transposition_hash();
 
-                if self.store.get_node_id(p.hash).is_some() {
+                self.expansions.complete(hash);
+
+                if self.store.get_node_id(hash).is_some() {
                     // Another thread has already expanded this node and backpropagated the path, so we can skip it.
                     continue;
                 }
 
                 // @TODO: It may be possible that another request got through with a different id and this request was considered a dupe.
                 // @TODO: Maybe recv_analysis_for needs a dedupe check.
-                let analysis = self.recv_analysis_for(p.hash);
+                let analysis = self.recv_analysis_for(hash);
 
                 let (policy_priors, predictions) = analysis.into_inner();
                 let new_node_id =
-                    self.create_state_node(p.hash, policy_priors, &p.game_state, &predictions);
+                    self.create_state_node(hash, policy_priors, game_state, &predictions);
                 self.link_child(p.parent_node_id, p.edge_index, new_node_id);
             }
 
@@ -109,14 +113,12 @@ where
             if self.sim_done {
                 if pending.is_empty() {
                     return None;
+                } else {
+                    panic!(
+                        "Simulation thread has finished but there are still pending simulations: {:?}",
+                        pending.keys()
+                    );
                 }
-
-                // Drain the remaining sims once the receiver is closed.
-                let (min_id, pending) =
-                    pending.pop_first().expect("pending_by_sim_id is non-empty");
-
-                self.next_sim_id = min_id + 1;
-                return Some(pending);
             }
 
             match self.rx.recv() {
@@ -200,14 +202,12 @@ impl<S> PendingSim<S> {
         match msg {
             SimMsg::Terminal { path, .. } => Self::Terminal(PendingTerminal { path }),
             SimMsg::State {
-                hash,
                 game_state,
                 path,
                 parent_node_id,
                 edge_index,
                 ..
             } => Self::State(PendingState {
-                hash,
                 game_state,
                 path,
                 parent_node_id,
@@ -229,7 +229,6 @@ struct PendingTerminal {
 }
 
 struct PendingState<S> {
-    hash: u64,
     game_state: S,
     path: Vec<NodeId>,
     parent_node_id: NodeId,
@@ -244,7 +243,6 @@ pub(super) enum SimMsg<S> {
     },
     State {
         sim_id: usize,
-        hash: u64,
         game_state: S,
         path: Vec<NodeId>,
         parent_node_id: NodeId,

@@ -109,8 +109,7 @@ where
     }
 
     fn maybe_analyze(&mut self, request_id: RequestId, game_state: AnalyzerState<M>) {
-        let hash = game_state.transposition_hash();
-        if self.in_flight.insert(hash) {
+        if self.in_flight.insert(request_id) {
             self.analyzer.analyze(request_id, &game_state);
         }
     }

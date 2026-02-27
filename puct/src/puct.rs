@@ -1,5 +1,4 @@
 use std::cmp::max;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use crossbeam::channel;
@@ -89,18 +88,11 @@ where
     where
         Alive: FnMut(usize) -> bool + Send,
     {
-        let alive_flag = AtomicBool::new(true);
         let root = self.get_or_create_root(game_state);
-        self.run_simulations(root, game_state, alive, &alive_flag)
+        self.run_simulations(root, game_state, alive)
     }
 
-    fn run_simulations<Alive>(
-        &self,
-        root: NodeId,
-        game_state: &E::State,
-        alive: Alive,
-        alive_flag: &AtomicBool,
-    ) -> usize
+    fn run_simulations<Alive>(&self, root: NodeId, game_state: &E::State, alive: Alive) -> usize
     where
         Alive: FnMut(usize) -> bool + Send,
     {
@@ -121,8 +113,7 @@ where
                 backprop.run();
             });
 
-            let sim_handle =
-                s.spawn(|| self.run_sim(root, game_state, alive, alive_flag, tx, expansions));
+            let sim_handle = s.spawn(|| self.run_sim(root, game_state, alive, tx, expansions));
 
             let coordinator_handle = s.spawn(move || coordinator.run());
 
@@ -141,7 +132,6 @@ where
         root: NodeId,
         game_state: &E::State,
         mut alive: Alive,
-        alive_flag: &AtomicBool,
         tx: SimTx<E::State>,
         expansions: impl InFlightExpansions<State = E::State>,
     ) -> usize
@@ -163,7 +153,6 @@ where
             let node_visits = root_node.visits() as usize;
 
             if !alive(node_visits) {
-                alive_flag.store(false, Ordering::SeqCst);
                 break;
             }
 
@@ -210,11 +199,11 @@ where
         tx: &SimTx<E::State>,
         expansions: &impl InFlightExpansions<State = E::State>,
     ) {
-        expansions.analyze(step.transposition_hash, step.game_state.clone());
+        let hash = step.game_state.transposition_hash();
+        expansions.analyze(hash, step.game_state.clone());
 
         let _ = tx.send(SimMsg::State {
             sim_id: step.sim_id,
-            hash: step.transposition_hash,
             game_state: step.game_state,
             path: step.path,
             parent_node_id: step.parent_node_id,

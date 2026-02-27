@@ -72,15 +72,11 @@ where
             });
         }
 
-        let transposition_hash = game_state.transposition_hash();
-
-        // @TODO: Is there a race between suspend?
         SimulationStep::NewLeaf(NewLeafStep {
             sim_id,
             path,
             parent_node_id,
             edge_index,
-            transposition_hash,
             game_state,
             depth,
         })
@@ -216,7 +212,6 @@ pub(super) struct NewLeafStep<S> {
     pub(super) path: Vec<NodeId>,
     pub(super) parent_node_id: NodeId,
     pub(super) edge_index: usize,
-    pub(super) transposition_hash: u64,
     pub(super) game_state: S,
     pub(super) depth: usize,
 }
