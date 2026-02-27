@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crossbeam::channel::Receiver;
 
@@ -37,7 +37,7 @@ where
     expansions: IE,
     rx: SimRx<M::State>,
 
-    analysis_buffer: BTreeMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
+    analysis_buffer: HashMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
     pending_by_sim_id: BTreeMap<usize, PendingSim<M::State>>,
     next_sim_id: usize,
     sim_done: bool,
@@ -66,7 +66,7 @@ where
             expansions,
             rx,
 
-            analysis_buffer: BTreeMap::new(),
+            analysis_buffer: HashMap::new(),
             pending_by_sim_id: BTreeMap::new(),
             next_sim_id: 0,
             sim_done: false,
@@ -100,21 +100,20 @@ where
 
     fn next_sim(&mut self) -> Option<PendingSim<M::State>> {
         loop {
-            if let Some(pending) = self.pending_by_sim_id.remove(&self.next_sim_id) {
-                self.next_sim_id += 1;
-                return Some(pending);
+            if let Some(sim) = self.try_next_sim() {
+                return Some(sim);
             }
 
+            let pending = &mut self.pending_by_sim_id;
+
             if self.sim_done {
-                if self.pending_by_sim_id.is_empty() {
+                if pending.is_empty() {
                     return None;
                 }
 
                 // Drain the remaining sims once the receiver is closed.
-                let (min_id, pending) = self
-                    .pending_by_sim_id
-                    .pop_first()
-                    .expect("pending_by_sim_id is non-empty");
+                let (min_id, pending) =
+                    pending.pop_first().expect("pending_by_sim_id is non-empty");
 
                 self.next_sim_id = min_id + 1;
                 return Some(pending);
@@ -123,12 +122,25 @@ where
             match self.rx.recv() {
                 Ok(msg) => {
                     let sim_id = msg.sim_id();
-                    self.pending_by_sim_id
-                        .insert(sim_id, PendingSim::from_msg(msg));
+                    pending.insert(sim_id, PendingSim::from_msg(msg));
                 }
                 Err(_) => self.sim_done = true,
             }
         }
+    }
+
+    fn try_next_sim(&mut self) -> Option<PendingSim<M::State>> {
+        let pending = &mut self.pending_by_sim_id;
+
+        if let Some((&min_id, _)) = pending.first_key_value() {
+            if min_id == self.next_sim_id {
+                let (_, pending) = pending.pop_first()?;
+                self.next_sim_id += 1;
+                return Some(pending);
+            }
+        }
+
+        None
     }
 
     fn recv_analysis_for(
