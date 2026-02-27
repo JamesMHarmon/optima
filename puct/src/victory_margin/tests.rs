@@ -370,9 +370,12 @@ where
 #[test]
 fn virtual_visits_down_weight_q_value() {
     let options = VictoryMarginStrategyOptions {
+        fpu: 0.0,
+        fpu_root: 0.0,
         // Disable victory-margin directive so selection is base_score (Q + U).
         victory_margin_threshold: 1.0,
-        ..default_options()
+        // Ensure VM adjustment is irrelevant even if directive changes.
+        victory_margin_factor: 0.0,
     };
     let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
 
@@ -391,8 +394,10 @@ fn virtual_visits_down_weight_q_value() {
 #[test]
 fn virtual_visits_do_not_reduce_u_term() {
     let options = VictoryMarginStrategyOptions {
+        fpu: 0.0,
+        fpu_root: 0.0,
         victory_margin_threshold: 1.0,
-        ..default_options()
+        victory_margin_factor: 0.0,
     };
     let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(1.0), options);
 
