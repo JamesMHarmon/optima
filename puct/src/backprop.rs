@@ -83,12 +83,10 @@ where
                 self.expansions.complete(hash);
 
                 if self.store.get_node_id(hash).is_some() {
-                    // Another thread has already expanded this node and backpropagated the path, so we can skip it.
+                    // Another simulation has already expanded this node and backpropagated the path, so we can skip it.
                     continue;
                 }
 
-                // @TODO: It may be possible that another request got through with a different id and this request was considered a dupe.
-                // @TODO: Maybe recv_analysis_for needs a dedupe check.
                 let analysis = self.recv_analysis_for(hash);
 
                 let (policy_priors, predictions) = analysis.into_inner();
@@ -97,7 +95,6 @@ where
                 self.link_child(p.parent_node_id, p.edge_index, new_node_id);
             }
 
-            // Run backprop for expanded nodes and terminal node updates.
             self.backprop_path(pending.path());
         }
     }

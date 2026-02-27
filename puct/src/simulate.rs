@@ -92,6 +92,7 @@ where
         let mut ctx = self.context_pool.acquire();
         let (path, visited) = ctx.split_mut();
 
+        let mut game_state = game_state;
         let mut current = node_id;
         let mut depth = 0;
 
@@ -105,7 +106,7 @@ where
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
-            let game_state = game_engine.take_action(&game_state, action);
+            game_state = game_engine.take_action(&game_state, action);
             let term_state = game_engine.terminal_state(&game_state);
             let transposition_hash = game_state.transposition_hash();
             let is_terminal = term_state.is_some();
