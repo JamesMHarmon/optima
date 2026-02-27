@@ -69,11 +69,8 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             return false;
         };
 
-        let Some(outcome) = after_state
-            .outcomes
-            .iter()
-            .find(|outcome| outcome.child() == child_id)
-        else {
+        let outcomes = &after_state.outcomes;
+        let Some(outcome) = outcomes.iter().find(|outcome| outcome.child() == child_id) else {
             debug_assert!(false, "No AfterState outcome for child_id {:?}", child_id);
             return false;
         };
