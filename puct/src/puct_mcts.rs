@@ -57,8 +57,9 @@ where
         analyzer: &'a M,
         value_model: &'a VM,
         selection: &'a Sel,
+        parallelism: usize,
     ) -> Self {
-        let puct = PUCT::new(engine, analyzer, value_model, selection);
+        let puct = PUCT::new(engine, analyzer, value_model, selection, parallelism);
 
         Self {
             engine,

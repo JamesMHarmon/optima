@@ -23,10 +23,6 @@ type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, RollupOf<VM>>;
 type SimMsgOf<E, VM> = SimMsg<<E as GameEngine>::State, SnapshotOf<VM>>;
 type SimTx<E, VM> = channel::Sender<SimMsgOf<E, VM>>;
 
-/// Capacity of the sim→backprop channel. Controls how far ahead the simulation
-/// thread can run before it blocks waiting for the backprop thread to catch up.
-const ANALYSIS_PIPELINE_DEPTH: usize = 4096;
-
 #[derive(Clone, Debug)]
 pub struct EdgeView<A, SS> {
     pub edge_index: usize,
@@ -47,6 +43,7 @@ where
     selection_strategy: &'a Sel,
     store: PuctStore<E, VM>,
     context_pool: SearchContextPool,
+    virtual_sims: usize,
 }
 
 impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
@@ -65,9 +62,11 @@ where
         analyzer: &'a M,
         value_model: &'a VM,
         selection_strategy: &'a Sel,
+        virtual_sims: usize,
     ) -> Self {
+        let virtual_sims = virtual_sims.max(1);
         let store: PuctStore<E, VM> = NodeGraphStore::new();
-        let context_pool = SearchContextPool::new(ANALYSIS_PIPELINE_DEPTH);
+        let context_pool = SearchContextPool::new(virtual_sims);
 
         Self {
             game_engine,
@@ -76,6 +75,7 @@ where
             selection_strategy,
             store,
             context_pool,
+            virtual_sims,
         }
     }
 
@@ -98,10 +98,10 @@ where
     {
         let mut max_depth = 0;
         thread::scope(|s| {
-            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(ANALYSIS_PIPELINE_DEPTH);
+            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(self.virtual_sims);
 
             let (expansions, coordinator) =
-                AnalysisCoordinator::new(self.analyzer, ANALYSIS_PIPELINE_DEPTH);
+                AnalysisCoordinator::new(self.analyzer, self.virtual_sims);
 
             let analyzer = self.analyzer;
             let store = &self.store;

@@ -288,6 +288,7 @@ where
                     &analyzer,
                     value_model,
                     selection,
+                    options_lock.parallelism,
                 ));
             }
 

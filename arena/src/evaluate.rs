@@ -290,7 +290,16 @@ impl Arena {
 
         let mut mctss: Vec<_> = analyzers
             .iter()
-            .map(|a| PuctMCTS::new(S::initial(), engine, a, value_model, selection_policy))
+            .map(|a| {
+                PuctMCTS::new(
+                    S::initial(),
+                    engine,
+                    a,
+                    value_model,
+                    selection_policy,
+                    play_options.parallelism,
+                )
+            })
             .collect();
 
         let mut actions: Vec<A> = Vec::new();

@@ -53,6 +53,7 @@ where
         analyzer,
         value_model,
         selection,
+        play_options.parallelism,
     );
 
     let mut analysis = Vec::new();
