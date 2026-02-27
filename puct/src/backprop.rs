@@ -1,4 +1,3 @@
-use core::panic;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crossbeam::channel::Receiver;
@@ -40,9 +39,8 @@ where
     rx: SimRx<M::State>,
 
     analysis_buffer: HashMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
-    pending_by_sim_id: BTreeMap<usize, PendingSim<M::State>>,
+    pending_sims: BTreeMap<usize, PendingSim<M::State>>,
     next_sim_id: usize,
-    sim_done: bool,
 }
 
 impl<'a, M, VM, IE> Backpropagator<'a, M, VM, IE>
@@ -69,9 +67,8 @@ where
             rx,
 
             analysis_buffer: HashMap::new(),
-            pending_by_sim_id: BTreeMap::new(),
+            pending_sims: BTreeMap::new(),
             next_sim_id: 0,
-            sim_done: false,
         }
     }
 
@@ -102,43 +99,41 @@ where
     }
 
     fn next_sim(&mut self) -> Option<PendingSim<M::State>> {
-        loop {
-            if let Some(sim) = self.try_next_sim() {
-                return Some(sim);
-            }
-
-            let pending = &mut self.pending_by_sim_id;
-
-            if self.sim_done {
-                if pending.is_empty() {
-                    return None;
-                } else {
-                    panic!(
-                        "Simulation thread has finished but there are still pending simulations: {:?}",
-                        pending.keys()
-                    );
-                }
-            }
-
-            match self.rx.recv() {
-                Ok(msg) => {
-                    let sim_id = msg.sim_id();
-                    pending.insert(sim_id, PendingSim::from_msg(msg));
-                }
-                Err(_) => self.sim_done = true,
-            }
+        // Check the BTreeMap to see if the sim has already been received.
+        if let Some(sim) = self.try_next_sim() {
+            return Some(sim);
         }
+
+        // The next sim is not in the BTreeMap so we receive messages until we find it.
+        while let Ok(sim) = self.rx.recv() {
+            let sim_id = sim.sim_id();
+
+            if sim_id == self.next_sim_id {
+                self.next_sim_id += 1;
+                return Some(PendingSim::from_msg(sim));
+            }
+
+            self.pending_sims.insert(sim_id, PendingSim::from_msg(sim));
+        }
+
+        // No more messages will arive and we have processed all pending messages in order, so we're done.
+        if self.pending_sims.is_empty() {
+            return None;
+        }
+
+        panic!(
+            "Missing simulation(s): expected sim_id {}",
+            self.next_sim_id
+        );
     }
 
     fn try_next_sim(&mut self) -> Option<PendingSim<M::State>> {
-        let pending = &mut self.pending_by_sim_id;
-
-        if let Some((&min_id, _)) = pending.first_key_value() {
-            if min_id == self.next_sim_id {
-                let (_, pending) = pending.pop_first()?;
-                self.next_sim_id += 1;
-                return Some(pending);
-            }
+        if let Some((&min_id, _)) = self.pending_sims.first_key_value()
+            && min_id == self.next_sim_id
+        {
+            let (_, pending) = self.pending_sims.pop_first()?;
+            self.next_sim_id += 1;
+            return Some(pending);
         }
 
         None
@@ -269,3 +264,6 @@ impl<S> SimMsg<S> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
