@@ -6,7 +6,7 @@ use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
 use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
-use crate::backprop::{Backpropagator, LinkChild, SimMsg};
+use crate::backprop::{Backpropagator, SimMsg};
 use crate::edge::PUCTEdge;
 use crate::node_arena::NodeId;
 use crate::rollup::RollupStats;
@@ -53,7 +53,7 @@ where
 impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
 where
     E: GameEngine + Sync,
-    M: GameAnalyzer<State = E::State, Action = E::Action, RequestId = usize> + Sync,
+    M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     RollupOf<VM>: Send + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State> + Sync,
@@ -210,11 +210,10 @@ where
         tx: &SimTx<E::State>,
         expansions: &impl InFlightExpansions<State = E::State>,
     ) {
-        expansions.analyze(step.sim_id, step.game_state.clone());
+        expansions.analyze(step.transposition_hash, step.game_state.clone());
 
         let _ = tx.send(SimMsg::State {
             sim_id: step.sim_id,
-            request_id: step.sim_id,
             hash: step.transposition_hash,
             game_state: step.game_state,
             path: step.path,
@@ -252,7 +251,7 @@ where
             return existing;
         }
 
-        let request_id = transposition_hash as usize;
+        let request_id = transposition_hash;
         self.analyzer.analyze(request_id, game_state);
         let (recv_request_id, analysis) = self.analyzer.recv();
 

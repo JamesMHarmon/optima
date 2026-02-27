@@ -8,7 +8,7 @@ use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
-use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis};
+use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis, RequestId};
 
 type PuctStore<M, R> = NodeGraphStore<<M as GameAnalyzer>::Action, R>;
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
@@ -37,7 +37,7 @@ where
     expansions: IE,
     rx: SimRx<M::State>,
 
-    analysis_buffer: BTreeMap<usize, GameStateAnalysis<M::Action, M::Predictions>>,
+    analysis_buffer: BTreeMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
     pending_by_sim_id: BTreeMap<usize, PendingSim<M::State>>,
     next_sim_id: usize,
     sim_done: bool,
@@ -45,7 +45,7 @@ where
 
 impl<'a, M, VM, IE> Backpropagator<'a, M, VM, IE>
 where
-    M: GameAnalyzer<RequestId = usize>,
+    M: GameAnalyzer,
     VM: ValueModel<State = M::State, Predictions = M::Predictions>,
     RollupOf<VM>: RollupStats,
     M::State: TranspositionHash + Clone,
@@ -85,7 +85,7 @@ where
 
                 // @TODO: It may be possible that another request got through with a different id and this request was considered a dupe.
                 // @TODO: Maybe recv_analysis_for needs a dedupe check.
-                let analysis = self.recv_analysis_for(p.request_id);
+                let analysis = self.recv_analysis_for(p.hash);
 
                 let (policy_priors, predictions) = analysis.into_inner();
                 let new_node_id =
@@ -133,7 +133,7 @@ where
 
     fn recv_analysis_for(
         &mut self,
-        request_id: usize,
+        request_id: RequestId,
     ) -> GameStateAnalysis<M::Action, M::Predictions> {
         loop {
             if let Some(analysis) = self.analysis_buffer.remove(&request_id) {
@@ -188,7 +188,6 @@ impl<S> PendingSim<S> {
         match msg {
             SimMsg::Terminal { path, .. } => Self::Terminal(PendingTerminal { path }),
             SimMsg::State {
-                request_id,
                 hash,
                 game_state,
                 path,
@@ -196,7 +195,6 @@ impl<S> PendingSim<S> {
                 edge_index,
                 ..
             } => Self::State(PendingState {
-                request_id,
                 hash,
                 game_state,
                 path,
@@ -219,7 +217,6 @@ struct PendingTerminal {
 }
 
 struct PendingState<S> {
-    request_id: usize,
     hash: u64,
     game_state: S,
     path: Vec<NodeId>,
@@ -235,7 +232,6 @@ pub(super) enum SimMsg<S> {
     },
     State {
         sim_id: usize,
-        request_id: usize,
         hash: u64,
         game_state: S,
         path: Vec<NodeId>,

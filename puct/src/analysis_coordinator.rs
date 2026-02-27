@@ -2,12 +2,11 @@ use std::collections::HashSet;
 
 use common::TranspositionHash;
 use crossbeam::channel;
-use model::GameAnalyzer;
+use model::{GameAnalyzer, RequestId};
 
 type HashId = u64;
-type SimId = usize;
 
-type AnalyzeMsg<S> = (SimId, S);
+type AnalyzeMsg<S> = (RequestId, S);
 type AnalyzeTx<S> = channel::Sender<AnalyzeMsg<S>>;
 type AnalyzeRx<S> = channel::Receiver<AnalyzeMsg<S>>;
 
@@ -19,7 +18,7 @@ type AnalyzerState<M> = <M as GameAnalyzer>::State;
 pub(crate) trait InFlightExpansions: Send + Sync {
     type State;
 
-    fn analyze(&self, sim_id: SimId, game_state: Self::State);
+    fn analyze(&self, request_id: RequestId, game_state: Self::State);
 
     fn complete(&self, hash: HashId);
 }
@@ -44,8 +43,8 @@ where
 {
     type State = S;
 
-    fn analyze(&self, sim_id: SimId, game_state: S) {
-        let _ = self.analyze_tx.send((sim_id, game_state));
+    fn analyze(&self, request_id: RequestId, game_state: S) {
+        let _ = self.analyze_tx.send((request_id, game_state));
     }
 
     fn complete(&self, hash: HashId) {
@@ -60,7 +59,7 @@ type CoordinatorPair<'a, M> = (
 
 pub(crate) struct AnalysisCoordinator<'a, M>
 where
-    M: GameAnalyzer<RequestId = usize>,
+    M: GameAnalyzer,
 {
     analyzer: &'a M,
     analyze_rx: AnalyzeRx<AnalyzerState<M>>,
@@ -70,7 +69,7 @@ where
 
 impl<'a, M> AnalysisCoordinator<'a, M>
 where
-    M: GameAnalyzer<RequestId = usize>,
+    M: GameAnalyzer,
     AnalyzerState<M>: TranspositionHash,
 {
     pub(crate) fn new(analyzer: &'a M, capacity: usize) -> CoordinatorPair<'a, M> {
@@ -93,8 +92,8 @@ where
 
     pub(crate) fn run(mut self) {
         loop {
-            while let Ok((sim_id, game_state)) = self.analyze_rx.try_recv() {
-                self.maybe_analyze(sim_id, game_state);
+            while let Ok((request_id, game_state)) = self.analyze_rx.try_recv() {
+                self.maybe_analyze(request_id, game_state);
             }
 
             if let Ok(hash) = self.complete_rx.try_recv() {
@@ -103,16 +102,16 @@ where
             }
 
             match self.analyze_rx.recv() {
-                Ok((sim_id, game_state)) => self.maybe_analyze(sim_id, game_state),
+                Ok((request_id, game_state)) => self.maybe_analyze(request_id, game_state),
                 Err(_) => break,
             }
         }
     }
 
-    fn maybe_analyze(&mut self, sim_id: SimId, game_state: AnalyzerState<M>) {
+    fn maybe_analyze(&mut self, request_id: RequestId, game_state: AnalyzerState<M>) {
         let hash = game_state.transposition_hash();
         if self.in_flight.insert(hash) {
-            self.analyzer.analyze(sim_id, &game_state);
+            self.analyzer.analyze(request_id, &game_state);
         }
     }
 }

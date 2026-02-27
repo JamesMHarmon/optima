@@ -12,7 +12,7 @@ use tar::Header;
 use tempfile::{TempDir, tempdir};
 
 use super::super::tensorflow::TensorflowModelOptions;
-use ::model::{Analyzer, GameAnalyzer, GameStateAnalysis, ModelInfo};
+use ::model::{Analyzer, GameAnalyzer, GameStateAnalysis, ModelInfo, RequestId};
 
 pub struct Archive<M> {
     inner: M,
@@ -45,16 +45,15 @@ where
     type Action = An::Action;
     type State = An::State;
     type Predictions = An::Predictions;
-    type RequestId = An::RequestId;
 
-    fn analyze(&self, request_id: Self::RequestId, game_state: &Self::State) {
+    fn analyze(&self, request_id: RequestId, game_state: &Self::State) {
         self.inner.analyze(request_id, game_state)
     }
 
     fn recv(
         &self,
     ) -> (
-        Self::RequestId,
+        RequestId,
         GameStateAnalysis<Self::Action, Self::Predictions>,
     ) {
         self.inner.recv()

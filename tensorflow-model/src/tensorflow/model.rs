@@ -17,7 +17,7 @@ use tensorflow::Tensor;
 use super::predictor::{AnalysisResults, Predictor};
 use super::tensor_pool::TensorPool;
 use super::*;
-use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, analytics};
+use ::model::{Analyzer, GameStateAnalysis, Info, ModelInfo, RequestId, analytics};
 
 #[cfg_attr(feature = "tensorflow_system_alloc", global_allocator)]
 #[cfg(feature = "tensorflow_system_alloc")]
@@ -145,9 +145,9 @@ impl<S, A, P, Map, Te> Info for TensorflowModel<S, A, P, Map, Te> {
     }
 }
 
-type ResultsTx<A, P> = crossbeam::channel::Sender<(usize, GameStateAnalysis<A, P>)>;
-type ResultsRx<A, P> = crossbeam::channel::Receiver<(usize, GameStateAnalysis<A, P>)>;
-type WaiterList<A, P> = SmallVec<[(usize, ResultsTx<A, P>); 2]>;
+type ResultsTx<A, P> = crossbeam::channel::Sender<(RequestId, GameStateAnalysis<A, P>)>;
+type ResultsRx<A, P> = crossbeam::channel::Receiver<(RequestId, GameStateAnalysis<A, P>)>;
+type WaiterList<A, P> = SmallVec<[(RequestId, ResultsTx<A, P>); 2]>;
 type BatchingModelRef<S, A, P, Map, Te> = Mutex<Weak<BatchingModel<S, A, P, Map, Te>>>;
 
 /// Tracks in-flight analysis requests to coalesce duplicate requests.
@@ -169,7 +169,7 @@ impl<A, P> InFlightRequests<A, P> {
 
     /// Register a request.
     /// Returns true if this key was already in-flight (duplicate).
-    fn try_register(&self, key: u64, request_id: usize, tx: ResultsTx<A, P>) -> bool {
+    fn try_register(&self, key: u64, request_id: RequestId, tx: ResultsTx<A, P>) -> bool {
         match self.requests.entry(key) {
             Entry::Occupied(mut entry) => {
                 entry.get_mut().waiters.push((request_id, tx));
@@ -248,9 +248,8 @@ where
     type State = S;
     type Action = A;
     type Predictions = P;
-    type RequestId = usize;
 
-    fn analyze(&self, request_id: usize, game_state: &S) {
+    fn analyze(&self, request_id: RequestId, game_state: &S) {
         if let Some(analysis) = self.try_immediate_analysis(game_state) {
             let _ = self.results_tx.send((request_id, analysis));
             return;
@@ -260,7 +259,7 @@ where
             .enqueue(game_state.to_owned(), request_id, self.results_tx.clone());
     }
 
-    fn recv(&self) -> (usize, GameStateAnalysis<A, P>) {
+    fn recv(&self) -> (RequestId, GameStateAnalysis<A, P>) {
         self.results_rx
             .recv()
             .expect("Results channel closed before receiving result")
@@ -285,7 +284,7 @@ where
     Map: TranspositionMap<State = S, Action = A, Predictions = P, TranspositionEntry = Te>,
     Te: Send + 'static,
 {
-    fn enqueue(&self, state_to_analyse: S, request_id: usize, tx: ResultsTx<A, P>) {
+    fn enqueue(&self, state_to_analyse: S, request_id: RequestId, tx: ResultsTx<A, P>) {
         let key = self.mapper.get_transposition_key(&state_to_analyse);
         let is_duplicate = self.in_flight_requests.try_register(key, request_id, tx);
 

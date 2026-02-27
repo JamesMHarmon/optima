@@ -1,17 +1,18 @@
 use half::*;
 
+pub type RequestId = u64;
+
 pub trait GameAnalyzer {
     type Action;
     type State;
     type Predictions;
-    type RequestId;
 
-    fn analyze(&self, request_id: Self::RequestId, game_state: &Self::State);
+    fn analyze(&self, request_id: RequestId, game_state: &Self::State);
 
     fn recv(
         &self,
     ) -> (
-        Self::RequestId,
+        RequestId,
         GameStateAnalysis<Self::Action, Self::Predictions>,
     );
 }
