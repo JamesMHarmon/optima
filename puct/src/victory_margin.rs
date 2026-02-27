@@ -182,6 +182,7 @@ where
     type State = S;
     type Predictions = P;
     type Terminal = T;
+    type Snapshot = VictoryMarginSnapshot;
     type Rollup = VictoryMarginRollup;
 
     fn pred_snapshot(

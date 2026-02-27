@@ -230,7 +230,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
 }
 
 #[test]
-fn add_child_to_edge_sets_new_outcome_visits_to_one() {
+fn add_child_to_edge_sets_new_outcome_visits_to_zero() {
     let arena = TestArena::new();
     let graph = NodeGraph::new(&arena);
 
@@ -256,7 +256,7 @@ fn add_child_to_edge_sets_new_outcome_visits_to_one() {
         .find(|o| o.child() == new_child)
         .expect("new outcome must exist");
 
-    assert_eq!(new_outcome.visits(), 1);
+    assert_eq!(new_outcome.visits(), 0);
 }
 
 #[test]
@@ -382,7 +382,7 @@ fn add_child_to_edge_converts_state_child_to_after_state_and_preserves_existing_
         .iter()
         .find(|o| o.child() == new_child)
         .expect("new outcome must exist");
-    assert_eq!(new_outcome.visits(), 1);
+    assert_eq!(new_outcome.visits(), 0);
 }
 
 #[test]
@@ -421,7 +421,7 @@ fn add_child_to_edge_converts_terminal_child_to_after_state_and_preserves_existi
         .iter()
         .find(|o| o.child() == new_child)
         .expect("new outcome must exist");
-    assert_eq!(new_outcome.visits(), 1);
+    assert_eq!(new_outcome.visits(), 0);
 }
 
 #[test]
@@ -454,11 +454,11 @@ fn add_child_to_edge_when_existing_child_is_after_state_clones_outcomes_without_
     let after_original = after_state_outcome_visits(&arena, after_state_id);
     assert_eq!(before, after_original);
 
-    // New afterstate contains old outcomes unchanged + new outcome at 1.
+    // New afterstate contains old outcomes unchanged + new outcome at 0.
     let after_new = after_state_outcome_visits(&arena, new_after_state_id);
     assert!(after_new.iter().any(|(id, v)| *id == s0 && *v == 2));
     assert!(after_new.iter().any(|(id, v)| *id == s1 && *v == 9));
-    assert!(after_new.iter().any(|(id, v)| *id == new_child && *v == 1));
+    assert!(after_new.iter().any(|(id, v)| *id == new_child && *v == 0));
 }
 
 #[test]

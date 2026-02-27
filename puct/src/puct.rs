@@ -5,10 +5,8 @@ use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
 use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
-use crate::backprop::{Backpropagator, SimMsg};
-use crate::edge::PUCTEdge;
+use crate::backprop::{Backpropagator, SimMsg, StateSimMsg, TerminalSimMsg};
 use crate::node_arena::NodeId;
-use crate::rollup::RollupStats;
 use crate::search_context::SearchContextPool;
 use crate::selection_policy::SelectionPolicy;
 use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
@@ -18,10 +16,11 @@ use engine::GameEngine;
 use model::{ActionWithPolicy, GameAnalyzer};
 
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
-type SnapshotOf<VM> = <RollupOf<VM> as RollupStats>::Snapshot;
+type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
 type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, RollupOf<VM>>;
 
-type SimTx<S> = channel::Sender<SimMsg<S>>;
+type SimMsgOf<E, VM> = SimMsg<<E as GameEngine>::State, SnapshotOf<VM>>;
+type SimTx<E, VM> = channel::Sender<SimMsgOf<E, VM>>;
 
 /// Capacity of the sim→backprop channel. Controls how far ahead the simulation
 /// thread can run before it blocks waiting for the backprop thread to catch up.
@@ -98,7 +97,7 @@ where
     {
         let mut max_depth = 0;
         thread::scope(|s| {
-            let (tx, rx) = channel::bounded::<SimMsg<E::State>>(ANALYSIS_PIPELINE_DEPTH);
+            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(ANALYSIS_PIPELINE_DEPTH);
 
             let (expansions, coordinator) =
                 AnalysisCoordinator::new(self.analyzer, ANALYSIS_PIPELINE_DEPTH);
@@ -132,8 +131,8 @@ where
         root: NodeId,
         game_state: &E::State,
         mut alive: Alive,
-        tx: SimTx<E::State>,
-        expansions: impl InFlightExpansions<State = E::State>,
+        tx: SimTx<E, VM>,
+        exp: impl InFlightExpansions<State = E::State>,
     ) -> usize
     where
         Alive: FnMut(usize) -> bool,
@@ -160,7 +159,7 @@ where
             let step = simulator.simulate_once(root, game_state.clone(), sim_id);
             max_depth = max(max_depth, step.depth());
 
-            self.handle_step(step, &tx, &expansions);
+            self.handle_step(step, &tx, &exp);
 
             sim_id += 1;
         }
@@ -171,45 +170,41 @@ where
     fn handle_step(
         &self,
         step: SimulationStep<E::State, E::Terminal>,
-        tx: &SimTx<E::State>,
-        expansions: &impl InFlightExpansions<State = E::State>,
+        tx: &SimTx<E, VM>,
+        exp: &impl InFlightExpansions<State = E::State>,
     ) {
         match step {
             SimulationStep::Terminal(terminal_step) => self.handle_terminal(terminal_step, tx),
-            SimulationStep::NewLeaf(new_leaf_step) => {
-                self.handle_new_leaf(new_leaf_step, tx, expansions)
-            }
+            SimulationStep::NewLeaf(new_leaf_step) => self.handle_new_leaf(new_leaf_step, tx, exp),
         }
     }
 
-    fn handle_terminal(&self, step: TerminalStep<E::State, E::Terminal>, tx: &SimTx<E::State>) {
-        let parent = self.store.state_node(step.parent_node_id);
-        let (edge, _) = parent.edge_and_action(step.edge_index);
+    fn handle_terminal(&self, step: TerminalStep<E::State, E::Terminal>, tx: &SimTx<E, VM>) {
+        let terminal_snapshot = self
+            .value_model
+            .terminal_snapshot(&step.game_state, &step.terminal);
 
-        self.update_edge_with_terminal(edge, &step.game_state, &step.terminal);
-
-        let _ = tx.send(SimMsg::Terminal {
+        let _ = tx.send(SimMsg::Terminal(TerminalSimMsg {
             sim_id: step.sim_id,
             path: step.path,
-        });
+            terminal_snapshot,
+        }));
     }
 
     fn handle_new_leaf(
         &self,
         step: NewLeafStep<E::State>,
-        tx: &SimTx<E::State>,
-        expansions: &impl InFlightExpansions<State = E::State>,
+        tx: &SimTx<E, VM>,
+        exp: &impl InFlightExpansions<State = E::State>,
     ) {
         let hash = step.game_state.transposition_hash();
-        expansions.analyze(hash, step.game_state.clone());
+        exp.analyze(hash, step.game_state.clone());
 
-        let _ = tx.send(SimMsg::State {
+        let _ = tx.send(SimMsg::State(StateSimMsg {
             sim_id: step.sim_id,
             game_state: step.game_state,
             path: step.path,
-            parent_node_id: step.parent_node_id,
-            edge_index: step.edge_index,
-        });
+        }));
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
@@ -265,19 +260,6 @@ where
         let rollup_stats = snapshot.into();
         self.store
             .create_and_insert_state_node(transposition_hash, policy_priors, rollup_stats)
-    }
-
-    fn update_edge_with_terminal(&self, edge: &PUCTEdge, state: &E::State, terminal: &E::Terminal) {
-        let snapshot = self.value_model.terminal_snapshot(state, terminal);
-
-        if let Some(terminal_id) = self.store.graph().find_edge_terminal(edge) {
-            let terminal_node = self.store.terminal_node(terminal_id);
-            terminal_node.rollup_stats().accumulate(&snapshot);
-        } else {
-            let rollup_stats = snapshot.into();
-            let terminal_id = self.store.create_and_insert_terminal_node(rollup_stats);
-            self.store.graph().add_child_to_edge(edge, terminal_id);
-        }
     }
 }
 

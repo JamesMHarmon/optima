@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crossbeam::channel::Receiver;
 
 use crate::analysis_coordinator::InFlightExpansions;
+use crate::edge::PUCTEdge;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
@@ -13,7 +14,8 @@ use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis, RequestId};
 
 type PuctStore<M, R> = NodeGraphStore<<M as GameAnalyzer>::Action, R>;
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
-type SimRx<S> = Receiver<SimMsg<S>>;
+type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
+type SimRx<S, TS> = Receiver<SimMsg<S, TS>>;
 
 /// Owns the receive-and-backprop loop; intended to run on a dedicated thread.
 ///
@@ -36,10 +38,10 @@ where
     store: &'a PuctStore<M, RollupOf<VM>>,
     value_model: &'a VM,
     expansions: IE,
-    rx: SimRx<M::State>,
+    rx: SimRx<M::State, SnapshotOf<VM>>,
 
     analysis_buffer: HashMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
-    pending_sims: BTreeMap<usize, PendingSim<M::State>>,
+    pending_sims: BTreeMap<usize, SimMsg<M::State, SnapshotOf<VM>>>,
     next_sim_id: usize,
 }
 
@@ -57,7 +59,7 @@ where
         store: &'a PuctStore<M, RollupOf<VM>>,
         value_model: &'a VM,
         expansions: IE,
-        rx: SimRx<M::State>,
+        rx: SimRx<M::State, SnapshotOf<VM>>,
     ) -> Self {
         Self {
             analyzer,
@@ -73,39 +75,40 @@ where
     }
 
     pub(super) fn run(mut self) {
-        while let Some(pending) = self.next_sim() {
-            let mut leaf_child_id: Option<NodeId> = None;
-
-            if let PendingSim::State(p) = &pending {
-                let game_state = &p.game_state;
-                let hash = p.game_state.transposition_hash();
-
-                self.expansions.complete(hash);
-
-                if self.store.get_node_id(hash).is_some() {
-                    // Another simulation has already expanded this node and backpropagated the path, so we can skip it.
-                    self.remove_virtual_loss(pending.path());
-                    continue;
+        while let Some(sim) = self.next_sim() {
+            match sim {
+                SimMsg::Terminal(sim) => {
+                    let last_step = sim.last_step();
+                    let terminal_node_id = self.upsert_terminal(last_step, &sim.terminal_snapshot);
+                    self.commit_path(&sim.path, terminal_node_id);
                 }
+                SimMsg::State(sim) => {
+                    let last_step = sim.last_step();
 
-                let analysis = self.recv_analysis_for(hash);
+                    let hash = sim.game_state.transposition_hash();
+                    self.expansions.complete(hash);
 
-                let (policy_priors, predictions) = analysis.into_inner();
-                let new_node_id =
-                    self.create_state_node(hash, policy_priors, game_state, &predictions);
-                self.link_child(p.parent_node_id, p.edge_index, new_node_id);
+                    // Check if another simulation has already expanded this node and backpropagated the path, so we can skip it.
+                    if self.store.get_node_id(hash).is_some() {
+                        self.remove_virtual_loss(&sim.path);
+                        continue;
+                    }
 
-                leaf_child_id = Some(new_node_id);
+                    let analysis = self.recv_analysis_for(hash);
+                    let (priors, preds) = analysis.into_inner();
+
+                    let new_node_id = self.create_state_node(hash, priors, &sim.game_state, &preds);
+                    self.link_state_node(last_step.node_id, last_step.edge_index, new_node_id);
+
+                    self.commit_path(&sim.path, new_node_id);
+                }
             }
-
-            self.commit_sim(&pending, leaf_child_id);
         }
     }
 
-    fn commit_sim(&self, sim: &PendingSim<M::State>, leaf_child_id: Option<NodeId>) {
+    fn commit_path(&self, path: &[PathStep], leaf_child_id: NodeId) {
         let store = self.store;
         let graph = store.graph();
-        let path = sim.path();
 
         if path.is_empty() {
             return;
@@ -113,37 +116,50 @@ where
 
         // Track the "child" reached by the current step so we can increment
         // afterstate outcome visits when the edge points to an AfterState.
-        let mut child_for_outcome: Option<NodeId> = match sim {
-            PendingSim::State(_) => leaf_child_id,
-            PendingSim::Terminal(_) => {
-                let last = path.last().expect("path not empty");
-                let last_node = store.state_node(last.node_id);
-                let last_edge = last_node.edge(last.edge_index);
-                graph.find_edge_terminal(last_edge)
-            }
-        };
+        let mut child_for_outcome = leaf_child_id;
 
         for step in path.iter().rev() {
             let node = store.state_node(step.node_id);
             let edge = node.edge(step.edge_index);
 
-            if let Some(child_id) = child_for_outcome {
-                graph.increment_afterstate_outcome_visits(edge, child_id);
-            }
-
             node.increment_visits();
             edge.increment_visits();
+            graph.increment_afterstate_outcome_visits(edge, child_for_outcome);
 
             store.recompute_rollup(step.node_id);
 
             node.decrement_virtual_visits();
             edge.decrement_virtual_visits();
 
-            child_for_outcome = Some(step.node_id);
+            child_for_outcome = step.node_id;
         }
     }
 
-    fn next_sim(&mut self) -> Option<PendingSim<M::State>> {
+    fn upsert_terminal(&self, last_step: &PathStep, terminal_snapshot: &SnapshotOf<VM>) -> NodeId {
+        let store = self.store;
+
+        let last_node = store.state_node(last_step.node_id);
+        let last_edge = last_node.edge(last_step.edge_index);
+
+        self.upsert_terminal_edge(last_edge, terminal_snapshot)
+    }
+
+    fn upsert_terminal_edge(&self, edge: &PUCTEdge, terminal_snapshot: &SnapshotOf<VM>) -> NodeId {
+        let graph = self.store.graph();
+
+        if let Some(terminal_id) = graph.find_edge_terminal(edge) {
+            let terminal_node = self.store.terminal_node(terminal_id);
+            terminal_node.rollup_stats().accumulate(terminal_snapshot);
+            terminal_id
+        } else {
+            let rollup_stats: RollupOf<VM> = (*terminal_snapshot).into();
+            let terminal_id = self.store.create_and_insert_terminal_node(rollup_stats);
+            graph.add_child_to_edge(edge, terminal_id);
+            terminal_id
+        }
+    }
+
+    fn next_sim(&mut self) -> Option<SimMsg<M::State, SnapshotOf<VM>>> {
         // Check the BTreeMap to see if the sim has already been received.
         if let Some(sim) = self.try_next_sim() {
             return Some(sim);
@@ -155,10 +171,10 @@ where
 
             if sim_id == self.next_sim_id {
                 self.next_sim_id += 1;
-                return Some(PendingSim::from_msg(sim));
+                return Some(sim);
             }
 
-            self.pending_sims.insert(sim_id, PendingSim::from_msg(sim));
+            self.pending_sims.insert(sim_id, sim);
         }
 
         // No more messages will arive and we have processed all pending messages in order, so we're done.
@@ -172,7 +188,7 @@ where
         );
     }
 
-    fn try_next_sim(&mut self) -> Option<PendingSim<M::State>> {
+    fn try_next_sim(&mut self) -> Option<SimMsg<M::State, SnapshotOf<VM>>> {
         if let Some((&min_id, _)) = self.pending_sims.first_key_value()
             && min_id == self.next_sim_id
         {
@@ -202,7 +218,7 @@ where
         }
     }
 
-    fn link_child(&self, parent_node_id: NodeId, edge_index: usize, new_node_id: NodeId) {
+    fn link_state_node(&self, parent_node_id: NodeId, edge_index: usize, new_node_id: NodeId) {
         let store = self.store;
 
         let parent = store.state_node(parent_node_id);
@@ -233,70 +249,44 @@ where
     }
 }
 
-enum PendingSim<S> {
-    Terminal(PendingTerminal),
-    State(PendingState<S>),
-}
-
-impl<S> PendingSim<S> {
-    fn from_msg(msg: SimMsg<S>) -> Self {
-        match msg {
-            SimMsg::Terminal { path, .. } => Self::Terminal(PendingTerminal { path }),
-            SimMsg::State {
-                game_state,
-                path,
-                parent_node_id,
-                edge_index,
-                ..
-            } => Self::State(PendingState {
-                game_state,
-                path,
-                parent_node_id,
-                edge_index,
-            }),
-        }
-    }
-
-    fn path(&self) -> &Vec<PathStep> {
-        match self {
-            Self::Terminal(p) => &p.path,
-            Self::State(p) => &p.path,
-        }
-    }
-}
-
-struct PendingTerminal {
-    path: Vec<PathStep>,
-}
-
-struct PendingState<S> {
-    game_state: S,
-    path: Vec<PathStep>,
-    parent_node_id: NodeId,
-    edge_index: usize,
+/// Message sent from the simulation thread to the backprop thread.
+pub(super) struct TerminalSimMsg<TS> {
+    pub(super) sim_id: usize,
+    pub(super) path: Vec<PathStep>,
+    pub(super) terminal_snapshot: TS,
 }
 
 /// Message sent from the simulation thread to the backprop thread.
-pub(super) enum SimMsg<S> {
-    Terminal {
-        sim_id: usize,
-        path: Vec<PathStep>,
-    },
-    State {
-        sim_id: usize,
-        game_state: S,
-        path: Vec<PathStep>,
-        parent_node_id: NodeId,
-        edge_index: usize,
-    },
+pub(super) struct StateSimMsg<S> {
+    pub(super) sim_id: usize,
+    pub(super) game_state: S,
+    pub(super) path: Vec<PathStep>,
 }
 
-impl<S> SimMsg<S> {
+/// Message sent from the simulation thread to the backprop thread.
+pub(super) enum SimMsg<S, TS> {
+    Terminal(TerminalSimMsg<TS>),
+    State(StateSimMsg<S>),
+}
+
+impl<S, TS> SimMsg<S, TS> {
     fn sim_id(&self) -> usize {
         match self {
-            Self::Terminal { sim_id, .. } => *sim_id,
-            Self::State { sim_id, .. } => *sim_id,
+            Self::Terminal(msg) => msg.sim_id,
+            Self::State(msg) => msg.sim_id,
         }
+    }
+}
+
+impl<TS> TerminalSimMsg<TS> {
+    fn last_step(&self) -> &PathStep {
+        self.path.last().expect("Must contain at least one step")
+    }
+}
+
+impl<S> StateSimMsg<S> {
+    fn last_step(&self) -> &PathStep {
+        self.path.last().expect("Must contain at least one step")
     }
 }
 

@@ -150,6 +150,7 @@ where
     type State = S;
     type Predictions = P;
     type Terminal = T;
+    type Snapshot = MovesLeftSnapshot;
     type Rollup = MovesLeftRollup;
 
     fn pred_snapshot(

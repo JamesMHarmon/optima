@@ -1,4 +1,4 @@
-use super::RollupStats;
+use super::{RollupStats, WeightedMerge};
 
 /// Defines the value semantics of the search as well as how game outcomes and
 /// neural network predictions are converted into a canonical `Snapshot`.
@@ -21,17 +21,11 @@ pub trait ValueModel {
     type State;
     type Predictions;
     type Terminal;
-    type Rollup: RollupStats + From<<Self::Rollup as RollupStats>::Snapshot>;
+    type Snapshot: WeightedMerge + Copy;
+    type Rollup: RollupStats<Snapshot = Self::Snapshot> + From<Self::Snapshot>;
 
-    fn pred_snapshot(
-        &self,
-        state: &Self::State,
-        predictions: &Self::Predictions,
-    ) -> <Self::Rollup as RollupStats>::Snapshot;
+    fn pred_snapshot(&self, state: &Self::State, predictions: &Self::Predictions)
+    -> Self::Snapshot;
 
-    fn terminal_snapshot(
-        &self,
-        state: &Self::State,
-        terminal: &Self::Terminal,
-    ) -> <Self::Rollup as RollupStats>::Snapshot;
+    fn terminal_snapshot(&self, state: &Self::State, terminal: &Self::Terminal) -> Self::Snapshot;
 }

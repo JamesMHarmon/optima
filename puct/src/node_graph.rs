@@ -82,6 +82,16 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         true
     }
 
+    #[cfg(test)]
+    pub(crate) fn afterstate_outcome_visits(&self, edge: &PUCTEdge, child_id: NodeId) -> Option<u32> {
+        let after_state = self.edge_after_state(edge)?;
+        after_state
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.child() == child_id)
+            .map(|outcome| outcome.visits())
+    }
+
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
     pub fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
         // First try to set child directly on edge if it's currently unset
@@ -109,7 +119,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             }
         }
 
-        new_outcomes.push(AfterStateOutcome::new(1, child_id));
+        new_outcomes.push(AfterStateOutcome::new(0, child_id));
 
         // Create new AfterState and atomically update edge
         // @TODO: Check if we need to be smarter about concurrent updates.

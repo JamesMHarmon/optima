@@ -56,16 +56,12 @@ where
 
         let depth = result.depth;
         let path = result.path().to_vec();
-        let parent_node_id = result.parent_node_id;
-        let edge_index = result.edge_index;
         let game_state = result.game_state;
 
         if let Some(terminal) = result.terminal {
             return SimulationStep::Terminal(TerminalStep {
                 sim_id,
                 path,
-                parent_node_id,
-                edge_index,
                 game_state,
                 terminal,
                 depth,
@@ -75,8 +71,6 @@ where
         SimulationStep::NewLeaf(NewLeafStep {
             sim_id,
             path,
-            parent_node_id,
-            edge_index,
             game_state,
             depth,
         })
@@ -118,7 +112,7 @@ where
             edge.increment_virtual_visits();
 
             if is_terminal {
-                return SelectionResult::new(ctx, current, edge_idx, game_state, term_state, depth);
+                return SelectionResult::new(ctx, game_state, term_state, depth);
             }
 
             if let Some(child_id) = store.get_or_link_transposition(edge, transposition_hash) {
@@ -126,7 +120,7 @@ where
                 continue;
             }
 
-            return SelectionResult::new(ctx, current, edge_idx, game_state, None, depth);
+            return SelectionResult::new(ctx, game_state, None, depth);
         }
     }
 
@@ -146,26 +140,15 @@ where
 
 pub(super) struct SelectionResult<S, T> {
     context: SearchContextGuard,
-    pub(super) parent_node_id: NodeId,
-    pub(super) edge_index: usize,
     pub(super) game_state: S,
     pub(super) terminal: Option<T>,
     pub(super) depth: usize,
 }
 
 impl<S, T> SelectionResult<S, T> {
-    fn new(
-        context: SearchContextGuard,
-        parent_node_id: NodeId,
-        edge_index: usize,
-        game_state: S,
-        terminal: Option<T>,
-        depth: usize,
-    ) -> Self {
+    fn new(context: SearchContextGuard, game_state: S, terminal: Option<T>, depth: usize) -> Self {
         Self {
             context,
-            parent_node_id,
-            edge_index,
             game_state,
             terminal,
             depth,
@@ -188,8 +171,6 @@ pub(super) enum SimulationStep<S, T> {
 pub(super) struct TerminalStep<S, T> {
     pub(super) sim_id: usize,
     pub(super) path: Vec<PathStep>,
-    pub(super) parent_node_id: NodeId,
-    pub(super) edge_index: usize,
     pub(super) game_state: S,
     pub(super) terminal: T,
     pub(super) depth: usize,
@@ -198,8 +179,6 @@ pub(super) struct TerminalStep<S, T> {
 pub(super) struct NewLeafStep<S> {
     pub(super) sim_id: usize,
     pub(super) path: Vec<PathStep>,
-    pub(super) parent_node_id: NodeId,
-    pub(super) edge_index: usize,
     pub(super) game_state: S,
     pub(super) depth: usize,
 }

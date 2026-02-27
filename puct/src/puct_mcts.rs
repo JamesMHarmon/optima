@@ -12,12 +12,13 @@ use std::time::{Duration, Instant};
 use crate::node_details::{EdgeDetails, NodeDetails};
 use crate::options::DirichletOptions;
 use crate::temp::Temperature;
-use crate::{EdgeView, PUCT, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeView, PUCT, SelectionPolicy, ValueModel, WeightedMerge};
 use model::{EdgeMetrics, NodeMetrics};
 
-type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
-type RootNodeMetrics<E, M, VM> =
-    NodeMetrics<<E as GameEngine>::Action, <M as GameAnalyzer>::Predictions, SnapshotOf<VM>>;
+type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
+type ActionOf<E> = <E as GameEngine>::Action;
+type PredictionsOf<M> = <M as GameAnalyzer>::Predictions;
+type RootNodeMetrics<E, M, VM> = NodeMetrics<ActionOf<E>, PredictionsOf<M>, SnapshotOf<VM>>;
 
 /// Transitional wrapper that runs search via the `puct` crate while providing an
 /// MCTS-like container API.
@@ -291,8 +292,7 @@ where
         let edge_details = edges
             .into_iter()
             .map(|e| {
-                let snapshot: <<VM as ValueModel>::Rollup as RollupStats>::Snapshot =
-                    e.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
+                let snapshot: SnapshotOf<VM> = e.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
 
                 //@TODO: Analyze this implementation of values.
 
@@ -324,12 +324,7 @@ where
         depth: usize,
     ) -> Result<Vec<EdgeDetails<E::Action, SnapshotOf<VM>>>> {
         let mut state = self.focus_state();
-        let mut pv: Vec<
-            EdgeDetails<
-                <E as GameEngine>::Action,
-                <<VM as ValueModel>::Rollup as RollupStats>::Snapshot,
-            >,
-        > = Vec::new();
+        let mut pv: Vec<EdgeDetails<E::Action, SnapshotOf<VM>>> = Vec::new();
 
         for ply in 0..depth {
             let edges = self.puct.edge_views(&state);
