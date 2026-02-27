@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use crate::node_details::{EdgeDetails, NodeDetails};
 use crate::options::DirichletOptions;
 use crate::temp::Temperature;
-use crate::{EdgeView, PUCT, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeView, NodeInfo, PUCT, SelectionPolicy, ValueModel, WeightedMerge};
 use model::{EdgeMetrics, NodeMetrics};
 
 type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
@@ -155,7 +155,8 @@ where
     }
 
     pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
-        self.search(|node_visits| node_visits < visits).await
+        self.search(|node_info| node_info.visits < visits as u32)
+            .await
     }
 
     pub async fn search_visits_active(
@@ -163,7 +164,7 @@ where
         visits: usize,
         active: &AtomicBool,
     ) -> Result<usize> {
-        self.search(|node_visits| active.load(Ordering::Acquire) && node_visits < visits)
+        self.search(|node_info| active.load(Ordering::Acquire) && node_info.visits < visits as u32)
             .await
     }
 
@@ -174,17 +175,17 @@ where
         active: &AtomicBool,
     ) -> Result<usize> {
         let start = Instant::now();
-        self.search(|visits| {
+        self.search(|node_info| {
             active.load(Ordering::Acquire)
                 && start.elapsed() < duration
-                && (max_visits == 0 || visits < max_visits)
+                && (max_visits == 0 || node_info.visits < max_visits as u32)
         })
         .await
     }
 
     pub async fn search<Fn>(&mut self, alive: Fn) -> Result<usize>
     where
-        Fn: FnMut(usize) -> bool + Send,
+        Fn: FnMut(NodeInfo) -> bool + Send,
     {
         let state = self.focus_state();
 

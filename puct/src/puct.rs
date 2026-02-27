@@ -4,6 +4,7 @@ use std::thread;
 use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
+use crate::NodeInfo;
 use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
 use crate::backprop::{Backpropagator, SimMsg, StateSimMsg, TerminalSimMsg};
 use crate::node_arena::NodeId;
@@ -85,7 +86,7 @@ where
 
     pub fn search<Alive>(&mut self, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: FnMut(usize) -> bool + Send,
+        Alive: FnMut(NodeInfo) -> bool + Send,
     {
         let root = self.get_or_create_root(game_state);
         self.run_simulations(root, game_state, alive)
@@ -93,7 +94,7 @@ where
 
     fn run_simulations<Alive>(&self, root: NodeId, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: FnMut(usize) -> bool + Send,
+        Alive: FnMut(NodeInfo) -> bool + Send,
     {
         let mut max_depth = 0;
         thread::scope(|s| {
@@ -135,7 +136,7 @@ where
         exp: impl InFlightExpansions<State = E::State>,
     ) -> usize
     where
-        Alive: FnMut(usize) -> bool,
+        Alive: FnMut(NodeInfo) -> bool,
     {
         let root_node = self.store.state_node(root);
         let mut max_depth = 0;
@@ -149,10 +150,13 @@ where
         );
 
         loop {
-            // @TODO: Determine if this is even correct.
-            let node_visits = root_node.visits() + root_node.virtual_visits();
+            let root_info = NodeInfo {
+                visits: root_node.visits(),
+                virtual_visits: root_node.virtual_visits(),
+                depth: max_depth as u32,
+            };
 
-            if !alive(node_visits as usize) {
+            if !alive(root_info) {
                 break;
             }
 

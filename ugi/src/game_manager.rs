@@ -324,9 +324,9 @@ where
                             && (max_visits == 0 || mcts.num_focus_node_visits() < max_visits)
                         {
                             let depth = mcts
-                                .search(|visits| {
+                                .search(|node_info| {
                                     search_active.load(Ordering::SeqCst)
-                                        && visits < max_visits
+                                        && node_info.visits < max_visits as u32
                                         && last_output.elapsed().as_secs() < 1
                                 })
                                 .await
