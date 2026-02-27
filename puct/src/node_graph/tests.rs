@@ -112,7 +112,7 @@ fn get_edge_state_with_hash_matches_state_child_without_touching_edge_visits() {
     edge.increment_visits();
     edge.increment_visits();
     let edge_visits_before = edge.visits();
-    assert!(edge.try_set_child(s0));
+    assert!(edge.try_set_child(s0).is_ok());
 
     assert_eq!(graph.get_edge_state_with_hash(&edge, 42), Some(s0));
     assert_eq!(edge.visits(), edge_visits_before);
@@ -124,7 +124,7 @@ fn get_edge_state_with_hash_state_child_mismatch_returns_none() {
     let graph = NodeGraph::new(&arena);
     let s0 = arena.push_state(make_state_node(1));
     let edge = PUCTEdge::new();
-    assert!(edge.try_set_child(s0));
+    assert!(edge.try_set_child(s0).is_ok());
 
     assert_eq!(graph.get_edge_state_with_hash(&edge, 2), None);
 }
@@ -135,7 +135,7 @@ fn get_edge_state_with_hash_terminal_child_returns_none() {
     let graph = NodeGraph::new(&arena);
     let t0 = make_terminal_node(&arena, 9);
     let edge = PUCTEdge::new();
-    assert!(edge.try_set_child(t0));
+    assert!(edge.try_set_child(t0).is_ok());
 
     assert_eq!(graph.get_edge_state_with_hash(&edge, 123), None);
 }
@@ -238,7 +238,7 @@ fn add_child_to_edge_sets_new_outcome_visits_to_one() {
 
     let edge = PUCTEdge::new();
     edge.increment_visits();
-    assert!(edge.try_set_child(existing_child));
+    assert!(edge.try_set_child(existing_child).is_ok());
 
     let new_child = arena.push_state(make_state_node(222));
 
@@ -269,7 +269,7 @@ fn find_edge_terminal_direct_terminal_does_not_mutate_edge_visits() {
     edge.increment_visits();
     edge.increment_visits();
     let edge_visits_before = edge.visits();
-    assert!(edge.try_set_child(t0));
+    assert!(edge.try_set_child(t0).is_ok());
 
     assert_eq!(graph.find_edge_terminal(&edge), Some(t0));
     assert_eq!(edge.visits(), edge_visits_before);
@@ -359,7 +359,7 @@ fn add_child_to_edge_converts_state_child_to_after_state_and_preserves_existing_
         edge.increment_visits();
     }
     let edge_visits_before = edge.visits();
-    assert!(edge.try_set_child(existing));
+    assert!(edge.try_set_child(existing).is_ok());
 
     graph.add_child_to_edge(&edge, new_child);
 
@@ -398,7 +398,7 @@ fn add_child_to_edge_converts_terminal_child_to_after_state_and_preserves_existi
         edge.increment_visits();
     }
     let edge_visits_before = edge.visits();
-    assert!(edge.try_set_child(existing));
+    assert!(edge.try_set_child(existing).is_ok());
 
     graph.add_child_to_edge(&edge, new_child);
 
@@ -568,7 +568,7 @@ fn add_child_to_edge_multiple_times_grows_after_state_outcomes_monotonically() {
     for _ in 0..4 {
         edge.increment_visits();
     }
-    assert!(edge.try_set_child(s0));
+    assert!(edge.try_set_child(s0).is_ok());
 
     graph.add_child_to_edge(&edge, s1);
     let after_state_1 = edge.child().expect("child must exist");
@@ -601,7 +601,7 @@ fn add_child_to_edge_does_not_mutate_edge_visits() {
         edge.increment_visits();
     }
     let before = edge.visits();
-    assert!(edge.try_set_child(s0));
+    assert!(edge.try_set_child(s0).is_ok());
 
     graph.add_child_to_edge(&edge, s1);
     assert_eq!(edge.visits(), before);
@@ -670,7 +670,7 @@ fn find_edge_terminal_state_child_returns_none() {
     let s0 = arena.push_state(make_state_node(1));
 
     let edge = PUCTEdge::new();
-    assert!(edge.try_set_child(s0));
+    assert!(edge.try_set_child(s0).is_ok());
 
     assert_eq!(graph.find_edge_terminal(&edge), None);
 }
