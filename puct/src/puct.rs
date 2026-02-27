@@ -195,16 +195,12 @@ where
     fn handle_terminal(&self, step: TerminalStep<E::State, E::Terminal>, tx: &SimTx<E::State>) {
         let parent = self.store.state_node(step.parent_node_id);
         let (edge, _) = parent.edge_and_action(step.edge_index);
-        let new_node_id = self.create_or_merge_terminal(edge, &step.game_state, &step.terminal);
 
-        // @TODO If we are creating the terminal here then don't defer the link.
-        let link = new_node_id
-            .map(|new_node_id| LinkChild::new(step.parent_node_id, step.edge_index, new_node_id));
+        self.update_edge_with_terminal(edge, &step.game_state, &step.terminal);
 
         let _ = tx.send(SimMsg::Terminal {
             sim_id: step.sim_id,
             path: step.path,
-            link,
         });
     }
 
@@ -282,31 +278,17 @@ where
             .create_and_insert_state_node(transposition_hash, policy_priors, rollup_stats)
     }
 
-    fn update_edge_with_terminal(
-        &self,
-        edge: &PUCTEdge,
-        snapshot: SnapshotOf<VM>,
-    ) -> Option<NodeId> {
+    fn update_edge_with_terminal(&self, edge: &PUCTEdge, state: &E::State, terminal: &E::Terminal) {
+        let snapshot = self.value_model.terminal_snapshot(state, terminal);
+
         if let Some(terminal_id) = self.store.graph().find_edge_terminal(edge) {
             let terminal_node = self.store.terminal_node(terminal_id);
             terminal_node.rollup_stats().accumulate(&snapshot);
-
-            None
         } else {
             let rollup_stats = snapshot.into();
             let terminal_id = self.store.create_and_insert_terminal_node(rollup_stats);
-            Some(terminal_id)
+            self.store.graph().add_child_to_edge(edge, terminal_id);
         }
-    }
-
-    fn create_or_merge_terminal(
-        &self,
-        edge: &PUCTEdge,
-        state: &E::State,
-        terminal: &E::Terminal,
-    ) -> Option<NodeId> {
-        let snapshot = self.value_model.terminal_snapshot(state, terminal);
-        self.update_edge_with_terminal(edge, snapshot)
     }
 }
 

@@ -75,29 +75,26 @@ where
 
     pub(super) fn run(mut self) {
         while let Some(pending) = self.next_sim() {
-            match pending {
-                PendingSim::Terminal(p) => {
-                    if let Some(link) = p.link {
-                        self.link_child(link.parent_node_id, link.edge_index, link.new_node_id);
-                    }
-                    self.backprop_path(p.path);
+            if let PendingSim::State(p) = &pending {
+                self.expansions.complete(p.hash);
+
+                if self.store.get_node_id(p.hash).is_some() {
+                    // Another thread has already expanded this node and backpropagated the path, so we can skip it.
+                    continue;
                 }
-                PendingSim::State(p) => {
-                    let analysis = self.recv_analysis_for(p.request_id);
 
-                    let new_node_id = if let Some(existing) = self.store.get_node_id(p.hash) {
-                        existing
-                    } else {
-                        let (policy_priors, predictions) = analysis.into_inner();
-                        self.create_state_node(p.hash, policy_priors, &p.game_state, &predictions)
-                    };
+                // @TODO: It may be possible that another request got through with a different id and this request was considered a dupe.
+                // @TODO: Maybe recv_analysis_for needs a dedupe check.
+                let analysis = self.recv_analysis_for(p.request_id);
 
-                    self.expansions.complete(p.hash);
-
-                    self.link_child(p.parent_node_id, p.edge_index, new_node_id);
-                    self.backprop_path(p.path);
-                }
+                let (policy_priors, predictions) = analysis.into_inner();
+                let new_node_id =
+                    self.create_state_node(p.hash, policy_priors, &p.game_state, &predictions);
+                self.link_child(p.parent_node_id, p.edge_index, new_node_id);
             }
+
+            // Run backprop for expanded nodes and terminal node updates.
+            self.backprop_path(pending.path());
         }
     }
 
@@ -113,16 +110,14 @@ where
                     return None;
                 }
 
-                // Should be unreachable in normal operation: sim ids are expected
-                // to be contiguous from 0. If the channel is closed early (or a
-                // bug drops a sim id), don't stall forever.
-                let min_id = *self
+                // Drain the remaining sims once the receiver is closed.
+                let (min_id, pending) = self
                     .pending_by_sim_id
-                    .keys()
-                    .next()
+                    .pop_first()
                     .expect("pending_by_sim_id is non-empty");
-                self.next_sim_id = min_id;
-                continue;
+
+                self.next_sim_id = min_id + 1;
+                return Some(pending);
             }
 
             match self.rx.recv() {
@@ -162,7 +157,7 @@ where
         store.graph().add_child_to_edge(edge, new_node_id);
     }
 
-    fn backprop_path(&self, path: Vec<NodeId>) {
+    fn backprop_path(&self, path: &[NodeId]) {
         let store = self.store;
         for &node_id in path.iter().rev() {
             store.recompute_rollup(node_id);
@@ -191,7 +186,7 @@ enum PendingSim<S> {
 impl<S> PendingSim<S> {
     fn from_msg(msg: SimMsg<S>) -> Self {
         match msg {
-            SimMsg::Terminal { path, link, .. } => Self::Terminal(PendingTerminal { path, link }),
+            SimMsg::Terminal { path, .. } => Self::Terminal(PendingTerminal { path }),
             SimMsg::State {
                 request_id,
                 hash,
@@ -210,11 +205,17 @@ impl<S> PendingSim<S> {
             }),
         }
     }
+
+    fn path(&self) -> &Vec<NodeId> {
+        match self {
+            Self::Terminal(p) => &p.path,
+            Self::State(p) => &p.path,
+        }
+    }
 }
 
 struct PendingTerminal {
     path: Vec<NodeId>,
-    link: Option<LinkChild>,
 }
 
 struct PendingState<S> {
@@ -226,32 +227,12 @@ struct PendingState<S> {
     edge_index: usize,
 }
 
-pub(super) struct LinkChild {
-    parent_node_id: NodeId,
-    edge_index: usize,
-    new_node_id: NodeId,
-}
-
-impl LinkChild {
-    pub(crate) fn new(parent_node_id: NodeId, edge_index: usize, new_node_id: NodeId) -> Self {
-        Self {
-            parent_node_id,
-            edge_index,
-            new_node_id,
-        }
-    }
-}
-
 /// Message sent from the simulation thread to the backprop thread.
 pub(super) enum SimMsg<S> {
     Terminal {
         sim_id: usize,
         path: Vec<NodeId>,
-        /// When `Some`, link this newly-created child before backpropagating.
-        link: Option<LinkChild>,
     },
-    /// A new (not yet analysed) leaf was found. `analyzer.analyze` has already
-    /// been called before this message is sent.
     State {
         sim_id: usize,
         request_id: usize,

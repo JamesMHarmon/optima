@@ -110,23 +110,16 @@ where
             let (edge, action) = node.edge_and_action(edge_idx);
 
             let game_state = game_engine.take_action(&game_state, action);
-            let terminal_state = game_engine.terminal_state(&game_state);
+            let term_state = game_engine.terminal_state(&game_state);
             let transposition_hash = game_state.transposition_hash();
-            let is_terminal = terminal_state.is_some();
+            let is_terminal = term_state.is_some();
 
             depth += 1;
 
             self.increment_selection_visits(node, edge, transposition_hash, is_terminal);
 
             if is_terminal {
-                return SelectionResult::new(
-                    ctx,
-                    current,
-                    edge_idx,
-                    game_state,
-                    terminal_state,
-                    depth,
-                );
+                return SelectionResult::new(ctx, current, edge_idx, game_state, term_state, depth);
             }
 
             if let Some(child_id) = store.get_or_link_transposition(edge, transposition_hash) {
