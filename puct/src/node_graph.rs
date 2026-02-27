@@ -83,7 +83,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
     }
 
     #[cfg(test)]
-    pub(crate) fn afterstate_outcome_visits(&self, edge: &PUCTEdge, child_id: NodeId) -> Option<u32> {
+    pub fn afterstate_outcome_visits(&self, edge: &PUCTEdge, child_id: NodeId) -> Option<u32> {
         let after_state = self.edge_after_state(edge)?;
         after_state
             .outcomes
