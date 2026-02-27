@@ -10,7 +10,7 @@ use crate::rollup::RollupStats;
 use crate::search_context::PathStep;
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
-use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis, RequestId};
+use model::{GameAnalyzer, GameStateAnalysis, RequestId};
 
 type PuctStore<M, R> = NodeGraphStore<<M as GameAnalyzer>::Action, R>;
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
@@ -83,13 +83,14 @@ where
                     self.commit_path(&sim.path, terminal_node_id);
                 }
                 SimMsg::State(sim) => {
+                    let store = self.store;
                     let last_step = sim.last_step();
 
                     let hash = sim.game_state.transposition_hash();
                     self.expansions.complete(hash);
 
                     // Check if another simulation has already expanded this node and backpropagated the path, so we can skip it.
-                    if self.store.get_node_id(hash).is_some() {
+                    if store.get_node_id(hash).is_some() {
                         self.remove_virtual_loss(&sim.path);
                         continue;
                     }
@@ -97,7 +98,10 @@ where
                     let analysis = self.recv_analysis_for(hash);
                     let (priors, preds) = analysis.into_inner();
 
-                    let new_node_id = self.create_state_node(hash, priors, &sim.game_state, &preds);
+                    let snapshot = self.value_model.pred_snapshot(&sim.game_state, &preds);
+                    let rollup = snapshot.into();
+
+                    let new_node_id = store.create_and_insert_state_node(hash, priors, rollup);
                     self.link_state_node(last_step.node_id, last_step.edge_index, new_node_id);
 
                     self.commit_path(&sim.path, new_node_id);
@@ -233,19 +237,6 @@ where
             node.decrement_virtual_visits();
             node.edge(step.edge_index).decrement_virtual_visits();
         }
-    }
-
-    pub(super) fn create_state_node(
-        &self,
-        transposition_hash: u64,
-        policy_priors: Vec<ActionWithPolicy<M::Action>>,
-        game_state: &M::State,
-        predictions: &M::Predictions,
-    ) -> NodeId {
-        let snapshot = self.value_model.pred_snapshot(game_state, predictions);
-        let rollup_stats = snapshot.into();
-        self.store
-            .create_and_insert_state_node(transposition_hash, policy_priors, rollup_stats)
     }
 }
 

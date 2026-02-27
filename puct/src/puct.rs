@@ -14,7 +14,7 @@ use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use engine::GameEngine;
-use model::{ActionWithPolicy, GameAnalyzer};
+use model::GameAnalyzer;
 
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
 type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
@@ -235,8 +235,9 @@ where
     }
 
     fn get_or_create_root(&mut self, game_state: &E::State) -> NodeId {
+        let store = &self.store;
         let transposition_hash = game_state.transposition_hash();
-        if let Some(existing) = self.store.get_node_id(transposition_hash) {
+        if let Some(existing) = store.get_node_id(transposition_hash) {
             return existing;
         }
 
@@ -250,20 +251,10 @@ where
         );
 
         let (policy_priors, predictions) = analysis.into_inner();
-        self.create_state_node(transposition_hash, policy_priors, game_state, &predictions)
-    }
+        let snapshot = self.value_model.pred_snapshot(game_state, &predictions);
+        let rollup = snapshot.into();
 
-    fn create_state_node(
-        &self,
-        transposition_hash: u64,
-        policy_priors: Vec<ActionWithPolicy<M::Action>>,
-        game_state: &E::State,
-        predictions: &M::Predictions,
-    ) -> NodeId {
-        let snapshot = self.value_model.pred_snapshot(game_state, predictions);
-        let rollup_stats = snapshot.into();
-        self.store
-            .create_and_insert_state_node(transposition_hash, policy_priors, rollup_stats)
+        store.create_and_insert_state_node(transposition_hash, policy_priors, rollup)
     }
 }
 
