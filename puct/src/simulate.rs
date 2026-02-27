@@ -1,7 +1,7 @@
 use common::TranspositionHash;
 use engine::GameEngine;
 
-use crate::edge::PUCTEdge;
+use crate::NodeInfo;
 use crate::node::StateNode;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
@@ -114,7 +114,8 @@ where
 
             depth += 1;
 
-            self.increment_selection_visits(node, edge, transposition_hash, is_terminal);
+            node.increment_virtual_visits();
+            edge.increment_virtual_visits();
 
             if is_terminal {
                 return SelectionResult::new(ctx, current, edge_idx, game_state, term_state, depth);
@@ -132,33 +133,14 @@ where
     fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, R>, depth: u32) -> usize {
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
+            NodeInfo {
+                visits: node.visits(),
+                virtual_visits: node.virtual_visits(),
+                depth,
+            },
             self.store.iter_edge_info(node),
-            node.visits(),
             game_state,
-            depth,
         )
-    }
-
-    fn increment_selection_visits(
-        &self,
-        node: &PuctStateNode<E, R>,
-        edge: &PUCTEdge,
-        transposition_hash: u64,
-        is_terminal: bool,
-    ) {
-        let graph = self.store.graph();
-
-        node.increment_visits();
-        node.increment_virtual_visits();
-
-        edge.increment_visits();
-        edge.increment_virtual_visits();
-
-        if is_terminal {
-            graph.increment_afterstate_terminal_visits(edge);
-        } else {
-            graph.increment_afterstate_visits(edge, transposition_hash);
-        }
     }
 }
 

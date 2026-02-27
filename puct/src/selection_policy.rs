@@ -5,16 +5,30 @@
 pub trait SelectionPolicy<S> {
     type State;
 
-    fn select_edge<'a, I, A: 'a>(
-        &self,
-        edges: I,
-        node_visits: u32,
-        state: &Self::State,
-        depth: u32,
-    ) -> usize
+    fn select_edge<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, S>>,
         S: 'a;
+}
+
+/// Read-only information about the current node for selection.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NodeInfo {
+    pub visits: u32,
+    pub virtual_visits: u32,
+    pub depth: u32,
+}
+
+impl NodeInfo {
+    #[inline]
+    pub fn total_visits(self) -> u32 {
+        self.visits + self.virtual_visits
+    }
+
+    #[inline]
+    pub fn is_root(self) -> bool {
+        self.depth == 0
+    }
 }
 
 /// Read-only information about an edge for selection

@@ -63,11 +63,8 @@ impl PUCTEdge {
     }
 
     pub fn decrement_virtual_visits(&self) {
-        let _ = self
-            .virtual_visits
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
-                Some(v.saturating_sub(1))
-            });
+        let prev = self.virtual_visits.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(prev > 0, "virtual_visits underflow");
     }
 
     pub fn virtual_visits(&self) -> u32 {

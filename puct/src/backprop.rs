@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use crossbeam::channel::Receiver;
 
@@ -74,6 +74,8 @@ where
 
     pub(super) fn run(mut self) {
         while let Some(pending) = self.next_sim() {
+            let mut leaf_child_id: Option<NodeId> = None;
+
             if let PendingSim::State(p) = &pending {
                 let game_state = &p.game_state;
                 let hash = p.game_state.transposition_hash();
@@ -82,6 +84,7 @@ where
 
                 if self.store.get_node_id(hash).is_some() {
                     // Another simulation has already expanded this node and backpropagated the path, so we can skip it.
+                    self.remove_virtual_loss(pending.path());
                     continue;
                 }
 
@@ -91,10 +94,52 @@ where
                 let new_node_id =
                     self.create_state_node(hash, policy_priors, game_state, &predictions);
                 self.link_child(p.parent_node_id, p.edge_index, new_node_id);
+
+                leaf_child_id = Some(new_node_id);
             }
 
-            self.backprop_path(pending.path());
-            self.remove_virtual_loss(pending.path());
+            self.commit_sim(&pending, leaf_child_id);
+        }
+    }
+
+    fn commit_sim(&self, sim: &PendingSim<M::State>, leaf_child_id: Option<NodeId>) {
+        let store = self.store;
+        let graph = store.graph();
+        let path = sim.path();
+
+        if path.is_empty() {
+            return;
+        }
+
+        // Track the "child" reached by the current step so we can increment
+        // afterstate outcome visits when the edge points to an AfterState.
+        let mut child_for_outcome: Option<NodeId> = match sim {
+            PendingSim::State(_) => leaf_child_id,
+            PendingSim::Terminal(_) => {
+                let last = path.last().expect("path not empty");
+                let last_node = store.state_node(last.node_id);
+                let last_edge = last_node.edge(last.edge_index);
+                graph.find_edge_terminal(last_edge)
+            }
+        };
+
+        for step in path.iter().rev() {
+            let node = store.state_node(step.node_id);
+            let edge = node.edge(step.edge_index);
+
+            if let Some(child_id) = child_for_outcome {
+                graph.increment_afterstate_outcome_visits(edge, child_id);
+            }
+
+            node.increment_visits();
+            edge.increment_visits();
+
+            store.recompute_rollup(step.node_id);
+
+            node.decrement_virtual_visits();
+            edge.decrement_virtual_visits();
+
+            child_for_outcome = Some(step.node_id);
         }
     }
 
@@ -163,16 +208,6 @@ where
         let parent = store.state_node(parent_node_id);
         let (edge, _) = parent.edge_and_action(edge_index);
         store.graph().add_child_to_edge(edge, new_node_id);
-    }
-
-    fn backprop_path(&self, path: &[PathStep]) {
-        let store = self.store;
-        let mut seen = HashSet::with_capacity(path.len());
-        for step in path.iter().rev() {
-            if seen.insert(step.node_id) {
-                store.recompute_rollup(step.node_id);
-            }
-        }
     }
 
     fn remove_virtual_loss(&self, path: &[PathStep]) {

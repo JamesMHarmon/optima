@@ -86,6 +86,11 @@ where
     A: 'a,
 {
     policy.select_edge(
+        NodeInfo {
+            visits: node_visits,
+            virtual_visits: 0,
+            depth,
+        },
         edges.iter().map(|e| EdgeInfo {
             edge_index: e.edge_index,
             action: e.action,
@@ -94,9 +99,7 @@ where
             virtual_visits: e.virtual_visits,
             snapshot: e.snapshot,
         }),
-        node_visits,
         state,
-        depth,
     )
 }
 
@@ -131,7 +134,9 @@ where
     let mut best_score = f32::MIN;
 
     for e in edges {
-        let nsa = e.visits;
+        let completed_visits = e.visits;
+        let virtual_visits = e.virtual_visits;
+        let nsa = completed_visits + virtual_visits;
         let psa = e.policy_prior;
         let usa = cpuct * psa * root_nsb / (1.0 + nsa as f32);
 
@@ -140,12 +145,10 @@ where
             .map(|s| s.player_value(player_to_move))
             .unwrap_or(fpu);
 
-        let v = e.virtual_visits.min(nsa);
-        let actual = nsa - v;
         let qsa = if nsa == 0 {
             qsa_raw
         } else {
-            qsa_raw * (actual as f32) / (nsa as f32)
+            qsa_raw * (completed_visits as f32) / (nsa as f32)
         };
 
         let msa = MovesLeftSelectionPolicy::<ConstantCpuct, TestState>::msa(
@@ -289,14 +292,14 @@ fn virtual_visits_do_not_reduce_u_term() {
     let a1 = 1u8;
 
     // Force Q to be exactly 0 for both edges so the selection depends only on U.
-    // If U incorrectly used (visits + virtual_visits), edge 1 would be heavily penalized.
+    // Virtual visits should reduce U by increasing the effective visit count.
     let edges = [
         edge_with_virtual_visits(0, &a0, 0.90, 1, 0, Some(snap(0.0, 1.0, 10.0, 1))),
         edge_with_virtual_visits(1, &a1, 1.00, 1, 100, Some(snap(0.0, 1.0, 10.0, 1))),
     ];
 
     let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
-    assert_eq!(idx, 1);
+    assert_eq!(idx, 0);
 }
 
 #[test]

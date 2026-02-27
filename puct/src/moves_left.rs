@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue};
 use serde::{Deserialize, Serialize};
 
-use crate::{EdgeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeInfo, NodeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MovesLeftSnapshot {
@@ -279,18 +279,12 @@ where
 {
     type State = S;
 
-    fn select_edge<'a, I, A: 'a>(
-        &self,
-        edges: I,
-        node_visits: u32,
-        state: &Self::State,
-        depth: u32,
-    ) -> usize
+    fn select_edge<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
     {
-        let is_root = depth == 0;
+        let is_root = node.is_root();
         let options = &self.options;
 
         let fpu = if is_root {
@@ -298,8 +292,9 @@ where
         } else {
             options.fpu
         };
-        let root_nsb = (node_visits as f32).sqrt();
-        let cpuct = self.cpuct.cpuct(state, node_visits, is_root);
+        let node_total_visits = node.total_visits();
+        let root_nsb = (node_total_visits as f32).sqrt();
+        let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
 
         let player_to_move = state.player_to_move();
         let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
@@ -310,7 +305,9 @@ where
         let mut best_score = f32::MIN;
 
         for edge in edges {
-            let nsa = edge.visits;
+            let visits = edge.visits;
+            let virtual_visits = edge.virtual_visits;
+            let nsa = visits + virtual_visits;
             let psa = edge.policy_prior;
             let usa = cpuct * psa * root_nsb / (1.0 + nsa as f32);
 
@@ -319,15 +316,12 @@ where
                 .map(|s| s.player_value(player_to_move))
                 .unwrap_or(fpu);
 
-            // Virtual loss: treat in-flight (virtual) visits as a loss of 0.0.
-            // Note: `visits` is already used in the selection formula, so we do not add
-            // `visits + virtual_visits` anywhere.
-            let virtual_visits = edge.virtual_visits.min(nsa);
-            let actual_visits = nsa - virtual_visits;
+            // Virtual loss: treat in-flight (virtual) visits as a loss of 0.0 by down-weighting
+            // the Q term according to the fraction of completed visits.
             let qsa = if nsa == 0 {
                 qsa
             } else {
-                qsa * (actual_visits as f32) / (nsa as f32)
+                qsa * (visits as f32) / (nsa as f32)
             };
 
             let msa = Self::msa(edge.snapshot, &baseline, options);

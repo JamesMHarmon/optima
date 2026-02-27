@@ -62,47 +62,24 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         }
     }
 
-    /// If `edge` currently points to an AfterState, and that AfterState has a *direct* state
-    /// outcome matching `transposition_hash`, increment that outcome's visits.
-    ///
-    /// Returns true if an outcome was found and incremented.
-    pub fn increment_afterstate_visits(&self, edge: &PUCTEdge, transposition_hash: u64) -> bool {
-        let after_state = match self.edge_after_state(edge) {
-            None => return false,
-            Some(after_state) => after_state,
+    /// If `edge` currently points to an AfterState, increment the outcome visits for the
+    /// outcome whose child exactly matches `child_id`.
+    pub fn increment_afterstate_outcome_visits(&self, edge: &PUCTEdge, child_id: NodeId) -> bool {
+        let Some(after_state) = self.edge_after_state(edge) else {
+            return false;
         };
 
-        after_state
+        let Some(outcome) = after_state
             .outcomes
             .iter()
-            .map(|outcome| (outcome, outcome.child()))
-            .filter(|(_, child_id)| child_id.node_type() == NodeType::State)
-            .find(|(_, child_id)| {
-                self.arena.get_state_node(*child_id).transposition_hash() == transposition_hash
-            })
-            .is_some_and(|(outcome, _)| {
-                outcome.increment_visits();
-                true
-            })
-    }
-
-    /// If `edge` currently points to an AfterState, and that AfterState has a terminal outcome,
-    /// increment that terminal outcome's visits.
-    ///
-    /// Returns true if a terminal outcome existed and was incremented.
-    pub fn increment_afterstate_terminal_visits(&self, edge: &PUCTEdge) -> bool {
-        let after_state = match self.edge_after_state(edge) {
-            None => return false,
-            Some(after_state) => after_state,
+            .find(|outcome| outcome.child() == child_id)
+        else {
+            debug_assert!(false, "No AfterState outcome for child_id {:?}", child_id);
+            return false;
         };
 
-        match after_state.terminal_outcome() {
-            None => false,
-            Some(outcome) => {
-                outcome.increment_visits();
-                true
-            }
-        }
+        outcome.increment_visits();
+        true
     }
 
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.

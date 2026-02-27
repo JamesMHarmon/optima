@@ -150,9 +150,10 @@ where
         );
 
         loop {
-            let node_visits = root_node.visits() as usize;
+            // @TODO: Determine if this is even correct.
+            let node_visits = root_node.visits() + root_node.virtual_visits();
 
-            if !alive(node_visits) {
+            if !alive(node_visits as usize) {
                 break;
             }
 
