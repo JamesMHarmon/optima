@@ -319,6 +319,17 @@ where
                 .map(|s| s.player_value(player_to_move))
                 .unwrap_or(fpu);
 
+            // Virtual loss: treat in-flight (virtual) visits as a loss of 0.0.
+            // Note: `visits` is already used in the selection formula, so we do not add
+            // `visits + virtual_visits` anywhere.
+            let virtual_visits = edge.virtual_visits.min(nsa);
+            let actual_visits = nsa - virtual_visits;
+            let qsa = if nsa == 0 {
+                qsa
+            } else {
+                qsa * (actual_visits as f32) / (nsa as f32)
+            };
+
             let msa = Self::msa(edge.snapshot, &baseline, options);
             let score = msa + qsa + usa;
             if score > best_score {

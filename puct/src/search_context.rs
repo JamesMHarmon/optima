@@ -3,8 +3,14 @@ use crossbeam_queue::SegQueue;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PathStep {
+    pub node_id: NodeId,
+    pub edge_index: usize,
+}
+
 pub struct SearchContext {
-    pub path: Vec<NodeId>,
+    pub path: Vec<PathStep>,
     pub visited: HashSet<NodeId>,
 }
 
@@ -71,7 +77,7 @@ impl SearchContextGuard {
         self.ctx.as_ref().unwrap()
     }
 
-    pub fn split_mut(&mut self) -> (&mut Vec<NodeId>, &mut HashSet<NodeId>) {
+    pub fn split_mut(&mut self) -> (&mut Vec<PathStep>, &mut HashSet<NodeId>) {
         let ctx = self.ctx.as_mut().unwrap();
         (&mut ctx.path, &mut ctx.visited)
     }

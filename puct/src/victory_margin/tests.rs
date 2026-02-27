@@ -233,6 +233,25 @@ fn edge<'a, A>(
         action,
         policy_prior,
         visits,
+        virtual_visits: 0,
+        snapshot,
+    }
+}
+
+fn edge_with_virtual_visits<'a, A>(
+    edge_index: usize,
+    action: &'a A,
+    policy_prior: f32,
+    visits: u32,
+    virtual_visits: u32,
+    snapshot: Option<VictoryMarginSnapshot>,
+) -> EdgeInfo<'a, A, VictoryMarginSnapshot> {
+    EdgeInfo {
+        edge_index,
+        action,
+        policy_prior,
+        visits,
+        virtual_visits,
         snapshot,
     }
 }
@@ -253,6 +272,7 @@ where
             action: e.action,
             policy_prior: e.policy_prior,
             visits: e.visits,
+            virtual_visits: e.virtual_visits,
             snapshot: e.snapshot,
         }),
         node_visits,
@@ -310,10 +330,19 @@ where
         let nsa = e.visits;
         let psa = e.policy_prior;
         let usa = cpuct * psa * root_sqrt / (1.0 + nsa as f32);
-        let qsa = e
+        let qsa_raw = e
             .snapshot
             .map(|s| s.player_value(player_index))
             .unwrap_or(fpu);
+
+        // Match production virtual-loss behavior.
+        let v = e.virtual_visits.min(nsa);
+        let actual = nsa - v;
+        let qsa = if nsa == 0 {
+            qsa_raw
+        } else {
+            qsa_raw * (actual as f32) / (nsa as f32)
+        };
 
         let vm_adj = if nsa == 0 {
             0.0
@@ -336,6 +365,48 @@ where
     }
 
     best_index
+}
+
+#[test]
+fn virtual_visits_down_weight_q_value() {
+    let options = VictoryMarginStrategyOptions {
+        // Disable victory-margin directive so selection is base_score (Q + U).
+        victory_margin_threshold: 1.0,
+        ..default_options()
+    };
+    let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+
+    let edges = [
+        edge_with_virtual_visits(0, &a0, 0.0, 10, 0, Some(snap(0.8, 0.2, 0.0, 1))),
+        edge_with_virtual_visits(1, &a1, 0.0, 10, 5, Some(snap(0.8, 0.2, 0.0, 1))),
+    ];
+
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    assert_eq!(idx, 0);
+}
+
+#[test]
+fn virtual_visits_do_not_reduce_u_term() {
+    let options = VictoryMarginStrategyOptions {
+        victory_margin_threshold: 1.0,
+        ..default_options()
+    };
+    let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(1.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+
+    // Make Q==0 for both, so selection depends on U.
+    let edges = [
+        edge_with_virtual_visits(0, &a0, 0.90, 1, 0, Some(snap(0.0, 1.0, 0.0, 1))),
+        edge_with_virtual_visits(1, &a1, 1.00, 1, 100, Some(snap(0.0, 1.0, 0.0, 1))),
+    ];
+
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    assert_eq!(idx, 1);
 }
 
 #[test]

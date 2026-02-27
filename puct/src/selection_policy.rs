@@ -26,5 +26,6 @@ pub struct EdgeInfo<'a, A, S> {
     pub action: &'a A,
     pub policy_prior: f32,
     pub visits: u32,
+    pub virtual_visits: u32,
     pub snapshot: Option<S>,
 }

@@ -4,6 +4,7 @@ use crate::node_arena::NodeId;
 
 pub struct PUCTEdge {
     visits: AtomicU32,
+    virtual_visits: AtomicU32,
     child: AtomicU32,
 }
 
@@ -11,6 +12,7 @@ impl Default for PUCTEdge {
     fn default() -> Self {
         Self {
             visits: AtomicU32::new(0),
+            virtual_visits: AtomicU32::new(0),
             child: AtomicU32::new(NodeId::unset().as_u32()),
         }
     }
@@ -54,5 +56,21 @@ impl PUCTEdge {
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn increment_virtual_visits(&self) {
+        self.virtual_visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn decrement_virtual_visits(&self) {
+        let _ = self
+            .virtual_visits
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+                Some(v.saturating_sub(1))
+            });
+    }
+
+    pub fn virtual_visits(&self) -> u32 {
+        self.virtual_visits.load(Ordering::Acquire)
     }
 }

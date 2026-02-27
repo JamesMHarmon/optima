@@ -1,5 +1,5 @@
 use core::panic;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crossbeam::channel::Receiver;
 
@@ -7,6 +7,7 @@ use crate::analysis_coordinator::InFlightExpansions;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
+use crate::search_context::PathStep;
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use model::{ActionWithPolicy, GameAnalyzer, GameStateAnalysis, RequestId};
@@ -96,6 +97,7 @@ where
             }
 
             self.backprop_path(pending.path());
+            self.remove_virtual_loss(pending.path());
         }
     }
 
@@ -168,10 +170,22 @@ where
         store.graph().add_child_to_edge(edge, new_node_id);
     }
 
-    fn backprop_path(&self, path: &[NodeId]) {
+    fn backprop_path(&self, path: &[PathStep]) {
         let store = self.store;
-        for &node_id in path.iter().rev() {
-            store.recompute_rollup(node_id);
+        let mut seen = HashSet::with_capacity(path.len());
+        for step in path.iter().rev() {
+            if seen.insert(step.node_id) {
+                store.recompute_rollup(step.node_id);
+            }
+        }
+    }
+
+    fn remove_virtual_loss(&self, path: &[PathStep]) {
+        let store = self.store;
+        for step in path {
+            let node = store.state_node(step.node_id);
+            node.decrement_virtual_visits();
+            node.edge(step.edge_index).decrement_virtual_visits();
         }
     }
 
@@ -213,7 +227,7 @@ impl<S> PendingSim<S> {
         }
     }
 
-    fn path(&self) -> &Vec<NodeId> {
+    fn path(&self) -> &Vec<PathStep> {
         match self {
             Self::Terminal(p) => &p.path,
             Self::State(p) => &p.path,
@@ -222,12 +236,12 @@ impl<S> PendingSim<S> {
 }
 
 struct PendingTerminal {
-    path: Vec<NodeId>,
+    path: Vec<PathStep>,
 }
 
 struct PendingState<S> {
     game_state: S,
-    path: Vec<NodeId>,
+    path: Vec<PathStep>,
     parent_node_id: NodeId,
     edge_index: usize,
 }
@@ -236,12 +250,12 @@ struct PendingState<S> {
 pub(super) enum SimMsg<S> {
     Terminal {
         sim_id: usize,
-        path: Vec<NodeId>,
+        path: Vec<PathStep>,
     },
     State {
         sim_id: usize,
         game_state: S,
-        path: Vec<NodeId>,
+        path: Vec<PathStep>,
         parent_node_id: NodeId,
         edge_index: usize,
     },

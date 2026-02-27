@@ -17,6 +17,7 @@ where
 {
     transposition_hash: u64,
     visits: AtomicU32,
+    virtual_visits: AtomicU32,
     rollup_prior: R::Snapshot,
     rollup_stats: R,
     edges: EdgeStore<A>,
@@ -33,11 +34,13 @@ where
     ) -> Self {
         let edges = EdgeStore::new(policy_priors.into());
         let visits = AtomicU32::new(1);
+        let virtual_visits = AtomicU32::new(0);
         let rollup_prior = rollup_stats.snapshot();
 
         Self {
             transposition_hash,
             visits,
+            virtual_visits,
             rollup_prior,
             rollup_stats,
             edges,
@@ -54,6 +57,10 @@ where
     pub fn edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
         let (edge, action_with_policy) = self.edges.edge(index);
         (edge, action_with_policy.action())
+    }
+
+    pub fn edge(&self, index: usize) -> &PUCTEdge {
+        self.edges.edge(index).0
     }
 
     pub fn iter_edges(&self) -> impl Iterator<Item = &PUCTEdge> {
@@ -76,6 +83,22 @@ where
 
     pub fn increment_visits(&self) {
         self.visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn increment_virtual_visits(&self) {
+        self.virtual_visits.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn decrement_virtual_visits(&self) {
+        let _ = self
+            .virtual_visits
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+                Some(v.saturating_sub(1))
+            });
+    }
+
+    pub fn virtual_visits(&self) -> u32 {
+        self.virtual_visits.load(Ordering::Acquire)
     }
 
     pub fn rollup_prior(&self) -> &R::Snapshot {
@@ -120,7 +143,6 @@ where
     ) -> impl Iterator<Item = EdgeInfo<'a, A, R::Snapshot>> + 'a {
         self.edges.iter_edges_with_policy().enumerate().map(
             move |(edge_index, (edge, action_with_policy))| {
-                let visits = edge.visits();
                 let child = edge.child();
                 let snapshot = child.map(|child_id| StateNode::child_snapshot(child_id, nodes));
 
@@ -128,7 +150,8 @@ where
                     edge_index,
                     action: action_with_policy.action(),
                     policy_prior: action_with_policy.policy_score().to_f32(),
-                    visits,
+                    visits: edge.visits(),
+                    virtual_visits: edge.virtual_visits(),
                     snapshot,
                 }
             },

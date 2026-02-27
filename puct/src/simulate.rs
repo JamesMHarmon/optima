@@ -6,7 +6,7 @@ use crate::node::StateNode;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
-use crate::search_context::{SearchContextGuard, SearchContextPool};
+use crate::search_context::{PathStep, SearchContextGuard, SearchContextPool};
 use crate::selection_policy::SelectionPolicy;
 
 type PuctStore<E, R> = NodeGraphStore<<E as GameEngine>::Action, R>;
@@ -90,7 +90,7 @@ where
         let store = self.store;
         let game_engine = self.game_engine;
         let mut ctx = self.context_pool.acquire();
-        let (path, visited) = ctx.split_mut();
+        let (path, _visited) = ctx.split_mut();
 
         let mut game_state = game_state;
         let mut current = node_id;
@@ -99,12 +99,13 @@ where
         loop {
             let node = store.state_node(current);
 
-            if visited.insert(current) {
-                path.push(current);
-            }
-
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
+
+            path.push(PathStep {
+                node_id: current,
+                edge_index: edge_idx,
+            });
 
             game_state = game_engine.take_action(&game_state, action);
             let term_state = game_engine.terminal_state(&game_state);
@@ -146,8 +147,12 @@ where
         is_terminal: bool,
     ) {
         let graph = self.store.graph();
+
         node.increment_visits();
+        node.increment_virtual_visits();
+
         edge.increment_visits();
+        edge.increment_virtual_visits();
 
         if is_terminal {
             graph.increment_afterstate_terminal_visits(edge);
@@ -185,7 +190,7 @@ impl<S, T> SelectionResult<S, T> {
         }
     }
 
-    pub(super) fn path(&self) -> &[NodeId] {
+    pub(super) fn path(&self) -> &[PathStep] {
         &self.context.get_ref().path
     }
 }
@@ -200,7 +205,7 @@ pub(super) enum SimulationStep<S, T> {
 
 pub(super) struct TerminalStep<S, T> {
     pub(super) sim_id: usize,
-    pub(super) path: Vec<NodeId>,
+    pub(super) path: Vec<PathStep>,
     pub(super) parent_node_id: NodeId,
     pub(super) edge_index: usize,
     pub(super) game_state: S,
@@ -210,7 +215,7 @@ pub(super) struct TerminalStep<S, T> {
 
 pub(super) struct NewLeafStep<S> {
     pub(super) sim_id: usize,
-    pub(super) path: Vec<NodeId>,
+    pub(super) path: Vec<PathStep>,
     pub(super) parent_node_id: NodeId,
     pub(super) edge_index: usize,
     pub(super) game_state: S,

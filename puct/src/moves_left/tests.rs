@@ -52,6 +52,25 @@ fn edge<'a, A>(
         action,
         policy_prior,
         visits,
+        virtual_visits: 0,
+        snapshot,
+    }
+}
+
+fn edge_with_virtual_visits<'a, A>(
+    edge_index: usize,
+    action: &'a A,
+    policy_prior: f32,
+    visits: u32,
+    virtual_visits: u32,
+    snapshot: Option<MovesLeftSnapshot>,
+) -> EdgeInfo<'a, A, MovesLeftSnapshot> {
+    EdgeInfo {
+        edge_index,
+        action,
+        policy_prior,
+        visits,
+        virtual_visits,
         snapshot,
     }
 }
@@ -72,6 +91,7 @@ where
             action: e.action,
             policy_prior: e.policy_prior,
             visits: e.visits,
+            virtual_visits: e.virtual_visits,
             snapshot: e.snapshot,
         }),
         node_visits,
@@ -115,10 +135,18 @@ where
         let psa = e.policy_prior;
         let usa = cpuct * psa * root_nsb / (1.0 + nsa as f32);
 
-        let qsa = e
+        let qsa_raw = e
             .snapshot
             .map(|s| s.player_value(player_to_move))
             .unwrap_or(fpu);
+
+        let v = e.virtual_visits.min(nsa);
+        let actual = nsa - v;
+        let qsa = if nsa == 0 {
+            qsa_raw
+        } else {
+            qsa_raw * (actual as f32) / (nsa as f32)
+        };
 
         let msa = MovesLeftSelectionPolicy::<ConstantCpuct, TestState>::msa(
             e.snapshot, &baseline, options,
@@ -224,6 +252,51 @@ fn fpu_root_used_at_depth_zero_and_fpu_used_below_root() {
     // Non-root: missing snapshot uses fpu = 0.1, should lose.
     let child_idx = run_policy(&policy, &edges, 1, &TestState { ptm: 1 }, 1);
     assert_eq!(child_idx, 0);
+}
+
+#[test]
+fn virtual_visits_down_weight_q_value() {
+    let options = MovesLeftStrategyOptions {
+        moves_left_threshold: 1.0,
+        ..default_options()
+    };
+    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+
+    let edges = [
+        edge_with_virtual_visits(0, &a0, 0.0, 10, 0, Some(snap(0.8, 0.2, 10.0, 1))),
+        edge_with_virtual_visits(1, &a1, 0.0, 10, 5, Some(snap(0.8, 0.2, 10.0, 1))),
+    ];
+
+    // With no U term (cpuct = 0) and no MSA (threshold >= 1), selection is purely Q.
+    // Virtual visits are treated as a loss of 0, so the second edge's Q is down-weighted.
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    assert_eq!(idx, 0);
+}
+
+#[test]
+fn virtual_visits_do_not_reduce_u_term() {
+    let options = MovesLeftStrategyOptions {
+        // Disable moves-left bias so selection is Q + U.
+        moves_left_threshold: 1.0,
+        ..default_options()
+    };
+    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(1.0), options);
+
+    let a0 = 0u8;
+    let a1 = 1u8;
+
+    // Force Q to be exactly 0 for both edges so the selection depends only on U.
+    // If U incorrectly used (visits + virtual_visits), edge 1 would be heavily penalized.
+    let edges = [
+        edge_with_virtual_visits(0, &a0, 0.90, 1, 0, Some(snap(0.0, 1.0, 10.0, 1))),
+        edge_with_virtual_visits(1, &a1, 1.00, 1, 100, Some(snap(0.0, 1.0, 10.0, 1))),
+    ];
+
+    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    assert_eq!(idx, 1);
 }
 
 #[test]
