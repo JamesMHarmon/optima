@@ -48,8 +48,6 @@ pub struct MatchResult {
     pub num_of_games_played: usize,
 }
 
-// @TODO: Simplify these generic params
-
 impl Arena {
     pub fn evaluate<S, P, E, M, T, VM, Sel>(
         models: &[M],
