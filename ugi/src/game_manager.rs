@@ -493,6 +493,9 @@ where
                     let mut game_lengths = Vec::new();
                     let mut scores = Vec::new();
                     let mut node_details_container = None;
+
+                    // @TODO: When stop is used, bestmove is empty
+
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
                         && search_active.load(Ordering::SeqCst)

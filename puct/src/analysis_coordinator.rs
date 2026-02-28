@@ -90,27 +90,27 @@ where
         )
     }
 
-    pub(crate) fn run(mut self) {
+    pub(crate) fn run(self) {
+        let mut in_flight = self.in_flight;
+        let mut complete_rx = self.complete_rx;
+
         loop {
-            while let Ok((request_id, game_state)) = self.analyze_rx.try_recv() {
-                self.maybe_analyze(request_id, game_state);
+            channel::select_biased! {
+                recv(self.analyze_rx) -> msg => match msg {
+                    Ok((request_id, game_state)) => {
+                        if in_flight.insert(request_id) {
+                            self.analyzer.analyze(request_id, &game_state);
+                        }
+                    }
+                    Err(_) => break,
+                },
+                recv(complete_rx) -> msg => match msg {
+                    Ok(hash) => {
+                        in_flight.remove(&hash);
+                    }
+                    Err(_) => complete_rx = channel::never(),
+                },
             }
-
-            if let Ok(hash) = self.complete_rx.try_recv() {
-                self.in_flight.remove(&hash);
-                continue;
-            }
-
-            match self.analyze_rx.recv() {
-                Ok((request_id, game_state)) => self.maybe_analyze(request_id, game_state),
-                Err(_) => break,
-            }
-        }
-    }
-
-    fn maybe_analyze(&mut self, request_id: RequestId, game_state: AnalyzerState<M>) {
-        if self.in_flight.insert(request_id) {
-            self.analyzer.analyze(request_id, &game_state);
         }
     }
 }
