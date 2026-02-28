@@ -2,7 +2,7 @@ use anyhow::Result;
 use common::{GameLength, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use model::Analyzer;
-use puct::{RollupStats, SelectionPolicy, ValueModel};
+use puct::{RollupStats, SelectionPolicy, SelectionPolicyScoring, ValueModel};
 
 use std::fmt::{Debug, Display};
 use std::io::stdin;
@@ -56,7 +56,11 @@ where
     SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + Sync + 'static,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+        + SelectionPolicyScoring<SnapshotOf<B>, State = S>
+        + Send
+        + Sync
+        + 'static,
     T: TimeStrategy<S> + Send + 'static,
     Ps: Display,
     Pr: Display,

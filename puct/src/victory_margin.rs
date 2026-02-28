@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue, VictoryMargin};
 use serde::{Deserialize, Serialize};
 
-use crate::{EdgeInfo, NodeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeInfo, EdgeScore, NodeInfo, RollupStats, SelectionPolicy, SelectionPolicyScoring};
+use crate::{ValueModel, WeightedMerge};
 
 #[derive(Clone, Copy)]
 pub struct VictoryMarginStrategyOptions {
@@ -357,6 +358,104 @@ where
             VictoryMarginDirective::MaximizeVictoryMargin => best_max_index,
             VictoryMarginDirective::MinimizeVictoryMargin => best_min_index,
         }
+    }
+}
+
+impl<C, S> SelectionPolicyScoring<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, S>
+where
+    C: CPUCT<State = S>,
+    S: PlayerToMove,
+{
+    fn score_edges<'a, I, A: 'a>(
+        &self,
+        node: NodeInfo,
+        edges: I,
+        state: &Self::State,
+    ) -> Vec<EdgeScore>
+    where
+        I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
+        VictoryMarginSnapshot: 'a,
+    {
+        let is_root = node.is_root();
+        let options = &self.options;
+
+        let fpu = if is_root {
+            options.fpu_root
+        } else {
+            options.fpu
+        };
+
+        let node_total_visits = node.total_visits();
+        let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
+        let root_sqrt = (node_total_visits as f32).sqrt();
+        let player_index = state.player_to_move();
+
+        let edges: Vec<EdgeInfo<'a, A, VictoryMarginSnapshot>> = edges.collect();
+
+        let mut baseline_visits = 0u32;
+        let mut baseline_snap: Option<VictoryMarginSnapshot> = None;
+        for edge in &edges {
+            let nsa = edge.visits + edge.virtual_visits;
+            if nsa > 0
+                && let Some(snap) = edge.snapshot
+                && nsa > baseline_visits
+            {
+                baseline_visits = nsa;
+                baseline_snap = Some(snap);
+            }
+        }
+
+        let directive = Self::directive_from_baseline(
+            baseline_snap,
+            options.victory_margin_threshold,
+            player_index,
+        );
+
+        edges
+            .into_iter()
+            .map(|edge| {
+                let visits = edge.visits;
+                let virtual_visits = edge.virtual_visits;
+                let nsa = visits + virtual_visits;
+                let psa = edge.policy_prior;
+
+                let usa = cpuct * psa * root_sqrt / (1.0 + nsa as f32);
+
+                let qsa = edge
+                    .snapshot
+                    .map(|s| s.player_value(player_index))
+                    .unwrap_or(fpu);
+
+                let qsa = if nsa == 0 {
+                    qsa
+                } else {
+                    qsa * (visits as f32) / (nsa as f32)
+                };
+
+                let base_score = qsa + usa;
+
+                let vm_adj = if nsa == 0 {
+                    0.0
+                } else {
+                    edge.snapshot
+                        .map(|s| s.victory_margin() * options.victory_margin_factor)
+                        .unwrap_or(0.0)
+                };
+
+                let score = match directive {
+                    VictoryMarginDirective::None => base_score,
+                    VictoryMarginDirective::MaximizeVictoryMargin => base_score + vm_adj,
+                    VictoryMarginDirective::MinimizeVictoryMargin => base_score - vm_adj,
+                };
+
+                EdgeScore {
+                    edge_index: edge.edge_index,
+                    usa,
+                    cpuct,
+                    puct_score: score,
+                }
+            })
+            .collect()
     }
 }
 

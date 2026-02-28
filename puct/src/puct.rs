@@ -10,6 +10,7 @@ use crate::backprop::{Backpropagator, SimMsg, StateSimMsg, TerminalSimMsg};
 use crate::node_arena::NodeId;
 use crate::search_context::SearchContextPool;
 use crate::selection_policy::SelectionPolicy;
+use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
 use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
@@ -222,6 +223,7 @@ where
         };
 
         let node = self.store.state_node(node_id);
+        node.ensure_frontier_edge();
         self.store
             .iter_edge_info(node)
             .map(|e| EdgeView {
@@ -232,6 +234,33 @@ where
                 snapshot: e.snapshot,
             })
             .collect()
+    }
+
+    /// Computes per-edge PUCT scores for the given node, using the active selection policy.
+    ///
+    /// This is intended for UI/debug output (e.g. filling `EdgeDetails`). It uses the
+    /// same scoring terms as selection, including virtual-loss handling.
+    pub fn edge_scores(&self, game_state: &E::State, depth: u32) -> Vec<EdgeScore>
+    where
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+    {
+        let transposition_hash = game_state.transposition_hash();
+        let Some(node_id) = self.store.get_node_id(transposition_hash) else {
+            return Vec::new();
+        };
+
+        let node = self.store.state_node(node_id);
+        node.ensure_frontier_edge();
+
+        self.selection_strategy.score_edges(
+            NodeInfo {
+                visits: node.visits(),
+                virtual_visits: node.virtual_visits(),
+                depth,
+            },
+            self.store.iter_edge_info(node),
+            game_state,
+        )
     }
 
     fn get_or_create_root(&mut self, game_state: &E::State) -> NodeId {

@@ -6,7 +6,7 @@ use common::{GameLength, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use model::Analyzer;
-use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, ValueModel};
+use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, SelectionPolicyScoring, ValueModel};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};
@@ -134,7 +134,11 @@ impl<S, A> GameManager<S, A> {
             + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-        Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Send + Sync + 'static,
+        Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+            + SelectionPolicyScoring<SnapshotOf<B>, State = S>
+            + Send
+            + Sync
+            + 'static,
         T: TimeStrategy<S> + Send + 'static,
         M::Analyzer: Send + Sync,
         <B as ValueModel>::Rollup: Send + Sync,
@@ -213,7 +217,7 @@ where
     <B as ValueModel>::Rollup: Send + Sync,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + SelectionPolicyScoring<SnapshotOf<B>, State = S> + Sync,
     T: TimeStrategy<S>,
     SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     Ps: Display,

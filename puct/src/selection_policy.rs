@@ -11,6 +11,29 @@ pub trait SelectionPolicy<S> {
         S: 'a;
 }
 
+/// Per-edge scoring output for UI / debugging.
+///
+/// Note that `puct_score` is the *actual* score used by the selection policy
+/// (including any policy-specific adjustments), not necessarily `Q + U`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct EdgeScore {
+    pub edge_index: usize,
+    pub usa: f32,
+    pub cpuct: f32,
+    pub puct_score: f32,
+}
+
+/// Optional extension trait that exposes per-edge scoring.
+///
+/// This is used to populate `EdgeDetails` with `Usa`, `cpuct`, and `puct_score`
+/// for debugging/UGI output.
+pub trait SelectionPolicyScoring<S>: SelectionPolicy<S> {
+    fn score_edges<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
+    where
+        I: Iterator<Item = EdgeInfo<'a, A, S>>,
+        S: 'a;
+}
+
 /// Read-only information about the current node for selection.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NodeInfo {

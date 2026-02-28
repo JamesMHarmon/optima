@@ -4,7 +4,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue};
 use serde::{Deserialize, Serialize};
 
-use crate::{EdgeInfo, NodeInfo, RollupStats, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeInfo, EdgeScore, NodeInfo, RollupStats, SelectionPolicy};
+use crate::{SelectionPolicyScoring, ValueModel, WeightedMerge};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MovesLeftSnapshot {
@@ -334,6 +335,73 @@ where
         }
 
         best_index
+    }
+}
+
+impl<C, S> SelectionPolicyScoring<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S>
+where
+    C: CPUCT<State = S>,
+    S: PlayerToMove,
+{
+    fn score_edges<'a, I, A: 'a>(
+        &self,
+        node: NodeInfo,
+        edges: I,
+        state: &Self::State,
+    ) -> Vec<EdgeScore>
+    where
+        I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
+        MovesLeftSnapshot: 'a,
+    {
+        let is_root = node.is_root();
+        let options = &self.options;
+
+        let fpu = if is_root {
+            options.fpu_root
+        } else {
+            options.fpu
+        };
+
+        let node_total_visits = node.total_visits();
+        let root_nsb = (node_total_visits as f32).sqrt();
+        let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
+
+        let player_to_move = state.player_to_move();
+        let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
+        let baseline =
+            Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);
+
+        edges
+            .into_iter()
+            .map(|edge| {
+                let visits = edge.visits;
+                let virtual_visits = edge.virtual_visits;
+                let nsa = visits + virtual_visits;
+                let psa = edge.policy_prior;
+                let usa = cpuct * psa * root_nsb / (1.0 + nsa as f32);
+
+                let qsa = edge
+                    .snapshot
+                    .map(|s| s.player_value(player_to_move))
+                    .unwrap_or(fpu);
+
+                let qsa = if nsa == 0 {
+                    qsa
+                } else {
+                    qsa * (visits as f32) / (nsa as f32)
+                };
+
+                let msa = Self::msa(edge.snapshot, &baseline, options);
+                let score = msa + qsa + usa;
+
+                EdgeScore {
+                    edge_index: edge.edge_index,
+                    usa,
+                    cpuct,
+                    puct_score: score,
+                }
+            })
+            .collect()
     }
 }
 

@@ -12,8 +12,10 @@ use std::time::{Duration, Instant};
 use crate::node_details::{EdgeDetails, NodeDetails};
 use crate::options::DirichletOptions;
 use crate::temp::Temperature;
-use crate::{EdgeView, NodeInfo, PUCT, SelectionPolicy, ValueModel, WeightedMerge};
+use crate::{EdgeScore, EdgeView};
+use crate::{NodeInfo, PUCT, SelectionPolicy, SelectionPolicyScoring, ValueModel, WeightedMerge};
 use model::{EdgeMetrics, NodeMetrics};
+use std::collections::HashMap;
 
 type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
 type ActionOf<E> = <E as GameEngine>::Action;
@@ -283,12 +285,17 @@ where
 
     pub fn get_focus_node_details(
         &mut self,
-    ) -> Result<Option<NodeDetails<E::Action, SnapshotOf<VM>>>> {
+    ) -> Result<Option<NodeDetails<E::Action, SnapshotOf<VM>>>>
+    where
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+    {
         let state = self.focus_state();
         let edges = self.puct.edge_views(&state);
         if edges.is_empty() {
             return Ok(None);
         }
+
+        let mut score_by_index = self.score_by_index(&state, 0);
 
         let player_to_move = self.engine.player_to_move(&state);
         let edge_details = edges
@@ -296,15 +303,15 @@ where
             .map(|e| {
                 let snapshot: SnapshotOf<VM> = e.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
 
-                //@TODO: Analyze this implementation of values.
+                let score = score_by_index.remove(&e.edge_index).unwrap_or_default();
 
                 EdgeDetails {
                     action: e.action,
                     Nsa: e.visits as usize,
                     Psa: e.policy_prior,
-                    Usa: 0.0,
-                    cpuct: 0.0,
-                    puct_score: 0.0,
+                    Usa: score.usa,
+                    cpuct: score.cpuct,
+                    puct_score: score.puct_score,
                     snapshot,
                     player_to_move,
                 }
@@ -324,7 +331,10 @@ where
         &mut self,
         action: Option<&E::Action>,
         depth: usize,
-    ) -> Result<Vec<EdgeDetails<E::Action, SnapshotOf<VM>>>> {
+    ) -> Result<Vec<EdgeDetails<E::Action, SnapshotOf<VM>>>>
+    where
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+    {
         let mut state = self.focus_state();
         let mut pv: Vec<EdgeDetails<E::Action, SnapshotOf<VM>>> = Vec::new();
 
@@ -333,6 +343,8 @@ where
             if edges.is_empty() {
                 break;
             }
+
+            let mut score_by_index = self.score_by_index(&state, ply as u32);
 
             let chosen = if ply == 0 {
                 if let Some(desired) = action {
@@ -357,14 +369,17 @@ where
             let snapshot = chosen.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
             let player_to_move = self.engine.player_to_move(&state);
 
-            //@TODO: Analyze this implementation of values.
+            let score = score_by_index
+                .remove(&chosen.edge_index)
+                .unwrap_or_default();
+
             let details = EdgeDetails {
                 action: chosen.action.clone(),
                 Nsa: chosen.visits as usize,
                 Psa: chosen.policy_prior,
-                Usa: 0.0,
-                cpuct: 0.0,
-                puct_score: 0.0,
+                Usa: score.usa,
+                cpuct: score.cpuct,
+                puct_score: score.puct_score,
                 snapshot,
                 player_to_move,
             };
@@ -374,5 +389,16 @@ where
         }
 
         Ok(pv)
+    }
+
+    fn score_by_index(&self, state: &E::State, depth: u32) -> HashMap<usize, EdgeScore>
+    where
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+    {
+        self.puct
+            .edge_scores(state, depth)
+            .into_iter()
+            .map(|s| (s.edge_index, s))
+            .collect()
     }
 }
