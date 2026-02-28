@@ -21,6 +21,16 @@ use tensorflow_model::{InputMap, PredictionsMap};
 
 type OutputMap = HashMap<String, Vec<f32>>;
 
+type StateOf<S> = <S as Sample>::State;
+type ActionOf<S> = <S as Sample>::Action;
+type PredOf<S> = <S as Sample>::Predictions;
+type SnapOf<S> = <S as Sample>::Snapshot;
+
+type SelfPlayMetricsOf<S> = SelfPlayMetrics<ActionOf<S>, PredOf<S>, SnapOf<S>>;
+type PositionMetricsOf<S> = PositionMetricsExtended<StateOf<S>, ActionOf<S>, PredOf<S>, SnapOf<S>>;
+
+type CacheReader = SampleFileReader<BufReader<File>>;
+
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
@@ -213,35 +223,27 @@ struct SampleLoader<S> {
     q_diff_width: f32,
 }
 
-// @TODO: Cleanup types
-
-impl<S> SampleLoader<S> {
+impl<S> SampleLoader<S>
+where
+    S: Sample + Sized,
+    StateOf<S>: GameState + PlayerToMove,
+    ActionOf<S>: de::DeserializeOwned + Serialize + PartialEq + Clone,
+    PredOf<S>: de::DeserializeOwned + Serialize + Clone,
+    SnapOf<S>: de::DeserializeOwned + Serialize + PlayerValue,
+    S: InputMap<State = StateOf<S>>,
+    S: PredictionsMap<
+            State = StateOf<S>,
+            Action = ActionOf<S>,
+            Predictions = PredOf<S>,
+            Snapshot = SnapOf<S>,
+        >,
+    S::PredictionStore: PredictionStore<State = StateOf<S>, Predictions = PredOf<S>>,
+    S: QMix<State = StateOf<S>, Predictions = PredOf<S>, Snapshot = SnapOf<S>>,
+{
     fn load_and_sample_metrics(
         &self,
         metrics_path: impl AsRef<Path>,
-    ) -> Result<Option<InputAndTargets>>
-    where
-        S: Sample,
-        S: Sized,
-        <S as Sample>::State: GameState + PlayerToMove,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
-        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
-        S: InputMap<State = <S as Sample>::State>,
-        S: PredictionsMap<
-                State = <S as Sample>::State,
-                Action = <S as Sample>::Action,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-        S::PredictionStore:
-            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
-        S: QMix<
-                State = <S as Sample>::State,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-    {
+    ) -> Result<Option<InputAndTargets>> {
         let mut sample_reader = self.load_and_cache_samples(metrics_path)?;
 
         let num_samples = sample_reader.num_samples()?;
@@ -257,35 +259,10 @@ impl<S> SampleLoader<S> {
         Ok(Some(inputs_and_targets))
     }
 
-    fn load_and_cache_samples(
-        &self,
-        metrics_path: impl AsRef<Path>,
-    ) -> Result<SampleFileReader<BufReader<File>>>
-    where
-        S: Sample,
-        S: Sized,
-        <S as Sample>::State: GameState + PlayerToMove,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
-        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
-        S: InputMap<State = <S as Sample>::State>,
-        S: PredictionsMap<
-                State = <S as Sample>::State,
-                Action = <S as Sample>::Action,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-        S::PredictionStore:
-            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
-        S: QMix<
-                State = <S as Sample>::State,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-    {
+    fn load_and_cache_samples(&self, metrics_path: impl AsRef<Path>) -> Result<CacheReader> {
         let cache_path = &self.metrics_path_for_cache(&metrics_path)?;
 
-        let read_cache_file = move || -> Result<SampleFileReader<BufReader<File>>> {
+        let read_cache_file = move || -> Result<CacheReader> {
             let file = File::open(cache_path)?;
 
             let res = {
@@ -333,49 +310,11 @@ impl<S> SampleLoader<S> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn load_samples(
-        &self,
-        metrics_path: impl AsRef<Path>,
-    ) -> Result<
-        Vec<
-            PositionMetricsExtended<
-                <S as Sample>::State,
-                <S as Sample>::Action,
-                <S as Sample>::Predictions,
-                <S as Sample>::Snapshot,
-            >,
-        >,
-    >
-    where
-        S: Sample,
-        S: Sized,
-        <S as Sample>::State: GameState + PlayerToMove,
-        <S as Sample>::Action: de::DeserializeOwned + Serialize + PartialEq + Clone,
-        <S as Sample>::Predictions: de::DeserializeOwned + Serialize + Clone,
-        <S as Sample>::Snapshot: de::DeserializeOwned + Serialize + PlayerValue,
-        S: InputMap<State = <S as Sample>::State>,
-        S: PredictionsMap<
-                State = <S as Sample>::State,
-                Action = <S as Sample>::Action,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-        S::PredictionStore:
-            PredictionStore<State = <S as Sample>::State, Predictions = <S as Sample>::Predictions>,
-        S: QMix<
-                State = <S as Sample>::State,
-                Predictions = <S as Sample>::Predictions,
-                Snapshot = <S as Sample>::Snapshot,
-            >,
-    {
+    fn load_samples(&self, metrics_path: impl AsRef<Path>) -> Result<Vec<PositionMetricsOf<S>>> {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
         let file = GzDecoder::new(file);
-        let metrics: SelfPlayMetrics<
-            <S as Sample>::Action,
-            <S as Sample>::Predictions,
-            <S as Sample>::Snapshot,
-        > = serde_json::from_reader(file)
+        let metrics: SelfPlayMetricsOf<S> = serde_json::from_reader(file)
             .with_context(|| format!("Failed to deserialize: {:?}", &metrics_path.as_ref()))?;
 
         let samples = self.sampler.metrics_to_samples(

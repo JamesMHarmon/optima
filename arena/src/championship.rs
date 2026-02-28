@@ -13,13 +13,14 @@ use tokio::runtime::Handle;
 use super::ArenaOptions;
 use super::{EvaluatePersistance, evaluate::EvalResult};
 
-// @TODO: Update generics
+pub type VmRollup<VM> = <VM as ValueModel>::Rollup;
+pub type VmSnapshot<VM> = <VmRollup<VM> as RollupStats>::Snapshot;
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship<S, A, F, E, M, MR, T, VM, Sel, P>(
-    champions: &F,
+pub fn championship<St, E, M, MR, T, VM, Sel, P>(
+    champions: &St,
     champions_dir: &Path,
-    candidates: &F,
+    candidates: &St,
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
@@ -29,23 +30,26 @@ pub fn championship<S, A, F, E, M, MR, T, VM, Sel, P>(
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState + Clone + TranspositionHash + Send + Sync,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
-    F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
-    M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
-    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
-    Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-    VM::Rollup: Send + Sync,
-    <VM::Rollup as RollupStats>::Snapshot: Clone + Send + Sync,
+    E: GameEngine<Terminal = P> + Sync,
+    E::State: GameState + Clone + TranspositionHash + Send + Sync,
+    E::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+    St: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
+    M: Analyzer<State = E::State, Action = E::Action, Analyzer = T, Predictions = P>
+        + Info
+        + Send
+        + Sync,
+    T: GameAnalyzer<Action = E::Action, State = E::State, Predictions = P> + Send + Sync,
+    VM: ValueModel<State = E::State, Predictions = P, Terminal = P> + Send + Sync,
+    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State> + Send + Sync,
+    VmRollup<VM>: Send + Sync,
+    VmSnapshot<VM>: Clone + Send + Sync,
     MR: Clone + Debug + Eq + Send + Sync,
     P: PlayerValue,
 {
     let runtime_handle = Handle::current();
 
     crossbeam::scope(|s| {
-        let eval_candidates = Arc::new(Mutex::new(vec![]));
+        let eval_candidates = Arc::new(Mutex::new(Vec::new()));
 
         loop {
             info!("Checking for latest candidate");
@@ -113,11 +117,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn championship_single<S, A, F, E, M, MR, T, VM, Sel, P>(
+pub fn championship_single<St, E, M, MR, T, VM, Sel, P>(
     candidate: &MR,
-    champions: &F,
+    champions: &St,
     champions_dir: &Path,
-    candidates: &F,
+    candidates: &St,
     certified_dir: &Path,
     evaluated_dir: &Path,
     engine: &E,
@@ -127,16 +131,19 @@ pub fn championship_single<S, A, F, E, M, MR, T, VM, Sel, P>(
     options: &ArenaOptions,
 ) -> Result<()>
 where
-    S: GameState + Clone + TranspositionHash + Send + Sync,
-    A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
-    F: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
-    M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-    T: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
-    VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
-    Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-    VM::Rollup: Send + Sync,
-    <VM::Rollup as RollupStats>::Snapshot: Clone + Send + Sync,
+    E: GameEngine<Terminal = P> + Sync,
+    E::State: GameState + Clone + TranspositionHash + Send + Sync,
+    E::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+    St: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
+    M: Analyzer<State = E::State, Action = E::Action, Analyzer = T, Predictions = P>
+        + Info
+        + Send
+        + Sync,
+    T: GameAnalyzer<Action = E::Action, State = E::State, Predictions = P> + Send + Sync,
+    VM: ValueModel<State = E::State, Predictions = P, Terminal = P> + Send + Sync,
+    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State> + Send + Sync,
+    VmRollup<VM>: Send + Sync,
+    VmSnapshot<VM>: Clone + Send + Sync,
     MR: Debug + Send + Sync,
     P: PlayerValue,
 {

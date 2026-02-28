@@ -17,6 +17,7 @@ use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 use puct::{PuctMCTS, RollupStats, SelectionPolicy, TemperatureMaxMoves, ValueModel};
 
+type RollupOf<VM> = <VM as ValueModel>::Rollup;
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
 use super::{ArenaOptions, EVALUATE_PARALLELISM};
@@ -69,8 +70,8 @@ impl Arena {
             + Sync,
         T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send + Sync,
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
-        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Send + Sync,
-        <VM as ValueModel>::Rollup: Send + Sync,
+        Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Send + Sync,
+        RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,
         P: PlayerValue,
     {
@@ -215,8 +216,8 @@ impl Arena {
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
-        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
-        <VM as ValueModel>::Rollup: Send + Sync,
+        Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
+        RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send + Sync,
         P: PlayerValue,
@@ -271,8 +272,8 @@ impl Arena {
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
         VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
-        Sel: SelectionPolicy<<VM::Rollup as RollupStats>::Snapshot, State = S> + Sync,
-        <VM as ValueModel>::Rollup: Send + Sync,
+        Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
+        RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send + Sync,
         P: PlayerValue,

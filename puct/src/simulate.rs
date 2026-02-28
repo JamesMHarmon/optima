@@ -115,6 +115,7 @@ where
                 return SelectionResult::new(ctx, game_state, term_state, depth);
             }
 
+            // @TODO: Make this thread safe since it is not being done in the backprop thread.
             if let Some(child_id) = store.get_or_link_transposition(edge, transposition_hash) {
                 current = child_id;
                 continue;
