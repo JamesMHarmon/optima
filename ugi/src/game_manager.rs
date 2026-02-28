@@ -6,7 +6,10 @@ use common::{GameLength, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use model::Analyzer;
-use puct::{EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, SelectionPolicyScoring, ValueModel};
+use puct::{
+    EdgeDetails, NodeDetails, PuctMCTS, RollupStats, SelectionPolicy, SelectionPolicyScoring,
+    ValueModel,
+};
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};
@@ -217,7 +220,9 @@ where
     <B as ValueModel>::Rollup: Send + Sync,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S> + SelectionPolicyScoring<SnapshotOf<B>, State = S> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+        + SelectionPolicyScoring<SnapshotOf<B>, State = S>
+        + Sync,
     T: TimeStrategy<S>,
     SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     Ps: Display,
@@ -339,14 +344,7 @@ where
 
                             last_output = Instant::now();
 
-                            let node_details = mcts
-                                .get_focus_node_details()
-                                .unwrap()
-                                .expect("There should have been at least one visit");
-
-                            if node_details.children.is_empty() {
-                                continue;
-                            }
+                            let node_details = mcts.get_focus_node_details();
 
                             let multi_pv = self.options.lock().unwrap().multi_pv;
                             let pv = node_details
@@ -354,7 +352,7 @@ where
                                 .iter()
                                 .take(multi_pv)
                                 .filter_map(|edge| {
-                                    mcts.get_principal_variation(Some(&edge.action), 10).ok()
+                                    mcts.principal_variation(Some(&edge.action), 10).ok()
                                 })
                                 .collect_vec();
 
@@ -387,10 +385,7 @@ where
                     }
                 }
                 CommandInner::Details => {
-                    let node_details = mcts
-                        .get_focus_node_details()
-                        .unwrap()
-                        .expect("There should have been at least one visit");
+                    let node_details = mcts.get_focus_node_details();
 
                     let sorted_children = node_details.children.iter().sorted().rev().collect_vec();
 
@@ -527,10 +522,7 @@ where
 
                         depths.push(depth);
 
-                        let node_details = mcts
-                            .get_focus_node_details()
-                            .unwrap()
-                            .expect("There should have been at least one visit");
+                        let node_details = mcts.get_focus_node_details();
 
                         let best_node = choose_action(
                             &node_details.children,
@@ -557,14 +549,10 @@ where
                         mcts.add_focus_to_action(action);
                     }
 
-                    let pv = mcts
-                        .get_principal_variation(None, 10)
-                        .into_iter()
-                        .collect_vec();
+                    let pv = mcts.principal_variation(None, 10).into_iter().collect_vec();
 
-                    let node_details = node_details_container
-                        .or_else(|| mcts.get_focus_node_details().unwrap())
-                        .expect("Expected node_details to have been set");
+                    let node_details =
+                        node_details_container.unwrap_or_else(|| mcts.get_focus_node_details());
 
                     self.output_post_search_info(
                         current_player,

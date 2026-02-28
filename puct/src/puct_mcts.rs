@@ -72,14 +72,10 @@ where
         }
     }
 
-    pub fn state(&self) -> &E::State {
-        &self.state
-    }
-
     /// PUCT implementation currently does not support persistent root prior mutation.
     /// This is a compatibility stub for legacy callers; it intentionally no-ops.
     pub async fn apply_noise_at_root(&mut self, _dirichlet: Option<&DirichletOptions>) {
-        // TODO: Implement true root prior noise once puct exposes prior mutation.
+        // @TODO: Implement true root prior noise once puct exposes prior mutation.
     }
 
     fn focus_state(&self) -> E::State
@@ -105,38 +101,10 @@ where
         &self.focus_actions
     }
 
-    /// Returns an owned snapshot of focused root edge stats.
-    pub fn edge_views(&self) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>> {
-        let state = self.focus_state();
-        self.puct.edge_views(&state)
-    }
-
-    pub fn num_focus_node_visits(&self) -> usize {
-        let edges = self.edge_views();
+    pub fn num_focus_node_visits(&mut self) -> usize {
+        let edges = self.puct.edge_views(&self.focus_state());
         let sum: u64 = edges.iter().map(|e| e.visits as u64).sum();
-        (sum.saturating_add(1)).min(usize::MAX as u64) as usize
-    }
-
-    pub fn principal_variation(&self, max_depth: usize) -> Vec<E::Action> {
-        let mut pv = Vec::new();
-        let mut state = self.focus_state();
-
-        for _ in 0..max_depth {
-            let edges = self.puct.edge_views(&state);
-            let Some(best) = edges
-                .into_iter()
-                .filter(|e| e.visits > 0)
-                .max_by_key(|e| e.visits)
-            else {
-                break;
-            };
-
-            let action = best.action;
-            pv.push(action.clone());
-            state = self.engine.take_action(&state, &action);
-        }
-
-        pv
+        (sum + 1).min(usize::MAX as u64) as usize
     }
 
     pub async fn advance_to_action_retain(&mut self, action: E::Action) -> Result<()> {
@@ -206,12 +174,6 @@ where
     {
         let state = self.focus_state();
         let edges = self.puct.edge_views(&state);
-
-        if edges.is_empty() {
-            return Err(anyhow!(
-                "Root or focused node does not exist. Run search first."
-            ));
-        }
 
         let temp_and_offset = temp.temp(&state);
 
@@ -283,17 +245,12 @@ where
         })
     }
 
-    pub fn get_focus_node_details(
-        &mut self,
-    ) -> Result<Option<NodeDetails<E::Action, SnapshotOf<VM>>>>
+    pub fn get_focus_node_details(&mut self) -> NodeDetails<E::Action, SnapshotOf<VM>>
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
     {
         let state = self.focus_state();
         let edges = self.puct.edge_views(&state);
-        if edges.is_empty() {
-            return Ok(None);
-        }
 
         let mut score_by_index = self.score_by_index(&state, 0);
 
@@ -321,13 +278,13 @@ where
         let visits_sum: u64 = edge_details.iter().map(|d| d.Nsa as u64).sum();
         let visits = (visits_sum.saturating_add(1)).min(usize::MAX as u64) as usize;
 
-        Ok(Some(NodeDetails {
+        NodeDetails {
             visits,
             children: edge_details,
-        }))
+        }
     }
 
-    pub fn get_principal_variation(
+    pub fn principal_variation(
         &mut self,
         action: Option<&E::Action>,
         depth: usize,
@@ -339,10 +296,10 @@ where
         let mut pv: Vec<EdgeDetails<E::Action, SnapshotOf<VM>>> = Vec::new();
 
         for ply in 0..depth {
-            let edges = self.puct.edge_views(&state);
-            if edges.is_empty() {
-                break;
-            }
+            let edges = match self.puct.try_edge_views(&state) {
+                Some(edges) => edges,
+                None => break,
+            };
 
             let mut score_by_index = self.score_by_index(&state, ply as u32);
 

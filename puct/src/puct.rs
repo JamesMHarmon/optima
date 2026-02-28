@@ -213,27 +213,44 @@ where
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
-    pub fn edge_views(&self, game_state: &E::State) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
+    pub fn edge_views(&mut self, game_state: &E::State) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
     where
         E::Action: Clone,
     {
         let transposition_hash = game_state.transposition_hash();
-        let Some(node_id) = self.store.get_node_id(transposition_hash) else {
-            return Vec::new();
-        };
+
+        if self.store.get_node_id(transposition_hash).is_none() {
+            self.get_or_create_root(game_state);
+        }
+
+        self.try_edge_views(game_state)
+            .expect("Node has been created")
+    }
+
+    pub fn try_edge_views(
+        &mut self,
+        game_state: &E::State,
+    ) -> Option<Vec<EdgeView<E::Action, SnapshotOf<VM>>>>
+    where
+        E::Action: Clone,
+    {
+        let transposition_hash = game_state.transposition_hash();
+        let node_id = self.store.get_node_id(transposition_hash)?;
 
         let node = self.store.state_node(node_id);
         node.ensure_frontier_edge();
-        self.store
-            .iter_edge_info(node)
-            .map(|e| EdgeView {
-                edge_index: e.edge_index,
-                action: e.action.clone(),
-                policy_prior: e.policy_prior,
-                visits: e.visits,
-                snapshot: e.snapshot,
-            })
-            .collect()
+        Some(
+            self.store
+                .iter_edge_info(node)
+                .map(|e| EdgeView {
+                    edge_index: e.edge_index,
+                    action: e.action.clone(),
+                    policy_prior: e.policy_prior,
+                    visits: e.visits,
+                    snapshot: e.snapshot,
+                })
+                .collect(),
+        )
     }
 
     /// Computes per-edge PUCT scores for the given node, using the active selection policy.
