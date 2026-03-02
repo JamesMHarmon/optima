@@ -114,7 +114,8 @@ where
 
     /// Get child from edge if cached, otherwise lookup in transposition table and link.
     /// Returns None if this is a new position that needs expansion.
-    pub(super) fn get_or_link_transposition(
+    /// This operation is atomic and safe to call for reader threads during selection.
+    pub(super) fn get_or_link_transposition_safe(
         &self,
         edge: &PUCTEdge,
         transposition_hash: u64,
