@@ -6,12 +6,12 @@ use crossbeam::channel;
 use super::node_graph_store::NodeGraphStore;
 use crate::NodeInfo;
 use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
-use crate::backprop::{Backpropagator, SimMsg, StateSimMsg, TerminalSimMsg};
+use crate::backprop::{Backpropagator, SimMsg};
 use crate::node_arena::NodeId;
 use crate::search_context::SearchContextPool;
-use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
 use crate::selection_policy::SelectionPolicy;
-use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
+use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
+use crate::simulate::{SimulationStep, Simulator};
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
 use engine::GameEngine;
@@ -53,8 +53,12 @@ where
     M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     RollupOf<VM>: Send + Sync,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State, Action = E::Action, Terminal = E::Terminal>
-        + Sync,
+    Sel: SelectionPolicy<
+            SnapshotOf<VM>,
+            State = E::State,
+            Action = E::Action,
+            Terminal = E::Terminal,
+        > + Sync,
     E::State: TranspositionHash + Clone + Send + Sync,
     E::Action: Send + Sync,
     SnapshotOf<VM>: Send + Sync,
@@ -179,38 +183,23 @@ where
         tx: &SimTx<E, VM>,
         exp: &impl InFlightExpansions<State = E::State>,
     ) {
-        match step {
-            SimulationStep::Terminal(terminal_step) => self.handle_terminal(terminal_step, tx),
-            SimulationStep::NewLeaf(new_leaf_step) => self.handle_new_leaf(new_leaf_step, tx, exp),
-        }
-    }
+        let msg = match step {
+            SimulationStep::Terminal(step) => {
+                let terminal_snapshot = self
+                    .value_model
+                    .terminal_snapshot(&step.game_state, &step.terminal);
 
-    fn handle_terminal(&self, step: TerminalStep<E::State, E::Terminal>, tx: &SimTx<E, VM>) {
-        let terminal_snapshot = self
-            .value_model
-            .terminal_snapshot(&step.game_state, &step.terminal);
+                SimMsg::new_terminal(step.sim_id, step.path, terminal_snapshot)
+            }
+            SimulationStep::NewLeaf(step) => {
+                let hash = step.game_state.transposition_hash();
+                exp.analyze(hash, step.game_state.clone());
 
-        let _ = tx.send(SimMsg::Terminal(TerminalSimMsg {
-            sim_id: step.sim_id,
-            path: step.path,
-            terminal_snapshot,
-        }));
-    }
+                SimMsg::new_state(step.sim_id, step.game_state, step.path)
+            }
+        };
 
-    fn handle_new_leaf(
-        &self,
-        step: NewLeafStep<E::State>,
-        tx: &SimTx<E, VM>,
-        exp: &impl InFlightExpansions<State = E::State>,
-    ) {
-        let hash = step.game_state.transposition_hash();
-        exp.analyze(hash, step.game_state.clone());
-
-        let _ = tx.send(SimMsg::State(StateSimMsg {
-            sim_id: step.sim_id,
-            game_state: step.game_state,
-            path: step.path,
-        }));
+        let _ = tx.send(msg);
     }
 
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.

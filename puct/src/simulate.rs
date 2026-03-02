@@ -59,21 +59,10 @@ where
         let game_state = result.game_state;
 
         if let Some(terminal) = result.terminal {
-            return SimulationStep::Terminal(TerminalStep {
-                sim_id,
-                path,
-                game_state,
-                terminal,
-                depth,
-            });
+            return SimulationStep::new_terminal(sim_id, path, game_state, terminal, depth);
         }
 
-        SimulationStep::NewLeaf(NewLeafStep {
-            sim_id,
-            path,
-            game_state,
-            depth,
-        })
+        SimulationStep::new_leaf(sim_id, path, game_state, depth)
     }
 
     fn select_leaf(
@@ -174,12 +163,52 @@ pub(super) enum SimulationStep<S, T> {
     NewLeaf(NewLeafStep<S>),
 }
 
+impl<S, T> SimulationStep<S, T> {
+    pub(super) fn depth(&self) -> usize {
+        match self {
+            Self::Terminal(s) => s.depth,
+            Self::NewLeaf(s) => s.depth,
+        }
+    }
+
+    pub(super) fn new_terminal(
+        sim_id: usize,
+        path: Vec<PathStep>,
+        game_state: S,
+        terminal: T,
+        depth: usize,
+    ) -> Self {
+        SimulationStep::Terminal(TerminalStep::new(sim_id, path, game_state, terminal, depth))
+    }
+
+    pub(super) fn new_leaf(
+        sim_id: usize,
+        path: Vec<PathStep>,
+        game_state: S,
+        depth: usize,
+    ) -> Self {
+        SimulationStep::NewLeaf(NewLeafStep::new(sim_id, path, game_state, depth))
+    }
+}
+
 pub(super) struct TerminalStep<S, T> {
     pub(super) sim_id: usize,
     pub(super) path: Vec<PathStep>,
     pub(super) game_state: S,
     pub(super) terminal: T,
     pub(super) depth: usize,
+}
+
+impl<S, T> TerminalStep<S, T> {
+    fn new(sim_id: usize, path: Vec<PathStep>, game_state: S, terminal: T, depth: usize) -> Self {
+        Self {
+            sim_id,
+            path,
+            game_state,
+            terminal,
+            depth,
+        }
+    }
 }
 
 pub(super) struct NewLeafStep<S> {
@@ -189,11 +218,13 @@ pub(super) struct NewLeafStep<S> {
     pub(super) depth: usize,
 }
 
-impl<S, T> SimulationStep<S, T> {
-    pub(super) fn depth(&self) -> usize {
-        match self {
-            Self::Terminal(s) => s.depth,
-            Self::NewLeaf(s) => s.depth,
+impl<S> NewLeafStep<S> {
+    fn new(sim_id: usize, path: Vec<PathStep>, game_state: S, depth: usize) -> Self {
+        Self {
+            sim_id,
+            path,
+            game_state,
+            depth,
         }
     }
 }

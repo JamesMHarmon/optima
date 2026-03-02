@@ -261,6 +261,22 @@ pub(super) enum SimMsg<S, TS> {
 }
 
 impl<S, TS> SimMsg<S, TS> {
+    pub(super) fn new_terminal(sim_id: usize, path: Vec<PathStep>, terminal_snapshot: TS) -> Self {
+        SimMsg::Terminal(TerminalSimMsg {
+            sim_id,
+            path,
+            terminal_snapshot,
+        })
+    }
+
+    pub(super) fn new_state(sim_id: usize, game_state: S, path: Vec<PathStep>) -> Self {
+        SimMsg::State(StateSimMsg {
+            sim_id,
+            game_state,
+            path,
+        })
+    }
+
     fn sim_id(&self) -> usize {
         match self {
             Self::Terminal(msg) => msg.sim_id,

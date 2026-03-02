@@ -90,6 +90,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
     }
 
     /// Add a child to an edge, converting to AfterState if multiple outcomes exist.
+    /// Warning: This is not atomic and should only be called from the single writer backpropagation thread.
     pub fn add_child_to_edge(&self, edge: &PUCTEdge, child_id: NodeId) {
         // First try to set child directly on edge if it's currently unset
         let existing_child_id = match edge.try_set_child(child_id) {
