@@ -210,14 +210,14 @@ where
     }
 }
 
-pub struct VictoryMarginSelectionPolicy<C, S, T = NoTrajectoryTerminal<(), ()>> {
+pub struct VictoryMarginSelectionPolicy<C, A, T = NoTrajectoryTerminal<(), ()>> {
     cpuct: C,
     options: VictoryMarginStrategyOptions,
     trajectory_terminal: T,
-    _phantom: PhantomData<S>,
+    _phantom: PhantomData<A>,
 }
 
-impl<C, S, T> VictoryMarginSelectionPolicy<C, S, T> {
+impl<C, A, T> VictoryMarginSelectionPolicy<C, A, T> {
     pub fn new(cpuct: C, options: VictoryMarginStrategyOptions, trajectory_terminal: T) -> Self {
         Self {
             cpuct,
@@ -252,31 +252,30 @@ impl<C, S, T> VictoryMarginSelectionPolicy<C, S, T> {
     }
 }
 
-impl<C, S, T> SelectionPolicy<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, S, T>
+impl<C, A, T> SelectionPolicy<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, A, T>
 where
-    C: CPUCT<State = S>,
-    S: PlayerToMove,
-    T: TrajectoryTerminal<S>,
+    C: CPUCT<State = T::State>,
+    T: TrajectoryTerminal,
+    T::State: PlayerToMove,
 {
-    type State = S;
-    type Action = T::Action;
+    type State = T::State;
+    type Action = A;
     type Terminal = T::Terminal;
 
     fn terminal_for_trajectory(
         &self,
-        state: &S,
-        action: &T::Action,
+        state: &Self::State,
         visited: &HashSet<u64>,
     ) -> Option<T::Terminal> {
         self.trajectory_terminal
-            .terminal_for_trajectory(state, action, visited)
+            .terminal_for_trajectory(state, visited)
     }
 
     fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, T::Action, VictoryMarginSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
-        T::Action: 'a,
+        A: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -372,36 +371,35 @@ where
     }
 }
 
-impl<C, S, T> TrajectoryTerminal<S> for VictoryMarginSelectionPolicy<C, S, T>
+impl<C, A, T> TrajectoryTerminal for VictoryMarginSelectionPolicy<C, A, T>
 where
-    T: TrajectoryTerminal<S>,
+    T: TrajectoryTerminal,
 {
-    type Action = T::Action;
+    type State = T::State;
     type Terminal = T::Terminal;
 
     fn terminal_for_trajectory(
         &self,
-        state: &S,
-        action: &T::Action,
+        state: &Self::State,
         visited: &HashSet<u64>,
     ) -> Option<T::Terminal> {
         self.trajectory_terminal
-            .terminal_for_trajectory(state, action, visited)
+            .terminal_for_trajectory(state, visited)
     }
 }
 
-impl<C, S, T> SelectionPolicyScoring<VictoryMarginSnapshot>
-    for VictoryMarginSelectionPolicy<C, S, T>
+impl<C, A, T> SelectionPolicyScoring<VictoryMarginSnapshot>
+    for VictoryMarginSelectionPolicy<C, A, T>
 where
-    C: CPUCT<State = S>,
-    S: PlayerToMove,
-    T: TrajectoryTerminal<S>,
+    C: CPUCT<State = T::State>,
+    T::State: PlayerToMove,
+    T: TrajectoryTerminal,
 {
     fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
-        I: Iterator<Item = EdgeInfo<'a, T::Action, VictoryMarginSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
-        T::Action: 'a,
+        A: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -417,7 +415,7 @@ where
         let root_sqrt = (node_total_visits as f32).sqrt();
         let player_index = state.player_to_move();
 
-        let edges: Vec<EdgeInfo<'a, T::Action, VictoryMarginSnapshot>> = edges.collect();
+        let edges: Vec<EdgeInfo<'a, A, VictoryMarginSnapshot>> = edges.collect();
 
         let mut baseline_visits = 0u32;
         let mut baseline_snap: Option<VictoryMarginSnapshot> = None;

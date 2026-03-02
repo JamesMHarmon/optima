@@ -3,7 +3,7 @@ use common::{GameLength, PlayerValue, VictoryMargin};
 use super::*;
 
 type TestPolicy =
-    VictoryMarginSelectionPolicy<ConstantCpuct, TestState, NoTrajectoryTerminal<u8, ()>>;
+    VictoryMarginSelectionPolicy<ConstantCpuct, u8, NoTrajectoryTerminal<TestState, ()>>;
 
 // ---------------------------------------------------------------------------
 // VictoryMarginSnapshot unit tests
@@ -260,7 +260,7 @@ fn edge_with_virtual_visits<'a, A>(
 }
 
 fn run_policy<'a, A, T>(
-    policy: &VictoryMarginSelectionPolicy<ConstantCpuct, TestState, T>,
+    policy: &VictoryMarginSelectionPolicy<ConstantCpuct, A, T>,
     edges: &'a [EdgeInfo<'a, A, VictoryMarginSnapshot>],
     node_visits: u32,
     state: &TestState,
@@ -268,7 +268,7 @@ fn run_policy<'a, A, T>(
 ) -> usize
 where
     A: 'a,
-    T: TrajectoryTerminal<TestState, Action = A>,
+    T: TrajectoryTerminal<State = TestState>,
 {
     policy.select_edge(
         NodeInfo {

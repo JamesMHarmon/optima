@@ -91,25 +91,25 @@ where
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
-            visited.insert(game_state.transposition_hash());
+            let transposition_hash = game_state.transposition_hash();
+            game_state = game_engine.take_action(&game_state, action);
+
+            let terminal = game_engine.terminal_state(&game_state);
+            let traj_terminal = || sel_strat.terminal_for_trajectory(&game_state, visited);
+            let terminal_state = terminal.or_else(traj_terminal);
+
+            visited.insert(transposition_hash);
             path.push(PathStep {
                 node_id: current,
                 edge_index: edge_idx,
             });
-
-            let traj_term = sel_strat.terminal_for_trajectory(&game_state, action, visited);
-
-            game_state = game_engine.take_action(&game_state, action);
-            let term_state = game_engine.terminal_state(&game_state);
-            let term_state = term_state.or(traj_term);
-            let transposition_hash = game_state.transposition_hash();
 
             depth += 1;
 
             node.increment_virtual_visits();
             edge.increment_virtual_visits();
 
-            if let Some(term_state) = term_state {
+            if let Some(term_state) = terminal_state {
                 return SelectionResult::new_terminal(ctx, term_state, depth);
             }
 

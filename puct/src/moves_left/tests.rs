@@ -2,7 +2,7 @@ use common::{GameLength, PlayerValue};
 
 use super::*;
 
-type TestPolicy = MovesLeftSelectionPolicy<ConstantCpuct, TestState, NoTrajectoryTerminal<u8, ()>>;
+type TestPolicy = MovesLeftSelectionPolicy<ConstantCpuct, u8, NoTrajectoryTerminal<TestState, ()>>;
 
 type Scenario<'a> = (
     Vec<EdgeInfo<'a, u8, MovesLeftSnapshot>>,
@@ -78,7 +78,7 @@ fn edge_with_virtual_visits<'a, A>(
 }
 
 fn run_policy<'a, A, T>(
-    policy: &MovesLeftSelectionPolicy<ConstantCpuct, TestState, T>,
+    policy: &MovesLeftSelectionPolicy<ConstantCpuct, A, T>,
     edges: &'a [EdgeInfo<'a, A, MovesLeftSnapshot>],
     node_visits: u32,
     state: &TestState,
@@ -86,7 +86,7 @@ fn run_policy<'a, A, T>(
 ) -> usize
 where
     A: 'a,
-    T: TrajectoryTerminal<TestState, Action = A>,
+    T: TrajectoryTerminal<State = TestState>,
 {
     policy.select_edge(
         NodeInfo {
@@ -127,7 +127,7 @@ where
     let root_nsb = (node_visits as f32).sqrt();
     let player_to_move = state.player_to_move();
 
-    let baseline = MovesLeftSelectionPolicy::<ConstantCpuct, TestState>::game_length_baseline(
+    let baseline = MovesLeftSelectionPolicy::<ConstantCpuct, A>::game_length_baseline(
         edges,
         options.moves_left_threshold,
         player_to_move,

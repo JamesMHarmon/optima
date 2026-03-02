@@ -20,7 +20,7 @@ pub trait SelectionPolicy<SS> {
         Self::Action: 'a,
         SS: 'a;
 
-    /// Called during tree traversal *before* `take_action` is applied to detect
+    /// Called during tree traversal after a state transition to detect
     /// path-context-dependent terminals that the transposition table cannot represent.
     ///
     /// `path_hashes` contains the transposition hash of every game state visited
@@ -30,7 +30,6 @@ pub trait SelectionPolicy<SS> {
     fn terminal_for_trajectory(
         &self,
         state: &Self::State,
-        action: &Self::Action,
         visited: &HashSet<u64>,
     ) -> Option<Self::Terminal>;
 }
@@ -105,14 +104,13 @@ pub struct EdgeInfo<'a, A, SS> {
 ///
 /// Implement on a named struct and inject it into the selection policy as a
 /// dependency (see `NoTrajectoryTerminal` for the no-op default).
-pub trait TrajectoryTerminal<St> {
-    type Action;
+pub trait TrajectoryTerminal {
+    type State;
     type Terminal;
 
     fn terminal_for_trajectory(
         &self,
-        state: &St,
-        action: &Self::Action,
+        state: &Self::State,
         visited: &HashSet<u64>,
     ) -> Option<Self::Terminal>;
 }
@@ -120,25 +118,24 @@ pub trait TrajectoryTerminal<St> {
 /// No-op implementation of [`TrajectoryTerminal`] for policies that do not need
 /// path-context-dependent terminal detection.
 ///
-/// The `Act` and `Term` type parameters are inferred from the usage context
-/// (e.g. the game's action and predictions types), so callers typically just
+/// The `St` and `Term` type parameters are inferred from the usage context
+/// (e.g. the game's state and terminal types), so callers typically just
 /// pass `NoTrajectoryTerminal::default()`.
-pub struct NoTrajectoryTerminal<Act, Term>(std::marker::PhantomData<fn(Act) -> Term>);
+pub struct NoTrajectoryTerminal<St, Term>(std::marker::PhantomData<fn(St) -> Term>);
 
-impl<Act, Term> Default for NoTrajectoryTerminal<Act, Term> {
+impl<St, Term> Default for NoTrajectoryTerminal<St, Term> {
     fn default() -> Self {
         Self(std::marker::PhantomData)
     }
 }
 
-impl<St, Act, Term> TrajectoryTerminal<St> for NoTrajectoryTerminal<Act, Term> {
-    type Action = Act;
+impl<St, Term> TrajectoryTerminal for NoTrajectoryTerminal<St, Term> {
+    type State = St;
     type Terminal = Term;
 
     fn terminal_for_trajectory(
         &self,
-        _state: &St,
-        _action: &Act,
+        _state: &Self::State,
         _visited: &HashSet<u64>,
     ) -> Option<Term> {
         None
