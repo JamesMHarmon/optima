@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use puct::TrajectoryTerminal;
+use std::collections::HashSet;
 
 use crate::{Action, GameState, Predictions, Value};
 

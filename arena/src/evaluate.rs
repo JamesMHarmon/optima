@@ -69,7 +69,8 @@ impl Arena {
         T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send + Sync,
         VM: ValueModel<Predictions = P, Terminal = P> + Send + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = E::Action, Terminal = P>
-            + Send + Sync,
+            + Send
+            + Sync,
         RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,
         P: PlayerValue,
