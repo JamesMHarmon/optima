@@ -1,14 +1,38 @@
-/// Policy for selecting edges during tree traversal
+/// Policy for selecting edges during tree traversal.
 ///
-/// Used by read-only selection workers to compute PUCT values and choose edges.
-/// Implementations define the exploration formula (standard PUCT, AlphaZero variant, etc.)
-pub trait SelectionPolicy<S> {
+/// `SS` is the rollup snapshot type produced by the value model.
+/// `type State` is the game state used by `select_edge`.
+///
+use std::collections::HashSet;
+/// Note that `select_edge` keeps its own free generic `A` (not related to any action type).
+/// This is intentional: scoring only needs edge metadata (visits, prior,
+/// snapshot), so the same policy struct can be reused for every game without
+/// being re-parameterised on the concrete action type.
+pub trait SelectionPolicy<SS> {
     type State;
+    type Action;
+    type Terminal;
 
-    fn select_edge<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
+    /// Choose an edge index to follow during tree traversal.
+    fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, S>>,
-        S: 'a;
+        I: Iterator<Item = EdgeInfo<'a, Self::Action, SS>>,
+        Self::Action: 'a,
+        SS: 'a;
+
+    /// Called during tree traversal *before* `take_action` is applied to detect
+    /// path-context-dependent terminals that the transposition table cannot represent.
+    ///
+    /// `path_hashes` contains the transposition hash of every game state visited
+    /// so far on the current simulation path (root first, newest last).
+    ///
+    /// Default implementation returns `None`.
+    fn terminal_for_trajectory(
+        &self,
+        state: &Self::State,
+        action: &Self::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<Self::Terminal>;
 }
 
 /// Per-edge scoring output for UI / debugging.
@@ -27,11 +51,12 @@ pub struct EdgeScore {
 ///
 /// This is used to populate `EdgeDetails` with `Usa`, `cpuct`, and `puct_score`
 /// for debugging/UGI output.
-pub trait SelectionPolicyScoring<S>: SelectionPolicy<S> {
-    fn score_edges<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
+pub trait SelectionPolicyScoring<SS>: SelectionPolicy<SS> {
+    fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
-        I: Iterator<Item = EdgeInfo<'a, A, S>>,
-        S: 'a;
+        I: Iterator<Item = EdgeInfo<'a, Self::Action, SS>>,
+        Self::Action: 'a,
+        SS: 'a;
 }
 
 /// Read-only information about the current node for selection.
@@ -58,11 +83,64 @@ impl NodeInfo {
 ///
 /// Provides all information needed to compute PUCT scores without mutation.
 /// Supports both direct edges and afterstate edges with multiple outcomes.
-pub struct EdgeInfo<'a, A, S> {
+pub struct EdgeInfo<'a, A, SS> {
     pub edge_index: usize,
     pub action: &'a A,
     pub policy_prior: f32,
     pub visits: u32,
     pub virtual_visits: u32,
-    pub snapshot: Option<S>,
+    pub snapshot: Option<SS>,
+}
+
+/// Called during tree traversal *before* `take_action` is applied to detect
+/// path-context-dependent terminals that the transposition table cannot represent.
+///
+/// Returns `Some(terminal)` to short-circuit traversal when the action leads to a
+/// terminal that depends on the path taken to reach the current node — e.g. a
+/// 3rd-position repetition in Arimaa (loss for the repeater) or
+/// draw-by-repetition in Quoridor.
+///
+/// `visited` is the set of transposition hashes of every game state visited
+/// so far on the current simulation path.
+///
+/// Implement on a named struct and inject it into the selection policy as a
+/// dependency (see `NoTrajectoryTerminal` for the no-op default).
+pub trait TrajectoryTerminal<St> {
+    type Action;
+    type Terminal;
+
+    fn terminal_for_trajectory(
+        &self,
+        state: &St,
+        action: &Self::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<Self::Terminal>;
+}
+
+/// No-op implementation of [`TrajectoryTerminal`] for policies that do not need
+/// path-context-dependent terminal detection.
+///
+/// The `Act` and `Term` type parameters are inferred from the usage context
+/// (e.g. the game's action and predictions types), so callers typically just
+/// pass `NoTrajectoryTerminal::default()`.
+pub struct NoTrajectoryTerminal<Act, Term>(std::marker::PhantomData<fn(Act) -> Term>);
+
+impl<Act, Term> Default for NoTrajectoryTerminal<Act, Term> {
+    fn default() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+impl<St, Act, Term> TrajectoryTerminal<St> for NoTrajectoryTerminal<Act, Term> {
+    type Action = Act;
+    type Terminal = Term;
+
+    fn terminal_for_trajectory(
+        &self,
+        _state: &St,
+        _action: &Act,
+        _visited: &HashSet<u64>,
+    ) -> Option<Term> {
+        None
+    }
 }

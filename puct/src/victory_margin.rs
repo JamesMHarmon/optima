@@ -1,11 +1,15 @@
 use core::panic;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::collections::HashSet;
 
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue, VictoryMargin};
 use serde::{Deserialize, Serialize};
 
-use crate::{EdgeInfo, EdgeScore, NodeInfo, RollupStats, SelectionPolicy, SelectionPolicyScoring};
+use crate::{
+    EdgeInfo, EdgeScore, NodeInfo, NoTrajectoryTerminal, RollupStats, SelectionPolicy,
+    SelectionPolicyScoring, TrajectoryTerminal,
+};
 use crate::{ValueModel, WeightedMerge};
 
 #[derive(Clone, Copy)]
@@ -215,17 +219,19 @@ where
     }
 }
 
-pub struct VictoryMarginSelectionPolicy<C, S> {
+pub struct VictoryMarginSelectionPolicy<C, S, T = NoTrajectoryTerminal<(), ()>> {
     cpuct: C,
     options: VictoryMarginStrategyOptions,
+    trajectory_terminal: T,
     _phantom: PhantomData<S>,
 }
 
-impl<C, S> VictoryMarginSelectionPolicy<C, S> {
-    pub fn new(cpuct: C, options: VictoryMarginStrategyOptions) -> Self {
+impl<C, S, T> VictoryMarginSelectionPolicy<C, S, T> {
+    pub fn new(cpuct: C, options: VictoryMarginStrategyOptions, trajectory_terminal: T) -> Self {
         Self {
             cpuct,
             options,
+            trajectory_terminal,
             _phantom: PhantomData,
         }
     }
@@ -255,17 +261,31 @@ impl<C, S> VictoryMarginSelectionPolicy<C, S> {
     }
 }
 
-impl<C, S> SelectionPolicy<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, S>
+impl<C, S, T> SelectionPolicy<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, S, T>
 where
     C: CPUCT<State = S>,
     S: PlayerToMove,
+    T: TrajectoryTerminal<S>,
 {
     type State = S;
+    type Action = T::Action;
+    type Terminal = T::Terminal;
 
-    fn select_edge<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
+    fn terminal_for_trajectory(
+        &self,
+        state: &S,
+        action: &T::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<T::Terminal> {
+        self.trajectory_terminal
+            .terminal_for_trajectory(state, action, visited)
+    }
+
+    fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, T::Action, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
+        T::Action: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -361,20 +381,36 @@ where
     }
 }
 
-impl<C, S> SelectionPolicyScoring<VictoryMarginSnapshot> for VictoryMarginSelectionPolicy<C, S>
+impl<C, S, T> TrajectoryTerminal<S> for VictoryMarginSelectionPolicy<C, S, T>
+where
+    T: TrajectoryTerminal<S>,
+{
+    type Action = T::Action;
+    type Terminal = T::Terminal;
+
+    fn terminal_for_trajectory(
+        &self,
+        state: &S,
+        action: &T::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<T::Terminal> {
+        self.trajectory_terminal
+            .terminal_for_trajectory(state, action, visited)
+    }
+}
+
+impl<C, S, T> SelectionPolicyScoring<VictoryMarginSnapshot>
+    for VictoryMarginSelectionPolicy<C, S, T>
 where
     C: CPUCT<State = S>,
     S: PlayerToMove,
+    T: TrajectoryTerminal<S>,
 {
-    fn score_edges<'a, I, A: 'a>(
-        &self,
-        node: NodeInfo,
-        edges: I,
-        state: &Self::State,
-    ) -> Vec<EdgeScore>
+    fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
-        I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, T::Action, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
+        T::Action: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -390,7 +426,7 @@ where
         let root_sqrt = (node_total_visits as f32).sqrt();
         let player_index = state.player_to_move();
 
-        let edges: Vec<EdgeInfo<'a, A, VictoryMarginSnapshot>> = edges.collect();
+        let edges: Vec<EdgeInfo<'a, T::Action, VictoryMarginSnapshot>> = edges.collect();
 
         let mut baseline_visits = 0u32;
         let mut baseline_snap: Option<VictoryMarginSnapshot> = None;

@@ -40,7 +40,8 @@ where
         + Sync,
     T: GameAnalyzer<Action = E::Action, State = E::State, Predictions = P> + Send + Sync,
     VM: ValueModel<State = E::State, Predictions = P, Terminal = P> + Send + Sync,
-    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State> + Send + Sync,
+    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State, Action = E::Action, Terminal = P>
+        + Send + Sync,
     VmRollup<VM>: Send + Sync,
     VmSnapshot<VM>: Clone + Send + Sync,
     MR: Clone + Debug + Eq + Send + Sync,
@@ -141,7 +142,8 @@ where
         + Sync,
     T: GameAnalyzer<Action = E::Action, State = E::State, Predictions = P> + Send + Sync,
     VM: ValueModel<State = E::State, Predictions = P, Terminal = P> + Send + Sync,
-    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State> + Send + Sync,
+    Sel: SelectionPolicy<VmSnapshot<VM>, State = E::State, Action = E::Action, Terminal = P>
+        + Send + Sync,
     VmRollup<VM>: Send + Sync,
     VmSnapshot<VM>: Clone + Send + Sync,
     MR: Debug + Send + Sync,

@@ -9,8 +9,8 @@ use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
 use crate::backprop::{Backpropagator, SimMsg, StateSimMsg, TerminalSimMsg};
 use crate::node_arena::NodeId;
 use crate::search_context::SearchContextPool;
-use crate::selection_policy::SelectionPolicy;
 use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
+use crate::selection_policy::SelectionPolicy;
 use crate::simulate::{NewLeafStep, SimulationStep, Simulator, TerminalStep};
 use crate::value_model::ValueModel;
 use common::TranspositionHash;
@@ -53,7 +53,8 @@ where
     M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
     VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     RollupOf<VM>: Send + Sync,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State, Action = E::Action, Terminal = E::Terminal>
+        + Sync,
     E::State: TranspositionHash + Clone + Send + Sync,
     E::Action: Send + Sync,
     SnapshotOf<VM>: Send + Sync,

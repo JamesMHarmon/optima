@@ -56,7 +56,7 @@ where
     SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S, Action = A, Terminal = E::Terminal>
         + SelectionPolicyScoring<SnapshotOf<B>, State = S>
         + Send
         + Sync

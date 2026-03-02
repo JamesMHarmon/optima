@@ -126,8 +126,8 @@ where
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            graph.add_child_to_edge(edge, *existing_id);
-            Some(*existing_id)
+            // If the child exists but isn't yet linked, link it. Use a race safe compare-and-set.
+            edge.try_set_child(*existing_id).ok().map(|_| *existing_id)
         } else {
             None
         }

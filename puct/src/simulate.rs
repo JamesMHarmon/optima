@@ -28,7 +28,7 @@ impl<'a, E, R, Sel> Simulator<'a, E, R, Sel>
 where
     E: GameEngine,
     R: RollupStats,
-    Sel: SelectionPolicy<R::Snapshot, State = E::State>,
+    Sel: SelectionPolicy<R::Snapshot, State = E::State, Action = E::Action, Terminal = E::Terminal>,
     E::State: TranspositionHash,
 {
     pub(super) fn new(
@@ -83,8 +83,9 @@ where
     ) -> SelectionResult<E::State, E::Terminal> {
         let store = self.store;
         let game_engine = self.game_engine;
+        let sel_strat = self.selection_strategy;
         let mut ctx = self.context_pool.acquire();
-        let (path, _visited) = ctx.split_mut();
+        let (path, visited) = ctx.split_mut();
 
         let mut game_state = game_state;
         let mut current = node_id;
@@ -96,22 +97,26 @@ where
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
+            visited.insert(game_state.transposition_hash());
             path.push(PathStep {
                 node_id: current,
                 edge_index: edge_idx,
             });
 
+            let traj_term = sel_strat.terminal_for_trajectory(&game_state, action, visited);
+
             game_state = game_engine.take_action(&game_state, action);
             let term_state = game_engine.terminal_state(&game_state);
+            let term_state = term_state.or(traj_term);
             let transposition_hash = game_state.transposition_hash();
-            let is_terminal = term_state.is_some();
 
             depth += 1;
 
             node.increment_virtual_visits();
             edge.increment_virtual_visits();
 
-            if is_terminal {
+            if term_state.is_some() {
+                // @TODO: Verify that this game_state is correct when coming from terminal for trajectory.
                 return SelectionResult::new(ctx, game_state, term_state, depth);
             }
 

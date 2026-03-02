@@ -2,6 +2,9 @@ use common::{GameLength, PlayerValue, VictoryMargin};
 
 use super::*;
 
+type TestPolicy =
+    VictoryMarginSelectionPolicy<ConstantCpuct, TestState, NoTrajectoryTerminal<u8, ()>>;
+
 // ---------------------------------------------------------------------------
 // VictoryMarginSnapshot unit tests
 // ---------------------------------------------------------------------------
@@ -256,8 +259,8 @@ fn edge_with_virtual_visits<'a, A>(
     }
 }
 
-fn run_policy<'a, A>(
-    policy: &VictoryMarginSelectionPolicy<ConstantCpuct, TestState>,
+fn run_policy<'a, A, T>(
+    policy: &VictoryMarginSelectionPolicy<ConstantCpuct, TestState, T>,
     edges: &'a [EdgeInfo<'a, A, VictoryMarginSnapshot>],
     node_visits: u32,
     state: &TestState,
@@ -265,6 +268,7 @@ fn run_policy<'a, A>(
 ) -> usize
 where
     A: 'a,
+    T: TrajectoryTerminal<TestState, Action = A>,
 {
     policy.select_edge(
         NodeInfo {
@@ -380,7 +384,7 @@ fn virtual_visits_down_weight_q_value() {
         // Ensure VM adjustment is irrelevant even if directive changes.
         victory_margin_factor: 0.0,
     };
-    let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -402,7 +406,7 @@ fn virtual_visits_do_not_reduce_u_term() {
         victory_margin_threshold: 1.0,
         victory_margin_factor: 0.0,
     };
-    let policy = VictoryMarginSelectionPolicy::<_, TestState>::new(ConstantCpuct(1.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(1.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -422,7 +426,7 @@ fn virtual_visits_do_not_reduce_u_term() {
 fn select_matches_reference_multiple_scenarios() {
     static ACTIONS: [u8; 6] = [1, 2, 3, 4, 5, 6];
     let cpuct = 1.0;
-    let policy = VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(
+    let policy = TestPolicy::new(
         ConstantCpuct(cpuct),
         VictoryMarginStrategyOptions {
             fpu: 0.25,
@@ -430,6 +434,7 @@ fn select_matches_reference_multiple_scenarios() {
             victory_margin_threshold: 0.75,
             victory_margin_factor: 0.10,
         },
+        NoTrajectoryTerminal::default(),
     );
 
     let scenarios: Vec<Scenario<'_>> = vec![
@@ -484,8 +489,7 @@ fn directive_threshold_ge_one_is_none() {
         victory_margin_factor: 1.0,
     };
 
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 2] = [1, 2];
     let edges = vec![
@@ -508,8 +512,7 @@ fn no_baseline_means_no_directive_and_picks_best_base() {
         victory_margin_factor: 10.0,
     };
 
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     let edges = vec![
@@ -534,8 +537,7 @@ fn winning_baseline_maximizes_victory_margin() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Baseline is edge 0 (most visited), and it's winning.
@@ -559,8 +561,7 @@ fn losing_baseline_minimizes_victory_margin() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Baseline is edge 0 (most visited), and it's losing.
@@ -584,8 +585,7 @@ fn uncertain_baseline_does_not_bias_victory_margin() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Baseline (edge 0) is in the middle => directive None.
@@ -610,8 +610,7 @@ fn unvisited_edges_do_not_get_victory_margin_bonus() {
         victory_margin_factor: 10.0,
     };
 
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 2] = [1, 2];
     // Baseline edge 1 makes us "winning" so directive maximize.
@@ -635,8 +634,7 @@ fn baseline_is_most_visited_not_best_q() {
         victory_margin_factor: 1.0,
     };
 
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Edge 0: most visited but losing => directive minimize.
@@ -662,8 +660,7 @@ fn fpu_root_used_at_depth_zero() {
         victory_margin_factor: 0.0,
     };
 
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 2] = [1, 2];
     let edges = vec![edge(0, &A[0], 0.0, 0, None), edge(1, &A[1], 0.0, 0, None)];
@@ -688,8 +685,7 @@ fn player_two_wins_maximizes_victory_margin_for_player_two() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Baseline: edge 0 (100 visits), p2=0.9 is winning from player 2's perspective.
@@ -714,8 +710,7 @@ fn player_two_loses_minimizes_victory_margin_for_player_two() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     // Baseline: edge 0 (100 visits), p2=0.1 is losing from player 2's perspective.
@@ -742,8 +737,7 @@ fn fpu_distinguishes_root_and_non_root_depth_for_player_two() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 0.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 2] = [1, 2];
     let edges = vec![
@@ -771,8 +765,7 @@ fn player_two_uncertain_baseline_applies_no_vm_bias() {
         victory_margin_threshold: 0.75,
         victory_margin_factor: 1.0,
     };
-    let policy =
-        VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
     let edges = vec![

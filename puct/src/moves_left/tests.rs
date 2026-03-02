@@ -2,6 +2,8 @@ use common::{GameLength, PlayerValue};
 
 use super::*;
 
+type TestPolicy = MovesLeftSelectionPolicy<ConstantCpuct, TestState, NoTrajectoryTerminal<u8, ()>>;
+
 type Scenario<'a> = (
     Vec<EdgeInfo<'a, u8, MovesLeftSnapshot>>,
     u32,
@@ -75,8 +77,8 @@ fn edge_with_virtual_visits<'a, A>(
     }
 }
 
-fn run_policy<'a, A>(
-    policy: &MovesLeftSelectionPolicy<ConstantCpuct, TestState>,
+fn run_policy<'a, A, T>(
+    policy: &MovesLeftSelectionPolicy<ConstantCpuct, TestState, T>,
     edges: &'a [EdgeInfo<'a, A, MovesLeftSnapshot>],
     node_visits: u32,
     state: &TestState,
@@ -84,6 +86,7 @@ fn run_policy<'a, A>(
 ) -> usize
 where
     A: 'a,
+    T: TrajectoryTerminal<TestState, Action = A>,
 {
     policy.select_edge(
         NodeInfo {
@@ -215,7 +218,7 @@ fn threshold_ge_one_disables_moves_left_bias() {
         moves_left_threshold: 1.0,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -238,7 +241,7 @@ fn fpu_root_used_at_depth_zero_and_fpu_used_below_root() {
         ..default_options()
     };
 
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -263,7 +266,7 @@ fn virtual_visits_down_weight_q_value() {
         moves_left_threshold: 1.0,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -286,7 +289,7 @@ fn virtual_visits_do_not_reduce_u_term() {
         moves_left_threshold: 1.0,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(1.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(1.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -311,7 +314,7 @@ fn winning_baseline_prefers_shorter_game_length() {
         ..default_options()
     };
 
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -338,7 +341,7 @@ fn losing_baseline_prefers_longer_game_length() {
         ..default_options()
     };
 
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -365,7 +368,7 @@ fn uncertain_baseline_does_not_apply_moves_left_bias() {
         ..default_options()
     };
 
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -392,7 +395,7 @@ fn baseline_is_most_visited_explored_edge() {
         ..default_options()
     };
 
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let b0 = 0u8;
     let b1 = 1u8;
@@ -426,7 +429,11 @@ fn baseline_is_most_visited_explored_edge() {
 fn policy_matches_reference_two_pass_for_multiple_scenarios() {
     let options_policy = default_options();
     let options_ref = default_options();
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.25), options_policy);
+    let policy = TestPolicy::new(
+        ConstantCpuct(0.25),
+        options_policy,
+        NoTrajectoryTerminal::default(),
+    );
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -642,7 +649,7 @@ fn player_two_winning_baseline_prefers_shorter_game_length() {
         moves_left_factor: 1.0,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -668,7 +675,7 @@ fn player_two_losing_baseline_prefers_longer_game_length() {
         moves_left_factor: 1.0,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;
@@ -693,7 +700,7 @@ fn player_two_fpu_root_vs_non_root() {
         fpu: 0.1,
         ..default_options()
     };
-    let policy = MovesLeftSelectionPolicy::<_, TestState>::new(ConstantCpuct(0.0), options);
+    let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     let a0 = 0u8;
     let a1 = 1u8;

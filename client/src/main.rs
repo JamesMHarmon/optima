@@ -14,6 +14,9 @@ use model::Load;
 #[cfg(any(feature = "connect4", feature = "arimaa"))]
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 
+#[cfg(feature = "connect4")]
+use puct::NoTrajectoryTerminal;
+
 #[cfg(feature = "quoridor")]
 use puct::{VictoryMarginSelectionPolicy, VictoryMarginStrategyOptions, VictoryMarginValueModel};
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
@@ -72,7 +75,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            #[cfg(feature = "connect4")]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::<_, _, _>::new(),
                 MovesLeftSelectionPolicy::new(
@@ -84,6 +87,23 @@ async fn async_main(cli: Cli) -> Result<()> {
                         moves_left_scale: play_options.moves_left_scale,
                         moves_left_factor: play_options.moves_left_factor,
                     },
+                    NoTrajectoryTerminal::default(),
+                ),
+            );
+
+            #[cfg(feature = "arimaa")]
+            let (value_model, selection_policy) = (
+                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftSelectionPolicy::new(
+                    cpuct,
+                    MovesLeftStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        moves_left_threshold: play_options.moves_left_threshold,
+                        moves_left_scale: play_options.moves_left_scale,
+                        moves_left_factor: play_options.moves_left_factor,
+                    },
+                    arimaa::RepetitionTerminal,
                 ),
             );
 
@@ -98,6 +118,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                         victory_margin_threshold: play_options.victory_margin_threshold,
                         victory_margin_factor: play_options.victory_margin_factor,
                     },
+                    quoridor::RepetitionTerminal,
                 ),
             );
 
@@ -138,7 +159,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let candidate_factory = ModelFactory::new(candidates_dir);
             let engine = Engine::new();
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            #[cfg(feature = "connect4")]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::<_, _, _>::new(),
                 MovesLeftSelectionPolicy::new(
@@ -150,6 +171,23 @@ async fn async_main(cli: Cli) -> Result<()> {
                         moves_left_scale: play_options.moves_left_scale,
                         moves_left_factor: play_options.moves_left_factor,
                     },
+                    NoTrajectoryTerminal::default(),
+                ),
+            );
+
+            #[cfg(feature = "arimaa")]
+            let (value_model, selection_policy) = (
+                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftSelectionPolicy::new(
+                    cpuct,
+                    MovesLeftStrategyOptions {
+                        fpu: play_options.fpu,
+                        fpu_root: play_options.fpu_root,
+                        moves_left_threshold: play_options.moves_left_threshold,
+                        moves_left_scale: play_options.moves_left_scale,
+                        moves_left_factor: play_options.moves_left_factor,
+                    },
+                    arimaa::RepetitionTerminal,
                 ),
             );
 
@@ -164,6 +202,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                         victory_margin_threshold: play_options.victory_margin_threshold,
                         victory_margin_factor: play_options.victory_margin_factor,
                     },
+                    quoridor::RepetitionTerminal,
                 ),
             );
 
@@ -226,9 +265,14 @@ async fn async_main(cli: Cli) -> Result<()> {
             #[cfg(any(feature = "connect4", feature = "arimaa"))]
             let value_model = move |_options: &UGIOptions| MovesLeftValueModel::<_, _, _>::new();
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            #[cfg(feature = "connect4")]
             let selection_strategy = move |options: &UGIOptions| {
-                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options))
+                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options), NoTrajectoryTerminal::default())
+            };
+
+            #[cfg(feature = "arimaa")]
+            let selection_strategy = move |options: &UGIOptions| {
+                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options), arimaa::RepetitionTerminal)
             };
 
             #[cfg(feature = "quoridor")]
@@ -245,7 +289,11 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "quoridor")]
             let selection_strategy = move |options: &UGIOptions| {
-                VictoryMarginSelectionPolicy::new(cpuct(options), selection_strategy_opts(options))
+                VictoryMarginSelectionPolicy::new(
+                    cpuct(options),
+                    selection_strategy_opts(options),
+                    quoridor::RepetitionTerminal,
+                )
             };
 
             let time_strategy = TimeStrategy::new();

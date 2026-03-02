@@ -137,7 +137,7 @@ impl<S, A> GameManager<S, A> {
             + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
-        Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+        Sel: SelectionPolicy<SnapshotOf<B>, State = S, Action = A, Terminal = E::Terminal>
             + SelectionPolicyScoring<SnapshotOf<B>, State = S>
             + Send
             + Sync
@@ -220,7 +220,7 @@ where
     <B as ValueModel>::Rollup: Send + Sync,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,
-    Sel: SelectionPolicy<SnapshotOf<B>, State = S>
+    Sel: SelectionPolicy<SnapshotOf<B>, State = S, Action = A, Terminal = E::Terminal>
         + SelectionPolicyScoring<SnapshotOf<B>, State = S>
         + Sync,
     T: TimeStrategy<S>,
@@ -622,13 +622,13 @@ where
         node_details: &NodeDetails<A, SnapshotOf<B>>,
     ) {
         self.output.info(&format!(
-            "time {} playertomove {} root_score {:.3} score {:.3} game_length {:.1} visits {} depth {} root_transpositionid {} transpositionid {}",
+            "time {} playertomove {} root_score {:.3} score {:.3} game_length {:.1} visits {:?} depth {} root_transpositionid {} transpositionid {}",
             search_start.elapsed().as_secs(),
             player_to_move,
             scores.first().unwrap_or(&0.5),
             scores.last().unwrap_or(&0.5),
             game_lengths.last().unwrap_or(&0.0),
-            visits.iter().max().unwrap_or(&0),
+            visits,
             depths.iter().max().unwrap_or(&0),
             pre_action_game_state.transposition_hash(),
             focus_game_state.transposition_hash()

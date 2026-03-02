@@ -11,7 +11,7 @@ pub struct PathStep {
 
 pub struct SearchContext {
     pub path: Vec<PathStep>,
-    pub visited: HashSet<NodeId>,
+    pub visited: HashSet<u64>,
 }
 
 impl SearchContext {
@@ -77,7 +77,7 @@ impl SearchContextGuard {
         self.ctx.as_ref().unwrap()
     }
 
-    pub fn split_mut(&mut self) -> (&mut Vec<PathStep>, &mut HashSet<NodeId>) {
+    pub fn split_mut(&mut self) -> (&mut Vec<PathStep>, &mut HashSet<u64>) {
         let ctx = self.ctx.as_mut().unwrap();
         (&mut ctx.path, &mut ctx.visited)
     }

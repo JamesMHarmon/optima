@@ -31,7 +31,7 @@ where
     M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,
     VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = S> + Sync,
+    Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,
     <VM as ValueModel>::Rollup: Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,
 {

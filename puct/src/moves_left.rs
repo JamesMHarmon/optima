@@ -1,10 +1,14 @@
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue};
 use serde::{Deserialize, Serialize};
 
-use crate::{EdgeInfo, EdgeScore, NodeInfo, RollupStats, SelectionPolicy};
+use crate::{
+    EdgeInfo, EdgeScore, NoTrajectoryTerminal, NodeInfo, RollupStats, SelectionPolicy,
+    TrajectoryTerminal,
+};
 use crate::{SelectionPolicyScoring, ValueModel, WeightedMerge};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -189,17 +193,19 @@ pub struct MovesLeftStrategyOptions {
     pub moves_left_factor: f32,
 }
 
-pub struct MovesLeftSelectionPolicy<C, S> {
+pub struct MovesLeftSelectionPolicy<C, S, T = NoTrajectoryTerminal<(), ()>> {
     cpuct: C,
     options: MovesLeftStrategyOptions,
+    trajectory_terminal: T,
     _phantom: PhantomData<S>,
 }
 
-impl<C, S> MovesLeftSelectionPolicy<C, S> {
-    pub fn new(cpuct: C, options: MovesLeftStrategyOptions) -> Self {
+impl<C, S, T> MovesLeftSelectionPolicy<C, S, T> {
+    pub fn new(cpuct: C, options: MovesLeftStrategyOptions, trajectory_terminal: T) -> Self {
         Self {
             cpuct,
             options,
+            trajectory_terminal,
             _phantom: PhantomData,
         }
     }
@@ -274,17 +280,31 @@ impl<C, S> MovesLeftSelectionPolicy<C, S> {
     }
 }
 
-impl<C, S> SelectionPolicy<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S>
+impl<C, S, T> SelectionPolicy<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S, T>
 where
     C: CPUCT<State = S>,
     S: PlayerToMove,
+    T: TrajectoryTerminal<S>,
 {
     type State = S;
+    type Action = T::Action;
+    type Terminal = T::Terminal;
 
-    fn select_edge<'a, I, A: 'a>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
+    fn terminal_for_trajectory(
+        &self,
+        state: &S,
+        action: &T::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<T::Terminal> {
+        self.trajectory_terminal
+            .terminal_for_trajectory(state, action, visited)
+    }
+
+    fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
     where
-        I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, T::Action, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
+        T::Action: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -299,7 +319,7 @@ where
         let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
 
         let player_to_move = state.player_to_move();
-        let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
+        let edges: Vec<EdgeInfo<'a, T::Action, MovesLeftSnapshot>> = edges.collect();
         let baseline =
             Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);
 
@@ -338,20 +358,35 @@ where
     }
 }
 
-impl<C, S> SelectionPolicyScoring<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S>
+impl<C, S, T> TrajectoryTerminal<S> for MovesLeftSelectionPolicy<C, S, T>
+where
+    T: TrajectoryTerminal<S>,
+{
+    type Action = T::Action;
+    type Terminal = T::Terminal;
+
+    fn terminal_for_trajectory(
+        &self,
+        state: &S,
+        action: &T::Action,
+        visited: &HashSet<u64>,
+    ) -> Option<T::Terminal> {
+        self.trajectory_terminal
+            .terminal_for_trajectory(state, action, visited)
+    }
+}
+
+impl<C, S, T> SelectionPolicyScoring<MovesLeftSnapshot> for MovesLeftSelectionPolicy<C, S, T>
 where
     C: CPUCT<State = S>,
     S: PlayerToMove,
+    T: TrajectoryTerminal<S>,
 {
-    fn score_edges<'a, I, A: 'a>(
-        &self,
-        node: NodeInfo,
-        edges: I,
-        state: &Self::State,
-    ) -> Vec<EdgeScore>
+    fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
-        I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
+        I: Iterator<Item = EdgeInfo<'a, T::Action, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
+        T::Action: 'a,
     {
         let is_root = node.is_root();
         let options = &self.options;
@@ -367,7 +402,7 @@ where
         let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
 
         let player_to_move = state.player_to_move();
-        let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
+        let edges: Vec<EdgeInfo<'a, T::Action, MovesLeftSnapshot>> = edges.collect();
         let baseline =
             Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);
 
