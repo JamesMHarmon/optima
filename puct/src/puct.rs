@@ -4,7 +4,7 @@ use std::thread;
 use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
-use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
+use crate::analysis_coordinator::AnalysisCoordinator;
 use crate::backprop::{Backpropagator, SimMsg};
 use crate::node_arena::NodeId;
 use crate::search_context::SearchContextPool;
@@ -102,32 +102,26 @@ where
     where
         Alive: FnMut(NodeInfo) -> bool + Send,
     {
+        let coordinator = AnalysisCoordinator::new(self.analyzer, self.virtual_sims);
         let mut max_depth = 0;
+
         thread::scope(|s| {
             let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(self.virtual_sims);
-
-            let (expansions, coordinator) =
-                AnalysisCoordinator::new(self.analyzer, self.virtual_sims);
 
             let analyzer = self.analyzer;
             let store = &self.store;
             let value_model = self.value_model;
-            let bp_expansions = expansions.clone();
+            let coordinator = &coordinator;
 
             let backprop_handle = s.spawn(move || {
-                let backprop = Backpropagator::new(analyzer, store, value_model, bp_expansions, rx);
+                let backprop = Backpropagator::new(analyzer, store, value_model, coordinator, rx);
                 backprop.run();
             });
 
-            let sim_handle = s.spawn(|| self.run_sim(root, game_state, alive, tx, expansions));
-
-            let coordinator_handle = s.spawn(move || coordinator.run());
+            let sim_handle = s.spawn(|| self.run_sim(root, game_state, alive, tx, coordinator));
 
             max_depth = sim_handle.join().expect("PUCT sim thread panicked");
             backprop_handle.join().expect("backprop thread panicked");
-            coordinator_handle
-                .join()
-                .expect("in-flight coordinator panicked");
         });
 
         max_depth
@@ -139,7 +133,7 @@ where
         game_state: &E::State,
         mut alive: Alive,
         tx: SimTx<E, VM>,
-        exp: impl InFlightExpansions<State = E::State>,
+        coordinator: &AnalysisCoordinator<M>,
     ) -> usize
     where
         Alive: FnMut(NodeInfo) -> bool,
@@ -169,7 +163,7 @@ where
             let step = simulator.simulate_once(root, game_state.clone(), sim_id);
             max_depth = max(max_depth, step.depth());
 
-            self.handle_step(step, &tx, &exp);
+            self.handle_step(step, &tx, coordinator);
 
             sim_id += 1;
         }
@@ -181,7 +175,7 @@ where
         &self,
         step: SimulationStep<E::State, E::Terminal>,
         tx: &SimTx<E, VM>,
-        exp: &impl InFlightExpansions<State = E::State>,
+        coordinator: &AnalysisCoordinator<M>,
     ) {
         let msg = match step {
             SimulationStep::Terminal(step) => {
@@ -190,8 +184,7 @@ where
                 SimMsg::new_terminal(step.sim_id, step.path, terminal_snapshot)
             }
             SimulationStep::NewLeaf(step) => {
-                let hash = step.game_state.transposition_hash();
-                exp.analyze(hash, step.game_state.clone());
+                coordinator.analyze(step.game_state.clone());
 
                 SimMsg::new_state(step.sim_id, step.game_state, step.path)
             }

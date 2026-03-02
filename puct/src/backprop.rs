@@ -2,13 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 
 use crossbeam::channel::Receiver;
 
-use crate::analysis_coordinator::InFlightExpansions;
-use crate::edge::PUCTEdge;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
 use crate::search_context::PathStep;
 use crate::value_model::ValueModel;
+use crate::{analysis_coordinator::AnalysisCoordinator, edge::PUCTEdge};
 use common::TranspositionHash;
 use model::{GameAnalyzer, GameStateAnalysis, RequestId};
 
@@ -28,16 +27,15 @@ type SimRx<S, TS> = Receiver<SimMsg<S, TS>>;
 /// the matching network analysis arrives via [`GameAnalyzer::recv`]. Any
 /// out-of-order analysis results are buffered in a `BTreeMap` keyed by request
 /// id.
-pub(super) struct Backpropagator<'a, M, VM, IE>
+pub(super) struct Backpropagator<'a, M, VM>
 where
     M: GameAnalyzer,
     VM: ValueModel,
-    IE: InFlightExpansions<State = M::State> + 'a,
 {
     analyzer: &'a M,
     store: &'a PuctStore<M, RollupOf<VM>>,
     value_model: &'a VM,
-    expansions: IE,
+    coordinator: &'a AnalysisCoordinator<'a, M>,
     rx: SimRx<M::State, SnapshotOf<VM>>,
 
     analysis_buffer: HashMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
@@ -45,27 +43,26 @@ where
     next_sim_id: usize,
 }
 
-impl<'a, M, VM, IE> Backpropagator<'a, M, VM, IE>
+impl<'a, M, VM> Backpropagator<'a, M, VM>
 where
-    M: GameAnalyzer,
+    M: GameAnalyzer + Sync,
     VM: ValueModel<Predictions = M::Predictions>,
     RollupOf<VM>: RollupStats,
     M::State: TranspositionHash + Clone,
     M::Action: Send + Sync,
-    IE: InFlightExpansions<State = M::State> + 'a,
 {
     pub(super) fn new(
         analyzer: &'a M,
         store: &'a PuctStore<M, RollupOf<VM>>,
         value_model: &'a VM,
-        expansions: IE,
+        coordinator: &'a AnalysisCoordinator<'a, M>,
         rx: SimRx<M::State, SnapshotOf<VM>>,
     ) -> Self {
         Self {
             analyzer,
             store,
             value_model,
-            expansions,
+            coordinator,
             rx,
 
             analysis_buffer: HashMap::new(),
@@ -87,7 +84,7 @@ where
                     let last_step = sim.last_step();
 
                     let hash = sim.game_state.transposition_hash();
-                    self.expansions.complete(hash);
+                    self.coordinator.complete(hash);
 
                     // Check if another simulation has already expanded this node and backpropagated the path, so we can skip it.
                     if store.get_node_id(hash).is_some() {
