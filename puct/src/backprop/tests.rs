@@ -92,21 +92,6 @@ impl crate::value_model::ValueModel for DummyValueModel {
     }
 }
 
-#[derive(Clone, Default)]
-struct DummyExpansions;
-
-impl crate::analysis_coordinator::InFlightExpansions for DummyExpansions {
-    type State = DummyState;
-
-    fn analyze(&self, _request_id: model::RequestId, _game_state: Self::State) {
-        unreachable!("analyze should not be called by next_sim tests")
-    }
-
-    fn complete(&self, _hash: u64) {
-        unreachable!("complete should not be called by next_sim tests")
-    }
-}
-
 fn terminal_msg(sim_id: usize) -> SimMsg<DummyState, DummySnapshot> {
     SimMsg::Terminal(TerminalSimMsg {
         sim_id,
@@ -129,14 +114,14 @@ fn path_sim_id(msg: &SimMsg<DummyState, DummySnapshot>) -> usize {
 
 fn make_backprop(
     rx: SimRx<DummyState, DummySnapshot>,
-) -> Backpropagator<'static, DummyAnalyzer, DummyValueModel, DummyExpansions> {
+) -> Backpropagator<'static, DummyAnalyzer, DummyValueModel> {
     // Leak these because Backpropagator stores references; tests are short-lived.
-    let analyzer: &'static DummyAnalyzer = Box::leak(Box::new(DummyAnalyzer));
-    let value_model: &'static DummyValueModel = Box::leak(Box::new(DummyValueModel));
-    let store: &'static PuctStore<DummyAnalyzer, DummyRollup> =
-        Box::leak(Box::new(NodeGraphStore::<(), DummyRollup>::new()));
+    let analyzer = Box::leak(Box::new(DummyAnalyzer));
+    let value_model = Box::leak(Box::new(DummyValueModel));
+    let store = Box::leak(Box::new(NodeGraphStore::<(), DummyRollup>::new()));
+    let coordinator = Box::leak(Box::new(AnalysisCoordinator::new(analyzer, 16)));
 
-    Backpropagator::new(analyzer, store, value_model, DummyExpansions, rx)
+    Backpropagator::new(analyzer, store, value_model, coordinator, rx)
 }
 
 fn one_action_prior() -> Vec<ActionWithPolicy<()>> {
