@@ -145,7 +145,7 @@ impl GameLength for StubPredictions {
 
 #[test]
 fn value_model_pred_snapshot_maps_all_fields() {
-    let model = VictoryMarginValueModel::<(), StubPredictions, StubPredictions>::new();
+    let model = VictoryMarginValueModel::<StubPredictions, StubPredictions>::new();
     let preds = StubPredictions {
         p1: 0.7,
         p2: 0.3,
@@ -153,7 +153,7 @@ fn value_model_pred_snapshot_maps_all_fields() {
         gl: 15.0,
     };
 
-    let snap = model.pred_snapshot(&(), &preds);
+    let snap = model.pred_snapshot(&preds);
 
     assert_eq!(snap.total_weight, 1);
     assert!((snap.player_value(1) - 0.7).abs() < 1e-6);
@@ -164,7 +164,7 @@ fn value_model_pred_snapshot_maps_all_fields() {
 
 #[test]
 fn value_model_terminal_snapshot_maps_all_fields() {
-    let model = VictoryMarginValueModel::<(), StubPredictions, StubPredictions>::new();
+    let model = VictoryMarginValueModel::<StubPredictions, StubPredictions>::new();
     let terminal = StubPredictions {
         p1: 0.0,
         p2: 1.0,
@@ -172,7 +172,7 @@ fn value_model_terminal_snapshot_maps_all_fields() {
         gl: 30.0,
     };
 
-    let snap = model.terminal_snapshot(&(), &terminal);
+    let snap = model.terminal_snapshot(&terminal);
 
     assert_eq!(snap.total_weight, 1);
     assert!((snap.player_value(1) - 0.0).abs() < 1e-6);

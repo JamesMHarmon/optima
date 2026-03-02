@@ -608,14 +608,14 @@ impl PlayerValue for StubTerminal {
 
 #[test]
 fn value_model_pred_snapshot_stores_player_values_and_game_length() {
-    let model = MovesLeftValueModel::<(), StubPredictions, StubTerminal>::new();
+    let model = MovesLeftValueModel::<StubPredictions, StubTerminal>::new();
     let preds = StubPredictions {
         p1: 0.6,
         p2: 0.4,
         gl: 12.0,
     };
 
-    let snap = model.pred_snapshot(&(), &preds);
+    let snap = model.pred_snapshot(&preds);
 
     assert_eq!(snap.total_weight, 1);
     assert!((snap.player_value(1) - 0.6).abs() < 1e-6);
@@ -625,10 +625,10 @@ fn value_model_pred_snapshot_stores_player_values_and_game_length() {
 
 #[test]
 fn value_model_terminal_snapshot_sets_game_length_to_zero() {
-    let model = MovesLeftValueModel::<(), StubPredictions, StubTerminal>::new();
+    let model = MovesLeftValueModel::<StubPredictions, StubTerminal>::new();
     let terminal = StubTerminal { p1: 0.0, p2: 1.0 };
 
-    let snap = model.terminal_snapshot(&(), &terminal);
+    let snap = model.terminal_snapshot(&terminal);
 
     assert_eq!(snap.total_weight, 1);
     assert!((snap.player_value(1) - 0.0).abs() < 1e-6);

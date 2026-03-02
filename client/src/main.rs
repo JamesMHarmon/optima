@@ -68,7 +68,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let mut self_play_persistance = SelfPlayPersistance::new(games_dir)?;
 
             let play_options = &self_play_options.play_options;
-            let cpuct = DynamicCPUCT::<_>::new(
+            let cpuct = DynamicCPUCT::new(
                 play_options.cpuct_base,
                 play_options.cpuct_init,
                 1.0,
@@ -77,7 +77,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "connect4")]
             let (value_model, selection_policy) = (
-                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
                     cpuct,
                     MovesLeftStrategyOptions {
@@ -93,7 +93,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "arimaa")]
             let (value_model, selection_policy) = (
-                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
                     cpuct,
                     MovesLeftStrategyOptions {
@@ -109,7 +109,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "quoridor")]
             let (value_model, selection_policy) = (
-                VictoryMarginValueModel::<_, _, _>::new(),
+                VictoryMarginValueModel::new(),
                 VictoryMarginSelectionPolicy::new(
                     cpuct,
                     VictoryMarginStrategyOptions {
@@ -148,7 +148,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             assert_dir_exists(&certified_dir)?;
             assert_dir_exists(&evaluated_dir)?;
 
-            let cpuct = DynamicCPUCT::<_>::new(
+            let cpuct = DynamicCPUCT::new(
                 play_options.cpuct_base,
                 play_options.cpuct_init,
                 1.0,
@@ -161,7 +161,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "connect4")]
             let (value_model, selection_policy) = (
-                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
                     cpuct,
                     MovesLeftStrategyOptions {
@@ -177,7 +177,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "arimaa")]
             let (value_model, selection_policy) = (
-                MovesLeftValueModel::<_, _, _>::new(),
+                MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
                     cpuct,
                     MovesLeftStrategyOptions {
@@ -193,7 +193,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
             #[cfg(feature = "quoridor")]
             let (value_model, selection_policy) = (
-                VictoryMarginValueModel::<_, _, _>::new(),
+                VictoryMarginValueModel::new(),
                 VictoryMarginSelectionPolicy::new(
                     cpuct,
                     VictoryMarginStrategyOptions {
@@ -245,7 +245,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             let engine = Engine::new();
 
             let cpuct = |options: &UGIOptions| {
-                DynamicCPUCT::<_>::new(
+                DynamicCPUCT::new(
                     options.cpuct_base,
                     options.cpuct_init,
                     options.cpuct_factor,
@@ -263,16 +263,24 @@ async fn async_main(cli: Cli) -> Result<()> {
             };
 
             #[cfg(any(feature = "connect4", feature = "arimaa"))]
-            let value_model = move |_options: &UGIOptions| MovesLeftValueModel::<_, _, _>::new();
+            let value_model = move |_options: &UGIOptions| MovesLeftValueModel::new();
 
             #[cfg(feature = "connect4")]
             let selection_strategy = move |options: &UGIOptions| {
-                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options), NoTrajectoryTerminal::default())
+                MovesLeftSelectionPolicy::new(
+                    cpuct(options),
+                    selection_strategy_opts(options),
+                    NoTrajectoryTerminal::default(),
+                )
             };
 
             #[cfg(feature = "arimaa")]
             let selection_strategy = move |options: &UGIOptions| {
-                MovesLeftSelectionPolicy::new(cpuct(options), selection_strategy_opts(options), arimaa::RepetitionTerminal)
+                MovesLeftSelectionPolicy::new(
+                    cpuct(options),
+                    selection_strategy_opts(options),
+                    arimaa::RepetitionTerminal,
+                )
             };
 
             #[cfg(feature = "quoridor")]
@@ -284,8 +292,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             };
 
             #[cfg(feature = "quoridor")]
-            let value_model =
-                move |_options: &UGIOptions| VictoryMarginValueModel::<_, _, _>::new();
+            let value_model = move |_options: &UGIOptions| VictoryMarginValueModel::new();
 
             #[cfg(feature = "quoridor")]
             let selection_strategy = move |options: &UGIOptions| {

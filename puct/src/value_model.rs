@@ -18,14 +18,12 @@ use super::{RollupStats, WeightedMerge};
 /// `RollupStats`. `ValueModel` does not define how aggregation
 /// works, only how predictions become canonical snapshots.
 pub trait ValueModel {
-    type State;
     type Predictions;
     type Terminal;
     type Snapshot: WeightedMerge + Copy;
     type Rollup: RollupStats<Snapshot = Self::Snapshot> + From<Self::Snapshot>;
 
-    fn pred_snapshot(&self, state: &Self::State, predictions: &Self::Predictions)
-    -> Self::Snapshot;
+    fn pred_snapshot(&self, predictions: &Self::Predictions) -> Self::Snapshot;
 
-    fn terminal_snapshot(&self, state: &Self::State, terminal: &Self::Terminal) -> Self::Snapshot;
+    fn terminal_snapshot(&self, terminal: &Self::Terminal) -> Self::Snapshot;
 }

@@ -78,21 +78,16 @@ impl From<DummySnapshot> for DummyRollup {
 struct DummyValueModel;
 
 impl crate::value_model::ValueModel for DummyValueModel {
-    type State = DummyState;
     type Predictions = ();
     type Terminal = ();
     type Snapshot = DummySnapshot;
     type Rollup = DummyRollup;
 
-    fn pred_snapshot(
-        &self,
-        _state: &Self::State,
-        _predictions: &Self::Predictions,
-    ) -> DummySnapshot {
+    fn pred_snapshot(&self, _predictions: &Self::Predictions) -> DummySnapshot {
         DummySnapshot(0)
     }
 
-    fn terminal_snapshot(&self, _state: &Self::State, _terminal: &Self::Terminal) -> DummySnapshot {
+    fn terminal_snapshot(&self, _terminal: &Self::Terminal) -> DummySnapshot {
         DummySnapshot(0)
     }
 }

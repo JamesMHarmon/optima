@@ -31,8 +31,13 @@ pub struct PuctMCTS<'a, E, M, VM, Sel>
 where
     E: GameEngine,
     M: GameAnalyzer<State = E::State, Action = E::Action>,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal>,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State, Action = E::Action, Terminal = E::Terminal>,
+    VM: ValueModel<Predictions = M::Predictions, Terminal = E::Terminal>,
+    Sel: SelectionPolicy<
+            SnapshotOf<VM>,
+            State = E::State,
+            Action = E::Action,
+            Terminal = E::Terminal,
+        >,
     E::State: TranspositionHash,
 {
     engine: &'a E,
@@ -46,10 +51,14 @@ impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
 where
     E: GameEngine + Sync,
     M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
+    VM: ValueModel<Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     <VM as ValueModel>::Rollup: Send + Sync,
-    Sel: SelectionPolicy<SnapshotOf<VM>, State = E::State, Action = E::Action, Terminal = E::Terminal>
-        + Sync,
+    Sel: SelectionPolicy<
+            SnapshotOf<VM>,
+            State = E::State,
+            Action = E::Action,
+            Terminal = E::Terminal,
+        > + Sync,
     E::State: TranspositionHash + Clone + Send + Sync,
     E::Action: Clone + PartialEq + Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,

@@ -1,13 +1,13 @@
 use core::panic;
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::collections::HashSet;
 
 use common::{CPUCT, GameLength, PlayerToMove, PlayerValue, VictoryMargin};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EdgeInfo, EdgeScore, NodeInfo, NoTrajectoryTerminal, RollupStats, SelectionPolicy,
+    EdgeInfo, EdgeScore, NoTrajectoryTerminal, NodeInfo, RollupStats, SelectionPolicy,
     SelectionPolicyScoring, TrajectoryTerminal,
 };
 use crate::{ValueModel, WeightedMerge};
@@ -167,11 +167,11 @@ impl RollupStats for VictoryMarginRollup {
 }
 
 #[derive(Default)]
-pub struct VictoryMarginValueModel<S, P, T> {
-    _phantom: PhantomData<(S, P, T)>,
+pub struct VictoryMarginValueModel<P, T> {
+    _phantom: PhantomData<(P, T)>,
 }
 
-impl<S, P, T> VictoryMarginValueModel<S, P, T> {
+impl<P, T> VictoryMarginValueModel<P, T> {
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -179,22 +179,17 @@ impl<S, P, T> VictoryMarginValueModel<S, P, T> {
     }
 }
 
-impl<S, P, T> ValueModel for VictoryMarginValueModel<S, P, T>
+impl<P, T> ValueModel for VictoryMarginValueModel<P, T>
 where
     P: PlayerValue + VictoryMargin + GameLength,
     T: PlayerValue + VictoryMargin + GameLength,
 {
-    type State = S;
     type Predictions = P;
     type Terminal = T;
     type Snapshot = VictoryMarginSnapshot;
     type Rollup = VictoryMarginRollup;
 
-    fn pred_snapshot(
-        &self,
-        _state: &Self::State,
-        predictions: &Self::Predictions,
-    ) -> VictoryMarginSnapshot {
+    fn pred_snapshot(&self, predictions: &Self::Predictions) -> VictoryMarginSnapshot {
         VictoryMarginSnapshot {
             p1_sum: predictions.player_value(1) as f64,
             p2_sum: predictions.player_value(2) as f64,
@@ -204,11 +199,7 @@ where
         }
     }
 
-    fn terminal_snapshot(
-        &self,
-        _state: &Self::State,
-        terminal: &Self::Terminal,
-    ) -> VictoryMarginSnapshot {
+    fn terminal_snapshot(&self, terminal: &Self::Terminal) -> VictoryMarginSnapshot {
         VictoryMarginSnapshot {
             p1_sum: terminal.player_value(1) as f64,
             p2_sum: terminal.player_value(2) as f64,

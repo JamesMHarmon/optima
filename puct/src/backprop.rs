@@ -48,7 +48,7 @@ where
 impl<'a, M, VM, IE> Backpropagator<'a, M, VM, IE>
 where
     M: GameAnalyzer,
-    VM: ValueModel<State = M::State, Predictions = M::Predictions>,
+    VM: ValueModel<Predictions = M::Predictions>,
     RollupOf<VM>: RollupStats,
     M::State: TranspositionHash + Clone,
     M::Action: Send + Sync,
@@ -98,7 +98,7 @@ where
                     let analysis = self.recv_analysis_for(hash);
                     let (priors, preds) = analysis.into_inner();
 
-                    let snapshot = self.value_model.pred_snapshot(&sim.game_state, &preds);
+                    let snapshot = self.value_model.pred_snapshot(&preds);
                     let rollup = snapshot.into();
 
                     let new_node_id = store.create_and_insert_state_node(hash, priors, rollup);

@@ -16,11 +16,15 @@ mod puct_mcts;
 mod rollup;
 mod search_context;
 mod selection_policy;
+mod selection_result;
 mod simulate;
 mod temp;
 mod terminal_node;
 mod value_model;
 mod victory_margin;
+
+pub(crate) use search_context::*;
+pub(crate) use selection_result::*;
 
 pub use moves_left::*;
 pub use node_details::*;

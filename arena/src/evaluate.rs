@@ -67,7 +67,7 @@ impl Arena {
             + Send
             + Sync,
         T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send + Sync,
-        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Send + Sync,
+        VM: ValueModel<Predictions = P, Terminal = P> + Send + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = E::Action, Terminal = P>
             + Send + Sync,
         RollupOf<VM>: Send + Sync,
@@ -214,7 +214,7 @@ impl Arena {
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+        VM: ValueModel<Predictions = P, Terminal = P> + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,
         RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,
@@ -270,7 +270,7 @@ impl Arena {
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
         E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
-        VM: ValueModel<State = S, Predictions = P, Terminal = P> + Sync,
+        VM: ValueModel<Predictions = P, Terminal = P> + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,
         RollupOf<VM>: Send + Sync,
         SnapshotOf<VM>: Clone + Send + Sync,

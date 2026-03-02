@@ -4,15 +4,15 @@ use std::thread;
 use crossbeam::channel;
 
 use super::node_graph_store::NodeGraphStore;
-use crate::NodeInfo;
 use crate::analysis_coordinator::{AnalysisCoordinator, InFlightExpansions};
 use crate::backprop::{Backpropagator, SimMsg};
 use crate::node_arena::NodeId;
 use crate::search_context::SearchContextPool;
 use crate::selection_policy::SelectionPolicy;
 use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
-use crate::simulate::{SimulationStep, Simulator};
+use crate::simulate::Simulator;
 use crate::value_model::ValueModel;
+use crate::{NodeInfo, SimulationStep};
 use common::TranspositionHash;
 use engine::GameEngine;
 use model::GameAnalyzer;
@@ -51,7 +51,7 @@ impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
 where
     E: GameEngine + Sync,
     M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
-    VM: ValueModel<State = E::State, Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
+    VM: ValueModel<Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     RollupOf<VM>: Send + Sync,
     Sel: SelectionPolicy<
             SnapshotOf<VM>,
@@ -185,9 +185,7 @@ where
     ) {
         let msg = match step {
             SimulationStep::Terminal(step) => {
-                let terminal_snapshot = self
-                    .value_model
-                    .terminal_snapshot(&step.game_state, &step.terminal);
+                let terminal_snapshot = self.value_model.terminal_snapshot(&step.terminal);
 
                 SimMsg::new_terminal(step.sim_id, step.path, terminal_snapshot)
             }
@@ -287,7 +285,7 @@ where
         );
 
         let (policy_priors, predictions) = analysis.into_inner();
-        let snapshot = self.value_model.pred_snapshot(game_state, &predictions);
+        let snapshot = self.value_model.pred_snapshot(&predictions);
         let rollup = snapshot.into();
 
         store.create_and_insert_state_node(transposition_hash, policy_priors, rollup)

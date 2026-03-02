@@ -6,8 +6,8 @@ use crate::node::StateNode;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
-use crate::search_context::{PathStep, SearchContextGuard, SearchContextPool};
 use crate::selection_policy::SelectionPolicy;
+use crate::{PathStep, SearchContextPool, SelectionResult, SimulationStep};
 
 type PuctStore<E, R> = NodeGraphStore<<E as GameEngine>::Action, R>;
 type PuctStateNode<E, R> = StateNode<<E as GameEngine>::Action, R>;
@@ -54,15 +54,20 @@ where
     ) -> SimulationStep<E::State, E::Terminal> {
         let result = self.select_leaf(root, root_state);
 
-        let depth = result.depth;
-        let path = result.path().to_vec();
-        let game_state = result.game_state;
-
-        if let Some(terminal) = result.terminal {
-            return SimulationStep::new_terminal(sim_id, path, game_state, terminal, depth);
+        match result {
+            SelectionResult::Terminal(term_res) => SimulationStep::new_terminal(
+                sim_id,
+                term_res.path().to_vec(),
+                term_res.terminal,
+                term_res.depth,
+            ),
+            SelectionResult::Leaf(leaf_res) => SimulationStep::new_leaf(
+                sim_id,
+                leaf_res.path().to_vec(),
+                leaf_res.game_state,
+                leaf_res.depth,
+            ),
         }
-
-        SimulationStep::new_leaf(sim_id, path, game_state, depth)
     }
 
     fn select_leaf(
@@ -104,9 +109,8 @@ where
             node.increment_virtual_visits();
             edge.increment_virtual_visits();
 
-            if term_state.is_some() {
-                // @TODO: Verify that this game_state is correct when coming from terminal for trajectory.
-                return SelectionResult::new(ctx, game_state, term_state, depth);
+            if let Some(term_state) = term_state {
+                return SelectionResult::new_terminal(ctx, term_state, depth);
             }
 
             // @TODO: Make this thread safe since it is not being done in the backprop thread.
@@ -115,7 +119,7 @@ where
                 continue;
             }
 
-            return SelectionResult::new(ctx, game_state, None, depth);
+            return SelectionResult::new_leaf(ctx, game_state, depth);
         }
     }
 
@@ -130,101 +134,5 @@ where
             self.store.iter_edge_info(node),
             game_state,
         )
-    }
-}
-
-pub(super) struct SelectionResult<S, T> {
-    context: SearchContextGuard,
-    pub(super) game_state: S,
-    pub(super) terminal: Option<T>,
-    pub(super) depth: usize,
-}
-
-impl<S, T> SelectionResult<S, T> {
-    fn new(context: SearchContextGuard, game_state: S, terminal: Option<T>, depth: usize) -> Self {
-        Self {
-            context,
-            game_state,
-            terminal,
-            depth,
-        }
-    }
-
-    pub(super) fn path(&self) -> &[PathStep] {
-        &self.context.get_ref().path
-    }
-}
-
-/// Describes the outcome of one simulation step.
-pub(super) enum SimulationStep<S, T> {
-    /// The leaf was a terminal state
-    Terminal(TerminalStep<S, T>),
-    /// A previously-unseen position was reached.
-    NewLeaf(NewLeafStep<S>),
-}
-
-impl<S, T> SimulationStep<S, T> {
-    pub(super) fn depth(&self) -> usize {
-        match self {
-            Self::Terminal(s) => s.depth,
-            Self::NewLeaf(s) => s.depth,
-        }
-    }
-
-    pub(super) fn new_terminal(
-        sim_id: usize,
-        path: Vec<PathStep>,
-        game_state: S,
-        terminal: T,
-        depth: usize,
-    ) -> Self {
-        SimulationStep::Terminal(TerminalStep::new(sim_id, path, game_state, terminal, depth))
-    }
-
-    pub(super) fn new_leaf(
-        sim_id: usize,
-        path: Vec<PathStep>,
-        game_state: S,
-        depth: usize,
-    ) -> Self {
-        SimulationStep::NewLeaf(NewLeafStep::new(sim_id, path, game_state, depth))
-    }
-}
-
-pub(super) struct TerminalStep<S, T> {
-    pub(super) sim_id: usize,
-    pub(super) path: Vec<PathStep>,
-    pub(super) game_state: S,
-    pub(super) terminal: T,
-    pub(super) depth: usize,
-}
-
-impl<S, T> TerminalStep<S, T> {
-    fn new(sim_id: usize, path: Vec<PathStep>, game_state: S, terminal: T, depth: usize) -> Self {
-        Self {
-            sim_id,
-            path,
-            game_state,
-            terminal,
-            depth,
-        }
-    }
-}
-
-pub(super) struct NewLeafStep<S> {
-    pub(super) sim_id: usize,
-    pub(super) path: Vec<PathStep>,
-    pub(super) game_state: S,
-    pub(super) depth: usize,
-}
-
-impl<S> NewLeafStep<S> {
-    fn new(sim_id: usize, path: Vec<PathStep>, game_state: S, depth: usize) -> Self {
-        Self {
-            sim_id,
-            path,
-            game_state,
-            depth,
-        }
     }
 }

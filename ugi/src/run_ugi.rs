@@ -48,10 +48,7 @@ where
         + 'static,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
     M::Analyzer: Send + Sync,
-    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>
-        + Send
-        + Sync
-        + 'static,
+    B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Send + Sync + 'static,
     <B as ValueModel>::Rollup: Send + Sync,
     SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,

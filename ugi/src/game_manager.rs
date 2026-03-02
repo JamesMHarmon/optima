@@ -131,10 +131,7 @@ impl<S, A> GameManager<S, A> {
             + Sync
             + 'static,
         M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
-        B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal>
-            + Send
-            + Sync
-            + 'static,
+        B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Send + Sync + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
         Sel: SelectionPolicy<SnapshotOf<B>, State = S, Action = A, Terminal = E::Terminal>
@@ -216,7 +213,7 @@ where
         + Sync,
     M: Analyzer<State = S, Action = A, Predictions = E::Terminal>,
     <M as Analyzer>::Analyzer: Send + Sync,
-    B: ValueModel<State = S, Predictions = E::Terminal, Terminal = E::Terminal> + Sync,
+    B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Sync,
     <B as ValueModel>::Rollup: Send + Sync,
     FnB: Fn(&UGIOptions) -> B,
     FnSel: Fn(&UGIOptions) -> Sel,

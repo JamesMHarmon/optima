@@ -135,11 +135,11 @@ impl RollupStats for MovesLeftRollup {
 }
 
 #[derive(Default)]
-pub struct MovesLeftValueModel<S, P, T> {
-    _phantom: PhantomData<(S, P, T)>,
+pub struct MovesLeftValueModel<P, T> {
+    _phantom: PhantomData<(P, T)>,
 }
 
-impl<S, P, T> MovesLeftValueModel<S, P, T> {
+impl<P, T> MovesLeftValueModel<P, T> {
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -147,22 +147,17 @@ impl<S, P, T> MovesLeftValueModel<S, P, T> {
     }
 }
 
-impl<S, P, T> ValueModel for MovesLeftValueModel<S, P, T>
+impl<P, T> ValueModel for MovesLeftValueModel<P, T>
 where
     P: PlayerValue + GameLength,
     T: PlayerValue,
 {
-    type State = S;
     type Predictions = P;
     type Terminal = T;
     type Snapshot = MovesLeftSnapshot;
     type Rollup = MovesLeftRollup;
 
-    fn pred_snapshot(
-        &self,
-        _game_state: &Self::State,
-        predictions: &Self::Predictions,
-    ) -> MovesLeftSnapshot {
+    fn pred_snapshot(&self, predictions: &Self::Predictions) -> MovesLeftSnapshot {
         MovesLeftSnapshot {
             p1_sum: predictions.player_value(1) as f64,
             p2_sum: predictions.player_value(2) as f64,
@@ -171,11 +166,7 @@ where
         }
     }
 
-    fn terminal_snapshot(
-        &self,
-        _state: &Self::State,
-        terminal: &Self::Terminal,
-    ) -> MovesLeftSnapshot {
+    fn terminal_snapshot(&self, terminal: &Self::Terminal) -> MovesLeftSnapshot {
         MovesLeftSnapshot {
             p1_sum: terminal.player_value(1) as f64,
             p2_sum: terminal.player_value(2) as f64,
