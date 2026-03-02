@@ -80,6 +80,7 @@ where
         let sel_strat = self.selection_strategy;
         let mut ctx = self.context_pool.acquire();
         let (path, visited) = ctx.split_mut();
+        visited.insert(game_state.transposition_hash());
 
         let mut game_state = game_state;
         let mut current = node_id;
@@ -91,8 +92,8 @@ where
             let edge_idx = self.select_edge(&game_state, node, depth as u32);
             let (edge, action) = node.edge_and_action(edge_idx);
 
-            let transposition_hash = game_state.transposition_hash();
             game_state = game_engine.take_action(&game_state, action);
+            let transposition_hash = game_state.transposition_hash();
 
             let terminal = game_engine.terminal_state(&game_state);
             let traj_terminal = || sel_strat.terminal_for_trajectory(&game_state, visited);
