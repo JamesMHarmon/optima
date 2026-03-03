@@ -3,7 +3,7 @@ use common::{TranspositionTable, get_env_usize};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use half::f16;
-use log::{debug, info, trace};
+use log::info;
 use parking_lot::Mutex;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelBridge, ParallelIterator,
@@ -302,25 +302,11 @@ where
 
         if is_duplicate {
             self.reporter.set_predict_in_flight();
-        } else {
-            self.reporter.set_predict_needs_infer();
-
-            let queue_len = self.states_to_analyze_tx.len();
-            let queue_cap = self.states_to_analyze_tx.capacity().unwrap_or(0);
-            if queue_len >= queue_cap {
-                debug!(
-                    "[backpressure] Analysis queue is FULL ({}/{}). Sim thread will block until inference drains an item.",
-                    queue_len, queue_cap
-                );
-            } else {
-                trace!(
-                    "[backpressure] Enqueue: queue depth {}/{}",
-                    queue_len, queue_cap
-                );
-            }
-
-            let _ = self.states_to_analyze_tx.send((state_to_analyse, key));
+            return;
         }
+
+        self.reporter.set_predict_needs_infer();
+        let _ = self.states_to_analyze_tx.send((state_to_analyse, key));
     }
 }
 
