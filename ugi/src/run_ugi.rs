@@ -5,6 +5,7 @@ use model::Analyzer;
 use puct::{RollupStats, SelectionPolicy, SelectionPolicyScoring, ValueModel};
 
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::io::stdin;
 use std::sync::Arc;
 
@@ -29,7 +30,7 @@ pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
 ) -> Result<()>
 where
     S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
-    A: Display + Debug + Eq + Clone + Send + Sync + 'static,
+    A: Display + Debug + Eq + Hash + Clone + Send + Sync + 'static,
     U: MoveStringToActions<Action = A>
         + ParseGameState<State = S>
         + InitialGameState<State = S>

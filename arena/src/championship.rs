@@ -1,10 +1,9 @@
 use anyhow::{Context, Result, anyhow};
-use common::{PlayerValue, TranspositionHash};
+use common::{GameAction, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, ValidActions};
 use log::{error, info, warn};
 use model::{Analyzer, GameAnalyzer, Info, Latest, Load, Move};
 use puct::{RollupStats, SelectionPolicy, ValueModel};
-use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fmt::Debug, time::Duration};
@@ -34,7 +33,7 @@ where
         + ValidActions<State = M::State, Action = M::Action>
         + Sync,
     M::State: GameState + Clone + TranspositionHash + Send + Sync,
-    M::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+    M::Action: GameAction + 'static,
     St: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = M::Action, State = M::State, Predictions = P> + Send + Sync,
@@ -136,7 +135,7 @@ where
         + ValidActions<State = M::State, Action = M::Action>
         + Sync,
     M::State: GameState + Clone + TranspositionHash + Send + Sync,
-    M::Action: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+    M::Action: GameAction + 'static,
     St: Load<MR = MR, M = M> + Latest<MR = MR> + Move<MR = MR> + Send + Sync,
     M: Analyzer<Analyzer = T, Predictions = P> + Info + Send + Sync,
     T: GameAnalyzer<Action = M::Action, State = M::State, Predictions = P> + Send + Sync,

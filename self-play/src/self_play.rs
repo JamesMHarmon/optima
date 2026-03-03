@@ -7,6 +7,7 @@ use log::warn;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -37,7 +38,7 @@ where
     E: GameEngine<State = S, Action = A, Terminal = P> + ValidActions<State = S, Action = A> + Sync,
     P: Clone + GameLength,
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
-    A: Serialize + Debug + Eq + Clone + Send + Sync,
+    A: Serialize + Debug + Eq + Hash + Clone + Send + Sync,
     P: Serialize + Display + Send,
     <F as Latest>::MR: Debug + Eq + Send,
     VM: ValueModel<Predictions = P, Terminal = P> + Send + Sync,
@@ -144,7 +145,7 @@ async fn play_games<M, E, S, A, P, F, VM, Sel>(
 where
     F: Fn() -> (M, ModelInfo),
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
-    A: Clone + Eq + Debug + Send + Sync,
+    A: Clone + Eq + Hash + Debug + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P> + ValidActions<State = S, Action = A> + Sync,
     M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,

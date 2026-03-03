@@ -13,6 +13,7 @@ use puct::{
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -146,7 +147,7 @@ impl<S, A> GameManager<S, A> {
         Ps: Display,
         Pr: Display,
         S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
-        A: Display + Debug + Eq + Clone + Send + Sync + 'static,
+        A: Display + Debug + Eq + Hash + Clone + Send + Sync + 'static,
     {
         let (command_tx, command_rx) = mpsc::channel(1);
         let (output_tx, output_rx) = mpsc::unbounded_channel();
@@ -201,7 +202,7 @@ pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel, T> {
 impl<S, A, U, E, M, B, FnB, FnSel, Sel, Ps, Pr, T> GameManagerInner<S, A, U, E, M, FnB, FnSel, T>
 where
     S: GameState + Clone + Display + TranspositionHash + Send + Sync,
-    A: Display + Debug + Eq + Clone + Send + Sync,
+    A: Display + Debug + Eq + Hash + Clone + Send + Sync,
     U: InitialGameState<State = S>
         + ActionsToMoveString<State = S, Action = A>
         + ConvertToValidCompositeActions<State = S, Action = A>,

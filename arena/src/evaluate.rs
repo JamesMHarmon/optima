@@ -4,14 +4,12 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use log::{error, info};
 use permutohedron::Heap as Permute;
 use serde::Serialize;
-use serde::de::DeserializeOwned;
-use std::fmt::Debug;
 use std::iter::repeat_with;
 use std::sync::mpsc;
 use std::time::Instant;
 use tokio::runtime::Handle;
 
-use common::{PlayerValue, TranspositionHash};
+use common::{GameAction, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, ValidActions};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
@@ -59,8 +57,7 @@ impl Arena {
     ) -> Result<MatchResult>
     where
         M::State: GameState + Clone + TranspositionHash + Send + Sync,
-        M::Action:
-            Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
+        M::Action: GameAction + 'static,
         E: GameEngine<State = M::State, Action = M::Action, Terminal = P>
             + ValidActions<State = M::State, Action = M::Action>
             + Sync,
@@ -211,7 +208,7 @@ impl Arena {
     ) -> Result<()>
     where
         S: GameState + Clone + TranspositionHash + Send + Sync,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
+        A: GameAction,
         E: GameEngine<State = S, Action = A, Terminal = P>
             + ValidActions<State = S, Action = A>
             + Sync,
@@ -269,7 +266,7 @@ impl Arena {
     ) -> Result<GameResult<A>>
     where
         S: GameState + Clone + TranspositionHash + Send + Sync,
-        A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
+        A: GameAction,
         E: GameEngine<State = S, Action = A, Terminal = P>
             + ValidActions<State = S, Action = A>
             + Sync,

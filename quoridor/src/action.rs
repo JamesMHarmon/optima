@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use std::fmt::{self, Debug, Display};
 use std::str::FromStr;
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Action {
     action_coord_idx: u8,
 }

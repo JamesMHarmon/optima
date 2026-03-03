@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum Action {
     DropPiece(u8),
 }

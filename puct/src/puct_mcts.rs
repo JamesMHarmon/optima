@@ -6,7 +6,8 @@ use rand::Rng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::thread_rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -62,7 +63,7 @@ where
             Terminal = E::Terminal,
         > + Sync,
     M::State: TranspositionHash + Clone + Send + Sync,
-    M::Action: Clone + Eq + Send + Sync,
+    M::Action: Clone + Eq + Hash + Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,
 {
     pub fn new(
@@ -370,7 +371,7 @@ where
         &mut self,
         state: &M::State,
     ) -> Vec<EdgeView<M::Action, SnapshotOf<VM>>> {
-        let valid_actions: Vec<M::Action> = self.engine.valid_actions(state).collect();
+        let valid_actions: HashSet<M::Action> = self.engine.valid_actions(state).collect();
         self.puct
             .edge_views(state)
             .into_iter()
@@ -382,7 +383,7 @@ where
         &mut self,
         state: &M::State,
     ) -> Option<Vec<EdgeView<M::Action, SnapshotOf<VM>>>> {
-        let valid_actions: Vec<M::Action> = self.engine.valid_actions(state).collect();
+        let valid_actions: HashSet<M::Action> = self.engine.valid_actions(state).collect();
         self.puct.try_edge_views(state).map(|edges| {
             edges
                 .into_iter()

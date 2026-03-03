@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use rand::Rng;
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use common::{GameLength, PlayerToMove, TranspositionHash};
 use engine::{GameEngine, GameState, ValidActions};
@@ -25,7 +26,7 @@ pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
 ) -> Result<(SelfPlayMetrics<A, P, SSOf<VM>>, S)>
 where
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
-    A: Clone + Eq + Debug + Send + Sync,
+    A: Clone + Eq + Hash + Debug + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P>,
     E: ValidActions<State = S, Action = A>,
     E: Sync,
