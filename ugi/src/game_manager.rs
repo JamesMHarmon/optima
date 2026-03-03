@@ -329,7 +329,7 @@ where
 
                         while search_active.load(Ordering::SeqCst)
                             && self.command_rx.is_empty()
-                            && (max_visits == 0 || mcts.num_focus_node_visits() < max_visits)
+                            && (max_visits == 0 || mcts.num_node_visits() < max_visits)
                         {
                             let depth = mcts
                                 .search(|node_info| {
@@ -342,7 +342,7 @@ where
 
                             last_output = Instant::now();
 
-                            let node_details = mcts.get_focus_node_details();
+                            let node_details = mcts.get_node_details();
 
                             let multi_pv = self.options.lock().unwrap().multi_pv;
                             let pv = node_details
@@ -383,7 +383,7 @@ where
                     }
                 }
                 CommandInner::Details => {
-                    let node_details = mcts.get_focus_node_details();
+                    let node_details = mcts.get_node_details();
 
                     let sorted_children = node_details.children.iter().sorted().rev().collect_vec();
 
@@ -397,6 +397,7 @@ where
                     self.output
                         .info(&format!("Updating tree with actions: {:?}", &actions));
 
+                    mcts.set_state(game_state.clone());
                     for action in actions {
                         let is_valid_action =
                             self.engine.valid_actions(&game_state).contains(&action);
@@ -416,7 +417,7 @@ where
                         }
 
                         game_state = self.engine.take_action(&game_state, &action);
-                        mcts.advance_to_action_retain(action).await.unwrap();
+                        mcts.advance_to_action(action).await.unwrap();
                     }
 
                     focus_game_state = game_state.clone();
@@ -446,22 +447,22 @@ where
                         }
 
                         focus_game_state = self.engine.take_action(&focus_game_state, &action);
-                        mcts.add_focus_to_action(action);
                     }
 
+                    mcts.set_state(focus_game_state.clone());
                     self.display_board(&focus_game_state);
                 }
                 CommandInner::ClearFocus => {
                     focus_game_state = game_state.clone();
-                    mcts.clear_focus();
+                    mcts.set_state(game_state.clone());
 
                     self.display_board(&game_state);
                 }
                 CommandInner::Go => {
                     let search_start = Instant::now();
                     let pre_action_game_state = focus_game_state.clone();
+                    let saved_focus_state = focus_game_state.clone();
                     let mut focus_game_state = focus_game_state.clone();
-                    let focused_actions = mcts.get_focused_actions().to_vec();
                     let current_player = self.engine.player_to_move(&focus_game_state);
 
                     let (
@@ -520,7 +521,7 @@ where
 
                         depths.push(depth);
 
-                        let node_details = mcts.get_focus_node_details();
+                        let node_details = mcts.get_node_details();
 
                         let best_node = choose_action(
                             &node_details.children,
@@ -530,11 +531,10 @@ where
                         scores.push(best_node.Qsa());
                         game_lengths.push(best_node.snapshot.game_length());
                         visits.push(node_details.visits);
-                        mcts.add_focus_to_action(best_node.action.clone());
-
                         focus_game_state = self
                             .engine
                             .take_action(&focus_game_state, &best_node.action);
+                        mcts.set_state(focus_game_state.clone());
                         actions.push(best_node.action.clone());
 
                         if node_details_container.is_none() {
@@ -542,15 +542,12 @@ where
                         }
                     }
 
-                    mcts.clear_focus();
-                    for action in focused_actions {
-                        mcts.add_focus_to_action(action);
-                    }
+                    mcts.set_state(saved_focus_state);
 
                     let pv = mcts.principal_variation(None, 10).into_iter().collect_vec();
 
                     let node_details =
-                        node_details_container.unwrap_or_else(|| mcts.get_focus_node_details());
+                        node_details_container.unwrap_or_else(|| mcts.get_node_details());
 
                     self.output_post_search_info(
                         current_player,

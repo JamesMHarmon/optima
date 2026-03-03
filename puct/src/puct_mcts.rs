@@ -45,7 +45,6 @@ where
     analyzer: &'a M,
     state: M::State,
     puct: PUCT<'a, E, M, VM, Sel>,
-    focus_actions: Vec<E::Action>,
 }
 
 impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
@@ -81,7 +80,6 @@ where
             analyzer,
             state,
             puct,
-            focus_actions: Vec::new(),
         }
     }
 
@@ -89,47 +87,31 @@ where
     /// This is a compatibility stub for legacy callers; it intentionally no-ops.
     pub async fn apply_noise_at_root(&mut self, _dirichlet: Option<&DirichletOptions>) {
         // @TODO: Implement true root prior noise once puct exposes prior mutation.
+        panic!("apply_noise_at_root is not currently implemented for PuctMCTS");
     }
 
-    fn focus_state(&self) -> M::State
-    where
-        M::State: Clone,
-    {
-        let mut state = self.state.clone();
-        for action in &self.focus_actions {
-            state = self.engine.take_action(&state, action);
-        }
-        state
+    pub fn state(&self) -> &M::State {
+        &self.state
     }
 
-    pub fn add_focus_to_action(&mut self, action: M::Action) {
-        self.focus_actions.push(action);
+    pub fn set_state(&mut self, state: M::State) {
+        self.state = state;
     }
 
-    pub fn clear_focus(&mut self) {
-        self.focus_actions.clear();
-    }
-
-    pub fn get_focused_actions(&self) -> &[M::Action] {
-        &self.focus_actions
-    }
-
-    pub fn num_focus_node_visits(&mut self) -> usize {
-        let edges = self.puct.edge_views(&self.focus_state());
+    pub fn num_node_visits(&mut self) -> usize {
+        let edges = self.puct.edge_views(&self.state);
         let sum: u64 = edges.iter().map(|e| e.visits as u64).sum();
         (sum + 1).min(usize::MAX as u64) as usize
     }
 
     pub async fn advance_to_action_retain(&mut self, action: M::Action) -> Result<()> {
         self.state = self.engine.take_action(&self.state, &action);
-        self.focus_actions.clear();
         Ok(())
     }
 
     /// Advances to `action` and prunes the underlying search store to the new root.
     pub async fn advance_to_action(&mut self, action: M::Action) -> Result<()> {
         self.state = self.engine.take_action(&self.state, &action);
-        self.focus_actions.clear();
 
         tokio::task::block_in_place(move || {
             self.puct.prune(&self.state);
@@ -171,7 +153,7 @@ where
     where
         Fn: FnMut(NodeInfo) -> bool + Send,
     {
-        let state = self.focus_state();
+        let state = self.state.clone();
 
         let depth = tokio::task::block_in_place(move || self.puct.search(&state, alive));
 
@@ -185,7 +167,7 @@ where
         M::State: Clone,
         SnapshotOf<VM>: Clone,
     {
-        let state = self.focus_state();
+        let state = self.state.clone();
         let edges = self.filtered_edge_views(&state);
 
         let temp_and_offset = temp.temp(&state);
@@ -221,7 +203,7 @@ where
         M::Predictions: Clone,
         SnapshotOf<VM>: Clone,
     {
-        let state = self.focus_state();
+        let state = self.state.clone();
         let transposition_hash = state.transposition_hash();
         let request_id = transposition_hash;
 
@@ -258,11 +240,11 @@ where
         })
     }
 
-    pub fn get_focus_node_details(&mut self) -> NodeDetails<M::Action, SnapshotOf<VM>>
+    pub fn get_node_details(&mut self) -> NodeDetails<M::Action, SnapshotOf<VM>>
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
-        let state = self.focus_state();
+        let state = self.state.clone();
         let edges = self.filtered_edge_views(&state);
 
         let mut score_by_index = self.score_by_index(&state, 0);
@@ -305,7 +287,7 @@ where
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
-        let mut state = self.focus_state();
+        let mut state = self.state.clone();
         let mut pv: Vec<EdgeDetails<M::Action, SnapshotOf<VM>>> = Vec::new();
 
         for ply in 0..depth {
