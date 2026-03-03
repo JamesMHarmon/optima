@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 pub trait ChannelExt<T> {
     // Blocks the channel for at least one item and then attempts to receive additional items up to the limit specified.
     fn recv_up_to(&self, limit: usize) -> Vec<T>;
@@ -11,7 +13,9 @@ impl<T> ChannelExt<T> for crossbeam::channel::Receiver<T> {
             states_to_analyse.push(state_to_analyze);
         }
 
-        while let Ok(state_to_analyze) = self.try_recv() {
+        let deadline = Instant::now() + Duration::from_millis(1);
+
+        while let Ok(state_to_analyze) = self.recv_deadline(deadline) {
             states_to_analyse.push(state_to_analyze);
 
             if states_to_analyse.len() == limit {
