@@ -2,7 +2,7 @@ use crate::{
     ActionsToMoveString, ConvertToValidCompositeActions, InitialGameState, TimeStrategy,
     UGICommand, UGIOption, UGIOptions,
 };
-use common::{GameLength, PlayerValue, TranspositionHash};
+use common::{InfoFields, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use model::Analyzer;
@@ -143,7 +143,7 @@ impl<S, A> GameManager<S, A> {
         T: TimeStrategy<S> + Send + 'static,
         M::Analyzer: Send + Sync,
         <B as ValueModel>::Rollup: Send + Sync,
-        SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
+        SnapshotOf<B>: Clone + PlayerValue + InfoFields + Display + Eq + Send + Sync,
         Ps: Display,
         Pr: Display,
         S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
@@ -222,7 +222,7 @@ where
         + SelectionPolicyScoring<SnapshotOf<B>, State = S>
         + Sync,
     T: TimeStrategy<S>,
-    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
+    SnapshotOf<B>: Clone + PlayerValue + InfoFields + Display + Eq + Send + Sync,
     Ps: Display,
     Pr: Display,
 {
@@ -358,7 +358,6 @@ where
                             let best_node = choose_action(&node_details.children, 0.0);
 
                             let player_to_move = self.engine.player_to_move(&focus_game_state);
-                            let game_length = best_node.snapshot.game_length().max(0.0);
 
                             self.output_post_search_info(
                                 player_to_move,
@@ -368,7 +367,7 @@ where
                                 start_time,
                                 &[best_node.Qsa()],
                                 &[node_details.visits],
-                                &[game_length],
+                                &[best_node.snapshot],
                                 &[depth],
                                 &node_details,
                             );
@@ -489,11 +488,9 @@ where
                     let mut actions = Vec::new();
                     let mut depths = Vec::new();
                     let mut visits = Vec::new();
-                    let mut game_lengths = Vec::new();
+                    let mut snapshots = Vec::new();
                     let mut scores = Vec::new();
                     let mut node_details_container = None;
-
-                    // @TODO: When stop is used, bestmove is empty
 
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
@@ -530,7 +527,7 @@ where
                         );
 
                         scores.push(best_node.Qsa());
-                        game_lengths.push(best_node.snapshot.game_length());
+                        snapshots.push(best_node.snapshot);
                         visits.push(node_details.visits);
                         focus_game_state = self
                             .engine
@@ -558,7 +555,7 @@ where
                         search_start,
                         &scores,
                         &visits,
-                        &game_lengths,
+                        &snapshots,
                         &depths,
                         &node_details,
                     );
@@ -613,21 +610,21 @@ where
         search_start: Instant,
         scores: &[f32],
         visits: &[usize],
-        game_lengths: &[f32],
+        snapshots: &[SnapshotOf<B>],
         depths: &[usize],
         node_details: &NodeDetails<A, SnapshotOf<B>>,
     ) {
         self.output.info(&format!(
-            "time {} playertomove {} root_score {:.3} score {:.3} game_length {:.1} visits {:?} depth {} root_transpositionid {} transpositionid {}",
-            search_start.elapsed().as_secs(),
-            player_to_move,
-            scores.first().unwrap_or(&0.5),
-            scores.last().unwrap_or(&0.5),
-            game_lengths.last().unwrap_or(&0.0),
-            visits,
-            depths.iter().max().unwrap_or(&0),
-            pre_action_game_state.transposition_hash(),
-            focus_game_state.transposition_hash()
+            "time {time} playertomove {player} root_score {root_score:.3} score {score:.3} {snapshot} visits {visits:?} depth {depth} root_transpositionid {root_transpositionid} transpositionid {transpositionid}",
+            time = search_start.elapsed().as_secs(),
+            player = player_to_move,
+            root_score = scores.first().unwrap_or(&0.5),
+            score = scores.last().unwrap_or(&0.5),
+            snapshot = snapshots.last().map( |s| Self::snapshot_info(s)).unwrap_or_default(),
+            visits = visits.iter().max().unwrap_or(&0),
+            depth = depths.iter().max().unwrap_or(&0),
+            root_transpositionid = pre_action_game_state.transposition_hash(),
+            transpositionid = focus_game_state.transposition_hash()
         ));
 
         let visits_sum = (node_details.visits - 1).max(1);
@@ -644,12 +641,12 @@ where
                 .actions_to_move_string(pre_action_game_state, &pv_actions);
 
             self.output.info(&format!(
-                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} game_length {game_length:.3} pv {pv}",
+                "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} {snapshot} pv {pv}",
                 pv_num = i + 1,
                 score = edge.Qsa(),
                 visits = edge.Nsa,
                 visitspct = edge.Nsa as f32 / visits_sum as f32,
-                game_length = edge.snapshot.game_length(),
+                snapshot = Self::snapshot_info(&edge.snapshot),
                 pv = &pv_string,
             ));
         }
@@ -662,6 +659,15 @@ where
                 .lines()
                 .for_each(|line| self.output.info(line));
         }
+    }
+
+    fn snapshot_info(snapshot: &SnapshotOf<B>) -> String {
+        snapshot
+            .info_fields()
+            .as_ref()
+            .iter()
+            .map(|(k, v)| format!("{} {:.3}", k, v))
+            .join(" ")
     }
 }
 

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use common::{GameLength, PlayerValue, TranspositionHash};
+use common::{InfoFields, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use model::Analyzer;
 use puct::{RollupStats, SelectionPolicy, SelectionPolicyScoring, ValueModel};
@@ -51,7 +51,7 @@ where
     M::Analyzer: Send + Sync,
     B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Send + Sync + 'static,
     <B as ValueModel>::Rollup: Send + Sync,
-    SnapshotOf<B>: Clone + PlayerValue + GameLength + Display + Eq + Send + Sync,
+    SnapshotOf<B>: Clone + PlayerValue + InfoFields + Display + Eq + Send + Sync,
     FnB: Fn(&UGIOptions) -> B + Send + 'static,
     FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,
     Sel: SelectionPolicy<SnapshotOf<B>, State = S, Action = A, Terminal = E::Terminal>

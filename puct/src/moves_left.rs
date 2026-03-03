@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use common::{CPUCT, GameLength, PlayerToMove, PlayerValue};
+use common::{CPUCT, GameLength, InfoFields, PlayerToMove, PlayerValue};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -68,6 +68,17 @@ impl GameLength for MovesLeftSnapshot {
             return 0.0;
         }
         (self.game_length_sum / (self.total_weight as f64)) as f32
+    }
+}
+
+impl InfoFields for MovesLeftSnapshot {
+    type Fields = [(&'static str, f32); 3];
+    fn info_fields(&self) -> Self::Fields {
+        [
+            ("p1", self.player_value(1)),
+            ("p2", self.player_value(2)),
+            ("game_length", self.game_length()),
+        ]
     }
 }
 

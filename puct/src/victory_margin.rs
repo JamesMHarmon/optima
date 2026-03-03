@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use common::{CPUCT, GameLength, PlayerToMove, PlayerValue, VictoryMargin};
+use common::{CPUCT, GameLength, InfoFields, PlayerToMove, PlayerValue, VictoryMargin};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -485,6 +485,18 @@ where
 }
 
 impl Eq for VictoryMarginSnapshot {}
+
+impl InfoFields for VictoryMarginSnapshot {
+    type Fields = [(&'static str, f32); 4];
+    fn info_fields(&self) -> Self::Fields {
+        [
+            ("p1", self.player_value(1)),
+            ("p2", self.player_value(2)),
+            ("game_length", self.game_length()),
+            ("victory_margin", self.victory_margin()),
+        ]
+    }
+}
 
 impl std::fmt::Display for VictoryMarginSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
