@@ -12,7 +12,7 @@ use std::time::Instant;
 use tokio::runtime::Handle;
 
 use common::{PlayerValue, TranspositionHash};
-use engine::{GameEngine, GameState};
+use engine::{GameEngine, GameState, ValidActions};
 use model::ModelInfo;
 use model::{Analyzer, GameAnalyzer, Info};
 use puct::{PuctMCTS, RollupStats, SelectionPolicy, TemperatureMaxMoves, ValueModel};
@@ -49,26 +49,25 @@ pub struct MatchResult {
 }
 
 impl Arena {
-    pub fn evaluate<S, P, E, M, T, VM, Sel>(
+    pub fn evaluate<P, E, M, T, VM, Sel>(
         models: &[M],
         engine: &E,
         value_model: &VM,
         selection_policy: &Sel,
-        results: Sender<EvalResult<E::Action>>,
+        results: Sender<EvalResult<M::Action>>,
         options: &ArenaOptions,
     ) -> Result<MatchResult>
     where
-        S: GameState + Clone + TranspositionHash + Send + Sync,
-        E::Action:
+        M::State: GameState + Clone + TranspositionHash + Send + Sync,
+        M::Action:
             Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync + 'static,
-        E: GameEngine<State = S, Terminal = P> + Sync,
-        M: Analyzer<State = S, Action = E::Action, Analyzer = T, Predictions = P>
-            + Info
-            + Send
+        E: GameEngine<State = M::State, Action = M::Action, Terminal = P>
+            + ValidActions<State = M::State, Action = M::Action>
             + Sync,
-        T: GameAnalyzer<Action = E::Action, State = S, Predictions = P> + Send + Sync,
+        M: Analyzer<Analyzer = T, Predictions = P> + Info + Send + Sync,
+        T: GameAnalyzer<Action = M::Action, State = M::State, Predictions = P> + Send + Sync,
         VM: ValueModel<Predictions = P, Terminal = P> + Send + Sync,
-        Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = E::Action, Terminal = P>
+        Sel: SelectionPolicy<SnapshotOf<VM>, State = M::State, Action = M::Action, Terminal = P>
             + Send
             + Sync,
         RollupOf<VM>: Send + Sync,
@@ -213,7 +212,9 @@ impl Arena {
     where
         S: GameState + Clone + TranspositionHash + Send + Sync,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
-        E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+        E: GameEngine<State = S, Action = A, Terminal = P>
+            + ValidActions<State = S, Action = A>
+            + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
         VM: ValueModel<Predictions = P, Terminal = P> + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,
@@ -269,7 +270,9 @@ impl Arena {
     where
         S: GameState + Clone + TranspositionHash + Send + Sync,
         A: Clone + Eq + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync,
-        E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+        E: GameEngine<State = S, Action = A, Terminal = P>
+            + ValidActions<State = S, Action = A>
+            + Sync,
         M: Analyzer<State = S, Action = A, Analyzer = T, Predictions = P> + Info + Send + Sync,
         VM: ValueModel<Predictions = P, Terminal = P> + Sync,
         Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,

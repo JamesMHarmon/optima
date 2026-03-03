@@ -1,11 +1,12 @@
 use anyhow::{Result, anyhow};
 use common::{PlayerToMove, TranspositionHash};
-use engine::GameEngine;
+use engine::{GameEngine, ValidActions};
 use model::GameAnalyzer;
 use rand::Rng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::thread_rng;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -15,7 +16,6 @@ use crate::temp::Temperature;
 use crate::{EdgeScore, EdgeView};
 use crate::{NodeInfo, PUCT, SelectionPolicy, SelectionPolicyScoring, ValueModel, WeightedMerge};
 use model::{EdgeMetrics, NodeMetrics};
-use std::collections::HashMap;
 
 type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
 type ActionOf<E> = <E as GameEngine>::Action;
@@ -34,37 +34,39 @@ where
     VM: ValueModel<Predictions = M::Predictions, Terminal = E::Terminal>,
     Sel: SelectionPolicy<
             SnapshotOf<VM>,
-            State = E::State,
+            State = M::State,
             Action = E::Action,
             Terminal = E::Terminal,
         >,
-    E::State: TranspositionHash,
+    M::State: TranspositionHash,
 {
     engine: &'a E,
     analyzer: &'a M,
-    state: E::State,
+    state: M::State,
     puct: PUCT<'a, E, M, VM, Sel>,
     focus_actions: Vec<E::Action>,
 }
 
 impl<'a, E, M, VM, Sel> PuctMCTS<'a, E, M, VM, Sel>
 where
-    E: GameEngine + Sync,
-    M: GameAnalyzer<State = E::State, Action = E::Action> + Sync,
+    E: GameEngine<State = M::State, Action = M::Action>
+        + ValidActions<State = M::State, Action = M::Action>
+        + Sync,
+    M: GameAnalyzer + Sync,
     VM: ValueModel<Predictions = M::Predictions, Terminal = E::Terminal> + Sync,
     <VM as ValueModel>::Rollup: Send + Sync,
     Sel: SelectionPolicy<
             SnapshotOf<VM>,
-            State = E::State,
-            Action = E::Action,
+            State = M::State,
+            Action = M::Action,
             Terminal = E::Terminal,
         > + Sync,
-    E::State: TranspositionHash + Clone + Send + Sync,
-    E::Action: Clone + PartialEq + Send + Sync,
+    M::State: TranspositionHash + Clone + Send + Sync,
+    M::Action: Clone + Eq + Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,
 {
     pub fn new(
-        state: E::State,
+        state: M::State,
         engine: &'a E,
         analyzer: &'a M,
         value_model: &'a VM,
@@ -88,9 +90,9 @@ where
         // @TODO: Implement true root prior noise once puct exposes prior mutation.
     }
 
-    fn focus_state(&self) -> E::State
+    fn focus_state(&self) -> M::State
     where
-        E::State: Clone,
+        M::State: Clone,
     {
         let mut state = self.state.clone();
         for action in &self.focus_actions {
@@ -99,7 +101,7 @@ where
         state
     }
 
-    pub fn add_focus_to_action(&mut self, action: E::Action) {
+    pub fn add_focus_to_action(&mut self, action: M::Action) {
         self.focus_actions.push(action);
     }
 
@@ -107,7 +109,7 @@ where
         self.focus_actions.clear();
     }
 
-    pub fn get_focused_actions(&self) -> &[E::Action] {
+    pub fn get_focused_actions(&self) -> &[M::Action] {
         &self.focus_actions
     }
 
@@ -117,14 +119,14 @@ where
         (sum + 1).min(usize::MAX as u64) as usize
     }
 
-    pub async fn advance_to_action_retain(&mut self, action: E::Action) -> Result<()> {
+    pub async fn advance_to_action_retain(&mut self, action: M::Action) -> Result<()> {
         self.state = self.engine.take_action(&self.state, &action);
         self.focus_actions.clear();
         Ok(())
     }
 
     /// Advances to `action` and prunes the underlying search store to the new root.
-    pub async fn advance_to_action(&mut self, action: E::Action) -> Result<()> {
+    pub async fn advance_to_action(&mut self, action: M::Action) -> Result<()> {
         self.state = self.engine.take_action(&self.state, &action);
         self.focus_actions.clear();
 
@@ -175,15 +177,15 @@ where
         Ok(depth as usize)
     }
 
-    pub fn select_action<T>(&mut self, temp: &T) -> Result<E::Action>
+    pub fn select_action<T>(&mut self, temp: &T) -> Result<M::Action>
     where
-        T: Temperature<State = E::State>,
-        E::Action: Clone,
-        E::State: Clone,
+        T: Temperature<State = M::State>,
+        M::Action: Clone,
+        M::State: Clone,
         SnapshotOf<VM>: Clone,
     {
         let state = self.focus_state();
-        let edges = self.puct.edge_views(&state);
+        let edges = self.filtered_edge_views(&state);
 
         let temp_and_offset = temp.temp(&state);
 
@@ -213,8 +215,8 @@ where
 
     pub fn get_root_node_metrics(&mut self) -> Result<RootNodeMetrics<E, M, VM>>
     where
-        E::Action: Clone,
-        E::State: Clone + PlayerToMove,
+        M::Action: Clone,
+        M::State: Clone + PlayerToMove,
         M::Predictions: Clone,
         SnapshotOf<VM>: Clone,
     {
@@ -231,7 +233,7 @@ where
 
         let predictions = analysis.predictions().clone();
 
-        let edges: Vec<EdgeView<E::Action, SnapshotOf<VM>>> = self.puct.edge_views(&state);
+        let edges: Vec<EdgeView<M::Action, SnapshotOf<VM>>> = self.puct.edge_views(&state);
 
         let children = edges
             .into_iter()
@@ -255,12 +257,12 @@ where
         })
     }
 
-    pub fn get_focus_node_details(&mut self) -> NodeDetails<E::Action, SnapshotOf<VM>>
+    pub fn get_focus_node_details(&mut self) -> NodeDetails<M::Action, SnapshotOf<VM>>
     where
-        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
         let state = self.focus_state();
-        let edges = self.puct.edge_views(&state);
+        let edges = self.filtered_edge_views(&state);
 
         let mut score_by_index = self.score_by_index(&state, 0);
 
@@ -296,17 +298,17 @@ where
 
     pub fn principal_variation(
         &mut self,
-        action: Option<&E::Action>,
+        action: Option<&M::Action>,
         depth: usize,
-    ) -> Result<Vec<EdgeDetails<E::Action, SnapshotOf<VM>>>>
+    ) -> Result<Vec<EdgeDetails<M::Action, SnapshotOf<VM>>>>
     where
-        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
         let mut state = self.focus_state();
-        let mut pv: Vec<EdgeDetails<E::Action, SnapshotOf<VM>>> = Vec::new();
+        let mut pv: Vec<EdgeDetails<M::Action, SnapshotOf<VM>>> = Vec::new();
 
         for ply in 0..depth {
-            let edges = match self.puct.try_edge_views(&state) {
+            let edges = match self.try_filtered_edge_views(&state) {
                 Some(edges) => edges,
                 None => break,
             };
@@ -358,9 +360,40 @@ where
         Ok(pv)
     }
 
-    fn score_by_index(&self, state: &E::State, depth: u32) -> HashMap<usize, EdgeScore>
+    /// Returns edges for `state` filtered to only those whose action is currently valid.
+    ///
+    /// Because the transposition table can map a node to multiple game states
+    /// (some of which may have fewer legal actions due to repetition rules), the
+    /// raw edge list can contain actions that are illegal in the current context.
+    /// This helper ensures callers always work with the correct legal subset.
+    fn filtered_edge_views(
+        &mut self,
+        state: &M::State,
+    ) -> Vec<EdgeView<M::Action, SnapshotOf<VM>>> {
+        let valid_actions: Vec<M::Action> = self.engine.valid_actions(state).collect();
+        self.puct
+            .edge_views(state)
+            .into_iter()
+            .filter(|e| valid_actions.contains(&e.action))
+            .collect()
+    }
+
+    fn try_filtered_edge_views(
+        &mut self,
+        state: &M::State,
+    ) -> Option<Vec<EdgeView<M::Action, SnapshotOf<VM>>>> {
+        let valid_actions: Vec<M::Action> = self.engine.valid_actions(state).collect();
+        self.puct.try_edge_views(state).map(|edges| {
+            edges
+                .into_iter()
+                .filter(|e| valid_actions.contains(&e.action))
+                .collect()
+        })
+    }
+
+    fn score_by_index(&self, state: &M::State, depth: u32) -> HashMap<usize, EdgeScore>
     where
-        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = E::State>,
+        Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
         self.puct
             .edge_scores(state, depth)

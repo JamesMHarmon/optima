@@ -3,7 +3,7 @@ use rand::Rng;
 use std::fmt::Debug;
 
 use common::{GameLength, PlayerToMove, TranspositionHash};
-use engine::{GameEngine, GameState};
+use engine::{GameEngine, GameState, ValidActions};
 use model::GameAnalyzer;
 use puct::{
     DirichletOptions, NoTemp, PuctMCTS, RollupStats, SelectionPolicy, TemperatureConstant,
@@ -27,6 +27,7 @@ where
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
     A: Clone + Eq + Debug + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P>,
+    E: ValidActions<State = S, Action = A>,
     E: Sync,
     M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,

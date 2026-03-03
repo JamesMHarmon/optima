@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 
 use super::{SelfPlayMetrics, SelfPlayOptions, SelfPlayPersistance, play_self_one};
-use engine::{GameEngine, GameState};
+use engine::{GameEngine, GameState, ValidActions};
 use model::GameAnalyzer;
 use model::{Analyzer, Info, Latest, Load, ModelInfo};
 use puct::{RollupStats, SelectionPolicy, ValueModel};
@@ -34,7 +34,7 @@ where
     F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
     M: Analyzer<State = S, Action = A, Predictions = P> + Info + Send + Sync,
     M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+    E: GameEngine<State = S, Action = A, Terminal = P> + ValidActions<State = S, Action = A> + Sync,
     P: Clone + GameLength,
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
     A: Serialize + Debug + Eq + Clone + Send + Sync,
@@ -145,7 +145,7 @@ where
     F: Fn() -> (M, ModelInfo),
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
     A: Clone + Eq + Debug + Send + Sync,
-    E: GameEngine<State = S, Action = A, Terminal = P> + Sync,
+    E: GameEngine<State = S, Action = A, Terminal = P> + ValidActions<State = S, Action = A> + Sync,
     M: GameAnalyzer<State = S, Action = A, Predictions = P> + Sync,
     P: Clone + GameLength,
     VM: ValueModel<Predictions = P, Terminal = P> + Sync,
