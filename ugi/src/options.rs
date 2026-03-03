@@ -13,6 +13,7 @@ pub struct UGIOptions {
     pub moves_left_scale: f32,
     pub moves_left_factor: f32,
     pub parallelism: usize,
+    pub sim_threads: usize,
     pub visits: usize,
     pub max_visits: usize,
     pub time_buffer: f32,
@@ -40,6 +41,7 @@ pub enum UGIOption {
     VictoryMarginThreshold(f32),
     VictoryMarginFactor(f32),
     Parallelism(usize),
+    SimThreads(usize),
     Visits(usize),
     MaxVisits(usize),
     TimeBuffer(f32),
@@ -72,6 +74,7 @@ impl UGIOptions {
             moves_left_scale: 10.0,
             moves_left_factor: 0.1,
             parallelism: 512,
+            sim_threads: 1,
             visits: 0,
             max_visits: 10_000_000,
             time_buffer: 1.0,
@@ -109,6 +112,7 @@ impl UGIOptions {
                 self.victory_margin_factor = victory_margin_factor
             }
             UGIOption::Parallelism(parallelism) => self.parallelism = parallelism,
+            UGIOption::SimThreads(sim_threads) => self.sim_threads = sim_threads,
             UGIOption::Visits(visits) => self.visits = visits,
             UGIOption::MaxVisits(max_visits) => self.max_visits = max_visits,
             UGIOption::TimeBuffer(time_buffer) => self.time_buffer = time_buffer,

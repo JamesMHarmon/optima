@@ -296,6 +296,7 @@ where
                     value_model,
                     selection,
                     options_lock.parallelism,
+                    options_lock.sim_threads,
                 ));
             }
 

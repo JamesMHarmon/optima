@@ -1,4 +1,6 @@
 use std::cmp::max;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::thread;
 
 use crossbeam::channel;
@@ -45,6 +47,7 @@ where
     store: PuctStore<E, VM>,
     context_pool: SearchContextPool,
     virtual_sims: usize,
+    sim_threads: usize,
 }
 
 impl<'a, E, M, VM, Sel> PUCT<'a, E, M, VM, Sel>
@@ -69,10 +72,12 @@ where
         value_model: &'a VM,
         selection_strategy: &'a Sel,
         virtual_sims: usize,
+        sim_threads: usize,
     ) -> Self {
         let virtual_sims = virtual_sims.max(1);
+        let sim_threads = sim_threads.max(1);
         let store: PuctStore<E, VM> = NodeGraphStore::new();
-        let context_pool = SearchContextPool::new(virtual_sims);
+        let context_pool = SearchContextPool::new(virtual_sims * sim_threads);
 
         Self {
             game_engine,
@@ -82,6 +87,7 @@ where
             store,
             context_pool,
             virtual_sims,
+            sim_threads,
         }
     }
 
@@ -92,7 +98,7 @@ where
 
     pub fn search<Alive>(&mut self, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: FnMut(NodeInfo) -> bool + Send,
+        Alive: Fn(NodeInfo) -> bool + Send + Sync,
     {
         let root = self.get_or_create_root(game_state);
         self.run_simulations(root, game_state, alive)
@@ -100,27 +106,45 @@ where
 
     fn run_simulations<Alive>(&self, root: NodeId, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: FnMut(NodeInfo) -> bool + Send,
+        Alive: Fn(NodeInfo) -> bool + Send + Sync,
     {
-        let coordinator = AnalysisCoordinator::new(self.analyzer, self.virtual_sims);
+        let total_capacity = self.virtual_sims * self.sim_threads;
+        let coordinator = AnalysisCoordinator::new(self.analyzer, total_capacity);
         let mut max_depth = 0;
 
         thread::scope(|s| {
-            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(self.virtual_sims);
+            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(total_capacity);
 
             let analyzer = self.analyzer;
             let store = &self.store;
             let value_model = self.value_model;
             let coordinator = &coordinator;
+            let alive = &alive;
 
             let backprop_handle = s.spawn(move || {
                 let backprop = Backpropagator::new(analyzer, store, value_model, coordinator, rx);
                 backprop.run();
             });
 
-            let sim_handle = s.spawn(|| self.run_sim(root, game_state, alive, tx, coordinator));
+            let sim_id = Arc::new(AtomicUsize::new(0));
 
-            max_depth = sim_handle.join().expect("PUCT sim thread panicked");
+            // @TODO: Clean this up
+            let sim_handles: Vec<_> = (0..self.sim_threads)
+                .map(|_| {
+                    let tx = tx.clone();
+                    let sim_id = Arc::clone(&sim_id);
+                    s.spawn(move || self.run_sim(root, game_state, alive, tx, coordinator, sim_id))
+                })
+                .collect();
+
+            // Drop the original sender so the channel closes when all sim threads exit.
+            drop(tx);
+
+            let depths = sim_handles
+                .into_iter()
+                .map(|h| h.join().expect("PUCT sim thread panicked"));
+            max_depth = depths.max().unwrap_or(0);
+
             backprop_handle.join().expect("backprop thread panicked");
         });
 
@@ -131,16 +155,16 @@ where
         &self,
         root: NodeId,
         game_state: &E::State,
-        mut alive: Alive,
+        alive: &Alive,
         tx: SimTx<E, VM>,
         coordinator: &AnalysisCoordinator<M>,
+        sim_id: Arc<AtomicUsize>,
     ) -> usize
     where
-        Alive: FnMut(NodeInfo) -> bool,
+        Alive: Fn(NodeInfo) -> bool,
     {
         let root_node = self.store.state_node(root);
         let mut max_depth = 0;
-        let mut sim_id: usize = 0;
 
         let mut simulator = Simulator::new(
             &self.store,
@@ -160,12 +184,11 @@ where
                 break;
             }
 
-            let step = simulator.simulate_once(root, game_state.clone(), sim_id);
+            let current_sim_id = sim_id.fetch_add(1, AtomicOrdering::Relaxed);
+            let step = simulator.simulate_once(root, game_state.clone(), current_sim_id);
             max_depth = max(max_depth, step.depth());
 
             self.handle_step(step, &tx, coordinator);
-
-            sim_id += 1;
         }
 
         max_depth
@@ -268,14 +291,7 @@ where
             return existing;
         }
 
-        let request_id = transposition_hash;
-        self.analyzer.analyze(request_id, game_state);
-        let (recv_request_id, analysis) = self.analyzer.recv();
-
-        assert!(
-            recv_request_id == request_id,
-            "Expected analysis result for root node"
-        );
+        let analysis = self.analyzer.analyze(game_state);
 
         let (policy_priors, predictions) = analysis.into_inner();
         let snapshot = self.value_model.pred_snapshot(&predictions);

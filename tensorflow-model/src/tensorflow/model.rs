@@ -3,7 +3,7 @@ use common::{TranspositionTable, get_env_usize};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use half::f16;
-use log::info;
+use log::{debug, info, trace};
 use parking_lot::Mutex;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, ParallelBridge, ParallelIterator,
@@ -249,7 +249,7 @@ where
     type Action = A;
     type Predictions = P;
 
-    fn analyze(&self, request_id: RequestId, game_state: &S) {
+    fn send(&self, request_id: RequestId, game_state: &S) {
         if let Some(analysis) = self.try_immediate_analysis(game_state) {
             let _ = self.results_tx.send((request_id, analysis));
             return;
@@ -263,6 +263,18 @@ where
         self.results_rx
             .recv()
             .expect("Results channel closed before receiving result")
+    }
+
+    fn analyze(&self, game_state: &S) -> GameStateAnalysis<A, P> {
+        const REQUEST_ID: RequestId = 0;
+        let (tx, rx) = crossbeam::channel::bounded(1);
+
+        self.batching_model
+            .enqueue(game_state.to_owned(), REQUEST_ID, tx);
+
+        rx.recv()
+            .expect("Analysis channel closed before receiving result")
+            .1
     }
 }
 
@@ -292,6 +304,21 @@ where
             self.reporter.set_predict_in_flight();
         } else {
             self.reporter.set_predict_needs_infer();
+
+            let queue_len = self.states_to_analyze_tx.len();
+            let queue_cap = self.states_to_analyze_tx.capacity().unwrap_or(0);
+            if queue_len >= queue_cap {
+                debug!(
+                    "[backpressure] Analysis queue is FULL ({}/{}). Sim thread will block until inference drains an item.",
+                    queue_len, queue_cap
+                );
+            } else {
+                trace!(
+                    "[backpressure] Enqueue: queue depth {}/{}",
+                    queue_len, queue_cap
+                );
+            }
+
             let _ = self.states_to_analyze_tx.send((state_to_analyse, key));
         }
     }

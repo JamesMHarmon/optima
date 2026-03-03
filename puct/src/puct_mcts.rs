@@ -72,8 +72,16 @@ where
         value_model: &'a VM,
         selection: &'a Sel,
         parallelism: usize,
+        sim_threads: usize,
     ) -> Self {
-        let puct = PUCT::new(engine, analyzer, value_model, selection, parallelism);
+        let puct = PUCT::new(
+            engine,
+            analyzer,
+            value_model,
+            selection,
+            parallelism,
+            sim_threads,
+        );
 
         Self {
             engine,
@@ -149,9 +157,9 @@ where
         .await
     }
 
-    pub async fn search<Fn>(&mut self, alive: Fn) -> Result<usize>
+    pub async fn search<F>(&mut self, alive: F) -> Result<usize>
     where
-        Fn: FnMut(NodeInfo) -> bool + Send,
+        F: Fn(NodeInfo) -> bool + Send + Sync,
     {
         let state = self.state.clone();
 
@@ -204,15 +212,7 @@ where
         SnapshotOf<VM>: Clone,
     {
         let state = self.state.clone();
-        let transposition_hash = state.transposition_hash();
-        let request_id = transposition_hash;
-
-        self.analyzer.analyze(request_id, &state);
-        let (recv_request_id, analysis) = self.analyzer.recv();
-        assert!(
-            recv_request_id == request_id,
-            "Expected analysis result for root node"
-        );
+        let analysis = self.analyzer.analyze(&state);
 
         let predictions = analysis.predictions().clone();
 

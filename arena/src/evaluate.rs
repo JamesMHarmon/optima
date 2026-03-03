@@ -299,6 +299,7 @@ impl Arena {
                     value_model,
                     selection_policy,
                     play_options.parallelism,
+                    play_options.sim_threads,
                 )
             })
             .collect();

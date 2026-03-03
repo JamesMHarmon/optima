@@ -31,7 +31,7 @@ where
         let hash = game_state.transposition_hash();
 
         if self.in_flight.insert(hash) {
-            self.analyzer.analyze(hash, &game_state);
+            self.analyzer.send(hash, &game_state);
         }
     }
 

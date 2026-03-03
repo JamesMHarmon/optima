@@ -7,7 +7,7 @@ pub trait GameAnalyzer {
     type State;
     type Predictions;
 
-    fn analyze(&self, request_id: RequestId, game_state: &Self::State);
+    fn send(&self, request_id: RequestId, game_state: &Self::State);
 
     fn recv(
         &self,
@@ -15,6 +15,11 @@ pub trait GameAnalyzer {
         RequestId,
         GameStateAnalysis<Self::Action, Self::Predictions>,
     );
+
+    fn analyze(
+        &self,
+        game_state: &Self::State,
+    ) -> GameStateAnalysis<Self::Action, Self::Predictions>;
 }
 
 #[derive(Clone, Debug)]

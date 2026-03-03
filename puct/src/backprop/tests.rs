@@ -23,8 +23,8 @@ impl model::GameAnalyzer for DummyAnalyzer {
     type State = DummyState;
     type Predictions = ();
 
-    fn analyze(&self, _request_id: model::RequestId, _game_state: &Self::State) {
-        unreachable!("analyze should not be called by next_sim tests")
+    fn send(&self, _request_id: model::RequestId, _game_state: &Self::State) {
+        unreachable!("send should not be called by next_sim tests")
     }
 
     fn recv(
@@ -34,6 +34,13 @@ impl model::GameAnalyzer for DummyAnalyzer {
         model::GameStateAnalysis<Self::Action, Self::Predictions>,
     ) {
         unreachable!("recv should not be called by next_sim tests")
+    }
+
+    fn analyze(
+        &self,
+        _game_state: &Self::State,
+    ) -> model::GameStateAnalysis<Self::Action, Self::Predictions> {
+        unreachable!("analyze should not be called by next_sim tests")
     }
 }
 

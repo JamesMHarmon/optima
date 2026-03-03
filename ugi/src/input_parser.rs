@@ -117,6 +117,10 @@ where
                         "parallelism",
                         option_value,
                     )?)),
+                    "sim_threads" => Some(UGIOption::SimThreads(parse_option_value(
+                        "sim_threads",
+                        option_value,
+                    )?)),
                     "visits" => Some(UGIOption::Visits(parse_option_value(
                         "visits",
                         option_value,

@@ -46,8 +46,8 @@ where
     type State = An::State;
     type Predictions = An::Predictions;
 
-    fn analyze(&self, request_id: RequestId, game_state: &Self::State) {
-        self.inner.analyze(request_id, game_state)
+    fn send(&self, request_id: RequestId, game_state: &Self::State) {
+        self.inner.send(request_id, game_state)
     }
 
     fn recv(
@@ -57,6 +57,13 @@ where
         GameStateAnalysis<Self::Action, Self::Predictions>,
     ) {
         self.inner.recv()
+    }
+
+    fn analyze(
+        &self,
+        game_state: &Self::State,
+    ) -> GameStateAnalysis<Self::Action, Self::Predictions> {
+        self.inner.analyze(game_state)
     }
 }
 

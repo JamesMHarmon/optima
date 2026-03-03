@@ -52,6 +52,7 @@ pub struct PlayOptions {
     pub temperature_post_max_moves: f32,
     pub temperature_visit_offset: f32,
     pub parallelism: usize,
+    pub sim_threads: usize,
     pub fpu: f32,
     pub fpu_root: f32,
     pub cpuct_base: f32,
@@ -87,6 +88,10 @@ impl Config for PlayOptions {
                 .get("parallelism")
                 .and_then(|v| v.as_usize())
                 .unwrap_or(4),
+            sim_threads: config
+                .get("sim_threads")
+                .and_then(|v| v.as_usize())
+                .unwrap_or(1),
             fpu: config.get("fpu").and_then(|v| v.as_f32()).unwrap_or(0.0),
             fpu_root: config
                 .get("fpu_root")
