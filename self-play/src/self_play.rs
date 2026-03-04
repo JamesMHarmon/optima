@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use common::get_env_usize;
 use common::{GameLength, PlayerToMove, TranspositionHash};
-use log::info;
+use log::{info, warn};
 use serde::Serialize;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -75,18 +75,22 @@ where
                         self_play_options,
                     );
 
-                    game_results_tx
-                        .send((metrics, game_state, model_info))
-                        .ok();
+                    let result = game_results_tx
+                        .send((metrics, game_state, model_info));
+
+                    if result.is_err() {
+                        warn!("Game thread {}: Writer channel disconnected, stopping thread", thread_num);
+                        break;
+                    }
                 }
             });
         }
 
-        s.spawn(move |_| -> Result<()> {
+        s.spawn(move |_|{
             let mut num_of_games_played: usize = 0;
 
             while let Ok((self_play_metric, game_state, model_info)) = game_results_rx.recv() {
-                self_play_persistance.write(&self_play_metric, &model_info).unwrap();
+                self_play_persistance.write(&self_play_metric, &model_info).expect("Failed to write self-play metrics");
                 num_of_games_played += 1;
 
                 info!(
@@ -101,8 +105,6 @@ where
                     num_of_games_played as f32 / starting_run_time.elapsed().as_secs() as f32 * 60_f32
                 );
             }
-
-            Ok(())
         });
     }).map_err(|_| anyhow!("A self-play thread panicked"))?;
 
