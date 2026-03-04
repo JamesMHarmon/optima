@@ -76,6 +76,32 @@ impl GameState {
         (1..=7).filter(|&col| !self.is_column_full(col))
     }
 
+    pub fn horizontal_symmetry(&self) -> Self {
+        let p1_mirrored = mirror_board(self.p1_piece_board);
+        let p2_mirrored = mirror_board(self.p2_piece_board);
+
+        let mut zobrist = Zobrist::initial();
+        let mut bits = p1_mirrored;
+        while bits != 0 {
+            let lsb = bits & bits.wrapping_neg();
+            zobrist = zobrist.add_piece(lsb, true);
+            bits &= bits - 1;
+        }
+        let mut bits = p2_mirrored;
+        while bits != 0 {
+            let lsb = bits & bits.wrapping_neg();
+            zobrist = zobrist.add_piece(lsb, false);
+            bits &= bits - 1;
+        }
+
+        Self {
+            p1_turn_to_move: self.p1_turn_to_move,
+            p1_piece_board: p1_mirrored,
+            p2_piece_board: p2_mirrored,
+            zobrist,
+        }
+    }
+
     pub fn is_column_full(&self, column: usize) -> bool {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
         let column_mask = 1 << (7 * (column - 1));
@@ -196,6 +222,16 @@ impl Display for GameState {
 
         Ok(())
     }
+}
+
+fn mirror_board(board: u64) -> u64 {
+    const COL_MASK: u64 = 0b111_1111;
+    let mut result = 0u64;
+    for c in 0..7u64 {
+        let col_bits = (board >> (7 * c)) & COL_MASK;
+        result |= col_bits << (7 * (6 - c));
+    }
+    result
 }
 
 impl TranspositionHash for GameState {

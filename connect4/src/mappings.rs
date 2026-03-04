@@ -7,7 +7,8 @@ use super::{
     Action, GameState, INPUT_C, INPUT_H, INPUT_W, OUTPUT_SIZE, Predictions, TranspositionEntry,
     Value, map_board_to_arr,
 };
-use common::{GameLength, PlayerValue, map_moves_left_to_one_hot};
+use crate::symmetries::get_symmetries;
+use common::{GameLength, PlayerValue, map_moves_left_to_one_hot, moves_left_expected_value};
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics, PositionMetrics};
 use puct::MovesLeftSnapshot;
@@ -27,8 +28,7 @@ impl Mapper {
         &self,
         metrics: PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>,
     ) -> Vec<PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>> {
-        //@TODO: Add symmetries.
-        vec![metrics]
+        get_symmetries(metrics)
     }
 
     fn metrics_to_policy_output(
@@ -126,9 +126,8 @@ impl PredictionsMap for Mapper {
         let policy_output = self.metrics_to_policy_output(game_state, node_metrics);
         let value_output = self.metrics_to_value_output(game_state, targets.value());
 
-        // @TODO: Verify how number_of_actions relates to game_length.
-        let move_number = game_state.number_of_actions() as f32;
-        let moves_left = (targets.game_length() - move_number + 1.0).max(1.0);
+        let number_of_actions = game_state.number_of_actions() as f32;
+        let moves_left = (targets.game_length() - number_of_actions + 1.0).max(1.0);
         let moves_left_one_hot = map_moves_left_to_one_hot(moves_left, MOVES_LEFT_SIZE);
 
         /*
@@ -162,9 +161,9 @@ impl PredictionsMap for Mapper {
         assert_eq!(moves_left_one_hot.len(), MOVES_LEFT_SIZE);
 
         [
-            ("policy", policy_output),
-            ("value", value_output),
-            ("moves_left", moves_left_one_hot),
+            ("policy_head", policy_output),
+            ("value_head", value_output),
+            ("moves_left_head", moves_left_one_hot),
         ]
         .into_iter()
         .map(|(key, value)| (key.to_string(), value))
@@ -188,20 +187,22 @@ impl TranspositionMap for Mapper {
         outputs: HashMap<String, &[f16]>,
     ) -> TranspositionEntry {
         let policy_scores = *outputs
-            .get("policy")
+            .get("policy_head")
             .expect("Policy scores not found in output");
 
-        let value = outputs.get("value").expect("Value not found in output")[0];
+        let value = outputs.get("value_head").expect("Value not found in output")[0];
 
-        let moves_left = outputs
-            .get("moves_left")
-            .expect("Moves left not found in output")[0];
+        let moves_left_vals = outputs
+            .get("moves_left_head")
+            .expect("Moves left not found in output");
 
         let policy_metrics = policy_scores
             .try_into()
             .expect("Slice does not match length of array");
 
-        let game_length = game_state.number_of_actions() as f32 + f16::to_f32(moves_left);
+        let moves_left = moves_left_expected_value(moves_left_vals.iter().map(|x| x.to_f32()));
+        let number_of_actions = game_state.number_of_actions() as f32;
+        let game_length = (number_of_actions + moves_left - 1.0).max(1.0);
         TranspositionEntry::new(policy_metrics, value, game_length)
     }
 

@@ -6,6 +6,7 @@ pub mod engine;
 pub mod game_state;
 pub mod mappings;
 pub mod predictions;
+pub mod symmetries;
 pub mod transposition_entry;
 pub mod ugi;
 pub mod value;

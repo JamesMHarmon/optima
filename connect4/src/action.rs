@@ -14,6 +14,10 @@ impl Action {
     pub fn column(&self) -> usize {
         self.0 as usize
     }
+
+    pub fn horizontal_symmetry(&self) -> Self {
+        Action((8 - self.column()) as u8)
+    }
 }
 
 impl From<usize> for Action {
