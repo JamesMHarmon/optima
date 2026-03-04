@@ -9,11 +9,11 @@ use std::hash::Hash;
 /// this trait via the blanket impl below, so no manual implementation is
 /// needed at the concrete action types.
 pub trait GameAction:
-    Clone + Eq + Hash + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync
+    Clone + Eq + Hash + DeserializeOwned + Serialize + Debug + Send + Sync
 {
 }
 
 impl<T> GameAction for T where
-    T: Clone + Eq + Hash + DeserializeOwned + Serialize + Debug + Unpin + Send + Sync
+    T: Clone + Eq + Hash + DeserializeOwned + Serialize + Debug + Send + Sync
 {
 }

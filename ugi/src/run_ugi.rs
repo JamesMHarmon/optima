@@ -47,7 +47,7 @@ where
         + Send
         + Sync
         + 'static,
-    M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
+    M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
     M::Analyzer: Send + Sync,
     B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Send + Sync + 'static,
     <B as ValueModel>::Rollup: Send + Sync,

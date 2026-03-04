@@ -48,7 +48,11 @@ where
 
     let latest_model_ref = model_factory.latest()?;
     let latest_model = model_factory.load(&latest_model_ref).unwrap();
-    let latest_model: Arc<Mutex<(M, _)>> = Arc::new(Mutex::new((latest_model, latest_model_ref)));
+    let latest_model = Arc::new(SharedModel::new(
+        latest_model,
+        latest_model_ref,
+        Duration::from_secs(10),
+    ));
 
     let total_game_threads = self_play_options.concurrent_games;
 
@@ -62,10 +66,7 @@ where
             s.spawn(move |_| {
                 info!("Starting game thread: {}", thread_num);
                 let latest_model_analyzer = || {
-                    let latest_model = latest_model
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    (latest_model.0.analyzer(), latest_model.0.info().clone())
+                    latest_model.get_analyzer(model_factory)
                 };
 
                 loop {
@@ -95,27 +96,6 @@ where
             });
         }
 
-        s.spawn(move |_| {
-            loop {
-                let new_latest_model_ref = model_factory.latest().unwrap();
-                {
-                    let mut latest_model = latest_model
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-
-                    if new_latest_model_ref != latest_model.1 {
-                        let new_latest_model = model_factory.load(&new_latest_model_ref).unwrap();
-
-                        info!("Updating latest model from {:?} to {:?}", latest_model.1, new_latest_model.info());
-
-                        *latest_model = (new_latest_model, new_latest_model_ref);
-                    }
-                }
-
-                std::thread::sleep(Duration::from_secs(10));
-            }
-        });
-
         s.spawn(move |_| -> Result<()> {
             let mut num_of_games_played: usize = 0;
 
@@ -141,4 +121,64 @@ where
     }).map_err(|_| anyhow!("A self-play thread panicked"))?;
 
     Ok(())
+}
+
+struct SharedModel<M, MR> {
+    model: Mutex<(M, MR)>,
+    last_check: Mutex<Instant>,
+    check_interval: Duration,
+}
+
+impl<M, MR> SharedModel<M, MR>
+where
+    M: Analyzer + Info,
+    MR: Debug + Eq,
+{
+    fn new(model: M, model_ref: MR, check_interval: Duration) -> Self {
+        Self {
+            model: Mutex::new((model, model_ref)),
+            last_check: Mutex::new(Instant::now()),
+            check_interval,
+        }
+    }
+
+    fn get_analyzer<F>(&self, factory: &F) -> (M::Analyzer, model::ModelInfo)
+    where
+        F: Latest<MR = MR> + Load<MR = MR, M = M>,
+    {
+        self.try_refresh(factory);
+        let model = self.model.lock().unwrap_or_else(|e| e.into_inner());
+        (model.0.analyzer(), model.0.info().clone())
+    }
+
+    fn try_refresh<F>(&self, factory: &F)
+    where
+        F: Latest<MR = MR> + Load<MR = MR, M = M>,
+    {
+        let Ok(mut last) = self.last_check.try_lock() else {
+            return;
+        };
+        if last.elapsed() < self.check_interval {
+            return;
+        };
+        *last = Instant::now();
+        drop(last);
+
+        let Ok(new_ref) = factory.latest() else {
+            return;
+        };
+        let mut model = self.model.lock().unwrap_or_else(|e| e.into_inner());
+        if new_ref == model.1 {
+            return;
+        };
+        let Ok(new_model) = factory.load(&new_ref) else {
+            return;
+        };
+        info!(
+            "Updating latest model from {:?} to {:?}",
+            model.1,
+            new_model.info()
+        );
+        *model = (new_model, new_ref);
+    }
 }

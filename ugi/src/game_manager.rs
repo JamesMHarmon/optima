@@ -127,7 +127,7 @@ impl<S, A> GameManager<S, A> {
             + Send
             + Sync
             + 'static,
-        M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + Sync + 'static,
+        M: Analyzer<State = S, Action = A, Predictions = E::Terminal> + Send + 'static,
         B: ValueModel<Predictions = E::Terminal, Terminal = E::Terminal> + Send + Sync + 'static,
         FnB: Fn(&UGIOptions) -> B + Send + 'static,
         FnSel: Fn(&UGIOptions) -> Sel + Send + 'static,

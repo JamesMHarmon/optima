@@ -1,27 +1,18 @@
 use common::TranspositionTable;
 use log::info;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
-use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct Reporter<Te> {
-    alive: Arc<AtomicBool>,
     inner: Arc<ReporterInner<Te>>,
 }
 
-impl<Te> Reporter<Te>
-where
-    Te: Send + 'static,
-{
+impl<Te> Reporter<Te> {
     pub fn new(transposition_table: Arc<Option<TranspositionTable<Te>>>) -> Self {
-        let alive = Arc::new(AtomicBool::new(true));
         let inner = Arc::new(ReporterInner::new(transposition_table));
-
-        Self::spawn_timer(alive.clone(), inner.clone());
-
-        Self { alive, inner }
+        Self { inner }
     }
 
     pub fn set_batch_size(&self, analysis_len: usize) {
@@ -58,36 +49,15 @@ where
         self.inner
             .num_nodes_analysed
             .fetch_add(n, Ordering::Relaxed);
-    }
 
-    fn spawn_timer(alive: Arc<AtomicBool>, inner: Arc<ReporterInner<Te>>) {
-        // @TODO Is there a better way than a spawned thread?
-        thread::spawn(move || {
-            let interval = Duration::from_secs(5);
-            let mut last_tick = Instant::now();
-            loop {
-                thread::sleep(interval);
-
-                if !alive.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                let elapsed = last_tick.elapsed();
-                last_tick = Instant::now();
-                inner.report(elapsed);
-            }
-        });
-    }
-}
-
-impl<Te> Drop for Reporter<Te> {
-    fn drop(&mut self) {
-        self.alive.store(false, Ordering::Relaxed);
+        self.inner.maybe_report();
     }
 }
 
 pub struct ReporterInner<Te> {
     last_report_had_nodes: AtomicBool,
+    last_report: Mutex<Instant>,
+    report_interval: Duration,
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
@@ -101,6 +71,8 @@ pub struct ReporterInner<Te> {
 impl<Te> ReporterInner<Te> {
     fn new(transposition_table: Arc<Option<TranspositionTable<Te>>>) -> Self {
         let last_report_had_nodes = AtomicBool::new(false);
+        let last_report = Mutex::new(Instant::now());
+        let report_interval = Duration::from_secs(5);
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
@@ -111,6 +83,8 @@ impl<Te> ReporterInner<Te> {
 
         Self {
             last_report_had_nodes,
+            last_report,
+            report_interval,
             num_nodes_analysed,
             min_batch_size,
             max_batch_size,
@@ -119,6 +93,17 @@ impl<Te> ReporterInner<Te> {
             predict_in_flight,
             predict_needs_infer,
             transposition_table,
+        }
+    }
+
+    fn maybe_report(&self) {
+        if let Ok(mut last) = self.last_report.try_lock() {
+            let elapsed = last.elapsed();
+            if elapsed >= self.report_interval {
+                *last = Instant::now();
+                drop(last);
+                self.report(elapsed);
+            }
         }
     }
 

@@ -14,9 +14,8 @@ use puct::{
 use super::{SelfPlayMetrics, SelfPlayOptions};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type RollupOf<VM> = <VM as ValueModel>::Rollup;
 type SSOf<VM> = SnapshotOf<VM>;
-
-// @TODO: Remove Send + Sync + Unpin bounds
 
 #[allow(non_snake_case)]
 pub fn play_self_one<S, A, E, M, P, VM, Sel>(
@@ -36,7 +35,7 @@ where
     P: Clone + GameLength,
     VM: ValueModel<Predictions = P, Terminal = P> + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Sync,
-    <VM as ValueModel>::Rollup: Send + Sync,
+    RollupOf<VM>: Send + Sync,
     SnapshotOf<VM>: Clone + Send + Sync,
 {
     let mut game_state: S = S::initial();
