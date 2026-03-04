@@ -1,2 +1,2 @@
-pub const ANALYSIS_REQUEST_BATCH_SIZE: usize = 512;
+pub const ANALYSIS_REQUEST_BATCH_SIZE: usize = 1024;
 pub const ANALYSIS_REQUEST_THREADS: usize = 1;

@@ -73,7 +73,7 @@ impl UGIOptions {
             moves_left_threshold: 0.8,
             moves_left_scale: 10.0,
             moves_left_factor: 0.1,
-            parallelism: 512,
+            parallelism: 2048,
             sim_threads: 1,
             visits: 0,
             max_visits: 10_000_000,
