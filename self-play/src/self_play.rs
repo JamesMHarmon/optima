@@ -64,12 +64,9 @@ where
 
             s.spawn(move |_| {
                 info!("Starting game thread: {}", thread_num);
-                let latest_model_analyzer = || {
-                    latest_model.get_analyzer(model_factory)
-                };
 
                 loop {
-                    let (analyzer, model_info) = latest_model_analyzer();
+                    let (analyzer, model_info) = latest_model.get_analyzer(model_factory);
                     let (metrics, game_state) = play_self_one(
                         engine,
                         &analyzer,
@@ -77,9 +74,10 @@ where
                         selection_policy,
                         self_play_options,
                     );
-                       game_results_tx
-                                .send((metrics, game_state, model_info))
-                                .ok();
+
+                    game_results_tx
+                        .send((metrics, game_state, model_info))
+                        .ok();
                 }
             });
         }

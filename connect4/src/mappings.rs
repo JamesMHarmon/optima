@@ -190,7 +190,9 @@ impl TranspositionMap for Mapper {
             .get("policy_head")
             .expect("Policy scores not found in output");
 
-        let value = outputs.get("value_head").expect("Value not found in output")[0];
+        let value = outputs
+            .get("value_head")
+            .expect("Value not found in output")[0];
 
         let moves_left_vals = outputs
             .get("moves_left_head")
