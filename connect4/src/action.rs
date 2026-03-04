@@ -8,15 +8,23 @@ use std::str::FromStr;
 use anyhow::anyhow;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub enum Action {
-    DropPiece(u8),
-}
+pub struct Action(u8);
 
 impl Action {
-    pub fn column(&self) -> u8 {
-        match self {
-            Action::DropPiece(column) => *column,
-        }
+    pub fn column(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for Action {
+    fn from(column: usize) -> Self {
+        (column as u8).into()
+    }
+}
+
+impl From<u8> for Action {
+    fn from(column: u8) -> Self {
+        Action(column)
     }
 }
 
@@ -24,20 +32,19 @@ impl FromStr for Action {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let column_num = s.parse()?;
+        let column_num: u8 = s.parse()?;
 
         if column_num > 7 {
             return Err(anyhow!("Column number must be between 1 and 7"));
         }
 
-        Ok(Action::DropPiece(column_num))
+        Ok(column_num.into())
     }
 }
 
 impl Display for Action {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let Action::DropPiece(column) = self;
-        write!(f, "{}", column)
+        write!(f, "{}", self.column())
     }
 }
 
@@ -46,9 +53,7 @@ impl Serialize for Action {
     where
         S: Serializer,
     {
-        serializer.serialize_u8(match self {
-            Action::DropPiece(c) => *c,
-        })
+        serializer.serialize_u8(self.column() as u8)
     }
 }
 
@@ -73,7 +78,7 @@ impl Visitor<'_> for ActionVisitor {
     where
         E: Error,
     {
-        Ok(Action::DropPiece(v))
+        Ok(v.into())
     }
 }
 

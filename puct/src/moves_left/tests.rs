@@ -17,6 +17,12 @@ struct TestState {
     ptm: usize,
 }
 
+impl TestState {
+    fn new(ptm: usize) -> Self {
+        Self { ptm }
+    }
+}
+
 impl PlayerToMove for TestState {
     fn player_to_move(&self) -> usize {
         self.ptm
@@ -182,6 +188,10 @@ fn default_options() -> MovesLeftStrategyOptions {
     }
 }
 
+fn default_ml() -> MovesLeftSnapshot {
+    MovesLeftSnapshot::default()
+}
+
 #[test]
 fn snapshot_value_and_length_are_weighted_means() {
     let s = snap(0.25, 0.75, 10.0, 4);
@@ -233,7 +243,7 @@ fn threshold_ge_one_disables_moves_left_bias() {
     ];
 
     // With threshold >= 1, baseline is None so MSA = 0; choose best Q.
-    let idx = run_policy(&policy, &edges, 100, MovesLeftSnapshot::default(), &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, default_ml(), &TestState::new(1), 1);
     assert_eq!(idx, 1);
 }
 
@@ -256,11 +266,11 @@ fn fpu_root_used_at_depth_zero_and_fpu_used_below_root() {
     ];
 
     // Root: missing snapshot uses fpu_root = 0.9, should win.
-    let root_idx = run_policy(&policy, &edges, 1, MovesLeftSnapshot::default(), &TestState { ptm: 1 }, 0);
+    let root_idx = run_policy(&policy, &edges, 1, default_ml(), &TestState::new(1), 0);
     assert_eq!(root_idx, 1);
 
     // Non-root: missing snapshot uses fpu = 0.1, should lose.
-    let child_idx = run_policy(&policy, &edges, 1, MovesLeftSnapshot::default(), &TestState { ptm: 1 }, 1);
+    let child_idx = run_policy(&policy, &edges, 1, default_ml(), &TestState::new(1), 1);
     assert_eq!(child_idx, 0);
 }
 
@@ -282,7 +292,7 @@ fn virtual_visits_down_weight_q_value() {
 
     // With no U term (cpuct = 0) and no MSA (threshold >= 1), selection is purely Q.
     // Virtual visits are treated as a loss of 0, so the second edge's Q is down-weighted.
-    let idx = run_policy(&policy, &edges, 100, MovesLeftSnapshot::default(), &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, default_ml(), &TestState::new(1), 1);
     assert_eq!(idx, 0);
 }
 
@@ -305,7 +315,7 @@ fn virtual_visits_do_not_reduce_u_term() {
         edge_with_virtual_visits(1, &a1, 1.00, 1, 100, Some(snap(0.0, 1.0, 10.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, MovesLeftSnapshot::default(), &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, default_ml(), &TestState::new(1), 1);
     assert_eq!(idx, 0);
 }
 
@@ -333,7 +343,7 @@ fn winning_baseline_prefers_shorter_game_length() {
         edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState::new(1), 1);
     assert_eq!(idx, 1);
 }
 
@@ -361,7 +371,7 @@ fn losing_baseline_prefers_longer_game_length() {
         edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState::new(1), 1);
     assert_eq!(idx, 2);
 }
 
@@ -389,7 +399,7 @@ fn uncertain_baseline_does_not_apply_moves_left_bias() {
         edge(2, &a2, 0.0, 1, Some(snap(0.56, 0.44, 30.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState::new(1), 1);
     assert_eq!(idx, 2);
 }
 
@@ -418,7 +428,14 @@ fn node_snapshot_drives_directive() {
         edge(3, &c1, 0.0, 1, Some(snap(0.94, 0.06, 30.0, 1))),
     ];
 
-    let idx_uncertain = run_policy(&policy, &edges_uncertain, 100, node_snap_uncertain, &TestState { ptm: 1 }, 1);
+    let idx_uncertain = run_policy(
+        &policy,
+        &edges_uncertain,
+        100,
+        node_snap_uncertain,
+        &TestState::new(1),
+        1,
+    );
     assert_eq!(idx_uncertain, 3);
 
     // Case 2: node snapshot is winning (p1=0.90 >= threshold=0.7) => minimize => short wins.
@@ -430,7 +447,14 @@ fn node_snapshot_drives_directive() {
         edge(3, &c1, 0.0, 1, Some(snap(0.94, 0.06, 30.0, 1))),
     ];
 
-    let idx_winning = run_policy(&policy, &edges_winning, 100, node_snap_winning, &TestState { ptm: 1 }, 1);
+    let idx_winning = run_policy(
+        &policy,
+        &edges_winning,
+        100,
+        node_snap_winning,
+        &TestState::new(1),
+        1,
+    );
     assert_eq!(idx_winning, 2);
 }
 
@@ -458,7 +482,7 @@ fn policy_matches_reference_two_pass_for_multiple_scenarios() {
             ],
             100,
             snap(0.9, 0.1, 20.0, 10),
-            TestState { ptm: 1 },
+            TestState::new(1),
             1,
         ),
         (
@@ -469,7 +493,7 @@ fn policy_matches_reference_two_pass_for_multiple_scenarios() {
             ],
             100,
             snap(0.1, 0.9, 20.0, 10),
-            TestState { ptm: 1 },
+            TestState::new(1),
             1,
         ),
         (
@@ -481,14 +505,21 @@ fn policy_matches_reference_two_pass_for_multiple_scenarios() {
             ],
             25,
             snap(0.6, 0.4, 20.0, 10),
-            TestState { ptm: 1 },
+            TestState::new(1),
             0,
         ),
     ];
 
     for (edges, node_visits, node_snapshot, state, depth) in scenarios {
-        let expected =
-            reference_two_pass_select(&edges, node_visits, node_snapshot, &state, depth, 0.25, &options_ref);
+        let expected = reference_two_pass_select(
+            &edges,
+            node_visits,
+            node_snapshot,
+            &state,
+            depth,
+            0.25,
+            &options_ref,
+        );
         let actual = run_policy(&policy, &edges, node_visits, node_snapshot, &state, depth);
         assert_eq!(actual, expected);
     }
@@ -555,7 +586,7 @@ fn moves_left_expected_value_empty_iterator_returns_zero() {
 
 #[test]
 fn snapshot_zero_returns_zero_for_all_accessors() {
-    let s = MovesLeftSnapshot::default();
+    let s = default_ml();
     assert_eq!(s.player_value(1), 0.0);
     assert_eq!(s.player_value(2), 0.0);
     assert_eq!(s.game_length(), 0.0);
@@ -686,7 +717,7 @@ fn player_two_winning_baseline_prefers_shorter_game_length() {
         edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState { ptm: 2 }, 1);
+    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState::new(2), 1);
     assert_eq!(idx, 1);
 }
 
@@ -713,7 +744,7 @@ fn player_two_losing_baseline_prefers_longer_game_length() {
         edge(2, &a2, 0.0, 1, Some(snap(0.5, 0.5, 30.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState { ptm: 2 }, 1);
+    let idx = run_policy(&policy, &edges, 100, node_snapshot, &TestState::new(2), 1);
     assert_eq!(idx, 2);
 }
 
@@ -736,10 +767,10 @@ fn player_two_fpu_root_vs_non_root() {
     ];
 
     // Root: fpu_root=0.9 > p2=0.5, so edge 1 wins.
-    let root_idx = run_policy(&policy, &edges, 1, MovesLeftSnapshot::default(), &TestState { ptm: 2 }, 0);
+    let root_idx = run_policy(&policy, &edges, 1, default_ml(), &TestState::new(2), 0);
     assert_eq!(root_idx, 1);
 
     // Non-root: fpu=0.1 < p2=0.5, so edge 0 wins.
-    let child_idx = run_policy(&policy, &edges, 1, MovesLeftSnapshot::default(), &TestState { ptm: 2 }, 1);
+    let child_idx = run_policy(&policy, &edges, 1, default_ml(), &TestState::new(2), 1);
     assert_eq!(child_idx, 0);
 }

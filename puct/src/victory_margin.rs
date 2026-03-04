@@ -323,9 +323,11 @@ where
                 (qsa, 0.0)
             } else {
                 let scale = visits as f32 / nsa as f32;
-                let vm = edge.snapshot
+                let vm = edge
+                    .snapshot
                     .map(|s| s.victory_margin() * options.victory_margin_factor)
-                    .unwrap_or(0.0) * vm_sign;
+                    .unwrap_or(0.0)
+                    * vm_sign;
                 (qsa * scale, vm)
             };
 
@@ -416,9 +418,11 @@ where
                     (qsa, 0.0)
                 } else {
                     let scale = visits as f32 / nsa as f32;
-                    let vm = edge.snapshot
+                    let vm = edge
+                        .snapshot
                         .map(|s| s.victory_margin() * options.victory_margin_factor)
-                        .unwrap_or(0.0) * vm_sign;
+                        .unwrap_or(0.0)
+                        * vm_sign;
                     (qsa * scale, vm)
                 };
 

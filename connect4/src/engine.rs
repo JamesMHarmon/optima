@@ -18,14 +18,13 @@ impl GameEngine for Engine {
     type Terminal = Predictions;
 
     fn take_action(&self, game_state: &Self::State, action: &Self::Action) -> Self::State {
-        match action {
-            Action::DropPiece(column) => game_state.drop_piece(*column as usize),
-        }
+        game_state.drop_piece(action.column())
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        let prediction = |v| Predictions::new(v, game_state.number_of_actions() as f32);
-        game_state.is_terminal().map(|v| prediction(v))
+        let game_length = game_state.number_of_actions();
+        let prediction = |v| Predictions::new(v, game_length as f32);
+        game_state.is_terminal().map(prediction)
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
@@ -42,16 +41,7 @@ impl ValidActions for Engine {
     type State = GameState;
 
     fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
-        game_state
-            .valid_actions()
-            .enumerate()
-            .filter_map(|(i, valid)| {
-                if valid {
-                    Some(Action::DropPiece((i + 1) as u8))
-                } else {
-                    None
-                }
-            })
+        game_state.valid_columns().map(|col| col.into())
     }
 }
 
@@ -181,8 +171,8 @@ mod tests {
         }
 
         assert_eq!(
-            state.valid_actions().collect::<Vec<_>>(),
-            [true, true, true, true, true, true, true]
+            state.valid_columns().collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5, 6, 7]
         );
     }
 
@@ -196,10 +186,7 @@ mod tests {
             }
         }
 
-        assert_eq!(
-            state.valid_actions().collect::<Vec<_>>(),
-            [false, false, false, false, false, false, false]
-        );
+        assert!(state.valid_columns().next().is_none());
     }
 
     #[test]
@@ -215,8 +202,8 @@ mod tests {
         state = state.drop_piece(1);
 
         assert_eq!(
-            state.valid_actions().collect::<Vec<_>>(),
-            [false, true, true, true, true, true, true]
+            state.valid_columns().collect::<Vec<_>>(),
+            [2, 3, 4, 5, 6, 7]
         );
     }
 
@@ -233,8 +220,8 @@ mod tests {
         state = state.drop_piece(7);
 
         assert_eq!(
-            state.valid_actions().collect::<Vec<_>>(),
-            [true, true, true, true, true, true, false]
+            state.valid_columns().collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5, 6]
         );
     }
 
@@ -252,10 +239,7 @@ mod tests {
         state = state.drop_piece(4);
         state = state.drop_piece(5);
 
-        assert_eq!(
-            state.valid_actions().collect::<Vec<_>>(),
-            [true, true, false, false, false, true, true]
-        );
+        assert_eq!(state.valid_columns().collect::<Vec<_>>(), [1, 2, 6, 7]);
     }
 
     #[test]

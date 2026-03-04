@@ -39,7 +39,7 @@ impl Mapper {
         //@TODO: Make invalid actions -1.0
         let total_visits = node_metrics.visits() as f32 - 1.0;
         let result: [f32; 7] = node_metrics.children().iter().fold([0.0; 7], |mut r, m| {
-            let column_idx = m.action().column() as usize - 1;
+            let column_idx = m.action().column() - 1;
             r[column_idx] = m.visits() as f32 / total_visits;
             r
         });
@@ -52,13 +52,12 @@ impl Mapper {
         game_state: &GameState,
         policy_scores: &[f16],
     ) -> Vec<ActionWithPolicy<Action>> {
-        let drop_piece = |col, p| ActionWithPolicy::new(Action::DropPiece(col), p);
-        let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state
-            .valid_actions()
-            .zip(policy_scores)
-            .zip(1u8..)
-            .filter_map(|((v, p), col)| v.then(|| drop_piece(col, *p)))
-            .collect();
+        let mut valid_actions_with_policies = policy_scores
+            .iter()
+            .zip(1..)
+            .filter(|(_, col)| !game_state.is_column_full(*col))
+            .map(|(p, col)| ActionWithPolicy::new(col.into(), *p))
+            .collect::<Vec<_>>();
 
         update_logit_policies_to_softmax(&mut valid_actions_with_policies);
 
