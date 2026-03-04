@@ -280,6 +280,14 @@ where
         )
     }
 
+    pub fn get_node_info(&self, game_state: &E::State) -> Option<NodeInfo> {
+        let transposition_hash = game_state.transposition_hash();
+        let node_id = self.store.get_node_id(transposition_hash)?;
+
+        let node = self.store.state_node(node_id);
+        Some(NodeInfo::new(node.visits(), node.virtual_visits(), 0))
+    }
+
     fn get_or_create_root(&mut self, game_state: &E::State) -> NodeId {
         let store = &self.store;
         let transposition_hash = game_state.transposition_hash();

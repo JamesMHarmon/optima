@@ -72,7 +72,7 @@ where
             mcts.select_action(&no_temp)?
         };
 
-        let metrics = mcts.node_metrics()?;
+        let metrics = mcts.node_metrics();
 
         mcts.advance_to_action(action.to_owned()).await?;
         game_state = game_engine.take_action(&game_state, &action);
