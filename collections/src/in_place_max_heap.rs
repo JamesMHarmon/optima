@@ -134,7 +134,10 @@ impl<T, C: Comparator<T>> InPlaceMaxHeap<T, C> {
         })
     }
 
-    // ----------------- internal (writer-only) helpers -----------------
+    /// Consumes the heap and returns all items (stable and heap regions) as a boxed slice.
+    pub fn into_items(self) -> Box<[T]> {
+        self.items.into_iter().map(UnsafeCell::into_inner).collect()
+    }
 
     #[inline]
     fn phys_of_logical(&self, logical: usize) -> usize {

@@ -56,7 +56,7 @@ fn rebuild_from_root_does_not_force_root_to_zero() {
     let state1 = arena.push_state(make_node(1));
 
     // Make both nodes reachable from root=state1 by linking state1 -> state0.
-    let root_node = arena.get_state_node(state1);
+    let root_node = arena.state_node(state1);
     root_node.ensure_frontier_edge();
     let (edge, _) = root_node.edge_and_action(0);
     edge.set_child(state0);

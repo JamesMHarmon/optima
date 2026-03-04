@@ -192,7 +192,7 @@ where
             if state_id.is_unset() {
                 continue;
             }
-            let node = self.new_arena.get_state_node(state_id);
+            let node = self.new_arena.state_node(state_id);
             for edge in node.iter_edges() {
                 if let Some(child) = edge.child() {
                     edge.set_child(remap(child));
@@ -205,7 +205,7 @@ where
             if after_state_id.is_unset() {
                 continue;
             }
-            let after_state = self.new_arena.get_after_state_node_mut(after_state_id);
+            let after_state = self.new_arena.after_state_node_mut(after_state_id);
             for outcome in after_state.outcomes.iter_mut() {
                 let child = outcome.child();
                 let visits = outcome.visits();
@@ -225,7 +225,7 @@ where
             if state_id.is_unset() {
                 continue;
             }
-            let node = self.new_arena.get_state_node(state_id);
+            let node = self.new_arena.state_node(state_id);
             transpositions.push((node.transposition_hash(), state_id));
         }
         transpositions

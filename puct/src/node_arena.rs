@@ -137,28 +137,35 @@ impl<S, A, T> NodeArena<S, A, T> {
     }
 
     #[inline]
-    pub fn get_state_node(&self, id: NodeId) -> &S {
+    pub fn state_node(&self, id: NodeId) -> &S {
         debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::State);
         &self.state_nodes[id.index()]
     }
 
     #[inline]
-    pub fn get_after_state_node(&self, id: NodeId) -> &A {
+    pub fn after_state_node(&self, id: NodeId) -> &A {
         debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::AfterState);
         &self.after_state_nodes[id.index()]
     }
 
     #[inline]
-    pub fn get_after_state_node_mut(&mut self, id: NodeId) -> &mut A {
+    pub fn state_node_mut(&mut self, id: NodeId) -> &mut S {
+        debug_assert!(!id.is_unset(), "NodeId is unset");
+        debug_assert_eq!(id.node_type(), NodeType::State);
+        &mut self.state_nodes[id.index()]
+    }
+
+    #[inline]
+    pub fn after_state_node_mut(&mut self, id: NodeId) -> &mut A {
         debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::AfterState);
         &mut self.after_state_nodes[id.index()]
     }
 
     #[inline]
-    pub fn get_terminal_node(&self, id: NodeId) -> &T {
+    pub fn terminal_node(&self, id: NodeId) -> &T {
         debug_assert!(!id.is_unset(), "NodeId is unset");
         debug_assert_eq!(id.node_type(), NodeType::Terminal);
         &self.terminal_nodes[id.index()]

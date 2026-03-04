@@ -24,11 +24,11 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
     pub fn find_state_with_hash(&self, node_id: NodeId, transposition_hash: u64) -> Option<NodeId> {
         match node_id.node_type() {
             NodeType::State => {
-                let state = self.arena.get_state_node(node_id);
+                let state = self.arena.state_node(node_id);
                 (state.transposition_hash() == transposition_hash).then_some(node_id)
             }
             NodeType::AfterState => {
-                let after_state = self.arena.get_after_state_node(node_id);
+                let after_state = self.arena.after_state_node(node_id);
                 after_state.outcomes.iter().find_map(|outcome| {
                     self.find_state_with_hash(outcome.child(), transposition_hash)
                 })
@@ -56,7 +56,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
             NodeType::State => None,
             NodeType::AfterState => self
                 .arena
-                .get_after_state_node(child_id)
+                .after_state_node(child_id)
                 .terminal_outcome()
                 .map(|outcome| outcome.child()),
         }
@@ -107,7 +107,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
 
         match existing_child_id.node_type() {
             NodeType::AfterState => {
-                let after_state = self.arena.get_after_state_node(existing_child_id);
+                let after_state = self.arena.after_state_node(existing_child_id);
                 for outcome in &after_state.outcomes {
                     new_outcomes.push(outcome.clone());
                 }
@@ -124,9 +124,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         edge.set_child(new_after_state_id);
 
         debug_assert!(
-            self.arena
-                .get_after_state_node(new_after_state_id)
-                .is_valid(),
+            self.arena.after_state_node(new_after_state_id).is_valid(),
             "AfterState outcomes must not contain duplicate node IDs and at most one terminal"
         );
     }
@@ -135,7 +133,7 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         let child_id = edge.child()?;
 
         match child_id.node_type() {
-            NodeType::AfterState => Some(self.arena.get_after_state_node(child_id)),
+            NodeType::AfterState => Some(self.arena.after_state_node(child_id)),
             _ => None,
         }
     }

@@ -273,7 +273,7 @@ fn edge_snapshots_return_child_rollup_for_state_and_terminal_children() {
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
     let state_id = nodes.push_state(StateNode::new(1, empty_priors, DummyRollup::default()));
     nodes
-        .get_state_node(state_id)
+        .state_node(state_id)
         .rollup_stats()
         .set(DummySnapshot(5));
 
@@ -315,7 +315,7 @@ fn edge_snapshots_aggregate_after_state_outcomes_weighted() {
     let empty_priors: Box<[ActionWithPolicy<u32>]> = Vec::new().into_boxed_slice();
     let state_id = nodes.push_state(StateNode::new(1, empty_priors, DummyRollup::default()));
     nodes
-        .get_state_node(state_id)
+        .state_node(state_id)
         .rollup_stats()
         .set(DummySnapshot(5));
 
@@ -352,7 +352,7 @@ fn e2e_rollup_recompute_weights_children_by_edge_visits_and_includes_prior() {
     let graph = NodeGraph::new(&arena);
 
     let root_id = arena.push_state(make_node_with_prior(1, 5, &[(0, 0.8), (1, 0.2)]));
-    let root = arena.get_state_node(root_id);
+    let root = arena.state_node(root_id);
 
     root.ensure_frontier_edge();
     let (edge0, _) = root.edge_and_action(0);
@@ -402,7 +402,7 @@ fn e2e_rollup_recompute_ignores_unvisited_edges() {
     let graph = NodeGraph::new(&arena);
 
     let root_id = arena.push_state(make_node_with_prior(1, 9, &[(0, 1.0), (1, 1.0)]));
-    let root = arena.get_state_node(root_id);
+    let root = arena.state_node(root_id);
 
     root.ensure_frontier_edge();
     let (edge0, _) = root.edge_and_action(0);
@@ -440,7 +440,7 @@ fn harness_writer_traversal_increments_node_and_edge_visits_exactly() {
     let graph = NodeGraph::new(&arena);
 
     let root_id = arena.push_state(make_node(&[(0, 0.6), (1, 0.4), (2, 0.2)]));
-    let root = arena.get_state_node(root_id);
+    let root = arena.state_node(root_id);
 
     assert_eq!(root.visits(), 1);
     assert_eq!(root.iter_edges().count(), 0);
@@ -480,4 +480,78 @@ fn harness_writer_traversal_increments_node_and_edge_visits_exactly() {
     assert_eq!(root.visits(), 4);
     assert_eq!(e0.visits(), 2);
     assert_eq!(e1.visits(), 1);
+}
+
+#[test]
+fn num_actions_returns_total_including_unmaterialized() {
+    let node = make_node(&[(0, 0.1), (1, 0.2), (2, 0.3)]);
+
+    // None materialized yet.
+    assert_eq!(node.num_actions(), 3);
+
+    // Still 3 after some edges are materialized.
+    node.ensure_frontier_edge();
+    node.edge(0).increment_visits();
+    node.ensure_frontier_edge();
+    assert_eq!(node.num_actions(), 3);
+}
+
+#[test]
+fn reset_node_resets_visits_virtual_visits_and_rollup() {
+    let mut node = make_node_with_prior(0, 42, &[(0, 0.5), (1, 0.5)]);
+
+    // Drive some search state into the node.
+    node.increment_visits();
+    node.increment_visits();
+    node.increment_virtual_visits();
+    assert_eq!(node.visits(), 3);
+    assert_eq!(node.virtual_visits(), 1);
+
+    node.reset_node(|_| {});
+
+    assert_eq!(node.visits(), 1);
+    assert_eq!(node.virtual_visits(), 0);
+    // rollup_stats should be back to the initial prior snapshot (42).
+    assert_eq!(node.rollup_stats().snapshot(), DummySnapshot(42));
+}
+
+#[test]
+fn reset_node_rebuilds_edges_from_scratch() {
+    let mut node = make_node(&[(0, 0.3), (1, 0.7)]);
+
+    // Materialize and visit both edges.
+    node.ensure_frontier_edge();
+    node.edge(0).increment_visits();
+    node.ensure_frontier_edge();
+    node.edge(1).increment_visits();
+    assert_eq!(node.iter_edges().count(), 2);
+    assert_eq!(node.edge(0).visits(), 1);
+    assert_eq!(node.edge(1).visits(), 1);
+
+    node.reset_node(|_| {});
+
+    // Edges are rebuilt; no visits remain.
+    node.ensure_frontier_edge();
+    assert_eq!(node.edge(0).visits(), 0);
+    assert_eq!(node.num_actions(), 2);
+}
+
+#[test]
+fn reset_node_applies_policy_mutation_before_rebuild() {
+    let mut node = make_node(&[(0, 0.2), (1, 0.8)]);
+
+    // Swap the priors via the callback.
+    node.reset_node(|priors| {
+        for p in priors.iter_mut() {
+            let new_score = 1.0 - p.policy_score().to_f32();
+            p.set_policy_score(half::f16::from_f32(new_score));
+        }
+    });
+
+    // After reset the heap re-orders by the new scores.
+    // Action 0 had 0.2 → now 0.8; action 1 had 0.8 → now 0.2.
+    // The frontier edge should be the highest-prior one (action 0).
+    node.ensure_frontier_edge();
+    let (_, action) = node.edge_and_action(0);
+    assert_eq!(*action, 0u32);
 }

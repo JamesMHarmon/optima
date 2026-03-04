@@ -63,7 +63,7 @@ fn make_terminal_node(arena: &TestArena, value: u32) -> NodeId {
 
 fn after_state_outcome_visits(arena: &TestArena, after_state_id: NodeId) -> Vec<(NodeId, u32)> {
     arena
-        .get_after_state_node(after_state_id)
+        .after_state_node(after_state_id)
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
@@ -85,7 +85,7 @@ fn terminal_merge_accumulates_when_terminal_already_reachable_via_edge() {
         .expect("terminal must be reachable");
     assert_eq!(found_terminal_id, terminal_id);
 
-    let terminal_node = arena.get_terminal_node(found_terminal_id);
+    let terminal_node = arena.terminal_node(found_terminal_id);
     assert_eq!(terminal_node.rollup_stats().snapshot(), DummySnapshot(10));
 
     terminal_node.rollup_stats().accumulate(&DummySnapshot(7));
@@ -207,7 +207,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
     edge.set_child(after_state_id);
 
     let before = arena
-        .get_after_state_node(after_state_id)
+        .after_state_node(after_state_id)
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
@@ -218,7 +218,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
     assert_eq!(found, Some(s1));
 
     let after = arena
-        .get_after_state_node(after_state_id)
+        .after_state_node(after_state_id)
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
@@ -248,7 +248,7 @@ fn add_child_to_edge_sets_new_outcome_visits_to_zero() {
     let after_state_id = edge.child().expect("edge child must be set");
     assert!(after_state_id.is_after_state());
 
-    let after_state = arena.get_after_state_node(after_state_id);
+    let after_state = arena.after_state_node(after_state_id);
 
     let new_outcome = after_state
         .outcomes
@@ -367,7 +367,7 @@ fn add_child_to_edge_converts_state_child_to_after_state_and_preserves_existing_
     let after_state_id = edge.child().expect("child must exist");
     assert!(after_state_id.is_after_state());
 
-    let after = arena.get_after_state_node(after_state_id);
+    let after = arena.after_state_node(after_state_id);
     assert_eq!(after.outcomes.len(), 2);
 
     let existing_outcome = after
@@ -406,7 +406,7 @@ fn add_child_to_edge_converts_terminal_child_to_after_state_and_preserves_existi
     let after_state_id = edge.child().expect("child must exist");
     assert!(after_state_id.is_after_state());
 
-    let after = arena.get_after_state_node(after_state_id);
+    let after = arena.after_state_node(after_state_id);
     assert_eq!(after.outcomes.len(), 2);
 
     let existing_outcome = after

@@ -54,6 +54,23 @@ where
         self.edges.ensure_frontier_edge();
     }
 
+    pub fn num_actions(&self) -> usize {
+        self.edges.num_actions()
+    }
+
+    /// Resets the node back to its post-analysis state: visits back to 1,
+    /// virtual_visits to 0, rollup_stats back to rollup_prior, and all edges
+    /// rebuilt from scratch via `f` which may mutate the policy priors.
+    pub fn reset_node<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut [ActionWithPolicy<A>]),
+    {
+        self.visits.store(1, Ordering::Release);
+        self.virtual_visits.store(0, Ordering::Release);
+        self.rollup_stats.set(self.rollup_prior.duplicate());
+        self.edges.reset_edges(f);
+    }
+
     pub fn edge_and_action(&self, index: usize) -> (&PUCTEdge, &A) {
         let (edge, action_with_policy) = self.edges.edge(index);
         (edge, action_with_policy.action())
@@ -107,11 +124,10 @@ where
     }
 
     pub fn recompute_rollup(&self, nodes: &StateArena<A, R>) {
-        let mut aggregated = R::Snapshot::zero();
+        let mut aggregated = self.rollup_prior.duplicate();
         let edges = self.iter_edge_rollups(nodes);
         let visited_edges = edges.map(|(e, s)| (e.visits(), s)).filter(|(v, _)| *v > 0);
 
-        aggregated.merge_weighted(self.rollup_prior(), 1);
         for (visits, snapshot) in visited_edges {
             aggregated.merge_weighted(&snapshot, visits);
         }
@@ -157,11 +173,9 @@ where
 
     fn child_snapshot(child_id: NodeId, nodes: &StateArena<A, R>) -> R::Snapshot {
         match child_id.node_type() {
-            NodeType::State => nodes.get_state_node(child_id).rollup_stats().snapshot(),
-
-            NodeType::AfterState => nodes.get_after_state_node(child_id).snapshot(nodes),
-
-            NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats().snapshot(),
+            NodeType::State => nodes.state_node(child_id).rollup_stats().snapshot(),
+            NodeType::AfterState => nodes.after_state_node(child_id).snapshot(nodes),
+            NodeType::Terminal => nodes.terminal_node(child_id).rollup_stats().snapshot(),
         }
     }
 }

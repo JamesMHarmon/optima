@@ -68,8 +68,8 @@ impl AfterState {
             );
 
             let rollup_stats = match child_id.node_type() {
-                NodeType::State => nodes.get_state_node(child_id).rollup_stats(),
-                NodeType::Terminal => nodes.get_terminal_node(child_id).rollup_stats(),
+                NodeType::State => nodes.state_node(child_id).rollup_stats(),
+                NodeType::Terminal => nodes.terminal_node(child_id).rollup_stats(),
                 NodeType::AfterState => {
                     panic!("AfterState outcome cannot point to another AfterState")
                 }

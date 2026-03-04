@@ -4,11 +4,16 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::thread;
 
 use crossbeam::channel;
+use half::f16;
+use rand::distributions::Distribution;
+use rand::thread_rng;
+use rand_distr::Dirichlet;
 
 use super::node_graph_store::NodeGraphStore;
 use crate::analysis_coordinator::AnalysisCoordinator;
 use crate::backprop::{Backpropagator, SimMsg};
 use crate::node_arena::NodeId;
+use crate::options::DirichletOptions;
 use crate::search_context::SearchContextPool;
 use crate::selection_policy::SelectionPolicy;
 use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
@@ -100,7 +105,7 @@ where
     where
         Alive: Fn(NodeInfo) -> bool + Send + Sync,
     {
-        let root = self.get_or_create_root(game_state);
+        let root = self.get_or_create_state_node(game_state);
         self.run_simulations(root, game_state, alive)
     }
 
@@ -212,6 +217,30 @@ where
         let _ = tx.send(msg);
     }
 
+    /// Resets the node and mixes Dirichlet noise into the policy priors
+    pub fn apply_noise_at_state(&mut self, game_state: &E::State, dirichlet: &DirichletOptions) {
+        let state_node_id = self.get_or_create_state_node(game_state);
+        let state_node = self.store.state_node_mut(state_node_id);
+
+        let num_actions = state_node.num_actions();
+        if num_actions < 2 {
+            return;
+        }
+
+        let e = dirichlet.epsilon;
+        let alpha = 8.0_f32 / num_actions as f32;
+        let noise: Vec<f32> = Dirichlet::new_with_size(alpha, num_actions)
+            .expect("Dirichlet construction")
+            .sample(&mut thread_rng());
+
+        state_node.reset_node(|priors| {
+            for (awp, n) in priors.iter_mut().zip(noise) {
+                let p = f32::from(awp.policy_score());
+                awp.set_policy_score(f16::from_f32((1.0 - e) * p + e * n));
+            }
+        });
+    }
+
     /// Returns an owned snapshot of edge stats suitable for UIs/wrappers.
     pub fn edge_views(&mut self, game_state: &E::State) -> Vec<EdgeView<E::Action, SnapshotOf<VM>>>
     where
@@ -220,7 +249,7 @@ where
         let transposition_hash = game_state.transposition_hash();
 
         if self.store.get_node_id(transposition_hash).is_none() {
-            self.get_or_create_root(game_state);
+            self.get_or_create_state_node(game_state);
         }
 
         self.try_edge_views(game_state)
@@ -288,7 +317,7 @@ where
         Some(NodeInfo::new(node.visits(), node.virtual_visits(), 0))
     }
 
-    fn get_or_create_root(&mut self, game_state: &E::State) -> NodeId {
+    fn get_or_create_state_node(&mut self, game_state: &E::State) -> NodeId {
         let store = &self.store;
         let transposition_hash = game_state.transposition_hash();
         if let Some(existing) = store.get_node_id(transposition_hash) {

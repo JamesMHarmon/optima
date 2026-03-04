@@ -37,12 +37,17 @@ where
 
     #[inline]
     pub(super) fn state_node(&self, node_id: NodeId) -> &StateNode<A, R> {
-        self.arena.get_state_node(node_id)
+        self.arena.state_node(node_id)
+    }
+
+    #[inline]
+    pub(super) fn state_node_mut(&mut self, node_id: NodeId) -> &mut StateNode<A, R> {
+        self.arena.state_node_mut(node_id)
     }
 
     #[inline]
     pub(super) fn terminal_node(&self, node_id: NodeId) -> &Terminal<R> {
-        self.arena.get_terminal_node(node_id)
+        self.arena.terminal_node(node_id)
     }
 
     #[inline]
@@ -79,7 +84,7 @@ where
 
     #[inline]
     pub(super) fn recompute_rollup(&self, node_id: NodeId) {
-        let node = self.arena.get_state_node(node_id);
+        let node = self.arena.state_node(node_id);
         node.recompute_rollup(&self.arena);
     }
 

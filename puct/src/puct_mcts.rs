@@ -91,11 +91,10 @@ where
         }
     }
 
-    /// PUCT implementation currently does not support persistent root prior mutation.
-    /// This is a compatibility stub for legacy callers; it intentionally no-ops.
-    pub async fn apply_noise_at_root(&mut self, _dirichlet: Option<&DirichletOptions>) {
-        // @TODO: Implement true root prior noise once puct exposes prior mutation.
-        panic!("apply_noise_at_root is not currently implemented for PuctMCTS");
+    pub async fn apply_noise_at_root(&mut self, dirichlet: Option<&DirichletOptions>) {
+        if let Some(dirichlet) = dirichlet {
+            self.puct.apply_noise_at_state(&self.state, dirichlet);
+        }
     }
 
     pub fn state(&self) -> &M::State {

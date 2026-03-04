@@ -45,6 +45,20 @@ impl<A> EdgeStore<A> {
         (edge, action_with_policy)
     }
 
+    pub(crate) fn num_actions(&self) -> usize {
+        self.heap.total_len()
+    }
+
+    /// Resets all edges by passing the full set of `ActionWithPolicy` items to `f` for
+    /// mutation, then rebuilding the store from scratch with the updated priors.
+    /// All existing edge state (visits, children) is discarded.
+    pub(crate) fn reset_edges(&mut self, f: impl FnOnce(&mut [ActionWithPolicy<A>])) {
+        let temp = InPlaceMaxHeap::with_comparator(Box::new([]), PolicyScoreCmp);
+        let mut items = std::mem::replace(&mut self.heap, temp).into_items();
+        f(&mut items);
+        *self = EdgeStore::new(items);
+    }
+
     pub(crate) fn ensure_frontier_edge(&self) {
         if self.has_unvisited_frontier_edge() {
             return;

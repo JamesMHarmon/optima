@@ -1,6 +1,15 @@
 pub trait WeightedMerge {
     fn zero() -> Self;
     fn merge_weighted(&mut self, other: &Self, weight: u32);
+
+    fn duplicate(&self) -> Self
+    where
+        Self: Sized,
+    {
+        let mut out = Self::zero();
+        out.merge_weighted(self, 1);
+        out
+    }
 }
 
 pub trait RollupStats {
