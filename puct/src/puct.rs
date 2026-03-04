@@ -103,7 +103,7 @@ where
 
     pub fn search<Alive>(&mut self, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: Fn(NodeInfo) -> bool + Send + Sync,
+        Alive: Fn(NodeInfo<SnapshotOf<VM>>) -> bool + Send + Sync,
     {
         let root = self.get_or_create_state_node(game_state);
         self.run_simulations(root, game_state, alive)
@@ -111,7 +111,7 @@ where
 
     fn run_simulations<Alive>(&self, root: NodeId, game_state: &E::State, alive: Alive) -> usize
     where
-        Alive: Fn(NodeInfo) -> bool + Send + Sync,
+        Alive: Fn(NodeInfo<SnapshotOf<VM>>) -> bool + Send + Sync,
     {
         let sim_id = Arc::new(AtomicUsize::new(0));
         let total_capacity = self.virtual_sims * self.sim_threads;
@@ -164,7 +164,7 @@ where
         sim_id: Arc<AtomicUsize>,
     ) -> usize
     where
-        Alive: Fn(NodeInfo) -> bool,
+        Alive: Fn(NodeInfo<SnapshotOf<VM>>) -> bool,
     {
         let root_node = self.store.state_node(root);
         let mut max_depth = 0;
@@ -179,7 +179,8 @@ where
         loop {
             let visits = root_node.visits();
             let virtual_visits = root_node.virtual_visits();
-            let root_info = NodeInfo::new(visits, virtual_visits, max_depth as u32);
+            let snapshot = root_node.snapshot();
+            let root_info = NodeInfo::new(visits, virtual_visits, snapshot, max_depth as u32);
 
             if !alive(root_info) {
                 break;
@@ -303,18 +304,21 @@ where
                 visits: node.visits(),
                 virtual_visits: node.virtual_visits(),
                 depth,
+                snapshot: node.snapshot(),
             },
             self.store.iter_edge_info(node),
             game_state,
         )
     }
 
-    pub fn get_node_info(&self, game_state: &E::State) -> Option<NodeInfo> {
+    pub fn get_node_info(&self, game_state: &E::State) -> Option<NodeInfo<SnapshotOf<VM>>> {
         let transposition_hash = game_state.transposition_hash();
         let node_id = self.store.get_node_id(transposition_hash)?;
 
         let node = self.store.state_node(node_id);
-        Some(NodeInfo::new(node.visits(), node.virtual_visits(), 0))
+        let snapshot = node.snapshot();
+        let v_visits = node.virtual_visits();
+        Some(NodeInfo::new(node.visits(), v_visits, snapshot, 0))
     }
 
     fn get_or_create_state_node(&mut self, game_state: &E::State) -> NodeId {

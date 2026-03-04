@@ -130,6 +130,7 @@ where
                 visits: node.visits(),
                 virtual_visits: node.virtual_visits(),
                 depth,
+                snapshot: node.snapshot(),
             },
             self.store.iter_edge_info(node),
             game_state,

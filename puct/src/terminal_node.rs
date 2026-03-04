@@ -1,3 +1,5 @@
+use crate::RollupStats;
+
 /// Terminal node representing a final game state.
 pub struct Terminal<R> {
     rollup_stats: R,
@@ -10,5 +12,12 @@ impl<R> Terminal<R> {
 
     pub fn rollup_stats(&self) -> &R {
         &self.rollup_stats
+    }
+
+    pub fn snapshot(&self) -> R::Snapshot
+    where
+        R: RollupStats,
+    {
+        self.rollup_stats.snapshot()
     }
 }

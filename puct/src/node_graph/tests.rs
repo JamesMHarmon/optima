@@ -86,10 +86,10 @@ fn terminal_merge_accumulates_when_terminal_already_reachable_via_edge() {
     assert_eq!(found_terminal_id, terminal_id);
 
     let terminal_node = arena.terminal_node(found_terminal_id);
-    assert_eq!(terminal_node.rollup_stats().snapshot(), DummySnapshot(10));
+    assert_eq!(terminal_node.snapshot(), DummySnapshot(10));
 
     terminal_node.rollup_stats().accumulate(&DummySnapshot(7));
-    assert_eq!(terminal_node.rollup_stats().snapshot(), DummySnapshot(17));
+    assert_eq!(terminal_node.snapshot(), DummySnapshot(17));
 }
 
 #[test]

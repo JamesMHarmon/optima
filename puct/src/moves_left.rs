@@ -11,6 +11,8 @@ use crate::{
 };
 use crate::{SelectionPolicyScoring, ValueModel, WeightedMerge};
 
+type NodeInfoVM = NodeInfo<MovesLeftSnapshot>;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MovesLeftSnapshot {
     pub p1_sum: f64,
@@ -212,38 +214,14 @@ impl<C, A, T> MovesLeftSelectionPolicy<C, A, T> {
         }
     }
 
-    fn game_length_baseline<'a>(
-        edges: &[EdgeInfo<'a, A, MovesLeftSnapshot>],
+    fn game_length_baseline(
+        snap: MovesLeftSnapshot,
         moves_left_threshold: f32,
         player_to_move: usize,
-    ) -> GameLengthBaseline
-    where
-        A: 'a,
-    {
-        if moves_left_threshold >= 1.0 {
+    ) -> GameLengthBaseline {
+        if moves_left_threshold >= 1.0 || snap.total_weight == 0 {
             return GameLengthBaseline::None;
         }
-
-        let mut best: Option<(u32, MovesLeftSnapshot)> = None;
-        for edge in edges {
-            if edge.visits == 0 {
-                continue;
-            }
-            let Some(snap) = edge.snapshot else {
-                continue;
-            };
-            match best {
-                None => best = Some((edge.visits, snap)),
-                Some((best_visits, _)) if edge.visits > best_visits => {
-                    best = Some((edge.visits, snap))
-                }
-                Some(_) => {}
-            }
-        }
-
-        let Some((_v, snap)) = best else {
-            return GameLengthBaseline::None;
-        };
 
         let qsa = snap.player_value(player_to_move);
         let expected_game_length = snap.game_length();
@@ -301,7 +279,7 @@ where
             .terminal_for_trajectory(state, visited)
     }
 
-    fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
+    fn select_edge<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
@@ -322,7 +300,7 @@ where
         let player_to_move = state.player_to_move();
         let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
         let baseline =
-            Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);
+            Self::game_length_baseline(node.snapshot, options.moves_left_threshold, player_to_move);
 
         let mut best_index = 0usize;
         let mut best_score = f32::MIN;
@@ -382,7 +360,7 @@ where
     C: CPUCT<State = T::State>,
     T::State: PlayerToMove,
 {
-    fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
+    fn score_edges<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
         I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
@@ -402,12 +380,10 @@ where
         let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
 
         let player_to_move = state.player_to_move();
-        let edges: Vec<EdgeInfo<'a, A, MovesLeftSnapshot>> = edges.collect();
         let baseline =
-            Self::game_length_baseline(&edges, options.moves_left_threshold, player_to_move);
+            Self::game_length_baseline(node.snapshot, options.moves_left_threshold, player_to_move);
 
         edges
-            .into_iter()
             .map(|edge| {
                 let visits = edge.visits;
                 let virtual_visits = edge.virtual_visits;

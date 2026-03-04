@@ -158,7 +158,7 @@ where
 
     pub async fn search<F>(&mut self, alive: F) -> Result<usize>
     where
-        F: Fn(NodeInfo) -> bool + Send + Sync,
+        F: Fn(NodeInfo<SnapshotOf<VM>>) -> bool + Send + Sync,
     {
         let state = self.state.clone();
 

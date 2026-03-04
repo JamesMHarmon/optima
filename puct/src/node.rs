@@ -123,6 +123,10 @@ where
         &self.rollup_stats
     }
 
+    pub fn snapshot(&self) -> R::Snapshot {
+        self.rollup_stats.snapshot()
+    }
+
     pub fn recompute_rollup(&self, nodes: &StateArena<A, R>) {
         let mut aggregated = self.rollup_prior.duplicate();
         let edges = self.iter_edge_rollups(nodes);
@@ -173,9 +177,9 @@ where
 
     fn child_snapshot(child_id: NodeId, nodes: &StateArena<A, R>) -> R::Snapshot {
         match child_id.node_type() {
-            NodeType::State => nodes.state_node(child_id).rollup_stats().snapshot(),
+            NodeType::State => nodes.state_node(child_id).snapshot(),
             NodeType::AfterState => nodes.after_state_node(child_id).snapshot(nodes),
-            NodeType::Terminal => nodes.terminal_node(child_id).rollup_stats().snapshot(),
+            NodeType::Terminal => nodes.terminal_node(child_id).snapshot(),
         }
     }
 }

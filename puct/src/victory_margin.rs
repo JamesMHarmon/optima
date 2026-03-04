@@ -12,6 +12,8 @@ use crate::{
 };
 use crate::{ValueModel, WeightedMerge};
 
+type NodeInfoVM = NodeInfo<VictoryMarginSnapshot>;
+
 #[derive(Clone, Copy)]
 pub struct VictoryMarginStrategyOptions {
     pub fpu: f32,
@@ -228,17 +230,13 @@ impl<C, A, T> VictoryMarginSelectionPolicy<C, A, T> {
     }
 
     fn directive_from_baseline(
-        baseline: Option<VictoryMarginSnapshot>,
+        baseline: VictoryMarginSnapshot,
         threshold: f32,
         player_index: usize,
     ) -> VictoryMarginDirective {
-        if threshold >= 1.0 {
+        if threshold >= 1.0 || baseline.total_weight == 0 {
             return VictoryMarginDirective::None;
         }
-
-        let Some(baseline) = baseline else {
-            return VictoryMarginDirective::None;
-        };
 
         let qsa = baseline.player_value(player_index);
 
@@ -271,7 +269,7 @@ where
             .terminal_for_trajectory(state, visited)
     }
 
-    fn select_edge<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> usize
+    fn select_edge<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
@@ -289,19 +287,22 @@ where
         let node_total_visits = node.total_visits();
         let cpuct = self.cpuct.cpuct(state, node_total_visits, is_root);
         let root_sqrt = (node_total_visits as f32).sqrt();
-        let player_index = state.player_to_move(); // 1 or 2
+        let player_index = state.player_to_move();
 
-        let mut baseline_visits = 0u32;
-        let mut baseline_snap: Option<VictoryMarginSnapshot> = None;
+        let directive = Self::directive_from_baseline(
+            node.snapshot,
+            options.victory_margin_threshold,
+            player_index,
+        );
 
-        let mut best_none_index = 0usize;
-        let mut best_none_score = f32::MIN;
+        let vm_sign: f32 = match directive {
+            VictoryMarginDirective::None => 0.0,
+            VictoryMarginDirective::MaximizeVictoryMargin => 1.0,
+            VictoryMarginDirective::MinimizeVictoryMargin => -1.0,
+        };
 
-        let mut best_max_index = 0usize;
-        let mut best_max_score = f32::MIN;
-
-        let mut best_min_index = 0usize;
-        let mut best_min_score = f32::MIN;
+        let mut best_index = 0usize;
+        let mut best_score = f32::MIN;
 
         for edge in edges {
             let visits = edge.visits;
@@ -318,56 +319,25 @@ where
 
             // Virtual loss: treat in-flight (virtual) visits as a loss of 0.0 by down-weighting
             // the Q term according to the fraction of completed visits.
-            let qsa = if nsa == 0 {
-                qsa
+            let (qsa, vm_adj) = if nsa == 0 {
+                (qsa, 0.0)
             } else {
-                qsa * (visits as f32) / (nsa as f32)
-            };
-
-            let base_score = qsa + usa;
-            if base_score > best_none_score {
-                best_none_score = base_score;
-                best_none_index = edge.edge_index;
-            }
-
-            let vm_adj = if nsa == 0 {
-                0.0
-            } else {
-                edge.snapshot
+                let scale = visits as f32 / nsa as f32;
+                let vm = edge.snapshot
                     .map(|s| s.victory_margin() * options.victory_margin_factor)
-                    .unwrap_or(0.0)
+                    .unwrap_or(0.0) * vm_sign;
+                (qsa * scale, vm)
             };
 
-            let score_max = base_score + vm_adj;
-            if score_max > best_max_score {
-                best_max_score = score_max;
-                best_max_index = edge.edge_index;
-            }
+            let score = qsa + usa + vm_adj;
 
-            let score_min = base_score - vm_adj;
-            if score_min > best_min_score {
-                best_min_score = score_min;
-                best_min_index = edge.edge_index;
-            }
-
-            if nsa > 0
-                && let Some(snap) = edge.snapshot
-                && nsa > baseline_visits
-            {
-                baseline_visits = nsa;
-                baseline_snap = Some(snap);
+            if score > best_score {
+                best_score = score;
+                best_index = edge.edge_index;
             }
         }
 
-        match Self::directive_from_baseline(
-            baseline_snap,
-            options.victory_margin_threshold,
-            player_index,
-        ) {
-            VictoryMarginDirective::None => best_none_index,
-            VictoryMarginDirective::MaximizeVictoryMargin => best_max_index,
-            VictoryMarginDirective::MinimizeVictoryMargin => best_min_index,
-        }
+        best_index
     }
 }
 
@@ -395,7 +365,7 @@ where
     T::State: PlayerToMove,
     T: TrajectoryTerminal,
 {
-    fn score_edges<'a, I>(&self, node: NodeInfo, edges: I, state: &Self::State) -> Vec<EdgeScore>
+    fn score_edges<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> Vec<EdgeScore>
     where
         I: Iterator<Item = EdgeInfo<'a, A, VictoryMarginSnapshot>>,
         VictoryMarginSnapshot: 'a,
@@ -415,26 +385,17 @@ where
         let root_sqrt = (node_total_visits as f32).sqrt();
         let player_index = state.player_to_move();
 
-        let edges: Vec<EdgeInfo<'a, A, VictoryMarginSnapshot>> = edges.collect();
-
-        let mut baseline_visits = 0u32;
-        let mut baseline_snap: Option<VictoryMarginSnapshot> = None;
-        for edge in &edges {
-            let nsa = edge.visits + edge.virtual_visits;
-            if nsa > 0
-                && let Some(snap) = edge.snapshot
-                && nsa > baseline_visits
-            {
-                baseline_visits = nsa;
-                baseline_snap = Some(snap);
-            }
-        }
-
         let directive = Self::directive_from_baseline(
-            baseline_snap,
+            node.snapshot,
             options.victory_margin_threshold,
             player_index,
         );
+
+        let vm_sign: f32 = match directive {
+            VictoryMarginDirective::None => 0.0,
+            VictoryMarginDirective::MaximizeVictoryMargin => 1.0,
+            VictoryMarginDirective::MinimizeVictoryMargin => -1.0,
+        };
 
         edges
             .into_iter()
@@ -451,27 +412,17 @@ where
                     .map(|s| s.player_value(player_index))
                     .unwrap_or(fpu);
 
-                let qsa = if nsa == 0 {
-                    qsa
+                let (qsa, vm_adj) = if nsa == 0 {
+                    (qsa, 0.0)
                 } else {
-                    qsa * (visits as f32) / (nsa as f32)
-                };
-
-                let base_score = qsa + usa;
-
-                let vm_adj = if nsa == 0 {
-                    0.0
-                } else {
-                    edge.snapshot
+                    let scale = visits as f32 / nsa as f32;
+                    let vm = edge.snapshot
                         .map(|s| s.victory_margin() * options.victory_margin_factor)
-                        .unwrap_or(0.0)
+                        .unwrap_or(0.0) * vm_sign;
+                    (qsa * scale, vm)
                 };
 
-                let score = match directive {
-                    VictoryMarginDirective::None => base_score,
-                    VictoryMarginDirective::MaximizeVictoryMargin => base_score + vm_adj,
-                    VictoryMarginDirective::MinimizeVictoryMargin => base_score - vm_adj,
-                };
+                let score = qsa + usa + vm_adj;
 
                 EdgeScore {
                     edge_index: edge.edge_index,

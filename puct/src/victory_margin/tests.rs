@@ -189,6 +189,7 @@ type Scenario<'a> = (
     TestState,
     u32,
     u32,
+    Option<VictoryMarginSnapshot>,
     Vec<EdgeInfo<'a, u8, VictoryMarginSnapshot>>,
 );
 
@@ -263,6 +264,7 @@ fn run_policy<'a, A, T>(
     policy: &VictoryMarginSelectionPolicy<ConstantCpuct, A, T>,
     edges: &'a [EdgeInfo<'a, A, VictoryMarginSnapshot>],
     node_visits: u32,
+    node_snapshot: Option<VictoryMarginSnapshot>,
     state: &TestState,
     depth: u32,
 ) -> usize
@@ -275,6 +277,7 @@ where
             visits: node_visits,
             virtual_visits: 0,
             depth,
+            snapshot: node_snapshot.unwrap_or_default(),
         },
         edges.iter().map(|e| EdgeInfo {
             edge_index: e.edge_index,
@@ -291,6 +294,7 @@ where
 fn reference_two_pass_select<'a, A>(
     edges: &[EdgeInfo<'a, A, VictoryMarginSnapshot>],
     node_visits: u32,
+    node_snapshot: Option<VictoryMarginSnapshot>,
     state: &TestState,
     depth: u32,
     cpuct: f32,
@@ -308,25 +312,9 @@ where
     let root_sqrt = (node_visits as f32).sqrt();
     let player_index = state.player_to_move();
 
-    let mut baseline_visits = 0u32;
-    let mut baseline_snap: Option<VictoryMarginSnapshot> = None;
-    for e in edges {
-        let total_visits = e.visits + e.virtual_visits;
-        if total_visits == 0 {
-            continue;
-        }
-        let Some(s) = e.snapshot else {
-            continue;
-        };
-        if total_visits > baseline_visits {
-            baseline_visits = total_visits;
-            baseline_snap = Some(s);
-        }
-    }
-
     let directive =
         VictoryMarginSelectionPolicy::<ConstantCpuct, TestState>::directive_from_baseline(
-            baseline_snap,
+            node_snapshot.unwrap_or_default(),
             options.victory_margin_threshold,
             player_index,
         );
@@ -394,7 +382,7 @@ fn virtual_visits_down_weight_q_value() {
         edge_with_virtual_visits(1, &a1, 0.0, 10, 5, Some(snap(0.8, 0.2, 0.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, None, &TestState { ptm: 1 }, 1);
     assert_eq!(idx, 0);
 }
 
@@ -418,7 +406,7 @@ fn virtual_visits_do_not_reduce_u_term() {
         edge_with_virtual_visits(1, &a1, 1.00, 1, 100, Some(snap(0.0, 1.0, 0.0, 1))),
     ];
 
-    let idx = run_policy(&policy, &edges, 100, &TestState { ptm: 1 }, 1);
+    let idx = run_policy(&policy, &edges, 100, None, &TestState { ptm: 1 }, 1);
     assert_eq!(idx, 0);
 }
 
@@ -442,6 +430,8 @@ fn select_matches_reference_multiple_scenarios() {
             TestState { ptm: 1 },
             0,
             100,
+            // Most-visited child: edge 3 (50 visits, p1=0.6) → uncertain → None directive.
+            Some(snap(0.6, 0.4, 0.1, 50)),
             vec![
                 edge(0, &ACTIONS[0], 0.4, 0, None),
                 edge(1, &ACTIONS[1], 0.3, 10, Some(snap(0.9, 0.1, 0.5, 10))),
@@ -453,6 +443,8 @@ fn select_matches_reference_multiple_scenarios() {
             TestState { ptm: 2 },
             0,
             80,
+            // Most-visited child: edge 3 (41 visits, p2=0.8) → winning for p2 → Maximize directive.
+            Some(snap(0.2, 0.8, 0.3, 41)),
             vec![
                 edge(0, &ACTIONS[0], 0.5, 0, None),
                 edge(1, &ACTIONS[1], 0.2, 12, Some(snap(0.8, 0.2, 0.8, 12))),
@@ -464,6 +456,8 @@ fn select_matches_reference_multiple_scenarios() {
             TestState { ptm: 1 },
             2,
             1,
+            // All edges unvisited → no node snapshot → None directive.
+            None,
             vec![
                 edge(0, &ACTIONS[0], 0.6, 0, None),
                 edge(1, &ACTIONS[1], 0.4, 0, Some(snap(0.2, 0.8, 0.9, 1))),
@@ -471,10 +465,17 @@ fn select_matches_reference_multiple_scenarios() {
         ),
     ];
 
-    for (state, depth, node_visits, edges) in scenarios {
-        let selected = run_policy(&policy, &edges, node_visits, &state, depth);
-        let expected =
-            reference_two_pass_select(&edges, node_visits, &state, depth, cpuct, &policy.options);
+    for (state, depth, node_visits, node_snapshot, edges) in scenarios {
+        let selected = run_policy(&policy, &edges, node_visits, node_snapshot, &state, depth);
+        let expected = reference_two_pass_select(
+            &edges,
+            node_visits,
+            node_snapshot,
+            &state,
+            depth,
+            cpuct,
+            &policy.options,
+        );
         assert_eq!(selected, expected);
     }
 }
@@ -497,7 +498,7 @@ fn directive_threshold_ge_one_is_none() {
         edge(1, &A[1], 0.5, 10, Some(snap(0.80, 0.20, 0.1, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(&policy, &edges, 100, None, &state, 0);
     // With cpuct=0 and fpu=0, selection under None becomes max Q; edge 0 has higher Q.
     assert_eq!(selected, 0);
 }
@@ -521,10 +522,10 @@ fn no_baseline_means_no_directive_and_picks_best_base() {
         edge(2, &A[2], 0.0, 0, None),
     ];
 
-    // No visited edges => baseline is None => directive None => VM ignored.
+    // No visited edges => node snapshot is None => directive None => VM ignored.
     // With cpuct=0, it picks best Q; for unvisited edges Q=fpu=0.4, for visited it would use snapshot,
     // but all visits are 0 so snapshot is ignored and Q is also fpu.
-    let selected = run_policy(&policy, &edges, 10, &state, 0);
+    let selected = run_policy(&policy, &edges, 10, None, &state, 0);
     assert_eq!(selected, 0);
 }
 
@@ -540,7 +541,7 @@ fn winning_baseline_maximizes_victory_margin() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Baseline is edge 0 (most visited), and it's winning.
+    // Node snapshot is winning (p1=0.9 >= threshold=0.75) => MaximizeVictoryMargin.
     // Among edges 1 and 2, Q is identical but VM differs; maximize should choose edge 2.
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.9, 0.1, 0.1, 100))),
@@ -548,7 +549,14 @@ fn winning_baseline_maximizes_victory_margin() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.9, 0.1, 0.8, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.9, 0.1, 0.1, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 2);
 }
 
@@ -564,7 +572,7 @@ fn losing_baseline_minimizes_victory_margin() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Baseline is edge 0 (most visited), and it's losing.
+    // Node snapshot is losing (p1=0.1 <= 1-threshold=0.25) => MinimizeVictoryMargin.
     // Among edges 1 and 2, Q is identical but VM differs; minimize should choose edge 1.
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.1, 0.9, 0.5, 100))),
@@ -572,7 +580,14 @@ fn losing_baseline_minimizes_victory_margin() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.1, 0.9, 0.9, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.1, 0.9, 0.5, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 1);
 }
 
@@ -588,7 +603,7 @@ fn uncertain_baseline_does_not_bias_victory_margin() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Baseline (edge 0) is in the middle => directive None.
+    // Node snapshot is uncertain (p1=0.6 is between 0.25 and 0.75) => directive None.
     // Edge 2 has huge VM but lower Q; with no bias we should pick edge 1.
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.6, 0.4, 0.5, 100))),
@@ -596,7 +611,14 @@ fn uncertain_baseline_does_not_bias_victory_margin() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.69, 0.31, 100.0, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.6, 0.4, 0.5, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 1);
 }
 
@@ -613,19 +635,26 @@ fn unvisited_edges_do_not_get_victory_margin_bonus() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 2] = [1, 2];
-    // Baseline edge 1 makes us "winning" so directive maximize.
+    // Node snapshot is winning (p1=0.9) so directive maximize.
     // Edge 0 is unvisited but has a snapshot with enormous VM; it should not benefit.
     let edges = vec![
         edge(0, &A[0], 0.0, 0, Some(snap(0.5, 0.5, 999.0, 1))),
         edge(1, &A[1], 0.0, 10, Some(snap(0.9, 0.1, 0.1, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 10, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        10,
+        Some(snap(0.9, 0.1, 0.1, 10)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 1);
 }
 
 #[test]
-fn baseline_is_most_visited_not_best_q() {
+fn node_snapshot_drives_directive_not_best_q() {
     let state = TestState { ptm: 1 };
     let options = VictoryMarginStrategyOptions {
         fpu: 0.0,
@@ -637,16 +666,22 @@ fn baseline_is_most_visited_not_best_q() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Edge 0: most visited but losing => directive minimize.
-    // Edge 1: fewer visits but winning.
-    // Between edges 1 and 2 with same Q, minimize prefers smaller VM.
+    // Node snapshot is losing => directive minimize.
+    // Edges 1 and 2 both have high Q, but different VM; minimize picks smaller VM (edge 2).
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.1, 0.9, 0.5, 100))),
         edge(1, &A[1], 0.0, 10, Some(snap(0.9, 0.1, 0.9, 10))),
         edge(2, &A[2], 0.0, 10, Some(snap(0.9, 0.1, 0.1, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.1, 0.9, 0.5, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 2);
 }
 
@@ -667,12 +702,13 @@ fn fpu_root_used_at_depth_zero() {
 
     // With everything identical, selection is deterministic (first edge), but we can at least
     // validate the score path doesn't panic and matches the reference implementation.
-    let selected = run_policy(&policy, &edges, 10, &state, 0);
-    let expected = reference_two_pass_select(&edges, 10, &state, 0, 0.0, &policy.options);
+    let selected = run_policy(&policy, &edges, 10, None, &state, 0);
+    let expected = reference_two_pass_select(&edges, 10, None, &state, 0, 0.0, &policy.options);
     assert_eq!(selected, expected);
 
-    let selected_non_root = run_policy(&policy, &edges, 10, &state, 1);
-    let expected_non_root = reference_two_pass_select(&edges, 10, &state, 1, 0.0, &policy.options);
+    let selected_non_root = run_policy(&policy, &edges, 10, None, &state, 1);
+    let expected_non_root =
+        reference_two_pass_select(&edges, 10, None, &state, 1, 0.0, &policy.options);
     assert_eq!(selected_non_root, expected_non_root);
 }
 #[test]
@@ -688,7 +724,7 @@ fn player_two_wins_maximizes_victory_margin_for_player_two() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Baseline: edge 0 (100 visits), p2=0.9 is winning from player 2's perspective.
+    // Node snapshot: p2=0.9 is winning for player 2 => MaximizeVictoryMargin.
     // Candidates 1 and 2 have equal Q but different VM; maximize should pick edge 2.
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.1, 0.9, 0.1, 100))),
@@ -696,7 +732,14 @@ fn player_two_wins_maximizes_victory_margin_for_player_two() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.1, 0.9, 0.8, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.1, 0.9, 0.1, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 2);
 }
 
@@ -713,7 +756,7 @@ fn player_two_loses_minimizes_victory_margin_for_player_two() {
     let policy = TestPolicy::new(ConstantCpuct(0.0), options, NoTrajectoryTerminal::default());
 
     static A: [u8; 3] = [1, 2, 3];
-    // Baseline: edge 0 (100 visits), p2=0.1 is losing from player 2's perspective.
+    // Node snapshot: p2=0.1 is losing from player 2's perspective => MinimizeVictoryMargin.
     // Candidates 1 and 2 have equal Q but different VM; minimize should pick edge 1 (smaller VM).
     let edges = vec![
         edge(0, &A[0], 0.0, 100, Some(snap(0.9, 0.1, 0.5, 100))),
@@ -721,7 +764,14 @@ fn player_two_loses_minimizes_victory_margin_for_player_two() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.9, 0.1, 0.9, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.9, 0.1, 0.5, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 1);
 }
 
@@ -746,11 +796,11 @@ fn fpu_distinguishes_root_and_non_root_depth_for_player_two() {
     ];
 
     // At root (depth=0): edge 1 gets fpu_root=0.9, edge 0 gets Q=p2=0.5; edge 1 wins.
-    let root_selected = run_policy(&policy, &edges, 1, &state, 0);
+    let root_selected = run_policy(&policy, &edges, 1, None, &state, 0);
     assert_eq!(root_selected, 1);
 
     // Below root (depth=1): edge 1 gets fpu=0.1, edge 0 gets Q=p2=0.5; edge 0 wins.
-    let child_selected = run_policy(&policy, &edges, 1, &state, 1);
+    let child_selected = run_policy(&policy, &edges, 1, None, &state, 1);
     assert_eq!(child_selected, 0);
 }
 
@@ -775,6 +825,13 @@ fn player_two_uncertain_baseline_applies_no_vm_bias() {
         edge(2, &A[2], 0.0, 10, Some(snap(0.31, 0.69, 999.0, 10))),
     ];
 
-    let selected = run_policy(&policy, &edges, 100, &state, 0);
+    let selected = run_policy(
+        &policy,
+        &edges,
+        100,
+        Some(snap(0.5, 0.5, 0.5, 100)),
+        &state,
+        0,
+    );
     assert_eq!(selected, 1);
 }

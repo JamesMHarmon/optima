@@ -46,17 +46,16 @@ impl AfterState {
     where
         R: RollupStats,
     {
-        let outcomes = self.iter_outcomes(nodes).map(|(r, w)| (r.snapshot(), w));
-        R::aggregate_weighted(outcomes)
+        R::aggregate_weighted(self.iter_outcomes(nodes))
     }
 
     /// Iterates over outcome rollups and weights.
-    pub fn iter_outcomes<'a, A, R>(
-        &'a self,
-        nodes: &'a StateArena<A, R>,
-    ) -> impl Iterator<Item = (&'a R, u32)> + 'a
+    pub fn iter_outcomes<A, R, SS>(
+        &self,
+        nodes: &StateArena<A, R>,
+    ) -> impl Iterator<Item = (SS, u32)>
     where
-        R: RollupStats,
+        R: RollupStats<Snapshot = SS>,
     {
         self.outcomes.iter().map(move |outcome| {
             let child_id = outcome.child();
@@ -67,15 +66,15 @@ impl AfterState {
                 "AfterState outcome has unset child NodeId"
             );
 
-            let rollup_stats = match child_id.node_type() {
-                NodeType::State => nodes.state_node(child_id).rollup_stats(),
-                NodeType::Terminal => nodes.terminal_node(child_id).rollup_stats(),
+            let snapshot = match child_id.node_type() {
+                NodeType::State => nodes.state_node(child_id).snapshot(),
+                NodeType::Terminal => nodes.terminal_node(child_id).snapshot(),
                 NodeType::AfterState => {
                     panic!("AfterState outcome cannot point to another AfterState")
                 }
             };
 
-            (rollup_stats, visits)
+            (snapshot, visits)
         })
     }
 }

@@ -393,7 +393,7 @@ fn e2e_rollup_recompute_weights_children_by_edge_visits_and_includes_prior() {
 
     // after_state_snapshot = 7*1 + 11*4 = 51
     // root_rollup = prior(5)*1 + edge0(2)*3 + edge1(51)*2 = 5 + 6 + 102 = 113
-    assert_eq!(root.rollup_stats().snapshot(), DummySnapshot(113));
+    assert_eq!(root.snapshot(), DummySnapshot(113));
 }
 
 #[test]
@@ -430,7 +430,7 @@ fn e2e_rollup_recompute_ignores_unvisited_edges() {
     root.recompute_rollup(&arena);
 
     // prior 9 + (100*2) = 209
-    assert_eq!(root.rollup_stats().snapshot(), DummySnapshot(209));
+    assert_eq!(root.snapshot(), DummySnapshot(209));
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn reset_node_resets_visits_virtual_visits_and_rollup() {
     assert_eq!(node.visits(), 1);
     assert_eq!(node.virtual_visits(), 0);
     // rollup_stats should be back to the initial prior snapshot (42).
-    assert_eq!(node.rollup_stats().snapshot(), DummySnapshot(42));
+    assert_eq!(node.snapshot(), DummySnapshot(42));
 }
 
 #[test]
