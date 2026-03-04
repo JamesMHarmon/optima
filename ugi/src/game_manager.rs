@@ -3,6 +3,7 @@ use crate::{
     UGICommand, UGIOption, UGIOptions,
 };
 use common::{InfoFields, PlayerValue, TranspositionHash};
+use crossbeam::channel::{Receiver, Sender};
 use engine::{GameEngine, GameState, PlayerResult, PlayerScore, Players, ValidActions};
 use itertools::Itertools;
 use model::Analyzer;
@@ -18,7 +19,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use std::{str, thread};
-use tokio::sync::mpsc;
 
 const NAME: &str = "UGI";
 const AUTHOR: &str = "Author";
@@ -26,7 +26,7 @@ const AUTHOR: &str = "Author";
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
 pub struct GameManager<S, A> {
-    command_channel: mpsc::Sender<CommandInner<S, A>>,
+    command_channel: Sender<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
     search_active: Arc<AtomicBool>,
@@ -54,7 +54,7 @@ impl<S, A> GameManager<S, A> {
         self.options.lock().unwrap().set_option(option);
     }
 
-    pub async fn command(&self, command: UGICommand<S, A>) {
+    pub fn command(&self, command: UGICommand<S, A>) {
         match command {
             UGICommand::UGI => {
                 self.output.cmd("protocol-version", "1");
@@ -71,37 +71,33 @@ impl<S, A> GameManager<S, A> {
             UGICommand::IsReady => {
                 self.output.cmd("readyok", "");
             }
-            UGICommand::SetPosition(state) => {
-                self.send_command(CommandInner::SetPosition(state)).await
-            }
+            UGICommand::SetPosition(state) => self.send_command(CommandInner::SetPosition(state)),
             UGICommand::Go => {
                 self.search_active.store(true, Ordering::SeqCst);
-                self.send_command(CommandInner::Go).await
+                self.send_command(CommandInner::Go)
             }
             UGICommand::GoPonder => {
                 self.search_active.store(true, Ordering::SeqCst);
-                self.send_command(CommandInner::Ponder).await
+                self.send_command(CommandInner::Ponder)
             }
             UGICommand::MakeMove(actions) => {
                 self.search_active.store(false, Ordering::SeqCst);
-                self.send_command(CommandInner::MakeMove(actions)).await
+                self.send_command(CommandInner::MakeMove(actions))
             }
-            UGICommand::ClearFocus => self.send_command(CommandInner::ClearFocus).await,
-            UGICommand::Focus(actions) => {
-                self.send_command(CommandInner::FocusActions(actions)).await
-            }
+            UGICommand::ClearFocus => self.send_command(CommandInner::ClearFocus),
+            UGICommand::Focus(actions) => self.send_command(CommandInner::FocusActions(actions)),
             UGICommand::Quit | UGICommand::Stop => {
                 self.search_active.store(false, Ordering::SeqCst);
             }
             UGICommand::SetOption(option) => self.set_option(option),
             UGICommand::Noop => {}
-            UGICommand::Details => self.send_command(CommandInner::Details).await,
-            UGICommand::Status => self.send_command(CommandInner::Status).await,
+            UGICommand::Details => self.send_command(CommandInner::Details),
+            UGICommand::Status => self.send_command(CommandInner::Status),
         }
     }
 
-    async fn send_command(&self, command: CommandInner<S, A>) {
-        if self.command_channel.send(command).await.is_err() {
+    fn send_command(&self, command: CommandInner<S, A>) {
+        if self.command_channel.send(command).is_err() {
             panic!("Failed to Send Command");
         }
     }
@@ -115,7 +111,7 @@ impl<S, A> GameManager<S, A> {
         backpropagation_strategy: FnB,
         selection_strategy: FnSel,
         time_strategy: T,
-    ) -> (Self, mpsc::UnboundedReceiver<Output>)
+    ) -> (Self, Receiver<Output>)
     where
         U: InitialGameState<State = S>
             + ActionsToMoveString<State = S, Action = A>
@@ -149,8 +145,8 @@ impl<S, A> GameManager<S, A> {
         S: GameState + Clone + Display + TranspositionHash + Send + Sync + 'static,
         A: Display + Debug + Eq + Hash + Clone + Send + Sync + 'static,
     {
-        let (command_tx, command_rx) = mpsc::channel(1);
-        let (output_tx, output_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = crossbeam::channel::bounded(1);
+        let (output_tx, output_rx) = crossbeam::channel::unbounded();
         let output = OutputHandle { output_tx };
         let options = Arc::new(Mutex::new(init_options()));
         let search_active = Arc::new(AtomicBool::new(false));
@@ -175,10 +171,9 @@ impl<S, A> GameManager<S, A> {
             time_strategy,
         );
 
-        let handle = tokio::runtime::Handle::current();
         thread::spawn(move || {
             let mut game_manager_inner = game_manager_inner;
-            handle.block_on(async { game_manager_inner.run_game_loop().await });
+            game_manager_inner.run_game_loop();
         });
 
         (game_manager, output_rx)
@@ -186,7 +181,7 @@ impl<S, A> GameManager<S, A> {
 }
 
 pub struct GameManagerInner<S, A, U, E, M, FnB, FnSel, T> {
-    command_rx: mpsc::Receiver<CommandInner<S, A>>,
+    command_rx: Receiver<CommandInner<S, A>>,
     output: OutputHandle,
     options: Arc<Mutex<UGIOptions>>,
     search_active: Arc<AtomicBool>,
@@ -227,7 +222,7 @@ where
     Pr: Display,
 {
     fn new(
-        command_rx: mpsc::Receiver<CommandInner<S, A>>,
+        command_rx: Receiver<CommandInner<S, A>>,
         output: OutputHandle,
         options: Arc<Mutex<UGIOptions>>,
         search_active: Arc<AtomicBool>,
@@ -257,7 +252,7 @@ where
             .convert_to_valid_composite_actions(actions, game_state)
     }
 
-    async fn run_game_loop(&mut self) {
+    fn run_game_loop(&mut self) {
         let mut mcts_container = None;
         let mut game_state = self.ugi_mapper.initial_game_state();
         let mut focus_game_state = game_state.clone();
@@ -269,7 +264,7 @@ where
         let mut value_model_container: Option<B> = None;
         let mut selection_container: Option<Sel> = None;
 
-        while let Some(command) = self.command_rx.recv().await {
+        while let Ok(command) = self.command_rx.recv() {
             if mcts_container.is_none() {
                 let options_lock = options.lock().unwrap();
 
@@ -332,12 +327,10 @@ where
                             && self.command_rx.is_empty()
                             && (max_visits == 0 || mcts.num_node_visits() < max_visits)
                         {
-                            let depth = tokio::task::block_in_place(|| {
-                                mcts.search(|node_info| {
-                                    search_active.load(Ordering::SeqCst)
-                                        && node_info.visits < max_visits as u32
-                                        && last_output.elapsed().as_secs() < 1
-                                })
+                            let depth = mcts.search(|node_info| {
+                                search_active.load(Ordering::SeqCst)
+                                    && node_info.visits < max_visits as u32
+                                    && last_output.elapsed().as_secs() < 1
                             });
 
                             last_output = Instant::now();
@@ -416,7 +409,7 @@ where
                         }
 
                         game_state = self.engine.take_action(&game_state, &action);
-                        tokio::task::block_in_place(|| mcts.advance_to_action(action));
+                        mcts.advance_to_action(action);
                     }
 
                     focus_game_state = game_state.clone();
@@ -498,23 +491,19 @@ where
                         let depth = if options_visits != 0 {
                             self.output
                                 .info(&format!("search visits: {}", options_visits));
-                            tokio::task::block_in_place(|| {
-                                mcts.search_visits_active(options_visits, &search_active)
-                            })
+                            mcts.search_visits_active(options_visits, &search_active)
                         } else {
                             self.output
                                 .info(&format!("search duration: {:?}", search_duration));
-                            tokio::task::block_in_place(|| {
-                                mcts.search_time_max_visits(
-                                    search_duration,
-                                    options_max_visits,
-                                    &search_active,
-                                )
-                            })
+                            mcts.search_time_max_visits(
+                                search_duration,
+                                options_max_visits,
+                                &search_active,
+                            )
                         };
 
                         // Safety step to ensure there is at least one visit for the steps when in play phase and using time. An additional visit is added for PUCT to select the best action.
-                        tokio::task::block_in_place(|| mcts.search_visits(2));
+                        mcts.search_visits(2);
 
                         depths.push(depth);
 
@@ -672,7 +661,7 @@ where
 
 #[derive(Clone)]
 struct OutputHandle {
-    output_tx: mpsc::UnboundedSender<Output>,
+    output_tx: Sender<Output>,
 }
 
 impl OutputHandle {

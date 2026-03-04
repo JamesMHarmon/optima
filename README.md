@@ -8,7 +8,7 @@ Optima is a system that uses model-based reinforcement learning to train an agen
 
 * **General** - Optima exposes traits that enable it to learn practically any game or environment, in contrast to other projects that are designed for one specific game.
 
-* **Performant** - By utilizing modern channel based architecture in conjunction with rust's async await, thousands of games can efficiently be played in parallel on a single machine. This allows for games to be learned w/ much less computation required than the original Alpha Zero.
+* **Performant** - By utilizing modern channel based architecture in conjunction with rust, thousands of games can efficiently be played in parallel on a single machine. This allows for games to be learned w/ much less computation required than the original Alpha Zero.
 
 * **Scalable** - Optima is split into a number of processes which can each be independently scaled horizontally across multiple machines. These processes include agents interacting in the environment, training of the agents given their experience, and arenas to ensure that the best agents are chosen.
 

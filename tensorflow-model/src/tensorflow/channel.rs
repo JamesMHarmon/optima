@@ -1,3 +1,4 @@
+use crossbeam::channel::Receiver;
 use std::time::{Duration, Instant};
 
 pub trait ChannelExt<T> {
@@ -5,7 +6,7 @@ pub trait ChannelExt<T> {
     fn recv_up_to(&self, limit: usize) -> Vec<T>;
 }
 
-impl<T> ChannelExt<T> for crossbeam::channel::Receiver<T> {
+impl<T> ChannelExt<T> for Receiver<T> {
     fn recv_up_to(&self, limit: usize) -> Vec<T> {
         let mut states_to_analyse = Vec::with_capacity(limit);
 

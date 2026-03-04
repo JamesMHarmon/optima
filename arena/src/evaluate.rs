@@ -1,13 +1,12 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel::Sender;
-use futures::stream::{FuturesUnordered, StreamExt};
 use log::{error, info};
 use permutohedron::Heap as Permute;
 use serde::Serialize;
 use std::iter::repeat_with;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio::runtime::Handle;
 
 use common::{GameAction, PlayerValue, TranspositionHash};
 use engine::{GameEngine, GameState, ValidActions};
@@ -78,8 +77,6 @@ impl Arena {
         let (game_results_tx, game_results_rx) = std::sync::mpsc::channel();
 
         let num_games_to_play = options.num_games;
-        let batch_size = options.evaluate_batch_size;
-        let runtime_handle = Handle::current();
 
         let match_result = crossbeam::scope(move |s| {
             let mut handles = vec![];
@@ -88,7 +85,6 @@ impl Arena {
 
             for thread_num in 0..EVALUATE_PARALLELISM {
                 let game_results_tx = game_results_tx.clone();
-                let runtime_handle = runtime_handle.clone();
 
                 let num_games_to_play_this_thread = num_games_per_thread
                     + if thread_num < num_games_per_thread_remainder {
@@ -103,19 +99,16 @@ impl Arena {
                         thread_num, num_games_to_play_this_thread
                     );
 
-                    let f = Self::play_games(
+                    Self::play_games(
                         num_games_to_play_this_thread,
                         num_players,
-                        batch_size,
                         game_results_tx,
                         engine,
                         models,
                         value_model,
                         selection_policy,
                         options,
-                    );
-
-                    runtime_handle.block_on(f)
+                    )
                 }));
             }
 
@@ -195,10 +188,9 @@ impl Arena {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn play_games<S, A, P, E, M, T, VM, Sel>(
+    fn play_games<S, A, P, E, M, T, VM, Sel>(
         num_games_to_play: usize,
         num_players: usize,
-        batch_size: usize,
         results_channel: mpsc::Sender<GameResult<A>>,
         engine: &E,
         models: &[M],
@@ -220,44 +212,53 @@ impl Arena {
         T: GameAnalyzer<State = S, Action = A, Predictions = P> + Send + Sync,
         P: PlayerValue,
     {
-        let mut games_to_play_futures = FuturesUnordered::new();
         let repeated_models: Vec<_> = repeat_with(|| models.iter())
             .flatten()
             .take(num_players)
             .collect();
 
-        let mut games_to_play: Vec<Vec<&M>> = repeat_with(|| repeated_models.clone())
+        let games_to_play: Vec<Vec<&M>> = repeat_with(|| repeated_models.clone())
             .flat_map::<Vec<_>, _>(|mut d| Permute::new(&mut d).collect())
             .take(num_games_to_play)
             .collect();
 
-        for _ in 0..batch_size {
-            if let Some(players) = games_to_play.pop() {
-                let game_to_play =
-                    Self::play_game(engine, value_model, selection_policy, players, options);
-                games_to_play_futures.push(game_to_play);
+        let games_queue = Arc::new(Mutex::new(games_to_play));
+        let batch_size = options.evaluate_batch_size;
+
+        crossbeam::scope(|s| {
+            for _ in 0..batch_size {
+                let games_queue = games_queue.clone();
+                let results_channel = results_channel.clone();
+                s.spawn(move |_| -> Result<()> {
+                    loop {
+                        let players = games_queue.lock().unwrap().pop();
+                        match players {
+                            None => break,
+                            Some(players) => {
+                                let game_result = Self::play_game(
+                                    engine,
+                                    value_model,
+                                    selection_policy,
+                                    players,
+                                    options,
+                                )?;
+                                results_channel
+                                    .send(game_result)
+                                    .map_err(|_| anyhow!("Failed to send game_result"))?;
+                            }
+                        }
+                    }
+                    Ok(())
+                });
             }
-        }
-
-        while let Some(game_result) = games_to_play_futures.next().await {
-            let game_result = game_result?;
-
-            results_channel
-                .send(game_result)
-                .map_err(|_| anyhow!("Failed to send game_result"))?;
-
-            if let Some(players) = games_to_play.pop() {
-                let game_to_play =
-                    Self::play_game(engine, value_model, selection_policy, players, options);
-                games_to_play_futures.push(game_to_play);
-            }
-        }
+        })
+        .map_err(|e| anyhow!("{:?}", e))?;
 
         Ok(())
     }
 
     #[allow(non_snake_case)]
-    async fn play_game<S, A, E, VM, Sel, T, M, P>(
+    fn play_game<S, A, E, VM, Sel, T, M, P>(
         engine: &E,
         value_model: &VM,
         selection_policy: &Sel,

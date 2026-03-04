@@ -5,11 +5,10 @@ use anyhow::{Result, anyhow};
 use arena::ArenaOptions;
 use clap::Parser;
 use cli::{Cli, Commands};
-use common::{ConfigLoader, DynamicCPUCT, FsExt, get_env_usize};
+use common::{ConfigLoader, DynamicCPUCT, FsExt};
 use dotenv::dotenv;
 use env_logger::Env;
 use game::{Engine, ModelFactory, ModelRef, TimeStrategy, UGI};
-use log::info;
 use model::Load;
 #[cfg(any(feature = "connect4", feature = "arimaa"))]
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
@@ -33,22 +32,12 @@ fn main() -> Result<()> {
 
     env_logger::Builder::from_env(log_level).init();
 
-    let mut builder = tokio::runtime::Builder::new_multi_thread();
-
-    builder.enable_all();
-
-    if let Some(worker_threads) = get_env_usize("TOKIO_THREADS") {
-        builder.worker_threads(worker_threads);
-    }
-
-    info!("{:?}", builder);
-
-    builder.build().unwrap().block_on(async_main(cli))?;
+    run(cli)?;
 
     Ok(())
 }
 
-async fn async_main(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<()> {
     match &cli.command {
         Commands::SelfPlay(self_play_args) => {
             let config_path = self_play_args.config.relative_to_cwd()?;
@@ -312,8 +301,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 value_model,
                 selection_strategy,
                 time_strategy,
-            )
-            .await?
+            )?
         }
         Commands::Perft(perft_args) => {
             let engine = Engine::new();

@@ -27,5 +27,4 @@ cargo build --release && cp ./target/release/libreplay_buffer.so ./model_py/repl
 
 ```shell
 RAYON_NUM_THREADS = 16
-TOKIO_THREADS = 16
 ```

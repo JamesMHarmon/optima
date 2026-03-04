@@ -20,7 +20,7 @@ use crate::{
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
-pub async fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
+pub fn run_ugi<M, E, S, A, U, B, Sel, FnB, FnSel, Pr, Ps, T>(
     ugi_mapper: U,
     engine: E,
     model: M,
@@ -65,7 +65,7 @@ where
 {
     let ugi_mapper = Arc::new(ugi_mapper);
 
-    let (game_manager, mut output_rx) = GameManager::new(
+    let (game_manager, output_rx) = GameManager::new(
         ugi_mapper.clone(),
         engine,
         model,
@@ -75,8 +75,8 @@ where
     );
     let input_parser = InputParser::new(&*ugi_mapper);
 
-    tokio::spawn(async move {
-        while let Some(output) = output_rx.recv().await {
+    std::thread::spawn(move || {
+        while let Ok(output) = output_rx.recv() {
             match output {
                 Output::Command(cmd, value) => output_ugi_cmd(&cmd, &value),
                 Output::Info(msg) => output_ugi_info(&msg),
@@ -94,7 +94,7 @@ where
         let is_quit = matches!(command, Ok(UGICommand::Quit));
 
         match command {
-            Ok(command) => game_manager.command(command).await,
+            Ok(command) => game_manager.command(command),
             Err(e) => {
                 log_warning(&e.to_string());
             }

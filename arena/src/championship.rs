@@ -7,7 +7,6 @@ use puct::{RollupStats, SelectionPolicy, ValueModel};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fmt::Debug, time::Duration};
-use tokio::runtime::Handle;
 
 use super::ArenaOptions;
 use super::{EvaluatePersistance, evaluate::EvalResult};
@@ -46,8 +45,6 @@ where
     MR: Clone + Debug + Eq + Send + Sync,
     P: PlayerValue,
 {
-    let runtime_handle = Handle::current();
-
     crossbeam::scope(|s| {
         let eval_candidates = Arc::new(Mutex::new(Vec::new()));
 
@@ -70,12 +67,9 @@ where
 
                     drop(eval_candidates_lock);
 
-                    let runtime_handle = runtime_handle.clone();
-
                     let eval_candidates = eval_candidates.clone();
                     s.spawn(move |_| {
-                        runtime_handle.block_on(async {
-                            let res = championship_single(
+                        let res = championship_single(
                                 &candidate,
                                 champions,
                                 champions_dir,
@@ -96,7 +90,7 @@ where
                             let mut eval_candidates_lock = eval_candidates.lock().unwrap();
 
                             eval_candidates_lock.retain(|c| c != &candidate);
-                        });
+
                     });
                 }
             } else {
