@@ -14,7 +14,7 @@ impl Predictions {
         Self { value, game_length }
     }
 
-    pub(super) fn value(&self) -> &Value {
+    pub fn value(&self) -> &Value {
         &self.value
     }
 }

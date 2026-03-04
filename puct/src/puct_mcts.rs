@@ -91,7 +91,7 @@ where
         }
     }
 
-    pub async fn apply_noise_at_root(&mut self, dirichlet: Option<&DirichletOptions>) {
+    pub fn apply_noise_at_root(&mut self, dirichlet: Option<&DirichletOptions>) {
         if let Some(dirichlet) = dirichlet {
             self.puct.apply_noise_at_state(&self.state, dirichlet);
         }
@@ -111,60 +111,44 @@ where
         (sum + 1).min(usize::MAX as u64) as usize
     }
 
-    pub async fn advance_to_action_retain(&mut self, action: M::Action) -> Result<()> {
+    pub fn advance_to_action_retain(&mut self, action: M::Action) {
         self.state = self.engine.take_action(&self.state, &action);
-        Ok(())
     }
 
     /// Advances to `action` and prunes the underlying search store to the new root.
-    pub async fn advance_to_action(&mut self, action: M::Action) -> Result<()> {
+    pub fn advance_to_action(&mut self, action: M::Action) {
         self.state = self.engine.take_action(&self.state, &action);
-
-        tokio::task::block_in_place(move || {
-            self.puct.prune(&self.state);
-        });
-
-        Ok(())
+        self.puct.prune(&self.state);
     }
 
-    pub async fn search_visits(&mut self, visits: usize) -> Result<usize> {
+    pub fn search_visits(&mut self, visits: usize) -> usize {
         self.search(|node_info| node_info.visits < visits as u32)
-            .await
     }
 
-    pub async fn search_visits_active(
-        &mut self,
-        visits: usize,
-        active: &AtomicBool,
-    ) -> Result<usize> {
+    pub fn search_visits_active(&mut self, visits: usize, active: &AtomicBool) -> usize {
         self.search(|node_info| active.load(Ordering::Acquire) && node_info.visits < visits as u32)
-            .await
     }
 
-    pub async fn search_time_max_visits(
+    pub fn search_time_max_visits(
         &mut self,
         duration: Duration,
         max_visits: usize,
         active: &AtomicBool,
-    ) -> Result<usize> {
+    ) -> usize {
         let start = Instant::now();
         self.search(|node_info| {
             active.load(Ordering::Acquire)
                 && start.elapsed() < duration
                 && (max_visits == 0 || node_info.visits < max_visits as u32)
         })
-        .await
     }
 
-    pub async fn search<F>(&mut self, alive: F) -> Result<usize>
+    pub fn search<F>(&mut self, alive: F) -> usize
     where
         F: Fn(NodeInfo<SnapshotOf<VM>>) -> bool + Send + Sync,
     {
         let state = self.state.clone();
-
-        let depth = tokio::task::block_in_place(move || self.puct.search(&state, alive));
-
-        Ok(depth as usize)
+        self.puct.search(&state, alive)
     }
 
     pub fn select_action<T>(&mut self, temp: &T) -> Result<M::Action>

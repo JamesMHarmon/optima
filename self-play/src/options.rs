@@ -1,5 +1,6 @@
 use anyhow::Result;
 use common::Config;
+use log::info;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -9,13 +10,12 @@ pub struct SelfPlayOptions {
     pub fast_visits: usize,
     pub full_visits_probability: f32,
     pub epsilon: f32,
-    pub self_play_batch_size: usize,
-    pub self_play_parallelism: usize,
+    pub concurrent_games: usize,
 }
 
 impl Config for SelfPlayOptions {
     fn load(config: &common::ConfigLoader) -> Result<Self> {
-        Ok(Self {
+        let options = Self {
             play_options: PlayOptions::load(config)?,
             visits: config
                 .get("visits")
@@ -33,15 +33,23 @@ impl Config for SelfPlayOptions {
                 .get("epsilon")
                 .and_then(|v| v.as_f32())
                 .unwrap_or(0.25),
-            self_play_batch_size: config
-                .get("self_play_batch_size")
+            concurrent_games: config
+                .get("concurrent_games")
                 .and_then(|v| v.as_usize())
-                .unwrap_or(512),
-            self_play_parallelism: config
-                .get("self_play_parallelism")
-                .and_then(|v| v.as_usize())
-                .unwrap_or(10),
-        })
+                .unwrap_or(256),
+        };
+
+        info!(
+            "SelfPlayOptions loaded: visits={}, fast_visits={}, full_visits_probability={}, epsilon={}, concurrent_games={}, parallelism={}",
+            options.visits,
+            options.fast_visits,
+            options.full_visits_probability,
+            options.epsilon,
+            options.concurrent_games,
+            options.play_options.parallelism,
+        );
+
+        Ok(options)
     }
 }
 

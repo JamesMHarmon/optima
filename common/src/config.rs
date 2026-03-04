@@ -135,6 +135,7 @@ impl Value {
     pub fn as_usize(&self) -> Option<usize> {
         match self {
             Value::Integer(val) => Some(*val),
+            Value::Float(val) => Some(*val as usize),
             Value::String(val) => val.parse::<usize>().ok(),
             _ => None,
         }

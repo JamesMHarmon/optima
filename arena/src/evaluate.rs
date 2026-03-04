@@ -310,11 +310,11 @@ impl Arena {
         while engine.terminal_state(&state).is_none() {
             let player_to_move = engine.player_to_move(&state);
             let player_to_move_mcts = &mut mctss[player_to_move - 1];
-            player_to_move_mcts.search_visits(visits).await?;
+            player_to_move_mcts.search_visits(visits);
             let action = player_to_move_mcts.select_action(&temp)?;
 
             for mcts in &mut mctss {
-                mcts.advance_to_action(action.to_owned()).await?;
+                mcts.advance_to_action(action.to_owned());
             }
 
             state = engine.take_action(&state, &action);

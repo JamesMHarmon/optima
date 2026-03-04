@@ -332,14 +332,13 @@ where
                             && self.command_rx.is_empty()
                             && (max_visits == 0 || mcts.num_node_visits() < max_visits)
                         {
-                            let depth = mcts
-                                .search(|node_info| {
+                            let depth = tokio::task::block_in_place(|| {
+                                mcts.search(|node_info| {
                                     search_active.load(Ordering::SeqCst)
                                         && node_info.visits < max_visits as u32
                                         && last_output.elapsed().as_secs() < 1
                                 })
-                                .await
-                                .unwrap();
+                            });
 
                             last_output = Instant::now();
 
@@ -417,7 +416,7 @@ where
                         }
 
                         game_state = self.engine.take_action(&game_state, &action);
-                        mcts.advance_to_action(action).await.unwrap();
+                        tokio::task::block_in_place(|| mcts.advance_to_action(action));
                     }
 
                     focus_game_state = game_state.clone();
@@ -499,23 +498,23 @@ where
                         let depth = if options_visits != 0 {
                             self.output
                                 .info(&format!("search visits: {}", options_visits));
-                            mcts.search_visits_active(options_visits, &search_active)
-                                .await
-                                .unwrap()
+                            tokio::task::block_in_place(|| {
+                                mcts.search_visits_active(options_visits, &search_active)
+                            })
                         } else {
                             self.output
                                 .info(&format!("search duration: {:?}", search_duration));
-                            mcts.search_time_max_visits(
-                                search_duration,
-                                options_max_visits,
-                                &search_active,
-                            )
-                            .await
-                            .unwrap()
+                            tokio::task::block_in_place(|| {
+                                mcts.search_time_max_visits(
+                                    search_duration,
+                                    options_max_visits,
+                                    &search_active,
+                                )
+                            })
                         };
 
                         // Safety step to ensure there is at least one visit for the steps when in play phase and using time. An additional visit is added for PUCT to select the best action.
-                        mcts.search_visits(2).await.unwrap();
+                        tokio::task::block_in_place(|| mcts.search_visits(2));
 
                         depths.push(depth);
 
@@ -615,7 +614,7 @@ where
         node_details: &NodeDetails<A, SnapshotOf<B>>,
     ) {
         self.output.info(&format!(
-            "time {time} playertomove {player} root_score {root_score:.3} score {score:.3} {snapshot} visits {visits:?} depth {depth} root_transpositionid {root_transpositionid} transpositionid {transpositionid}",
+            "time {time} playertomove {player} root_score {root_score:.3} score {score:.3} {snapshot} visits {visits:?} depth {depth} root_transpositionid {root_transpositionid:016X} transpositionid {transpositionid:016X}",
             time = search_start.elapsed().as_secs(),
             player = player_to_move,
             root_score = scores.first().unwrap_or(&0.5),

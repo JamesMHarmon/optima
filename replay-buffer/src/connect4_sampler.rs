@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use common::{GameLength, PlayerValue};
 use connect4::{Action, GameState, Mapper, Predictions, Value};
 use connect4::{INPUT_C, INPUT_H, INPUT_W, MOVES_LEFT_SIZE, OUTPUT_SIZE};
-use engine::{GameEngine, Value as ValueTrait};
+use engine::GameEngine;
 use half::f16;
 use model::{NodeMetrics, PositionMetrics};
 use puct::MovesLeftSnapshot;

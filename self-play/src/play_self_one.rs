@@ -17,7 +17,7 @@ type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 type SSOf<VM> = SnapshotOf<VM>;
 
 #[allow(non_snake_case)]
-pub async fn play_self_one<S, A, E, M, P, VM, Sel>(
+pub fn play_self_one<S, A, E, M, P, VM, Sel>(
     game_engine: &E,
     analyzer: &M,
     value_model: &VM,
@@ -64,21 +64,22 @@ where
 
     while game_engine.terminal_state(&game_state).is_none() {
         let action = if rng.random::<f32>() <= options.full_visits_probability {
-            mcts.apply_noise_at_root(dirichlet_options.as_ref()).await;
-            mcts.search_visits(options.visits).await?;
+            mcts.apply_noise_at_root(dirichlet_options.as_ref());
+            mcts.search_visits(options.visits);
             mcts.select_action(&temp)?
         } else {
-            mcts.search_visits(options.fast_visits).await?;
+            mcts.search_visits(options.fast_visits);
             mcts.select_action(&no_temp)?
         };
 
         let metrics = mcts.node_metrics();
 
-        mcts.advance_to_action(action.to_owned()).await?;
+        mcts.advance_to_action(action.to_owned());
         game_state = game_engine.take_action(&game_state, &action);
         analysis.push((action, metrics));
     }
 
+    // @TODO: Fix this to not require result
     let terminal_score = game_engine
         .terminal_state(&game_state)
         .ok_or_else(|| anyhow!("Expected a terminal state"))?;

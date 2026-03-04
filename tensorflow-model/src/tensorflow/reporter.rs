@@ -3,8 +3,8 @@ use log::info;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+use std::thread;
 use std::time::{Duration, Instant};
-use tokio::time;
 
 pub struct Reporter<Te> {
     alive: Arc<AtomicBool>,
@@ -61,11 +61,12 @@ where
     }
 
     fn spawn_timer(alive: Arc<AtomicBool>, inner: Arc<ReporterInner<Te>>) {
-        tokio::task::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(5));
+        // @TODO Is there a better way than a spawned thread?
+        thread::spawn(move || {
+            let interval = Duration::from_secs(5);
             let mut last_tick = Instant::now();
             loop {
-                interval.tick().await;
+                thread::sleep(interval);
 
                 if !alive.load(Ordering::Relaxed) {
                     break;
