@@ -594,6 +594,7 @@ impl GameLength for StubPredictions {
 struct StubTerminal {
     p1: f32,
     p2: f32,
+    gl: f32,
 }
 
 impl PlayerValue for StubTerminal {
@@ -603,6 +604,12 @@ impl PlayerValue for StubTerminal {
             2 => self.p2,
             _ => panic!(),
         }
+    }
+}
+
+impl GameLength for StubTerminal {
+    fn game_length(&self) -> f32 {
+        self.gl
     }
 }
 
@@ -624,17 +631,20 @@ fn value_model_pred_snapshot_stores_player_values_and_game_length() {
 }
 
 #[test]
-fn value_model_terminal_snapshot_sets_game_length_to_zero() {
+fn value_model_terminal_snapshot_uses_terminal_game_length() {
     let model = MovesLeftValueModel::<StubPredictions, StubTerminal>::new();
-    let terminal = StubTerminal { p1: 0.0, p2: 1.0 };
+    let terminal = StubTerminal {
+        p1: 0.0,
+        p2: 1.0,
+        gl: 15.0,
+    };
 
     let snap = model.terminal_snapshot(&terminal);
 
     assert_eq!(snap.total_weight, 1);
     assert!((snap.player_value(1) - 0.0).abs() < 1e-6);
     assert!((snap.player_value(2) - 1.0).abs() < 1e-6);
-    // Terminal positions have no moves remaining; game_length_sum is stored as 0.
-    assert_eq!(snap.game_length(), 0.0);
+    assert!((snap.game_length() - 15.0).abs() < 1e-6);
 }
 
 // ---------------------------------------------------------------------------

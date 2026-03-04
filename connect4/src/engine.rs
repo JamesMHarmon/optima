@@ -24,7 +24,8 @@ impl GameEngine for Engine {
     }
 
     fn terminal_state(&self, game_state: &Self::State) -> Option<Self::Terminal> {
-        game_state.is_terminal().map(|v| Predictions::new(v, 0.0))
+        let prediction = |v| Predictions::new(v, game_state.number_of_actions() as f32);
+        game_state.is_terminal().map(|v| prediction(v))
     }
 
     fn player_to_move(&self, game_state: &Self::State) -> usize {
@@ -42,8 +43,7 @@ impl ValidActions for Engine {
 
     fn valid_actions(&self, game_state: &Self::State) -> impl Iterator<Item = Self::Action> {
         game_state
-            .get_valid_actions()
-            .into_iter()
+            .valid_actions()
             .enumerate()
             .filter_map(|(i, valid)| {
                 if valid {
@@ -171,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_valid_actions_all_columns_available() {
+    fn test_valid_actions_all_columns_available() {
         let mut state: GameState = GameState::initial();
 
         for column in 1..8 {
@@ -181,13 +181,13 @@ mod tests {
         }
 
         assert_eq!(
-            state.get_valid_actions().as_slice(),
+            state.valid_actions().collect::<Vec<_>>(),
             [true, true, true, true, true, true, true]
         );
     }
 
     #[test]
-    fn test_get_valid_actions_all_columns_full() {
+    fn test_valid_actions_all_columns_full() {
         let mut state: GameState = GameState::initial();
 
         for column in 1..8 {
@@ -197,13 +197,13 @@ mod tests {
         }
 
         assert_eq!(
-            state.get_valid_actions().as_slice(),
+            state.valid_actions().collect::<Vec<_>>(),
             [false, false, false, false, false, false, false]
         );
     }
 
     #[test]
-    fn test_get_valid_actions_first_column_full() {
+    fn test_valid_actions_first_column_full() {
         let mut state: GameState = GameState::initial();
 
         for column in 1..8 {
@@ -215,13 +215,13 @@ mod tests {
         state = state.drop_piece(1);
 
         assert_eq!(
-            state.get_valid_actions().as_slice(),
+            state.valid_actions().collect::<Vec<_>>(),
             [false, true, true, true, true, true, true]
         );
     }
 
     #[test]
-    fn test_get_valid_actions_last_column_full() {
+    fn test_valid_actions_last_column_full() {
         let mut state: GameState = GameState::initial();
 
         for column in 1..8 {
@@ -233,13 +233,13 @@ mod tests {
         state = state.drop_piece(7);
 
         assert_eq!(
-            state.get_valid_actions().as_slice(),
+            state.valid_actions().collect::<Vec<_>>(),
             [true, true, true, true, true, true, false]
         );
     }
 
     #[test]
-    fn test_get_valid_actions_three_columns_full() {
+    fn test_valid_actions_three_columns_full() {
         let mut state: GameState = GameState::initial();
 
         for column in 1..8 {
@@ -253,7 +253,7 @@ mod tests {
         state = state.drop_piece(5);
 
         assert_eq!(
-            state.get_valid_actions().as_slice(),
+            state.valid_actions().collect::<Vec<_>>(),
             [true, true, false, false, false, true, true]
         );
     }

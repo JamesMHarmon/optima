@@ -52,18 +52,12 @@ impl Mapper {
         game_state: &GameState,
         policy_scores: &[f16],
     ) -> Vec<ActionWithPolicy<Action>> {
+        let drop_piece = |col, p| ActionWithPolicy::new(Action::DropPiece(col), p);
         let mut valid_actions_with_policies: Vec<ActionWithPolicy<Action>> = game_state
-            .get_valid_actions()
-            .iter()
+            .valid_actions()
             .zip(policy_scores)
-            .enumerate()
-            .filter_map(|(i, (v, p))| {
-                if *v {
-                    Some(ActionWithPolicy::new(Action::DropPiece((i + 1) as u8), *p))
-                } else {
-                    None
-                }
-            })
+            .zip(1u8..)
+            .filter_map(|((v, p), col)| v.then(|| drop_piece(col, *p)))
             .collect();
 
         update_logit_policies_to_softmax(&mut valid_actions_with_policies);

@@ -161,7 +161,7 @@ impl<P, T> MovesLeftValueModel<P, T> {
 impl<P, T> ValueModel for MovesLeftValueModel<P, T>
 where
     P: PlayerValue + GameLength,
-    T: PlayerValue,
+    T: PlayerValue + GameLength,
 {
     type Predictions = P;
     type Terminal = T;
@@ -181,7 +181,7 @@ where
         MovesLeftSnapshot {
             p1_sum: terminal.player_value(1) as f64,
             p2_sum: terminal.player_value(2) as f64,
-            game_length_sum: 0.0,
+            game_length_sum: terminal.game_length() as f64,
             total_weight: 1,
         }
     }

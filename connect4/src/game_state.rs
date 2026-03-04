@@ -72,19 +72,15 @@ impl GameState {
         }
     }
 
-    pub fn get_valid_actions(&self) -> Vec<bool> {
+    pub fn valid_actions(&self) -> impl Iterator<Item = bool> {
         let all_pieces = self.p1_piece_board | self.p2_piece_board;
 
-        let valid_columns: Vec<bool> = (1..8)
-            .map(|column| {
-                let column_mask = 1 << (7 * (column - 1));
-                let column_mask_row_six = column_mask << 5;
-                let is_column_full = column_mask_row_six & all_pieces != 0;
-                !is_column_full
-            })
-            .collect();
-
-        valid_columns
+        (1..8).map(move |column| {
+            let column_mask = 1 << (7 * (column - 1));
+            let column_mask_row_six = column_mask << 5;
+            let is_column_full = column_mask_row_six & all_pieces != 0;
+            !is_column_full
+        })
     }
 
     /// Determines if the current state is either a winning or drawn position.
