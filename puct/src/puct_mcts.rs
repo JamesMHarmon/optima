@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use common::TranspositionHash;
 use engine::{GameEngine, ValidActions};
 use model::GameAnalyzer;
@@ -151,7 +150,7 @@ where
         self.puct.search(&state, alive)
     }
 
-    pub fn select_action<T>(&mut self, temp: &T) -> Result<M::Action>
+    pub fn select_action<T>(&mut self, temp: &T) -> M::Action
     where
         T: Temperature<State = M::State>,
     {
@@ -173,7 +172,7 @@ where
                 Ok(dist) => dist.sample(&mut thread_rng()),
             };
 
-            return Ok(edges[chosen_idx].action.clone());
+            return edges[chosen_idx].action.clone();
         }
 
         // Temperature == 0: choose the most visited edge.
@@ -181,7 +180,7 @@ where
             .into_iter()
             .max_by_key(|e| e.visits)
             .map(|e| e.action)
-            .ok_or_else(|| anyhow!("No available actions"))
+            .unwrap_or_else(|| panic!("No available actions"))
     }
 
     pub fn node_metrics(&mut self) -> NodeMetricsOf<E, M, VM>
@@ -249,7 +248,7 @@ where
         &mut self,
         action: Option<&M::Action>,
         depth: usize,
-    ) -> Result<Vec<EdgeDetails<M::Action, SnapshotOf<VM>>>>
+    ) -> Vec<EdgeDetails<M::Action, SnapshotOf<VM>>>
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {
@@ -306,7 +305,7 @@ where
             pv.push(details);
         }
 
-        Ok(pv)
+        pv
     }
 
     /// Returns edges for `state` filtered to only those whose action is currently valid.

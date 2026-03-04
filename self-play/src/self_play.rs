@@ -2,7 +2,6 @@ use anyhow::{Result, anyhow};
 use common::get_env_usize;
 use common::{GameLength, PlayerToMove, TranspositionHash};
 use log::info;
-use log::warn;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -70,28 +69,17 @@ where
                 };
 
                 loop {
-                    // @TODO: Clean this panic catch
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let (analyzer, model_info) = latest_model_analyzer();
-                        let result = play_self_one(
-                            engine,
-                            &analyzer,
-                            value_model,
-                            selection_policy,
-                            self_play_options,
-                        );
-                        result.map(|(metrics, game_state)| (metrics, game_state, model_info))
-                    }));
-
-                    match result {
-                        Ok(Ok((metrics, game_state, model_info))) => {
-                            game_results_tx
+                    let (analyzer, model_info) = latest_model_analyzer();
+                    let (metrics, game_state) = play_self_one(
+                        engine,
+                        &analyzer,
+                        value_model,
+                        selection_policy,
+                        self_play_options,
+                    );
+                       game_results_tx
                                 .send((metrics, game_state, model_info))
                                 .ok();
-                        }
-                        Ok(Err(e)) => warn!("Game thread {} error: {}", thread_num, e),
-                        Err(_) => warn!("Game thread {} panicked, continuing", thread_num),
-                    }
                 }
             });
         }

@@ -342,9 +342,7 @@ where
                                 .children
                                 .iter()
                                 .take(multi_pv)
-                                .filter_map(|edge| {
-                                    mcts.principal_variation(Some(&edge.action), 10).ok()
-                                })
+                                .map(|edge| mcts.principal_variation(Some(&edge.action), 10))
                                 .collect_vec();
 
                             let best_node = choose_action(&node_details.children, 0.0);
@@ -530,14 +528,14 @@ where
 
                     mcts.set_state(saved_focus_state);
 
-                    let pv = mcts.principal_variation(None, 10).into_iter().collect_vec();
+                    let pv = mcts.principal_variation(None, 10);
 
                     let node_details =
                         node_details_container.unwrap_or_else(|| mcts.get_node_details());
 
                     self.output_post_search_info(
                         current_player,
-                        &pv,
+                        &[pv],
                         &pre_action_game_state,
                         &focus_game_state,
                         search_start,

@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use rand::Rng;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -24,7 +23,7 @@ pub fn play_self_one<S, A, E, M, P, VM, Sel>(
     value_model: &VM,
     selection: &Sel,
     options: &SelfPlayOptions,
-) -> Result<(SelfPlayMetrics<A, P, SSOf<VM>>, S)>
+) -> (SelfPlayMetrics<A, P, SSOf<VM>>, S)
 where
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
     A: Clone + Eq + Hash + Debug + Send + Sync,
@@ -63,14 +62,18 @@ where
     let mut analysis = Vec::new();
     let mut rng = rand::rng();
 
-    while game_engine.terminal_state(&game_state).is_none() {
+    let terminal_score = loop {
+        if let Some(score) = game_engine.terminal_state(&game_state) {
+            break score;
+        }
+
         let action = if rng.random::<f32>() <= options.full_visits_probability {
             mcts.apply_noise_at_root(dirichlet_options.as_ref());
             mcts.search_visits(options.visits);
-            mcts.select_action(&temp)?
+            mcts.select_action(&temp)
         } else {
             mcts.search_visits(options.fast_visits);
-            mcts.select_action(&no_temp)?
+            mcts.select_action(&no_temp)
         };
 
         let metrics = mcts.node_metrics();
@@ -78,12 +81,7 @@ where
         mcts.advance_to_action(action.to_owned());
         game_state = game_engine.take_action(&game_state, &action);
         analysis.push((action, metrics));
-    }
+    };
 
-    // @TODO: Fix this to not require result
-    let terminal_score = game_engine
-        .terminal_state(&game_state)
-        .ok_or_else(|| anyhow!("Expected a terminal state"))?;
-
-    Ok((SelfPlayMetrics::new(analysis, terminal_score), game_state))
+    (SelfPlayMetrics::new(analysis, terminal_score), game_state)
 }
