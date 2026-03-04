@@ -224,5 +224,5 @@ fn filter_full_visits<S, A, P, SS>(
     metrics: &mut Vec<PositionMetricsExtended<S, A, P, SS>>,
     min_visits: usize,
 ) {
-    metrics.retain(|m| m.metrics.node_metrics.visits >= min_visits)
+    metrics.retain(|m| m.metrics.node_metrics.visits() >= min_visits)
 }

@@ -172,11 +172,9 @@ where
         );
 
         loop {
-            let root_info = NodeInfo {
-                visits: root_node.visits(),
-                virtual_visits: root_node.virtual_visits(),
-                depth: max_depth as u32,
-            };
+            let visits = root_node.visits();
+            let virtual_visits = root_node.virtual_visits();
+            let root_info = NodeInfo::new(visits, virtual_visits, max_depth as u32);
 
             if !alive(root_info) {
                 break;

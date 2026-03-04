@@ -24,15 +24,16 @@ fn symmetrical_node_metrics(
     metrics: &NodeMetrics<Action, Predictions, VictoryMarginSnapshot>,
 ) -> NodeMetrics<Action, Predictions, VictoryMarginSnapshot> {
     let children_symmetry = metrics
-        .children
+        .children()
         .iter()
         .map(|m| EdgeMetrics::new(m.action().vertical_symmetry(), m.visits(), *m.snapshot()))
         .collect();
-    NodeMetrics {
-        visits: metrics.visits,
-        predictions: metrics.predictions.clone(),
-        children: children_symmetry,
-    }
+
+    NodeMetrics::new(
+        metrics.predictions().clone(),
+        metrics.visits(),
+        children_symmetry,
+    )
 }
 
 #[cfg(test)]
@@ -46,11 +47,11 @@ mod tests {
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 0,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
-                children: vec![],
-            },
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
+                0,
+                vec![],
+            ),
         });
 
         symmetries.into_iter().map(|s| s.game_state).collect()
@@ -244,10 +245,10 @@ mod tests {
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 0,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
-                children: vec![
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
+                0,
+                vec![
                     EdgeMetrics::new("a9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                     EdgeMetrics::new("b9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                     EdgeMetrics::new("h9".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
@@ -257,10 +258,10 @@ mod tests {
                     EdgeMetrics::new("h3h".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                     EdgeMetrics::new("h3v".parse().unwrap(), 0, VictoryMarginSnapshot::zero()),
                 ],
-            },
+            ),
         });
 
-        let node_metrics = &symmetries.last().unwrap().node_metrics.children;
+        let node_metrics = &symmetries.last().unwrap().node_metrics.children();
         assert_eq!(node_metrics[0].action(), &"i9".parse::<Action>().unwrap());
         assert_eq!(node_metrics[1].action(), &"h9".parse::<Action>().unwrap());
         assert_eq!(node_metrics[2].action(), &"b9".parse::<Action>().unwrap());
@@ -300,11 +301,11 @@ mod tests {
 
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 0,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0, 0.0),
+                0,
                 children,
-            },
+            ),
         });
 
         for (action, symmetrical_action) in actions().zip(
@@ -312,7 +313,7 @@ mod tests {
                 .last()
                 .unwrap()
                 .node_metrics
-                .children
+                .children()
                 .iter()
                 .map(|m| m.action()),
         ) {

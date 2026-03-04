@@ -66,11 +66,7 @@ mod test {
     fn node_metrics(children: Vec<MetricEdge>) -> MetricNode {
         let predictions = Predictions::new(Value::new(0.0, 0.0), 0.0);
 
-        NodeMetrics {
-            visits: 0,
-            predictions,
-            children,
-        }
+        NodeMetrics::new(predictions, 0, children)
     }
 
     fn position_metrics(
@@ -735,11 +731,7 @@ mod test {
         fn q_node_metrics(children: Vec<QMetricEdge>) -> QMetricNode {
             let predictions = QPredictions::new(QValue::new(0.0, 0.0), 0.0, 0.0);
 
-            NodeMetrics {
-                visits: 0,
-                predictions,
-                children,
-            }
+            NodeMetrics::new(predictions, 0, children)
         }
 
         fn q_position_metrics(

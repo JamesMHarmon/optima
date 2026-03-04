@@ -46,14 +46,14 @@ impl Mapper {
     ) -> Vec<f32> {
         let move_map = static_sparse_piece_move_map().as_slice();
         let push_pull_map = static_sparse_push_pull_map().as_slice();
-        let total_visits = policy_metrics.visits as f32 - 1.0;
+        let total_visits = policy_metrics.visits() as f32 - 1.0;
         let invert = !game_state.is_p1_turn_to_move();
         let inputs: Vec<f32> = vec![-1f32; OUTPUT_SIZE];
 
         assert_eq!(
-            policy_metrics.visits - 1,
+            policy_metrics.visits() - 1,
             policy_metrics
-                .children
+                .children()
                 .iter()
                 .map(|m| m.visits())
                 .sum::<usize>(),
@@ -61,7 +61,7 @@ impl Mapper {
             policy_metrics
         );
 
-        policy_metrics.children.iter().fold(inputs, |mut r, m| {
+        policy_metrics.children().iter().fold(inputs, |mut r, m| {
             // Policy scores are in the perspective of player 1. That means that if we are p2, we need to flip the actions as if we were looking
             // at the board from the perspective of player 1, but with the pieces inverted.
             let policy_index = if invert {
@@ -1579,15 +1579,15 @@ mod tests {
             .parse()
             .unwrap();
 
-        let policy_metrics = NodeMetrics {
-            visits: 11,
-            predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-            children: vec![
+        let policy_metrics = NodeMetrics::new(
+            Predictions::new(Value::new(0.0, 0.0), 0.0),
+            11,
+            vec![
                 EdgeMetrics::new("a7n".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("pa7nn".parse().unwrap(), 2, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("p".parse().unwrap(), 1, MovesLeftSnapshot::zero()),
             ],
-        };
+        );
 
         let output = Mapper::new().metrics_to_policy_output(&game_state, &policy_metrics);
         let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;
@@ -1624,15 +1624,15 @@ mod tests {
             .parse()
             .unwrap();
 
-        let policy_metrics = NodeMetrics {
-            visits: 11,
-            predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-            children: vec![
+        let policy_metrics = NodeMetrics::new(
+            Predictions::new(Value::new(0.0, 0.0), 0.0),
+            11,
+            vec![
                 EdgeMetrics::new("h2s".parse().unwrap(), 7, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("ph2ss".parse().unwrap(), 2, MovesLeftSnapshot::zero()),
                 EdgeMetrics::new("p".parse().unwrap(), 1, MovesLeftSnapshot::zero()),
             ],
-        };
+        );
 
         let output = Mapper::new().metrics_to_policy_output(&game_state, &policy_metrics);
         let pass_idx = NUM_PIECE_MOVES + NUM_PUSH_PULL_MOVES;

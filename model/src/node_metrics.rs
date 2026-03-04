@@ -9,17 +9,37 @@ use std::marker::PhantomData;
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A, P, SS> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
-    pub visits: usize,
+    visits: usize,
     /// Ancillary predictions by the neural network. Like score difference or moves left.
-    pub predictions: P,
+    predictions: P,
     /// The valid actions of the current game_state of the node.
-    pub children: Vec<EdgeMetrics<A, SS>>,
+    children: Vec<EdgeMetrics<A, SS>>,
 }
 
 #[allow(non_snake_case)]
 impl<A, P, SS> NodeMetrics<A, P, SS> {
+    pub fn new(predictions: P, visits: usize, children: Vec<EdgeMetrics<A, SS>>) -> Self {
+        Self {
+            visits,
+            predictions,
+            children,
+        }
+    }
+
     pub fn child_max_visits(&self) -> &EdgeMetrics<A, SS> {
         self.children.iter().max_by_key(|c| c.visits).unwrap()
+    }
+
+    pub fn children(&self) -> &Vec<EdgeMetrics<A, SS>> {
+        &self.children
+    }
+
+    pub fn visits(&self) -> usize {
+        self.visits
+    }
+
+    pub fn predictions(&self) -> &P {
+        &self.predictions
     }
 }
 

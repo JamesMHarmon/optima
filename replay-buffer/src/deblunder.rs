@@ -161,7 +161,7 @@ where
         .child_max_visits()
         .snapshot()
         .player_value(player_to_move);
-    let chosen_edge = metrics.children.iter().find(|c| c.action() == action);
+    let chosen_edge = metrics.children().iter().find(|c| c.action() == action);
     let chosen_q = chosen_edge
         .expect("Specified action was not found")
         .snapshot()

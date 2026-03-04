@@ -67,6 +67,14 @@ pub struct NodeInfo {
 }
 
 impl NodeInfo {
+    pub fn new(visits: u32, virtual_visits: u32, depth: u32) -> Self {
+        Self {
+            visits,
+            virtual_visits,
+            depth,
+        }
+    }
+
     #[inline]
     pub fn total_visits(self) -> u32 {
         self.visits + self.virtual_visits

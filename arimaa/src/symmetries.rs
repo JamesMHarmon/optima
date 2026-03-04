@@ -26,16 +26,16 @@ pub fn get_symmetries(
 fn symmetrical_node_metrics(
     metrics: &NodeMetrics<Action, Predictions, MovesLeftSnapshot>,
 ) -> NodeMetrics<Action, Predictions, MovesLeftSnapshot> {
-    let children_symmetry = metrics.children.iter().map(|m| {
+    let children_symmetry = metrics.children().iter().map(|m| {
         let symmetrical_action = m.action().vertical_symmetry();
         EdgeMetrics::new(symmetrical_action, m.visits(), *m.snapshot())
     });
 
-    NodeMetrics {
-        visits: metrics.visits,
-        predictions: metrics.predictions.clone(),
-        children: children_symmetry.collect::<Vec<_>>(),
-    }
+    NodeMetrics::new(
+        metrics.predictions().clone(),
+        metrics.visits(),
+        children_symmetry.collect::<Vec<_>>(),
+    )
 }
 
 #[cfg(test)]
@@ -50,11 +50,7 @@ mod tests {
     fn get_symmetries_game_state(game_state: GameState) -> Vec<GameState> {
         let symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 0,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-                children: vec![],
-            },
+            node_metrics: NodeMetrics::new(Predictions::new(Value::new(0.0, 0.0), 0.0), 0, vec![]),
         });
 
         symmetries.into_iter().map(|s| s.game_state).collect()
@@ -271,43 +267,31 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 800,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-                children: vec![
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0),
+                800,
+                vec![
                     EdgeMetrics::new("c2n".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("a2e".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("c2w".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
-            },
+            ),
         });
 
-        let PositionMetrics {
-            game_state: symmetrical_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: symmetrical_visits,
-                    children: symmetrical_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let symmetrical_game_state = metrics.game_state;
+        let symmetrical_visits = metrics.node_metrics.visits();
+        let symmetrical_children = metrics.node_metrics.children();
 
-        let PositionMetrics {
-            game_state: original_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: original_visits,
-                    children: original_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let original_game_state = metrics.game_state;
+        let original_visits = metrics.node_metrics.visits();
+        let original_children = metrics.node_metrics.children();
 
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for (original, symmetrical) in original_children.into_iter().zip(symmetrical_children) {
+        for (original, symmetrical) in original_children.iter().zip(symmetrical_children) {
             match original.action() {
                 Action::Move(original_square, original_direction) => match symmetrical.action() {
                     Action::Move(symmetrical_square, symmetrical_direction) => {
@@ -369,43 +353,31 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 800,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-                children: vec![
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0),
+                800,
+                vec![
                     EdgeMetrics::new("a2".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("c2".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("d1".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
-            },
+            ),
         });
 
-        let PositionMetrics {
-            game_state: symmetrical_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: symmetrical_visits,
-                    children: symmetrical_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let symmetrical_game_state = metrics.game_state;
+        let symmetrical_visits = metrics.node_metrics.visits();
+        let symmetrical_children = metrics.node_metrics.children();
 
-        let PositionMetrics {
-            game_state: original_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: original_visits,
-                    children: original_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let original_game_state = metrics.game_state;
+        let original_visits = metrics.node_metrics.visits();
+        let original_children = metrics.node_metrics.children();
 
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for (original, symmetrical) in original_children.into_iter().zip(symmetrical_children) {
+        for (original, symmetrical) in original_children.iter().zip(symmetrical_children) {
             match original.action() {
                 Action::Place(original_square) => match symmetrical.action() {
                     Action::Place(symmetrical_square) => {
@@ -463,43 +435,31 @@ mod tests {
 
         let mut symmetries = get_symmetries(PositionMetrics {
             game_state,
-            node_metrics: NodeMetrics {
-                visits: 800,
-                predictions: Predictions::new(Value::new(0.0, 0.0), 0.0),
-                children: vec![
+            node_metrics: NodeMetrics::new(
+                Predictions::new(Value::new(0.0, 0.0), 0.0),
+                800,
+                vec![
                     EdgeMetrics::new("g7".parse().unwrap(), 500, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("d8".parse().unwrap(), 250, MovesLeftSnapshot::zero()),
                     EdgeMetrics::new("e7".parse().unwrap(), 50, MovesLeftSnapshot::zero()),
                 ],
-            },
+            ),
         });
 
-        let PositionMetrics {
-            game_state: symmetrical_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: symmetrical_visits,
-                    children: symmetrical_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let symmetrical_game_state = metrics.game_state;
+        let symmetrical_visits = metrics.node_metrics.visits();
+        let symmetrical_children = metrics.node_metrics.children();
 
-        let PositionMetrics {
-            game_state: original_game_state,
-            node_metrics:
-                NodeMetrics {
-                    visits: original_visits,
-                    children: original_children,
-                    ..
-                },
-            ..
-        } = symmetries.pop().unwrap();
+        let metrics = symmetries.pop().unwrap();
+        let original_game_state = metrics.game_state;
+        let original_visits = metrics.node_metrics.visits();
+        let original_children = metrics.node_metrics.children();
 
         assert_eq!(symmetrical_visits, original_visits);
         assert_eq!(original_children.len(), symmetrical_children.len());
 
-        for (original, symmetrical) in original_children.into_iter().zip(symmetrical_children) {
+        for (original, symmetrical) in original_children.iter().zip(symmetrical_children) {
             match original.action() {
                 Action::Place(original_square) => match symmetrical.action() {
                     Action::Place(symmetrical_square) => {

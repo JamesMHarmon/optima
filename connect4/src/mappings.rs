@@ -37,8 +37,8 @@ impl Mapper {
         node_metrics: &NodeMetrics<Action, Predictions, MovesLeftSnapshot>,
     ) -> Vec<f32> {
         //@TODO: Make invalid actions -1.0
-        let total_visits = node_metrics.visits as f32 - 1.0;
-        let result: [f32; 7] = node_metrics.children.iter().fold([0.0; 7], |mut r, m| {
+        let total_visits = node_metrics.visits() as f32 - 1.0;
+        let result: [f32; 7] = node_metrics.children().iter().fold([0.0; 7], |mut r, m| {
             let column_idx = m.action().column() as usize - 1;
             r[column_idx] = m.visits() as f32 / total_visits;
             r
