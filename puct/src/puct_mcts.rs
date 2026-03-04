@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use common::{PlayerToMove, TranspositionHash};
+use common::TranspositionHash;
 use engine::{GameEngine, ValidActions};
 use model::GameAnalyzer;
 use rand::Rng;
@@ -21,7 +21,7 @@ use model::{EdgeMetrics, NodeMetrics};
 type SnapshotOf<VM> = <VM as ValueModel>::Snapshot;
 type ActionOf<E> = <E as GameEngine>::Action;
 type PredictionsOf<M> = <M as GameAnalyzer>::Predictions;
-type RootNodeMetrics<E, M, VM> = NodeMetrics<ActionOf<E>, PredictionsOf<M>, SnapshotOf<VM>>;
+type NodeMetricsOf<E, M, VM> = NodeMetrics<ActionOf<E>, PredictionsOf<M>, SnapshotOf<VM>>;
 
 /// Transitional wrapper that runs search via the `puct` crate while providing an
 /// MCTS-like container API.
@@ -171,9 +171,6 @@ where
     pub fn select_action<T>(&mut self, temp: &T) -> Result<M::Action>
     where
         T: Temperature<State = M::State>,
-        M::Action: Clone,
-        M::State: Clone,
-        SnapshotOf<VM>: Clone,
     {
         let state = self.state.clone();
         let edges = self.filtered_edge_views(&state);
@@ -204,12 +201,9 @@ where
             .ok_or_else(|| anyhow!("No available actions"))
     }
 
-    pub fn get_root_node_metrics(&mut self) -> Result<RootNodeMetrics<E, M, VM>>
+    pub fn get_root_node_metrics(&mut self) -> Result<NodeMetricsOf<E, M, VM>>
     where
-        M::Action: Clone,
-        M::State: Clone + PlayerToMove,
         M::Predictions: Clone,
-        SnapshotOf<VM>: Clone,
     {
         let state = self.state.clone();
         let analysis = self.analyzer.analyze(&state);

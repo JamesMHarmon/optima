@@ -389,11 +389,11 @@ where
                         return;
                     }
 
-                    let tensor: &mut Tensor<f16> =
-                        tensor_pool.get(states_to_analyse.len(), half::f16::ZERO);
+                    let states_len = states_to_analyse.len();
+                    let tensor: &mut Tensor<f16> = tensor_pool.get(states_len, half::f16::ZERO);
 
-                    reporter.set_batch_size(states_to_analyse.len());
-                    reporter.set_analyzed_nodes(states_to_analyse.len());
+                    reporter.set_batch_size(states_len);
+                    reporter.set_analyzed_nodes(states_len);
 
                     states_to_analyse
                         .iter()

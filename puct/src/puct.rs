@@ -108,13 +108,13 @@ where
     where
         Alive: Fn(NodeInfo) -> bool + Send + Sync,
     {
+        let sim_id = Arc::new(AtomicUsize::new(0));
         let total_capacity = self.virtual_sims * self.sim_threads;
         let coordinator = AnalysisCoordinator::new(self.analyzer, total_capacity);
+        let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(total_capacity);
         let mut max_depth = 0;
 
         thread::scope(|s| {
-            let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(total_capacity);
-
             let analyzer = self.analyzer;
             let store = &self.store;
             let value_model = self.value_model;
@@ -126,24 +126,22 @@ where
                 backprop.run();
             });
 
-            let sim_id = Arc::new(AtomicUsize::new(0));
+            let mut sim_handles = Vec::with_capacity(self.sim_threads);
+            for _ in 0..self.sim_threads {
+                let tx = tx.clone();
+                let sim_id = sim_id.clone();
+                let handle =
+                    s.spawn(move || self.run_sim(root, game_state, alive, tx, coordinator, sim_id));
+                sim_handles.push(handle);
+            }
 
-            // @TODO: Clean this up
-            let sim_handles: Vec<_> = (0..self.sim_threads)
-                .map(|_| {
-                    let tx = tx.clone();
-                    let sim_id = Arc::clone(&sim_id);
-                    s.spawn(move || self.run_sim(root, game_state, alive, tx, coordinator, sim_id))
-                })
-                .collect();
-
-            // Drop the original sender so the channel closes when all sim threads exit.
             drop(tx);
 
-            let depths = sim_handles
-                .into_iter()
-                .map(|h| h.join().expect("PUCT sim thread panicked"));
-            max_depth = depths.max().unwrap_or(0);
+            let depths = sim_handles.into_iter().map(|h| h.join());
+            max_depth = depths
+                .map(|d| d.expect("PUCT sim thread panicked"))
+                .max()
+                .unwrap_or(0);
 
             backprop_handle.join().expect("backprop thread panicked");
         });

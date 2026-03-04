@@ -120,7 +120,6 @@ impl<'a, A, R: RollupStats> NodeGraph<'a, A, R> {
         new_outcomes.push(AfterStateOutcome::new(0, child_id));
 
         // Create new AfterState and atomically update edge
-        // @TODO: Check if we need to be smarter about concurrent updates.
         let new_after_state_id = self.arena.push_after_state(AfterState::new(new_outcomes));
         edge.set_child(new_after_state_id);
 
