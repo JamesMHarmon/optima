@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use half::f16;
+use itertools::Itertools;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
@@ -47,7 +48,7 @@ fn make_state_node(hash: u64, value: u32) -> TestStateNode {
     let priors = [(0u32, 1.0f32)]
         .into_iter()
         .map(|(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
-        .collect::<Vec<_>>()
+        .collect_vec()
         .into_boxed_slice();
 
     let node = StateNode::new(hash, priors, DummyRollup::default());

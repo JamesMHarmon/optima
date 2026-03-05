@@ -634,7 +634,7 @@ where
                     .iter()
                     .map(|e| &e.action)
                     .cloned()
-                    .collect::<Vec<_>>();
+                    .collect_vec();
 
                 let pv_string = self
                     .ugi_mapper

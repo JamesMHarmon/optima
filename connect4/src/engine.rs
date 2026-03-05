@@ -88,6 +88,7 @@ impl PlayerResult for Engine {
 mod tests {
     use super::*;
     use engine::GameState as GameStateTrait;
+    use itertools::Itertools;
 
     #[test]
     fn test_new_state_is_correct() {
@@ -170,10 +171,7 @@ mod tests {
             }
         }
 
-        assert_eq!(
-            state.valid_columns().collect::<Vec<_>>(),
-            [1, 2, 3, 4, 5, 6, 7]
-        );
+        assert_eq!(state.valid_columns().collect_vec(), [1, 2, 3, 4, 5, 6, 7]);
     }
 
     #[test]
@@ -201,10 +199,7 @@ mod tests {
 
         state = state.drop_piece(1);
 
-        assert_eq!(
-            state.valid_columns().collect::<Vec<_>>(),
-            [2, 3, 4, 5, 6, 7]
-        );
+        assert_eq!(state.valid_columns().collect_vec(), [2, 3, 4, 5, 6, 7]);
     }
 
     #[test]
@@ -219,10 +214,7 @@ mod tests {
 
         state = state.drop_piece(7);
 
-        assert_eq!(
-            state.valid_columns().collect::<Vec<_>>(),
-            [1, 2, 3, 4, 5, 6]
-        );
+        assert_eq!(state.valid_columns().collect_vec(), [1, 2, 3, 4, 5, 6]);
     }
 
     #[test]
@@ -239,7 +231,7 @@ mod tests {
         state = state.drop_piece(4);
         state = state.drop_piece(5);
 
-        assert_eq!(state.valid_columns().collect::<Vec<_>>(), [1, 2, 6, 7]);
+        assert_eq!(state.valid_columns().collect_vec(), [1, 2, 6, 7]);
     }
 
     #[test]

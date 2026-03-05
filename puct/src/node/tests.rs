@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use half::f16;
+use itertools::Itertools;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
@@ -50,7 +51,7 @@ fn make_node(priors: &[(u32, f32)]) -> TestStateNode {
     let priors = priors
         .iter()
         .map(|&(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
-        .collect::<Vec<_>>()
+        .collect_vec()
         .into_boxed_slice();
 
     StateNode::new(0, priors, DummyRollup::default())
@@ -64,7 +65,7 @@ fn make_node_with_prior(
     let priors = priors
         .iter()
         .map(|&(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
-        .collect::<Vec<_>>()
+        .collect_vec()
         .into_boxed_slice();
 
     let r = DummyRollup::default();

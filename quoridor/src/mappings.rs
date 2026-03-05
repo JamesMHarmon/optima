@@ -362,7 +362,7 @@ mod tests {
         let mapper = Mapper::new();
         mapper.game_state_to_input(game_state, &mut input, Mode::Infer);
 
-        input.iter().copied().map(f16::to_f32).collect::<Vec<_>>()
+        input.iter().copied().map(f16::to_f32).collect_vec()
     }
 
     #[test]

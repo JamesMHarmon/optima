@@ -1,5 +1,6 @@
 use common::{TranspositionHash, TranspositionTable};
 use engine::{GameEngine, GameState, ValidActions};
+use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use std::sync::{
@@ -49,7 +50,7 @@ where
 
     engine
         .valid_actions(game_state)
-        .collect::<Vec<_>>()
+        .collect_vec()
         .into_par_iter()
         .for_each(|action| {
             let next_game_state = engine.take_action(game_state, action);

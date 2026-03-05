@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use model::position_metrics::PositionMetrics;
 use model::{EdgeMetrics, node_metrics::NodeMetrics};
 use puct::MovesLeftSnapshot;
@@ -34,7 +35,7 @@ fn symmetrical_node_metrics(
     NodeMetrics::new(
         metrics.predictions().clone(),
         metrics.visits(),
-        children_symmetry.collect::<Vec<_>>(),
+        children_symmetry.collect_vec(),
     )
 }
 

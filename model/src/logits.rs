@@ -8,6 +8,7 @@ pub fn update_logit_policies_to_softmax<A>(logit_policies: &mut [ActionWithPolic
         .iter()
         .map(|p| p.policy_score().into())
         .collect::<Vec<_>>();
+
     let softmaxed_policies = softmax(&policy_scores_by_action, temperature);
 
     for (awp, policy) in logit_policies.iter_mut().zip(softmaxed_policies) {

@@ -209,7 +209,7 @@ fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Ac
     let actions = actions_as_string
         .split(' ')
         .filter(|s| !s.contains('x'))
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     if actions.len() > 4 {
         let mut placements: Vec<(Piece, Square)> = actions
@@ -238,7 +238,7 @@ fn convert_move_string_to_step_actions(actions_as_string: &str) -> Result<Vec<Ac
                 let direction = s[3..4].parse::<Direction>().unwrap();
                 Action::Move(square, std::iter::once(direction).collect())
             })
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         if actions.len() <= 3 {
             actions.push(Action::Pass);

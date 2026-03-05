@@ -1,5 +1,6 @@
 use common::{PlayerValue, TranspositionHash};
 use engine::{GameEngine, ValidActions};
+use itertools::Itertools;
 use model::GameAnalyzer;
 use rand::Rng;
 use rand::distributions::WeightedIndex;
@@ -198,7 +199,7 @@ where
             EdgeMetrics::new(e.action, e.visits as usize, snapshot)
         };
 
-        let children = edges.into_iter().map(edge_to_metrics).collect::<Vec<_>>();
+        let children = edges.into_iter().map(edge_to_metrics).collect_vec();
         let node_info = self.puct.get_node_info(&state).expect("Node always exists");
         let visits = node_info.visits as usize;
 
@@ -222,7 +223,7 @@ where
                 let puct_scores = score_by_index.remove(&e.edge_index).unwrap_or_default();
                 EdgeDetails::new(e, puct_scores, player_to_move)
             })
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let node_info = self.puct.get_node_info(&state).expect("Node exists");
 

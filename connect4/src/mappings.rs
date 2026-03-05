@@ -9,6 +9,7 @@ use super::{
 };
 use crate::symmetries::get_symmetries;
 use common::{GameLength, PlayerValue, map_moves_left_to_one_hot, moves_left_expected_value};
+use itertools::Itertools;
 use model::logits::update_logit_policies_to_softmax;
 use model::{ActionWithPolicy, GameStateAnalysis, NodeMetrics, PositionMetrics};
 use puct::MovesLeftSnapshot;
@@ -57,7 +58,7 @@ impl Mapper {
             .zip(1..)
             .filter(|(_, col)| !game_state.is_column_full(*col))
             .map(|(p, col)| ActionWithPolicy::new(col.into(), *p))
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         update_logit_policies_to_softmax(&mut valid_actions_with_policies);
 

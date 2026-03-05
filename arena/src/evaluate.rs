@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use crossbeam::channel::Sender;
+use itertools::Itertools;
 use log::{error, info};
 use permutohedron::Heap as Permute;
 use serde::Serialize;
@@ -281,7 +282,7 @@ impl Arena {
     {
         let play_options = &options.play_options;
         let visits = options.visits;
-        let analyzers = players.iter().map(|m| m.analyzer()).collect::<Vec<_>>();
+        let analyzers = players.iter().map(|m| m.analyzer()).collect_vec();
         let temp = TemperatureMaxMoves::new(
             play_options.temperature,
             play_options.temperature_post_max_moves,

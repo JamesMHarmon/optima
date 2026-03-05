@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use half::f16;
+use itertools::Itertools;
 use model::ActionWithPolicy;
 use tinyvec::TinyVec;
 
@@ -49,7 +50,7 @@ fn make_state_node(hash: u64) -> TestStateNode {
     let priors = [(0u32, 1.0f32)]
         .into_iter()
         .map(|(a, p)| ActionWithPolicy::new(a, f16::from_f32(p)))
-        .collect::<Vec<_>>()
+        .collect_vec()
         .into_boxed_slice();
 
     StateNode::new(hash, priors, DummyRollup::default())
@@ -67,7 +68,7 @@ fn after_state_outcome_visits(arena: &TestArena, after_state_id: NodeId) -> Vec<
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
-        .collect::<Vec<_>>()
+        .collect_vec()
 }
 
 #[test]
@@ -211,7 +212,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     assert!(graph.increment_afterstate_outcome_visits(&edge, s1));
     let found = graph.get_edge_state_with_hash(&edge, 200);
@@ -222,7 +223,7 @@ fn get_edge_state_with_hash_increments_matching_after_state_outcome_visits() {
         .outcomes
         .iter()
         .map(|o| (o.child(), o.visits()))
-        .collect::<Vec<_>>();
+        .collect_vec();
 
     assert_eq!(before[0], after[0]);
     assert_eq!(after[1].0, s1);

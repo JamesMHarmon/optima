@@ -4,6 +4,7 @@ mod tests {
 
     use super::super::{Action, GameState, Value};
     use engine::game_state::GameState as GameStateTrait;
+    use itertools::Itertools;
 
     macro_rules! take_actions {
         ($game_state:expr, [$($action:expr),*]) => {
@@ -29,7 +30,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["f1", "d1", "e2"]);
     }
@@ -41,7 +42,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["e8", "f9", "d9"]);
     }
@@ -53,7 +54,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["e2"]);
     }
@@ -65,7 +66,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["e1", "e3"]);
     }
@@ -77,7 +78,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["f1", "d1"]);
 
@@ -85,7 +86,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["f9", "d9"]);
 
@@ -93,7 +94,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["g1", "e1"]);
     }
@@ -106,7 +107,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["e4", "f6", "d6", "e7"]);
 
@@ -114,7 +115,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(
             valid_pawn_move_actions,
@@ -125,7 +126,7 @@ mod tests {
         let valid_pawn_move_actions = game_state
             .valid_actions()
             .filter(|a| a.is_move())
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         assert_eq!(valid_pawn_move_actions, actions!["f5", "d5", "f6", "d6"]);
     }
@@ -136,7 +137,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let cols = || 'a'..='h';
         let rows = 2..=9;
@@ -161,7 +162,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["c2h", "d2h", "e2h"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -177,7 +178,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["e6h"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -193,7 +194,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["c2h", "e2h", "d2h", "d3h"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -209,7 +210,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["c2h", "e2h", "d3h"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -225,7 +226,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["c2h", "e2h", "d3h", "b3h", "c3h", "d3h", "e3h"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -241,7 +242,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::HorizontalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions![
             "a3h", "a4h", "a5h", "b3h", "b4h", "c3h", "d3h", "e3h", "e2h", "f3h"
         ];
@@ -257,7 +258,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::VerticalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let cols = || 'a'..='h';
         let rows = 2..=9;
@@ -282,7 +283,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::VerticalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["e5v", "e6v", "e7v"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
@@ -298,7 +299,7 @@ mod tests {
         let valid_actions = game_state
             .valid_actions()
             .filter(|a| matches!(a.action_type(), ActionType::VerticalWall))
-            .collect::<Vec<_>>();
+            .collect_vec();
         let excludes_actions = actions!["e6v"];
         let intersects = intersects(&valid_actions, &excludes_actions);
 
