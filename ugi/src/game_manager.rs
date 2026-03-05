@@ -630,11 +630,7 @@ where
             .filter_map(|edge| {
                 let pv_line = principal_variation(&edge.action);
 
-                let pv_actions = pv_line
-                    .iter()
-                    .map(|e| &e.action)
-                    .cloned()
-                    .collect_vec();
+                let pv_actions = pv_line.iter().map(|e| &e.action).cloned().collect_vec();
 
                 let pv_string = self
                     .ugi_mapper
