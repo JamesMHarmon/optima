@@ -149,9 +149,10 @@ impl<Ps> PredictionStack<Ps> {
     }
 }
 
-// @TODO: Verify if this works properly with player_to_move
-
-/// Difference between the Q of the specified action and the child that would be played with no temp.
+// Difference between the Q of the specified action and the child that would be played with no temp.
+// Q values are evaluated from the current player's perspective via player_to_move, which is the
+// correct frame of reference: both max_visits_q and chosen_q use the same player index, and
+// mix_q later updates only that player's value component.
 fn q_diff<A, P, SS>(metrics: &NodeMetrics<A, P, SS>, action: &A, player_to_move: usize) -> f32
 where
     A: PartialEq,

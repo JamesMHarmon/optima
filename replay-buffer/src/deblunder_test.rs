@@ -664,6 +664,188 @@ mod test {
         assert_abs_diff_eq!(metrics[0].target_score.game_length(), 123.0);
     }
 
+    #[test]
+    fn test_deblunder_width_zero_at_exact_threshold_uses_full_mix() {
+        // When q_diff_width == 0.0 and q_diff == q_diff_threshold exactly:
+        //   (q_diff - threshold) / width = 0.0 / 0.0 = NaN
+        //   NaN.min(1.0) = 1.0  (Rust's f32::min uses LLVM minnum: returns non-NaN operand)
+        // So q_mix_amt = 1.0 — full replacement — consistent with the step-function intent
+        // that any q_diff >= threshold with width=0.0 produces full mix.
+        //
+        // Use exact f32 fractions (powers of 2) so that (Q_a1n - Q_a2n) == threshold exactly
+        // in IEEE 754: 0.75 - 0.25 = 0.5 = threshold with zero rounding error.
+        let mut metrics = vec![position_metrics(
+            true,
+            Value::new(0.2, 0.8),
+            10.0,
+            "a2n",
+            vec![
+                node_child("a1n", 0.75, 50.0, 30), // q_diff = 0.75-0.25 = 0.5 == threshold
+                node_child("a2n", 0.25, 20.0, 10),
+            ],
+        )];
+
+        deblunder(&mut metrics, 0.5, 0.0);
+
+        // q_mix_amt = 1.0 (full replacement), not 0.0.
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.75);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(2), 0.8); // unchanged
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 50.0);
+    }
+
+    #[test]
+    fn test_deblunder_consecutive_same_player_blunders() {
+        // Two P1 positions in a row (no P2 between them), both blunders.
+        // Frame stack grows twice for P1. Each blunder frame uses the max_visits snapshot
+        // at its own position, compounding corrections through the stack.
+        //
+        // metrics[1] (processed first in reverse): q_diff = 0.65-0.2 = 0.45 → q_mix = 1.0
+        //   frame0.p1 = (1.0,0.0)@50; frame1.p1 = mix(frame0.p1, a1n@m1, 1.0):
+        //   = (1-1)*1.0 + 1*0.65 = 0.65, gl=(1-1)*50+1*40=40 → frame1=(0.65,0.0)@40
+        //
+        // metrics[0] (processed second): q_diff = 0.7-0.4 = 0.3 → q_mix = 1.0
+        //   frame1.p1 already set; push frame2.p1 = mix(frame1.p1, a1n@m0, 1.0):
+        //   = (1-1)*0.65 + 1*0.7 = 0.7, gl=(1-1)*40+1*60=60 → frame2=(0.7,0.0)@60
+        let mut metrics = vec![
+            position_metrics(
+                true,
+                Value::new(1.0, 0.0),
+                50.0,
+                "a2n",
+                vec![
+                    node_child("a1n", 0.7, 60.0, 30),
+                    node_child("a2n", 0.4, 50.0, 10),
+                ],
+            ),
+            position_metrics(
+                true,
+                Value::new(1.0, 0.0),
+                50.0,
+                "a2n",
+                vec![
+                    node_child("a1n", 0.65, 40.0, 30),
+                    node_child("a2n", 0.2, 50.0, 10),
+                ],
+            ),
+        ];
+
+        deblunder(&mut metrics, 0.1, 0.2);
+
+        // metrics[1] (later in game, first processed): corrected by its own blunder.
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(1), 0.65);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.0);
+        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 40.0);
+
+        // metrics[0] (earlier in game, second processed): uses its own max_visits snapshot
+        // mixed against the already-corrected frame1 prediction, not the original target.
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.7);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(2), 0.0);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 60.0);
+    }
+
+    #[test]
+    fn test_deblunder_p1_blunder_corrects_earlier_p2_position() {
+        // P1 blunders at metrics[1]. P2 has a position at metrics[0] (before the blunder).
+        // A blunder pushes a new prediction frame for ALL players, so P2's earlier position
+        // must also receive a corrected prediction. The correction uses P2's own max_visits
+        // snapshot at that position, mixed with P2's existing prediction via the blunder
+        // frame's q_mix_amt.
+        //
+        // Processing reverse:
+        // metrics[1] (p1): q_diff = 0.9-0.3 = 0.6 → q_mix=1.0
+        //   frame1.p1 = mix(frame0.p1=(0.8,0.2)@20, a1n@m1, 1.0):
+        //     p1 mixed_value = 0.9, mixed_gl = 30 → frame1=(0.9,0.2)@30
+        //
+        // metrics[0] (p2): no blunder (chosen=max_visits=a1n)
+        //   set_initial: frame0.p2 = Value(0.1,0.7); game_length already 20 (from p1 set_initial)
+        //   set_if_not fills frame1.p2 = mix(frame0.p2=(0.1,0.7)@20, a1n@m0, 1.0):
+        //     p2 mixed_value = 0.6, mixed_gl computation = 14.0 but frame1.gl already 30 (p1's)
+        //     → stored as Value(0.1,0.6) in frame1; gl remains 30.0
+        //   latest(p2) → frame1 → Predictions(Value(0.1,0.6), 30.0)
+        let mut metrics = vec![
+            position_metrics(
+                false, // P2 to move
+                Value::new(0.1, 0.7),
+                15.0,
+                "a1n", // chosen = max visits → no blunder for P2
+                vec![
+                    node_child_p1_p2("a1n", 0.3, 0.6, 14.0, 30),
+                    node_child_p1_p2("a2n", 0.8, 0.2, 30.0, 10),
+                ],
+            ),
+            position_metrics(
+                true, // P1 to move
+                Value::new(0.8, 0.2),
+                20.0,
+                "a2n", // P1 chose poorly; max_visits=a1n has much higher P1 Q
+                vec![
+                    node_child_p1_p2("a1n", 0.9, 0.1, 30.0, 40), // max visits
+                    node_child_p1_p2("a2n", 0.3, 0.7, 20.0, 10),
+                ],
+            ),
+        ];
+
+        deblunder(&mut metrics, 0.1, 0.1);
+
+        // metrics[1]: P1's value replaced with max-visits Q=0.9; P2 unchanged; gl from a1n=30.
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(1), 0.9);
+        assert_abs_diff_eq!(metrics[1].target_score.value().player_value(2), 0.2);
+        assert_abs_diff_eq!(metrics[1].target_score.game_length(), 30.0);
+
+        // metrics[0]: P2's value is corrected toward P2's max_visits Q (0.6);
+        // game_length is inherited from P1's blunder frame (30.0), not P2's own max_visits (14.0).
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.1);
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(2), 0.6);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 30.0);
+    }
+
+    #[test]
+    fn test_deblunder_equal_visits_last_child_wins_tie_no_blunder() {
+        // child_max_visits() uses max_by_key(|c| c.visits), which returns the LAST element
+        // among ties. When the chosen action is the last child and ties for max visits,
+        // it becomes the max-visits child → q_diff = 0 → no blunder, even though another
+        // child has higher Q and the same visit count.
+        let mut metrics = vec![position_metrics(
+            true,
+            Value::new(1.0, 0.0),
+            10.0,
+            "a2n", // chosen = last child in list
+            vec![
+                node_child("a1n", 0.8, 10.0, 30), // higher Q, same visits as a2n
+                node_child("a2n", 0.3, 10.0, 30), // lower Q, same visits — LAST → wins tie
+            ],
+        )];
+
+        deblunder(&mut metrics, 0.1, 0.2);
+
+        // a2n wins tie (last in list) → max_visits_child = a2n = chosen → q_diff = 0.
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 1.0);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 10.0);
+    }
+
+    #[test]
+    fn test_deblunder_equal_visits_last_child_wins_tie_blunder_fires() {
+        // Mirror of the above: the chosen action is the FIRST child; the second child
+        // (same visits, last in list) wins the tie and becomes max_visits_child.
+        // Now q_diff = second.Q - first.Q > threshold → blunder fires.
+        let mut metrics = vec![position_metrics(
+            true,
+            Value::new(1.0, 0.0),
+            10.0,
+            "a2n", // chosen = first child in list
+            vec![
+                node_child("a2n", 0.3, 10.0, 30), // chosen, same visits — FIRST
+                node_child("a1n", 0.8, 40.0, 30), // higher Q, same visits — LAST → wins tie
+            ],
+        )];
+
+        deblunder(&mut metrics, 0.1, 0.2);
+
+        // a1n wins tie → q_diff = 0.8-0.3 = 0.5 → q_mix_amt = (0.5-0.1)/0.2 = 2.0 → 1.0
+        assert_abs_diff_eq!(metrics[0].target_score.value().player_value(1), 0.8);
+        assert_abs_diff_eq!(metrics[0].target_score.game_length(), 40.0);
+    }
+
     #[cfg(feature = "quoridor")]
     mod quoridor_deblunder {
         use super::*;
