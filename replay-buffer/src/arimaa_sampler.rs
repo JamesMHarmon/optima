@@ -144,7 +144,6 @@ pub struct ArimaaPStore {
     game_length: Option<f32>,
 }
 
-#[allow(non_snake_case)]
 impl PredictionStore for ArimaaPStore {
     type State = GameState;
     type Predictions = Predictions;

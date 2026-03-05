@@ -31,7 +31,6 @@ type SamplePositionMetricsExtended<S> = PositionMetricsExtended<
 
 type OutputTargets = HashMap<String, Vec<f32>>;
 
-#[allow(clippy::type_complexity)]
 pub trait Sample {
     type State;
     type Action;

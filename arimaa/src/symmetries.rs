@@ -244,7 +244,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(non_snake_case)]
     fn test_get_symmetries() {
         let game_state: GameState = "
                 5g
@@ -346,7 +345,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(non_snake_case)]
     fn test_symmetries_setup() {
         let game_state = GameState::initial();
 
@@ -428,7 +426,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(non_snake_case)]
     fn test_symmetries_setup_silver() {
         let game_state = GameState::initial();
 

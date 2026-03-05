@@ -258,7 +258,6 @@ impl Arena {
         Ok(())
     }
 
-    #[allow(non_snake_case)]
     fn play_game<S, A, E, VM, Sel, T, M, P>(
         engine: &E,
         value_model: &VM,

@@ -1,14 +1,11 @@
-#[allow(dead_code)]
 pub fn log_debug(msg: &str) {
     println!("log Debug: {}", msg);
 }
 
-#[allow(dead_code)]
 pub fn log_warning(msg: &str) {
     println!("log Warning: {}", msg);
 }
 
-#[allow(dead_code)]
 pub fn log_error(msg: &str) {
     println!("log Error: {}", msg);
 }

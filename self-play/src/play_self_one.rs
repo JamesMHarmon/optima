@@ -16,7 +16,6 @@ type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 type RollupOf<VM> = <VM as ValueModel>::Rollup;
 type SSOf<VM> = SnapshotOf<VM>;
 
-#[allow(non_snake_case)]
 pub fn play_self_one<S, A, E, M, P, VM, Sel>(
     game_engine: &E,
     analyzer: &M,

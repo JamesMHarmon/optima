@@ -1,4 +1,3 @@
-#[allow(non_snake_case)]
 pub trait QMix {
     type State;
     type Predictions;
@@ -12,7 +11,6 @@ pub trait QMix {
     ) -> Self::Predictions;
 }
 
-#[allow(non_snake_case)]
 pub trait PredictionStore: Default {
     type State;
     type Predictions;

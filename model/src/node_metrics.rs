@@ -5,7 +5,6 @@ use serde::ser::{Serialize, SerializeTuple, Serializer};
 use std::fmt;
 use std::marker::PhantomData;
 
-#[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
 pub struct NodeMetrics<A, P, SS> {
     /// The total number of visits of the node. Should be children.visits.sum() + 1.
@@ -16,7 +15,6 @@ pub struct NodeMetrics<A, P, SS> {
     children: Vec<EdgeMetrics<A, SS>>,
 }
 
-#[allow(non_snake_case)]
 impl<A, P, SS> NodeMetrics<A, P, SS> {
     pub fn new(predictions: P, visits: usize, children: Vec<EdgeMetrics<A, SS>>) -> Self {
         Self {
@@ -43,7 +41,6 @@ impl<A, P, SS> NodeMetrics<A, P, SS> {
     }
 }
 
-#[allow(non_snake_case)]
 #[derive(PartialEq, Debug)]
 pub struct EdgeMetrics<A, SS> {
     /// The action that this edge represents.
@@ -54,7 +51,6 @@ pub struct EdgeMetrics<A, SS> {
     snapshot: SS,
 }
 
-#[allow(non_snake_case)]
 impl<A, SS> EdgeMetrics<A, SS> {
     pub fn new(action: A, visits: usize, snapshot: SS) -> Self {
         Self {
@@ -77,7 +73,6 @@ impl<A, SS> EdgeMetrics<A, SS> {
     }
 }
 
-#[allow(non_snake_case)]
 impl<A, SS> EdgeMetrics<A, SS>
 where
     SS: PlayerValue,
@@ -87,7 +82,6 @@ where
     }
 }
 
-#[allow(non_snake_case)]
 impl<A, SS> EdgeMetrics<A, SS>
 where
     SS: GameLength,

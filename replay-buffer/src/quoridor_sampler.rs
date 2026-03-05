@@ -153,7 +153,6 @@ pub struct QuoridorVStore {
     game_length: Option<f32>,
 }
 
-#[allow(non_snake_case)]
 impl PredictionStore for QuoridorVStore {
     type State = GameState;
     type Predictions = Predictions;

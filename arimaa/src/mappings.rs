@@ -454,7 +454,6 @@ fn static_sparse_push_pull_map() -> &'static Vec<u16> {
     })
 }
 
-#[allow(clippy::float_cmp)]
 #[cfg(test)]
 mod tests {
     use super::*;

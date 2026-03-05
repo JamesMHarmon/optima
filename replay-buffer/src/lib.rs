@@ -309,7 +309,6 @@ where
         buffered_samples
     }
 
-    #[allow(clippy::type_complexity)]
     fn load_samples(&self, metrics_path: impl AsRef<Path>) -> Result<Vec<PositionMetricsOf<S>>> {
         let file = std::fs::File::open(&metrics_path)
             .with_context(|| format!("Failed to open: {:?}", &metrics_path.as_ref()))?;
