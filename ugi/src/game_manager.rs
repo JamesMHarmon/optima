@@ -22,6 +22,7 @@ use std::{str, thread};
 
 const NAME: &str = "UGI";
 const AUTHOR: &str = "Author";
+const PV_DEPTH: usize = 10;
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
 
@@ -335,15 +336,15 @@ where
 
                             last_output = Instant::now();
 
+                            let multi_pv = self.options.lock().unwrap().multi_pv;
                             let node_details = mcts.get_node_details();
 
-                            let multi_pv = self.options.lock().unwrap().multi_pv;
-                            let pv = node_details
-                                .children
-                                .iter()
-                                .take(multi_pv)
-                                .map(|edge| mcts.principal_variation(Some(&edge.action), 10))
-                                .collect_vec();
+                            let pv = self.pv_info(
+                                &node_details,
+                                &focus_game_state,
+                                multi_pv,
+                                |action| mcts.principal_variation(action, PV_DEPTH),
+                            );
 
                             let best_node = choose_action(&node_details.children, 0.0);
 
@@ -356,10 +357,9 @@ where
                                 &focus_game_state,
                                 start_time,
                                 &[best_node.Qsa()],
-                                &[node_details.visits],
+                                &[node_details.node_info.visits],
                                 &[best_node.snapshot],
                                 &[depth],
-                                &node_details,
                             );
                         }
 
@@ -373,11 +373,7 @@ where
                     }
                 }
                 CommandInner::Details => {
-                    let node_details = mcts.get_node_details();
-
-                    let sorted_children = node_details.children.iter().sorted().rev().collect_vec();
-
-                    for child in sorted_children {
+                    for child in mcts.get_node_details().children.iter().sorted().rev() {
                         self.output.info(&format!("{}", &child));
                     }
                 }
@@ -480,7 +476,6 @@ where
                     let mut visits = Vec::new();
                     let mut snapshots = Vec::new();
                     let mut scores = Vec::new();
-                    let mut node_details_container = None;
 
                     while self.engine.player_to_move(&focus_game_state) == current_player
                         && self.engine.terminal_state(&focus_game_state).is_none()
@@ -514,28 +509,25 @@ where
 
                         scores.push(best_node.Qsa());
                         snapshots.push(best_node.snapshot);
-                        visits.push(node_details.visits);
+                        visits.push(node_details.node_info.visits);
                         focus_game_state = self
                             .engine
                             .take_action(&focus_game_state, &best_node.action);
                         mcts.set_state(focus_game_state.clone());
                         actions.push(best_node.action.clone());
-
-                        if node_details_container.is_none() {
-                            node_details_container = Some(node_details);
-                        }
                     }
 
                     mcts.set_state(saved_focus_state);
 
-                    let pv = mcts.principal_variation(None, 10);
+                    let node_details = mcts.get_node_details();
 
-                    let node_details =
-                        node_details_container.unwrap_or_else(|| mcts.get_node_details());
+                    let pv = self.pv_info(&node_details, &pre_action_game_state, 1, |action| {
+                        mcts.principal_variation(action, PV_DEPTH)
+                    });
 
                     self.output_post_search_info(
                         current_player,
-                        &[pv],
+                        &pv,
                         &pre_action_game_state,
                         &focus_game_state,
                         search_start,
@@ -543,7 +535,6 @@ where
                         &visits,
                         &snapshots,
                         &depths,
-                        &node_details,
                     );
 
                     let move_string = self
@@ -590,15 +581,14 @@ where
     fn output_post_search_info(
         &self,
         player_to_move: usize,
-        pv: &[Vec<EdgeDetails<A, SnapshotOf<B>>>],
+        pv: &[PVInfo],
         pre_action_game_state: &S,
         focus_game_state: &S,
         search_start: Instant,
         scores: &[f32],
-        visits: &[usize],
+        visits: &[u32],
         snapshots: &[SnapshotOf<B>],
         depths: &[usize],
-        node_details: &NodeDetails<A, SnapshotOf<B>>,
     ) {
         self.output.info(&format!(
             "time {time} playertomove {player} root_score {root_score:.3} score {score:.3} {snapshot} visits {visits:?} depth {depth} root_transpositionid {root_transpositionid:016X} transpositionid {transpositionid:016X}",
@@ -613,29 +603,66 @@ where
             transpositionid = focus_game_state.transposition_hash()
         ));
 
-        let visits_sum = (node_details.visits - 1).max(1);
-
-        // @TODO: Do we really zip up node_details with pv?
-        for (i, (edge, pv_line)) in node_details.children.iter().zip(pv).enumerate() {
-            let pv_actions = pv_line
-                .iter()
-                .map(|edge| &edge.action)
-                .cloned()
-                .collect::<Vec<_>>();
-            let pv_string = self
-                .ugi_mapper
-                .actions_to_move_string(pre_action_game_state, &pv_actions);
-
+        for (i, pv_info) in pv.iter().enumerate() {
             self.output.info(&format!(
                 "multipv {pv_num} score {score:.3} visits {visits} visitspct {visitspct:.3} {snapshot} pv {pv}",
                 pv_num = i + 1,
-                score = edge.Qsa(),
-                visits = edge.Nsa,
-                visitspct = edge.Nsa as f32 / visits_sum as f32,
-                snapshot = Self::snapshot_info(&edge.snapshot),
-                pv = &pv_string,
+                score = pv_info.score,
+                visits = pv_info.visits,
+                visitspct = pv_info.visitspct,
+                snapshot = pv_info.snapshot,
+                pv = pv_info.pv,
             ));
         }
+    }
+
+    fn pv_info(
+        &self,
+        node_details: &NodeDetails<A, SnapshotOf<B>>,
+        game_state: &S,
+        top_n: usize,
+        mut principal_variation: impl FnMut(&A) -> Vec<EdgeDetails<A, SnapshotOf<B>>>,
+    ) -> Vec<PVInfo> {
+        let top_edges = self.top_n_edges(node_details, top_n);
+        let visits_sum = node_details.node_info.visits;
+
+        top_edges
+            .filter_map(|edge| {
+                let pv_line = principal_variation(&edge.action);
+
+                let pv_actions = pv_line
+                    .iter()
+                    .map(|e| &e.action)
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let pv_string = self
+                    .ugi_mapper
+                    .actions_to_move_string(game_state, &pv_actions);
+
+                let first_edge = pv_line.into_iter().next()?;
+
+                Some(PVInfo {
+                    score: first_edge.Qsa(),
+                    visits: first_edge.Nsa,
+                    visitspct: first_edge.Nsa as f32 / visits_sum as f32,
+                    snapshot: Self::snapshot_info(&first_edge.snapshot),
+                    pv: pv_string,
+                })
+            })
+            .collect()
+    }
+
+    fn top_n_edges<'a>(
+        &self,
+        node_details: &'a NodeDetails<A, SnapshotOf<B>>,
+        n: usize,
+    ) -> impl Iterator<Item = &'a EdgeDetails<A, SnapshotOf<B>>> {
+        node_details
+            .children
+            .iter()
+            .sorted_by(|a, b| b.cmp(a))
+            .take(n)
     }
 
     fn display_board(&self, game_state: &S) {
@@ -712,4 +739,12 @@ fn init_options() -> UGIOptions {
     }
 
     options
+}
+
+struct PVInfo {
+    score: f32,
+    visits: usize,
+    visitspct: f32,
+    snapshot: String,
+    pv: String,
 }

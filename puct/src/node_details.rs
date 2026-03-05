@@ -3,11 +3,11 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 use common::PlayerValue;
 
-use crate::{EdgeScore, EdgeView, WeightedMerge};
+use crate::{EdgeScore, EdgeView, NodeInfo, WeightedMerge};
 
 #[allow(non_snake_case)]
 pub struct NodeDetails<A, SS> {
-    pub visits: usize,
+    pub node_info: NodeInfo<SS>,
     pub children: Vec<EdgeDetails<A, SS>>,
 }
 
@@ -26,7 +26,7 @@ where
         write!(
             f,
             "V: {visits}, Actions: {actions}",
-            visits = self.visits,
+            visits = self.node_info.visits,
             actions = actions
         )
     }
@@ -47,7 +47,7 @@ where
         write!(
             f,
             "V: {visits}, Actions: {actions}",
-            visits = self.visits,
+            visits = self.node_info.visits,
             actions = actions
         )
     }

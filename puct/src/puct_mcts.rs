@@ -225,17 +225,16 @@ where
             .collect::<Vec<_>>();
 
         let node_info = self.puct.get_node_info(&state).expect("Node exists");
-        let visits = node_info.visits as usize;
 
         NodeDetails {
-            visits,
+            node_info,
             children: edge_details,
         }
     }
 
     pub fn principal_variation(
         &mut self,
-        action: Option<&M::Action>,
+        action: &M::Action,
         depth: usize,
     ) -> Vec<EdgeDetails<M::Action, SnapshotOf<VM>>>
     where
@@ -253,14 +252,7 @@ where
             let mut score_by_index = self.puct_score_by_index(&state, ply as u32);
 
             let chosen = if ply == 0 {
-                if let Some(desired) = action {
-                    edges.into_iter().find(|e| &e.action == desired)
-                } else {
-                    edges
-                        .into_iter()
-                        .filter(|e| e.visits > 0)
-                        .max_by_key(|e| e.visits)
-                }
+                edges.into_iter().find(|e| &e.action == action)
             } else {
                 edges
                     .into_iter()
@@ -272,25 +264,16 @@ where
                 break;
             };
 
-            let snapshot = chosen.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
             let player_to_move = self.engine.player_to_move(&state);
 
             let score = score_by_index
                 .remove(&chosen.edge_index)
                 .unwrap_or_default();
 
-            let details = EdgeDetails {
-                action: chosen.action.clone(),
-                Nsa: chosen.visits as usize,
-                Psa: chosen.policy_prior,
-                Usa: score.usa,
-                cpuct: score.cpuct,
-                puct_score: score.puct_score,
-                snapshot,
-                player_to_move,
-            };
-
             state = self.engine.take_action(&state, &chosen.action);
+
+            let details = EdgeDetails::new(chosen, score, player_to_move);
+
             pv.push(details);
         }
 
