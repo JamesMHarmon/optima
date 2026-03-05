@@ -149,8 +149,6 @@ impl PredictionStore for ArimaaPStore {
     type State = GameState;
     type Predictions = Predictions;
 
-    // @TODO: See if this should use snapshot over predictions and value.
-
     fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
         let player = game_state.player_to_move();
         self.player_value[player - 1].as_ref().map(|value| {
