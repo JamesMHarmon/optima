@@ -23,6 +23,7 @@ mod terminal_node;
 mod value_model;
 mod victory_margin;
 
+pub(crate) use edge::*;
 pub(crate) use search_context::*;
 pub(crate) use selection_result::*;
 

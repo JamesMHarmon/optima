@@ -17,6 +17,8 @@ use model::{Analyzer, Info, Latest, Load};
 use puct::{RollupStats, SelectionPolicy, ValueModel};
 
 type SnapshotOf<VM> = <<VM as ValueModel>::Rollup as RollupStats>::Snapshot;
+type RollupOf<VM> = <VM as ValueModel>::Rollup;
+type MROf<F> = <F as Latest>::MR;
 
 pub fn play_self<F, M, E, S, A, P, VM, Sel>(
     model_factory: &F,
@@ -27,7 +29,7 @@ pub fn play_self<F, M, E, S, A, P, VM, Sel>(
     self_play_options: &SelfPlayOptions,
 ) -> Result<()>
 where
-    F: Latest + Load<MR = <F as Latest>::MR> + Load<M = M> + Sync,
+    F: Latest + Load<MR = MROf<F>> + Load<M = M> + Sync,
     M: Analyzer<State = S, Action = A, Predictions = P> + Info + Send + Sync,
     M::Analyzer: GameAnalyzer<Action = A, State = S, Predictions = P> + Send + Sync,
     E: GameEngine<State = S, Action = A, Terminal = P> + ValidActions<State = S, Action = A> + Sync,
@@ -35,10 +37,10 @@ where
     S: GameState + Clone + TranspositionHash + PlayerToMove + Send + Sync,
     A: Serialize + Debug + Eq + Hash + Clone + Send + Sync,
     P: Serialize + Display + Send,
-    <F as Latest>::MR: Debug + Eq + Send,
+    MROf<F>: Debug + Eq + Send,
     VM: ValueModel<Predictions = P, Terminal = P> + Send + Sync,
     Sel: SelectionPolicy<SnapshotOf<VM>, State = S, Action = A, Terminal = P> + Send + Sync,
-    <VM as ValueModel>::Rollup: Send + Sync,
+    RollupOf<VM>: Send + Sync,
     SnapshotOf<VM>: Clone + Serialize + Send + Sync,
 {
     let starting_run_time = Instant::now();

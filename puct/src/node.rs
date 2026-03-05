@@ -1,6 +1,7 @@
 use model::ActionWithPolicy;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::NodeInfo;
 use crate::after_state::AfterState;
 use crate::edge::PUCTEdge;
 use crate::edge_store::EdgeStore;
@@ -181,6 +182,19 @@ where
             NodeType::AfterState => nodes.after_state_node(child_id).snapshot(nodes),
             NodeType::Terminal => nodes.terminal_node(child_id).snapshot(),
         }
+    }
+}
+
+impl<A, R, SS> From<&StateNode<A, R>> for NodeInfo<SS>
+where
+    R: RollupStats<Snapshot = SS>,
+{
+    fn from(node: &StateNode<A, R>) -> Self {
+        let visits = node.visits();
+        let virtual_visits = node.virtual_visits();
+        let snapshot = node.snapshot();
+
+        Self::new(visits, virtual_visits, snapshot)
     }
 }
 

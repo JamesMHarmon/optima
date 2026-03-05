@@ -14,7 +14,13 @@ pub trait SelectionPolicy<SS> {
     type Terminal;
 
     /// Choose an edge index to follow during tree traversal.
-    fn select_edge<'a, I>(&self, node: NodeInfo<SS>, edges: I, state: &Self::State) -> usize
+    fn select_edge<'a, I>(
+        &self,
+        node: NodeInfo<SS>,
+        edges: I,
+        state: &Self::State,
+        depth: u32,
+    ) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, Self::Action, SS>>,
         Self::Action: 'a,
@@ -56,6 +62,7 @@ pub trait SelectionPolicyScoring<SS>: SelectionPolicy<SS> {
         node: NodeInfo<SS>,
         edges: I,
         state: &Self::State,
+        depth: u32,
     ) -> Vec<EdgeScore>
     where
         I: Iterator<Item = EdgeInfo<'a, Self::Action, SS>>,
@@ -68,30 +75,14 @@ pub trait SelectionPolicyScoring<SS>: SelectionPolicy<SS> {
 pub struct NodeInfo<SS> {
     pub visits: u32,
     pub virtual_visits: u32,
-    pub depth: u32,
     pub snapshot: SS,
 }
 
-impl<SS> Default for NodeInfo<SS>
-where
-    SS: Default,
-{
-    fn default() -> Self {
-        Self {
-            visits: 0,
-            virtual_visits: 0,
-            depth: 0,
-            snapshot: Default::default(),
-        }
-    }
-}
-
 impl<SS> NodeInfo<SS> {
-    pub fn new(visits: u32, virtual_visits: u32, snapshot: SS, depth: u32) -> Self {
+    pub fn new(visits: u32, virtual_visits: u32, snapshot: SS) -> Self {
         Self {
             visits,
             virtual_visits,
-            depth,
             snapshot,
         }
     }
@@ -99,11 +90,6 @@ impl<SS> NodeInfo<SS> {
     #[inline]
     pub fn total_visits(self) -> u32 {
         self.visits + self.virtual_visits
-    }
-
-    #[inline]
-    pub fn is_root(self) -> bool {
-        self.depth == 0
     }
 }
 

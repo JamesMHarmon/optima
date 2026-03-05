@@ -3,6 +3,8 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 use common::PlayerValue;
 
+use crate::{EdgeScore, EdgeView, WeightedMerge};
+
 #[allow(non_snake_case)]
 pub struct NodeDetails<A, SS> {
     pub visits: usize,
@@ -62,6 +64,26 @@ pub struct EdgeDetails<A, SS> {
     pub puct_score: f32,
     pub snapshot: SS,
     pub player_to_move: usize,
+}
+
+impl<A, SS> EdgeDetails<A, SS>
+where
+    SS: WeightedMerge,
+{
+    pub fn new(edge_view: EdgeView<A, SS>, puct_scores: EdgeScore, player_to_move: usize) -> Self {
+        let snapshot = edge_view.snapshot.unwrap_or_else(SS::zero);
+
+        Self {
+            action: edge_view.action,
+            Nsa: edge_view.visits as usize,
+            Psa: edge_view.policy_prior,
+            Usa: puct_scores.usa,
+            cpuct: puct_scores.cpuct,
+            puct_score: puct_scores.puct_score,
+            snapshot,
+            player_to_move,
+        }
+    }
 }
 
 #[allow(non_snake_case)]

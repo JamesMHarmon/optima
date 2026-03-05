@@ -1,4 +1,4 @@
-use common::TranspositionHash;
+use common::{PlayerValue, TranspositionHash};
 use engine::{GameEngine, ValidActions};
 use model::GameAnalyzer;
 use rand::Rng;
@@ -26,7 +26,7 @@ type NodeMetricsOf<E, M, VM> = NodeMetrics<ActionOf<E>, PredictionsOf<M>, Snapsh
 /// MCTS-like container API.
 ///
 /// This is intentionally minimal for now; parity features (focus actions, noise,
-/// detailed node/edge introspection) will be layered on next.
+/// detailed node/edge introspection) will be layered on next.s
 pub struct PuctMCTS<'a, E, M, VM, Sel>
 where
     E: GameEngine,
@@ -208,30 +208,19 @@ where
     pub fn get_node_details(&mut self) -> NodeDetails<M::Action, SnapshotOf<VM>>
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
+        SnapshotOf<VM>: PlayerValue,
     {
         let state = self.state.clone();
         let edges = self.filtered_edge_views(&state);
 
-        let mut score_by_index = self.score_by_index(&state, 0);
+        let mut score_by_index = self.puct_score_by_index(&state, 0);
 
         let player_to_move = self.engine.player_to_move(&state);
         let edge_details = edges
             .into_iter()
             .map(|e| {
-                let snapshot: SnapshotOf<VM> = e.snapshot.unwrap_or_else(SnapshotOf::<VM>::zero);
-
-                let score = score_by_index.remove(&e.edge_index).unwrap_or_default();
-
-                EdgeDetails {
-                    action: e.action,
-                    Nsa: e.visits as usize,
-                    Psa: e.policy_prior,
-                    Usa: score.usa,
-                    cpuct: score.cpuct,
-                    puct_score: score.puct_score,
-                    snapshot,
-                    player_to_move,
-                }
+                let puct_scores = score_by_index.remove(&e.edge_index).unwrap_or_default();
+                EdgeDetails::new(e, puct_scores, player_to_move)
             })
             .collect::<Vec<_>>();
 
@@ -261,7 +250,7 @@ where
                 None => break,
             };
 
-            let mut score_by_index = self.score_by_index(&state, ply as u32);
+            let mut score_by_index = self.puct_score_by_index(&state, ply as u32);
 
             let chosen = if ply == 0 {
                 if let Some(desired) = action {
@@ -339,7 +328,7 @@ where
         })
     }
 
-    fn score_by_index(&self, state: &M::State, depth: u32) -> HashMap<usize, EdgeScore>
+    fn puct_score_by_index(&self, state: &M::State, depth: u32) -> HashMap<usize, EdgeScore>
     where
         Sel: SelectionPolicyScoring<SnapshotOf<VM>, State = M::State>,
     {

@@ -279,13 +279,19 @@ where
             .terminal_for_trajectory(state, visited)
     }
 
-    fn select_edge<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> usize
+    fn select_edge<'a, I>(
+        &self,
+        node: NodeInfoVM,
+        edges: I,
+        state: &Self::State,
+        depth: u32,
+    ) -> usize
     where
         I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
         A: 'a,
     {
-        let is_root = node.is_root();
+        let is_root = depth == 0;
         let options = &self.options;
 
         let fpu = if is_root {
@@ -360,13 +366,19 @@ where
     C: CPUCT<State = T::State>,
     T::State: PlayerToMove,
 {
-    fn score_edges<'a, I>(&self, node: NodeInfoVM, edges: I, state: &Self::State) -> Vec<EdgeScore>
+    fn score_edges<'a, I>(
+        &self,
+        node: NodeInfoVM,
+        edges: I,
+        state: &Self::State,
+        depth: u32,
+    ) -> Vec<EdgeScore>
     where
         I: Iterator<Item = EdgeInfo<'a, A, MovesLeftSnapshot>>,
         MovesLeftSnapshot: 'a,
         A: 'a,
     {
-        let is_root = node.is_root();
+        let is_root = depth == 0;
         let options = &self.options;
 
         let fpu = if is_root {

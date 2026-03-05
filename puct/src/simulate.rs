@@ -1,7 +1,6 @@
 use common::TranspositionHash;
 use engine::GameEngine;
 
-use crate::NodeInfo;
 use crate::node::StateNode;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
@@ -126,14 +125,10 @@ where
     fn select_edge(&self, game_state: &E::State, node: &PuctStateNode<E, R>, depth: u32) -> usize {
         node.ensure_frontier_edge();
         self.selection_strategy.select_edge(
-            NodeInfo {
-                visits: node.visits(),
-                virtual_visits: node.virtual_visits(),
-                depth,
-                snapshot: node.snapshot(),
-            },
+            node.into(),
             self.store.iter_edge_info(node),
             game_state,
+            depth,
         )
     }
 }

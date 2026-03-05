@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::node_arena::NodeId;
+use crate::{EdgeInfo, node_arena::NodeId};
 
 pub struct PUCTEdge {
     visits: AtomicU32,
@@ -69,5 +69,29 @@ impl PUCTEdge {
 
     pub fn virtual_visits(&self) -> u32 {
         self.virtual_visits.load(Ordering::Acquire)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct EdgeView<A, SS> {
+    pub edge_index: usize,
+    pub action: A,
+    pub policy_prior: f32,
+    pub visits: u32,
+    pub snapshot: Option<SS>,
+}
+
+impl<A, SS> From<EdgeInfo<'_, A, SS>> for EdgeView<A, SS>
+where
+    A: Clone,
+{
+    fn from(info: EdgeInfo<'_, A, SS>) -> Self {
+        Self {
+            edge_index: info.edge_index,
+            action: info.action.clone(),
+            policy_prior: info.policy_prior,
+            visits: info.visits,
+            snapshot: info.snapshot,
+        }
     }
 }

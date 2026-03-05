@@ -19,7 +19,7 @@ use crate::selection_policy::SelectionPolicy;
 use crate::selection_policy::{EdgeScore, SelectionPolicyScoring};
 use crate::simulate::Simulator;
 use crate::value_model::ValueModel;
-use crate::{NodeInfo, SimulationStep};
+use crate::{EdgeView, NodeInfo, SimulationStep};
 use common::TranspositionHash;
 use engine::GameEngine;
 use model::GameAnalyzer;
@@ -30,15 +30,6 @@ type PuctStore<E, VM> = NodeGraphStore<<E as GameEngine>::Action, RollupOf<VM>>;
 
 type SimMsgOf<E, VM> = SimMsg<<E as GameEngine>::State, SnapshotOf<VM>>;
 type SimTx<E, VM> = channel::Sender<SimMsgOf<E, VM>>;
-
-#[derive(Clone, Debug)]
-pub struct EdgeView<A, SS> {
-    pub edge_index: usize,
-    pub action: A,
-    pub policy_prior: f32,
-    pub visits: u32,
-    pub snapshot: Option<SS>,
-}
 
 pub struct PUCT<'a, E, M, VM, Sel>
 where
@@ -177,12 +168,7 @@ where
         );
 
         loop {
-            let visits = root_node.visits();
-            let virtual_visits = root_node.virtual_visits();
-            let snapshot = root_node.snapshot();
-            let root_info = NodeInfo::new(visits, virtual_visits, snapshot, max_depth as u32);
-
-            if !alive(root_info) {
+            if !alive(root_node.into()) {
                 break;
             }
 
@@ -269,18 +255,7 @@ where
 
         let node = self.store.state_node(node_id);
         node.ensure_frontier_edge();
-        Some(
-            self.store
-                .iter_edge_info(node)
-                .map(|e| EdgeView {
-                    edge_index: e.edge_index,
-                    action: e.action.clone(),
-                    policy_prior: e.policy_prior,
-                    visits: e.visits,
-                    snapshot: e.snapshot,
-                })
-                .collect(),
-        )
+        Some(self.store.iter_edge_info(node).map(|e| e.into()).collect())
     }
 
     /// Computes per-edge PUCT scores for the given node, using the active selection policy.
@@ -300,14 +275,10 @@ where
         node.ensure_frontier_edge();
 
         self.selection_strategy.score_edges(
-            NodeInfo {
-                visits: node.visits(),
-                virtual_visits: node.virtual_visits(),
-                depth,
-                snapshot: node.snapshot(),
-            },
+            node.into(),
             self.store.iter_edge_info(node),
             game_state,
+            depth,
         )
     }
 
@@ -316,9 +287,8 @@ where
         let node_id = self.store.get_node_id(transposition_hash)?;
 
         let node = self.store.state_node(node_id);
-        let snapshot = node.snapshot();
-        let v_visits = node.virtual_visits();
-        Some(NodeInfo::new(node.visits(), v_visits, snapshot, 0))
+
+        Some(node.into())
     }
 
     fn get_or_create_state_node(&mut self, game_state: &E::State) -> NodeId {

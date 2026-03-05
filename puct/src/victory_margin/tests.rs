@@ -276,7 +276,6 @@ where
         NodeInfo {
             visits: node_visits,
             virtual_visits: 0,
-            depth,
             snapshot: node_snapshot.unwrap_or_default(),
         },
         edges.iter().map(|e| EdgeInfo {
@@ -288,6 +287,7 @@ where
             snapshot: e.snapshot,
         }),
         state,
+        depth,
     )
 }
 
