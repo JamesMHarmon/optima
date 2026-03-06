@@ -23,6 +23,14 @@ impl<Te> Reporter<Te> {
         self.inner
             .max_batch_size
             .fetch_max(analysis_len, Ordering::Relaxed);
+
+        self.inner
+            .total_batch_size
+            .fetch_add(analysis_len, Ordering::Relaxed);
+
+        self.inner
+            .batch_count
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn set_cache_hit(&self) {
@@ -61,6 +69,8 @@ pub struct ReporterInner<Te> {
     num_nodes_analysed: AtomicUsize,
     min_batch_size: AtomicUsize,
     max_batch_size: AtomicUsize,
+    total_batch_size: AtomicUsize,
+    batch_count: AtomicUsize,
     cache_misses: AtomicUsize,
     cache_hits: AtomicUsize,
     predict_in_flight: AtomicUsize,
@@ -76,6 +86,8 @@ impl<Te> ReporterInner<Te> {
         let num_nodes_analysed = AtomicUsize::new(0);
         let min_batch_size = AtomicUsize::new(usize::MAX);
         let max_batch_size = AtomicUsize::new(0);
+        let total_batch_size = AtomicUsize::new(0);
+        let batch_count = AtomicUsize::new(0);
         let cache_misses = AtomicUsize::new(0);
         let cache_hits = AtomicUsize::new(0);
         let predict_in_flight = AtomicUsize::new(0);
@@ -88,6 +100,8 @@ impl<Te> ReporterInner<Te> {
             num_nodes_analysed,
             min_batch_size,
             max_batch_size,
+            total_batch_size,
+            batch_count,
             cache_misses,
             cache_hits,
             predict_in_flight,
@@ -114,7 +128,7 @@ impl<Te> ReporterInner<Te> {
         let num_transpo_nodes =
             transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
         let cache_hits = transposition_hits.map_or(0, |(_entries, _capacity, hits, _misses)| hits);
-        let (min_batch_size_raw, max_batch_size) = self.take_min_max_batch_size();
+        let (min_batch_size_raw, avg_batch_size, max_batch_size) = self.take_min_max_batch_size();
         let min_batch_size = if min_batch_size_raw == usize::MAX {
             0
         } else {
@@ -127,10 +141,11 @@ impl<Te> ReporterInner<Te> {
 
         if self.last_report_had_nodes.load(Ordering::Relaxed) || total_nps > 0.0 {
             info!(
-                "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Min Batch Size: {min_batch_size}, Max Batch Size: {max_batch_size}",
+                "NPS: {total_nps:.2}, Infered NPS: {infer_nps:.2}, Batch Size Min: {min_batch_size}, Avg: {avg_batch_size}, Max: {max_batch_size}",
                 total_nps = total_nps,
                 infer_nps = infer_nps,
                 min_batch_size = min_batch_size,
+                avg_batch_size = avg_batch_size,
                 max_batch_size = max_batch_size
             );
             if let Some((entries, capacity, hits, misses)) = transposition_hits {
@@ -173,11 +188,13 @@ impl<Te> ReporterInner<Te> {
         self.num_nodes_analysed.swap(0, Ordering::Relaxed)
     }
 
-    fn take_min_max_batch_size(&self) -> (usize, usize) {
-        (
-            self.min_batch_size.swap(usize::MAX, Ordering::Relaxed),
-            self.max_batch_size.swap(0, Ordering::Relaxed),
-        )
+    fn take_min_max_batch_size(&self) -> (usize, usize, usize) {
+        let min = self.min_batch_size.swap(usize::MAX, Ordering::Relaxed);
+        let max = self.max_batch_size.swap(0, Ordering::Relaxed);
+        let total = self.total_batch_size.swap(0, Ordering::Relaxed);
+        let count = self.batch_count.swap(0, Ordering::Relaxed);
+        let avg = if count > 0 { total / count } else { 0 };
+        (min, avg, max)
     }
 
     fn take_transposition_hits(&self) -> Option<(usize, usize, usize, usize)> {
