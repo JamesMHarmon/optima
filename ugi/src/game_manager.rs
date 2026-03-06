@@ -310,13 +310,16 @@ where
                     self.display_board(&game_state);
                 }
                 CommandInner::Ponder => {
-                    let (visits, max_visits);
+                    let (visits, max_visits, parallelism);
 
                     {
                         let options_lock = options.lock().unwrap();
                         visits = options_lock.visits;
                         max_visits = options_lock.max_visits;
+                        parallelism = options_lock.parallelism;
                     }
+
+                    mcts.set_parallelism(parallelism);
 
                     if visits == 0 {
                         let start_time = Instant::now();
@@ -455,6 +458,7 @@ where
                         options_visits,
                         options_max_visits,
                         options_alternative_action_threshold,
+                        options_parallelism,
                         search_duration,
                     );
 
@@ -463,12 +467,15 @@ where
                         options_visits = options.visits;
                         options_max_visits = options.max_visits;
                         options_alternative_action_threshold = options.alternative_action_threshold;
+                        options_parallelism = options.parallelism;
                         search_duration = self.time_strategy.search_duration(
                             &options,
                             &focus_game_state,
                             current_player,
                         );
                     }
+
+                    mcts.set_parallelism(options_parallelism);
 
                     let search_active = Arc::clone(&self.search_active);
                     let mut actions = Vec::new();

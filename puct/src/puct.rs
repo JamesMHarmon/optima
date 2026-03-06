@@ -87,6 +87,11 @@ where
         }
     }
 
+    pub fn set_virtual_sims(&mut self, virtual_sims: usize) {
+        let virtual_sims = virtual_sims.max(1);
+        self.virtual_sims = virtual_sims;
+    }
+
     pub fn prune(&mut self, game_state: &E::State) {
         let transposition_hash = game_state.transposition_hash();
         self.store.prune_to_transposition_hash(transposition_hash);

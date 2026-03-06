@@ -91,6 +91,10 @@ where
         }
     }
 
+    pub fn set_parallelism(&mut self, parallelism: usize) {
+        self.puct.set_virtual_sims(parallelism);
+    }
+
     pub fn apply_noise_at_root(&mut self, dirichlet: Option<&DirichletOptions>) {
         if let Some(dirichlet) = dirichlet {
             self.puct.apply_noise_at_state(&self.state, dirichlet);
