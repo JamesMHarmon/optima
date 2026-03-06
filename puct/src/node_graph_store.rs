@@ -132,8 +132,9 @@ where
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            // If the child exists but isn't yet linked, link it. Use a race safe compare-and-set.
-            edge.try_set_child(*existing_id).ok().map(|_| *existing_id)
+            // Link it if not already linked. Return the existing node either way.
+            let _ = edge.try_set_child(*existing_id);
+            Some(*existing_id)
         } else {
             None
         }
@@ -163,3 +164,6 @@ where
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests;
