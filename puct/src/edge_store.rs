@@ -65,6 +65,18 @@ impl<A> EdgeStore<A> {
         }
 
         self.materialize_next_edge();
+
+        // Spin-wait for any in-flight push from a racing thread to become visible.
+        //
+        // Race: Thread A extracts from the heap (heap_len Release → remaining drops to 0)
+        // then is about to call edges.push. Thread B reads remaining == 0, skips its own
+        // push, and proceeds directly to selection. Thread B's Acquire on heap_len
+        // synchronizes with A's extract but NOT with A's separate push CAS.
+        //
+        // The spin terminates because AppendOnlyVec::push always commits its CAS.
+        while self.heap.extracted_len() != self.edges.len() {
+            std::hint::spin_loop();
+        }
     }
 
     #[inline]
