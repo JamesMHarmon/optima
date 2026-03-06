@@ -72,7 +72,7 @@ where
         let virtual_sims = virtual_sims.max(1);
         let sim_threads = sim_threads.max(1);
         let store: PuctStore<E, VM> = NodeGraphStore::new();
-        let context_pool = SearchContextPool::new(virtual_sims * sim_threads);
+        let context_pool = SearchContextPool::new(virtual_sims * 2);
 
         Self {
             game_engine,
@@ -109,8 +109,7 @@ where
         Alive: Fn(NodeInfo<SnapshotOf<VM>>) -> bool + Send + Sync,
     {
         let sim_id = Arc::new(AtomicUsize::new(0));
-        let total_capacity = self.virtual_sims * self.sim_threads;
-        let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(total_capacity);
+        let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(self.virtual_sims);
         let mut max_depth = 0;
 
         thread::scope(|s| {
