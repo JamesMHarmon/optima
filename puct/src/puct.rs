@@ -10,7 +10,6 @@ use rand::thread_rng;
 use rand_distr::Dirichlet;
 
 use super::node_graph_store::NodeGraphStore;
-use crate::analysis_coordinator::AnalysisCoordinator;
 use crate::backprop::{Backpropagator, SimMsg};
 use crate::node_arena::NodeId;
 use crate::options::DirichletOptions;
@@ -111,7 +110,6 @@ where
     {
         let sim_id = Arc::new(AtomicUsize::new(0));
         let total_capacity = self.virtual_sims * self.sim_threads;
-        let coordinator = AnalysisCoordinator::new(self.analyzer, total_capacity);
         let (tx, rx) = channel::bounded::<SimMsgOf<E, VM>>(total_capacity);
         let mut max_depth = 0;
 
@@ -119,20 +117,16 @@ where
             let analyzer = self.analyzer;
             let store = &self.store;
             let value_model = self.value_model;
-            let coordinator = &coordinator;
             let alive = &alive;
 
-            let backprop_handle = s.spawn(move || {
-                let backprop = Backpropagator::new(analyzer, store, value_model, coordinator, rx);
-                backprop.run();
-            });
+            let backprop_handle =
+                s.spawn(move || Backpropagator::new(analyzer, store, value_model, rx).run());
 
             let mut sim_handles = Vec::with_capacity(self.sim_threads);
             for _ in 0..self.sim_threads {
                 let tx = tx.clone();
                 let sim_id = sim_id.clone();
-                let handle =
-                    s.spawn(move || self.run_sim(root, game_state, alive, tx, coordinator, sim_id));
+                let handle = s.spawn(move || self.run_sim(root, game_state, alive, tx, sim_id));
                 sim_handles.push(handle);
             }
 
@@ -156,7 +150,6 @@ where
         game_state: &E::State,
         alive: &Alive,
         tx: SimTx<E, VM>,
-        coordinator: &AnalysisCoordinator<M>,
         sim_id: Arc<AtomicUsize>,
     ) -> usize
     where
@@ -181,18 +174,13 @@ where
             let step = simulator.simulate_once(root, game_state.clone(), current_sim_id);
             max_depth = max(max_depth, step.depth());
 
-            self.handle_step(step, &tx, coordinator);
+            self.handle_step(step, &tx);
         }
 
         max_depth
     }
 
-    fn handle_step(
-        &self,
-        step: SimulationStep<E::State, E::Terminal>,
-        tx: &SimTx<E, VM>,
-        coordinator: &AnalysisCoordinator<M>,
-    ) {
+    fn handle_step(&self, step: SimulationStep<E::State, E::Terminal>, tx: &SimTx<E, VM>) {
         let msg = match step {
             SimulationStep::Terminal(step) => {
                 let terminal_snapshot = self.value_model.terminal_snapshot(&step.terminal);
@@ -200,10 +188,12 @@ where
                 SimMsg::new_terminal(step.sim_id, step.path, terminal_snapshot)
             }
             SimulationStep::NewLeaf(step) => {
-                coordinator.analyze(step.game_state.clone());
+                self.analyzer
+                    .send(step.game_state.transposition_hash(), &step.game_state);
 
                 SimMsg::new_state(step.sim_id, step.game_state, step.path)
             }
+            SimulationStep::Preempted(step) => SimMsg::new_preempted(step.sim_id, step.path),
         };
 
         let _ = tx.send(msg);

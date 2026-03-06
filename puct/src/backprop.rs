@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crossbeam::channel::Receiver;
+use log::warn;
 
+use crate::edge::PUCTEdge;
 use crate::node_arena::NodeId;
 use crate::node_graph_store::NodeGraphStore;
 use crate::rollup::RollupStats;
 use crate::search_context::PathStep;
 use crate::value_model::ValueModel;
-use crate::{analysis_coordinator::AnalysisCoordinator, edge::PUCTEdge};
 use common::TranspositionHash;
 use model::{GameAnalyzer, GameStateAnalysis, RequestId};
 
@@ -35,7 +36,6 @@ where
     analyzer: &'a M,
     store: &'a PuctStore<M, RollupOf<VM>>,
     value_model: &'a VM,
-    coordinator: &'a AnalysisCoordinator<'a, M>,
     rx: SimRx<M::State, SnapshotOf<VM>>,
 
     analysis_buffer: HashMap<RequestId, GameStateAnalysis<M::Action, M::Predictions>>,
@@ -55,14 +55,12 @@ where
         analyzer: &'a M,
         store: &'a PuctStore<M, RollupOf<VM>>,
         value_model: &'a VM,
-        coordinator: &'a AnalysisCoordinator<'a, M>,
         rx: SimRx<M::State, SnapshotOf<VM>>,
     ) -> Self {
         Self {
             analyzer,
             store,
             value_model,
-            coordinator,
             rx,
 
             analysis_buffer: HashMap::new(),
@@ -84,10 +82,13 @@ where
                     let last_step = sim.last_step();
 
                     let hash = sim.game_state.transposition_hash();
-                    self.coordinator.complete(hash);
 
-                    // Check if another simulation has already expanded this node and backpropagated the path, so we can skip it.
+                    // Should rarely happen if ever in practice.
                     if store.get_node_id(hash).is_some() {
+                        warn!(
+                            "Sim {} reached already-known hash {:x}; skipping",
+                            sim.sim_id, hash
+                        );
                         self.remove_virtual_loss(&sim.path);
                         continue;
                     }
@@ -102,6 +103,9 @@ where
                     self.link_state_node(last_step.node_id, last_step.edge_index, new_node_id);
 
                     self.commit_path(&sim.path, new_node_id);
+                }
+                SimMsg::Preempted(sim) => {
+                    self.remove_virtual_loss(&sim.path);
                 }
             }
         }
@@ -251,10 +255,18 @@ pub(super) struct StateSimMsg<S> {
     pub(super) path: Vec<PathStep>,
 }
 
+/// Message sent from the simulation thread to the backprop thread when another
+/// sim preempted this sim at the leaf position. Backprop removes the virtual loss in order.
+pub(super) struct PreemptedSimMsg {
+    pub(super) sim_id: usize,
+    pub(super) path: Vec<PathStep>,
+}
+
 /// Message sent from the simulation thread to the backprop thread.
 pub(super) enum SimMsg<S, TS> {
     Terminal(TerminalSimMsg<TS>),
     State(StateSimMsg<S>),
+    Preempted(PreemptedSimMsg),
 }
 
 impl<S, TS> SimMsg<S, TS> {
@@ -274,10 +286,15 @@ impl<S, TS> SimMsg<S, TS> {
         })
     }
 
+    pub(super) fn new_preempted(sim_id: usize, path: Vec<PathStep>) -> Self {
+        SimMsg::Preempted(PreemptedSimMsg { sim_id, path })
+    }
+
     fn sim_id(&self) -> usize {
         match self {
             Self::Terminal(msg) => msg.sim_id,
             Self::State(msg) => msg.sim_id,
+            Self::Preempted(msg) => msg.sim_id,
         }
     }
 }

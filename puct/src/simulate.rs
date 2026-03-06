@@ -3,7 +3,7 @@ use engine::GameEngine;
 
 use crate::node::StateNode;
 use crate::node_arena::NodeId;
-use crate::node_graph_store::NodeGraphStore;
+use crate::node_graph_store::{LeafResult, NodeGraphStore};
 use crate::rollup::RollupStats;
 use crate::selection_policy::SelectionPolicy;
 use crate::{PathStep, SearchContextPool, SelectionResult, SimulationStep};
@@ -66,6 +66,11 @@ where
                 leaf_res.game_state,
                 leaf_res.depth,
             ),
+            SelectionResult::Preempted(preempted_res) => SimulationStep::new_preempted(
+                sim_id,
+                preempted_res.path().to_vec(),
+                preempted_res.depth,
+            ),
         }
     }
 
@@ -113,12 +118,17 @@ where
                 return SelectionResult::new_terminal(ctx, term_state, depth);
             }
 
-            if let Some(child_id) = store.get_or_link_transposition_safe(edge, transposition_hash) {
-                current = child_id;
-                continue;
+            match store.link_or_try_claim(edge, transposition_hash) {
+                LeafResult::Known(child_id) => {
+                    current = child_id;
+                }
+                LeafResult::Claimed => {
+                    return SelectionResult::new_leaf(ctx, game_state, depth);
+                }
+                LeafResult::Preempted => {
+                    return SelectionResult::new_preempted(ctx, depth);
+                }
             }
-
-            return SelectionResult::new_leaf(ctx, game_state, depth);
         }
     }
 

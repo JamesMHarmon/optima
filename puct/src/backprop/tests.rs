@@ -114,6 +114,7 @@ fn path_sim_id(msg: &SimMsg<DummyState, DummySnapshot>) -> usize {
     let path = match msg {
         SimMsg::Terminal(msg) => &msg.path,
         SimMsg::State(msg) => &msg.path,
+        SimMsg::Preempted(msg) => &msg.path,
     };
 
     path.first().expect("path is not empty").node_id.as_u32() as usize
@@ -126,9 +127,8 @@ fn make_backprop(
     let analyzer = Box::leak(Box::new(DummyAnalyzer));
     let value_model = Box::leak(Box::new(DummyValueModel));
     let store = Box::leak(Box::new(NodeGraphStore::<(), DummyRollup>::new()));
-    let coordinator = Box::leak(Box::new(AnalysisCoordinator::new(analyzer, 16)));
 
-    Backpropagator::new(analyzer, store, value_model, coordinator, rx)
+    Backpropagator::new(analyzer, store, value_model, rx)
 }
 
 fn one_action_prior() -> Vec<ActionWithPolicy<()>> {

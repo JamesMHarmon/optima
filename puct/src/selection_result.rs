@@ -3,6 +3,7 @@ use crate::search_context::{PathStep, SearchContextGuard};
 pub(super) enum SelectionResult<S, T> {
     Terminal(TerminalSelectionResult<T>),
     Leaf(LeafSelectionResult<S>),
+    Preempted(PreemptedSelectionResult),
 }
 
 impl<S, T> SelectionResult<S, T> {
@@ -12,6 +13,10 @@ impl<S, T> SelectionResult<S, T> {
 
     pub(super) fn new_leaf(context: SearchContextGuard, game_state: S, depth: usize) -> Self {
         Self::Leaf(LeafSelectionResult::new(context, game_state, depth))
+    }
+
+    pub(super) fn new_preempted(context: SearchContextGuard, depth: usize) -> Self {
+        Self::Preempted(PreemptedSelectionResult::new(context, depth))
     }
 }
 
@@ -55,12 +60,29 @@ impl<S> LeafSelectionResult<S> {
     }
 }
 
+pub(super) struct PreemptedSelectionResult {
+    context: SearchContextGuard,
+    pub(super) depth: usize,
+}
+
+impl PreemptedSelectionResult {
+    fn new(context: SearchContextGuard, depth: usize) -> Self {
+        Self { context, depth }
+    }
+
+    pub(super) fn path(&self) -> &[PathStep] {
+        &self.context.get_ref().path
+    }
+}
+
 /// Describes the outcome of one simulation step.
 pub(super) enum SimulationStep<S, T> {
     /// The leaf was a terminal state
     Terminal(TerminalStep<T>),
-    /// A previously-unseen position was reached.
+    /// A previously-unseen position was reached and claimed by this sim.
     NewLeaf(NewLeafStep<S>),
+    /// This sim was preempted — another sim already claimed this leaf position.
+    Preempted(PreemptedStep),
 }
 
 impl<S, T> SimulationStep<S, T> {
@@ -68,6 +90,7 @@ impl<S, T> SimulationStep<S, T> {
         match self {
             Self::Terminal(s) => s.depth,
             Self::NewLeaf(s) => s.depth,
+            Self::Preempted(s) => s.depth,
         }
     }
 
@@ -87,6 +110,10 @@ impl<S, T> SimulationStep<S, T> {
         depth: usize,
     ) -> Self {
         SimulationStep::NewLeaf(NewLeafStep::new(sim_id, path, game_state, depth))
+    }
+
+    pub(super) fn new_preempted(sim_id: usize, path: Vec<PathStep>, depth: usize) -> Self {
+        SimulationStep::Preempted(PreemptedStep::new(sim_id, path, depth))
     }
 }
 
@@ -121,6 +148,22 @@ impl<S> NewLeafStep<S> {
             sim_id,
             path,
             game_state,
+            depth,
+        }
+    }
+}
+
+pub(super) struct PreemptedStep {
+    pub(super) sim_id: usize,
+    pub(super) path: Vec<PathStep>,
+    pub(super) depth: usize,
+}
+
+impl PreemptedStep {
+    fn new(sim_id: usize, path: Vec<PathStep>, depth: usize) -> Self {
+        Self {
+            sim_id,
+            path,
             depth,
         }
     }

@@ -7,7 +7,7 @@ use crate::prune::rebuild_from_root;
 use crate::rollup::RollupStats;
 use crate::selection_policy::EdgeInfo;
 use crate::terminal_node::Terminal;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use model::ActionWithPolicy;
 
 /// Owns the node arena together with its transposition index.
@@ -17,6 +17,8 @@ where
 {
     arena: NodeArena<StateNode<A, R>, AfterState, Terminal<R>>,
     transposition_table: DashMap<u64, NodeId>,
+    /// Hashes claimed by a sim that is currently awaiting neural-net expansion.
+    pending: DashSet<u64>,
 }
 
 impl<A, R> NodeGraphStore<A, R>
@@ -27,6 +29,7 @@ where
         Self {
             arena: NodeArena::new(),
             transposition_table: DashMap::new(),
+            pending: DashSet::new(),
         }
     }
 
@@ -74,6 +77,9 @@ where
             "Transposition table entry for hash already exists"
         );
 
+        // Release the pending claim now that the node is in the table.
+        self.pending.remove(&transposition_hash);
+
         new_node_id
     }
 
@@ -117,26 +123,33 @@ where
             .map(|v| *v)
     }
 
-    /// Get child from edge if cached, otherwise lookup in transposition table and link.
-    /// Returns None if this is a new position that needs expansion.
-    /// This operation is atomic and safe to call for reader threads during selection.
-    pub(super) fn get_or_link_transposition_safe(
-        &self,
-        edge: &PUCTEdge,
-        transposition_hash: u64,
-    ) -> Option<NodeId> {
+    /// Determine what a sim should do upon reaching a position with `transposition_hash`.
+    ///
+    /// - [`LeafResult::Known`]: the node is already in the tree; keep traversing.
+    /// - [`LeafResult::Claimed`]: this sim won the atomic claim; it must send
+    ///   `SimMsg::State` and call [`create_and_insert_state_node`] once analysis
+    ///   completes (which releases the claim).
+    /// - [`LeafResult::Preempted`]: another sim already claimed this hash;
+    ///   this sim should send `SimMsg::Preempted` so backprop removes its virtual loss
+    ///   in order.
+    pub(super) fn link_or_try_claim(&self, edge: &PUCTEdge, transposition_hash: u64) -> LeafResult {
         let graph = self.graph();
 
         if let Some(nested_child_id) = graph.get_edge_state_with_hash(edge, transposition_hash) {
-            return Some(nested_child_id);
+            return LeafResult::Known(nested_child_id);
         }
 
         if let Some(existing_id) = self.transposition_table.get(&transposition_hash) {
-            // Link it if not already linked. Return the existing node either way.
+            // Node is in the tree; link edge and keep traversing.
             let _ = edge.try_set_child(*existing_id);
-            Some(*existing_id)
+            return LeafResult::Known(*existing_id);
+        }
+
+        // Position is genuinely new. Race to claim it.
+        if self.pending.insert(transposition_hash) {
+            LeafResult::Claimed
         } else {
-            None
+            LeafResult::Preempted
         }
     }
 
@@ -150,6 +163,7 @@ where
 
     fn rebuild_transpositions(&self, transpositions: Vec<(u64, NodeId)>) {
         self.transposition_table.clear();
+        self.pending.clear();
         for (hash, node_id) in transpositions {
             self.transposition_table.insert(hash, node_id);
         }
@@ -163,6 +177,16 @@ where
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Outcome of [`NodeGraphStore::link_or_try_claim`].
+pub(super) enum LeafResult {
+    /// The node is already in the tree. The edge has been linked.
+    Known(NodeId),
+    /// This sim is the first to reach this hash — it should send `SimMsg::State`.
+    Claimed,
+    /// Another sim already claimed this hash and will expand it; this sim is preempted.
+    Preempted,
 }
 
 #[cfg(test)]

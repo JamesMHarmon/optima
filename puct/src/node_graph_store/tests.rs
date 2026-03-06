@@ -56,42 +56,42 @@ fn make_store_with_node(hash: u64) -> (TestStore, NodeId) {
     (store, node_id)
 }
 
-/// When the transposition table has no entry for the hash, returns None
+/// When the transposition table has no entry for the hash, returns Claimed
 /// (genuinely new leaf that needs expansion).
 #[test]
-fn returns_none_when_hash_not_in_transposition_table() {
+fn returns_claimed_when_hash_not_in_transposition_table() {
     let store = TestStore::new();
     let edge = PUCTEdge::new();
 
-    assert_eq!(
-        store.get_or_link_transposition_safe(&edge, 0xdeadbeef),
-        None
-    );
+    assert!(matches!(
+        store.link_or_try_claim(&edge, 0xdeadbeef),
+        LeafResult::Claimed
+    ));
 }
 
 /// When the hash is in the transposition table and the edge is unlinked,
-/// links the edge and returns the correct NodeId.
+/// links the edge and returns Known(node_id).
 #[test]
-fn links_edge_and_returns_node_when_hash_known_and_edge_unlinked() {
+fn links_edge_and_returns_known_when_hash_known_and_edge_unlinked() {
     let (store, node_id) = make_store_with_node(42);
     let edge = PUCTEdge::new();
 
-    let result = store.get_or_link_transposition_safe(&edge, 42);
+    let result = store.link_or_try_claim(&edge, 42);
 
-    assert_eq!(result, Some(node_id));
+    assert!(matches!(result, LeafResult::Known(id) if id == node_id));
     assert_eq!(edge.child(), Some(node_id));
 }
 
 /// Regression test for the original CAS bug:
 /// When the hash is in the transposition table but the edge was ALREADY linked
 /// by a racing thread (try_set_child CAS would fail), the function must still
-/// return Some(node_id) rather than None.
+/// return Known(node_id) rather than Claimed or Preempted.
 ///
 /// The old code was: `edge.try_set_child(*existing_id).ok().map(|_| *existing_id)`
 /// which turned the Err (CAS lost the race) into None, making the sim think it
 /// had found a new leaf and sending a spurious SimMsg::State.
 #[test]
-fn returns_node_even_when_edge_already_linked_by_racing_thread() {
+fn returns_known_even_when_edge_already_linked_by_racing_thread() {
     let (store, node_id) = make_store_with_node(42);
     let edge = PUCTEdge::new();
 
@@ -99,20 +99,18 @@ fn returns_node_even_when_edge_already_linked_by_racing_thread() {
     edge.set_child(node_id);
 
     // Despite the CAS that try_set_child would perform internally failing,
-    // the result must be Some — not None.
-    let result = store.get_or_link_transposition_safe(&edge, 42);
+    // the result must be Known — not Claimed or Preempted.
+    let result = store.link_or_try_claim(&edge, 42);
 
-    assert_eq!(result, Some(node_id));
+    assert!(matches!(result, LeafResult::Known(id) if id == node_id));
 }
 
-/// Two threads calling get_or_link_transposition_safe on the same unlinked edge
-/// concurrently must both get back Some(node_id) — never None.
+/// One thread gets Claimed, all others get Preempted — never an incorrect
+/// Known or a second Claimed.
 #[test]
-fn concurrent_calls_both_return_some() {
+fn concurrent_calls_one_claims_rest_are_preempted() {
     let store = Arc::new(TestStore::new());
-    let node_id = store.create_and_insert_state_node(99, one_prior(), DummySnapshot(0).into());
-    store.state_node(node_id).ensure_frontier_edge();
-
+    // Don't insert into transposition_table — all callers see a genuinely new hash.
     let edge = Arc::new(PUCTEdge::new());
     const THREADS: usize = 64;
 
@@ -120,15 +118,24 @@ fn concurrent_calls_both_return_some() {
         .map(|_| {
             let store = Arc::clone(&store);
             let edge = Arc::clone(&edge);
-            thread::spawn(move || store.get_or_link_transposition_safe(&edge, 99))
+            thread::spawn(move || store.link_or_try_claim(&edge, 99))
         })
         .collect();
 
+    let mut claimed = 0usize;
+    let mut preempted = 0usize;
     for handle in handles {
-        assert_eq!(
-            handle.join().unwrap(),
-            Some(node_id),
-            "every concurrent caller must get Some(node_id), never None"
-        );
+        match handle.join().unwrap() {
+            LeafResult::Claimed => claimed += 1,
+            LeafResult::Preempted => preempted += 1,
+            LeafResult::Known(_) => panic!("unexpected Known — hash was never inserted"),
+        }
     }
+
+    assert_eq!(claimed, 1, "exactly one thread must win the claim");
+    assert_eq!(
+        preempted,
+        THREADS - 1,
+        "all other threads must be Preempted"
+    );
 }
