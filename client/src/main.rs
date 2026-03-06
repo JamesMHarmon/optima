@@ -10,13 +10,13 @@ use dotenv::dotenv;
 use env_logger::Env;
 use game::{Engine, ModelFactory, ModelRef, TimeStrategy, UGI};
 use model::Load;
-#[cfg(any(feature = "connect4", feature = "arimaa"))]
+#[cfg(moves_left_game)]
 use puct::{MovesLeftSelectionPolicy, MovesLeftStrategyOptions, MovesLeftValueModel};
 
-#[cfg(feature = "connect4")]
+#[cfg(connect4_game)]
 use puct::NoTrajectoryTerminal;
 
-#[cfg(feature = "quoridor")]
+#[cfg(quoridor_game)]
 use puct::{VictoryMarginSelectionPolicy, VictoryMarginStrategyOptions, VictoryMarginValueModel};
 use self_play::{SelfPlayOptions, SelfPlayPersistance, play_self};
 use std::borrow::Cow;
@@ -64,7 +64,7 @@ fn run(cli: Cli) -> Result<()> {
                 play_options.cpuct_root_scaling,
             );
 
-            #[cfg(feature = "connect4")]
+            #[cfg(connect4_game)]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
@@ -80,7 +80,7 @@ fn run(cli: Cli) -> Result<()> {
                 ),
             );
 
-            #[cfg(feature = "arimaa")]
+            #[cfg(arimaa_game)]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
@@ -96,7 +96,7 @@ fn run(cli: Cli) -> Result<()> {
                 ),
             );
 
-            #[cfg(feature = "quoridor")]
+            #[cfg(quoridor_game)]
             let (value_model, selection_policy) = (
                 VictoryMarginValueModel::new(),
                 VictoryMarginSelectionPolicy::new(
@@ -148,7 +148,7 @@ fn run(cli: Cli) -> Result<()> {
             let candidate_factory = ModelFactory::new(candidates_dir);
             let engine = Engine::new();
 
-            #[cfg(feature = "connect4")]
+            #[cfg(connect4_game)]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
@@ -164,7 +164,7 @@ fn run(cli: Cli) -> Result<()> {
                 ),
             );
 
-            #[cfg(feature = "arimaa")]
+            #[cfg(arimaa_game)]
             let (value_model, selection_policy) = (
                 MovesLeftValueModel::new(),
                 MovesLeftSelectionPolicy::new(
@@ -180,7 +180,7 @@ fn run(cli: Cli) -> Result<()> {
                 ),
             );
 
-            #[cfg(feature = "quoridor")]
+            #[cfg(quoridor_game)]
             let (value_model, selection_policy) = (
                 VictoryMarginValueModel::new(),
                 VictoryMarginSelectionPolicy::new(
@@ -242,7 +242,7 @@ fn run(cli: Cli) -> Result<()> {
                 )
             };
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            #[cfg(moves_left_game)]
             let selection_strategy_opts = |options: &UGIOptions| MovesLeftStrategyOptions {
                 fpu: options.fpu,
                 fpu_root: options.fpu_root,
@@ -251,10 +251,10 @@ fn run(cli: Cli) -> Result<()> {
                 moves_left_factor: options.moves_left_factor,
             };
 
-            #[cfg(any(feature = "connect4", feature = "arimaa"))]
+            #[cfg(moves_left_game)]
             let value_model = move |_options: &UGIOptions| MovesLeftValueModel::new();
 
-            #[cfg(feature = "connect4")]
+            #[cfg(connect4_game)]
             let selection_strategy = move |options: &UGIOptions| {
                 MovesLeftSelectionPolicy::new(
                     cpuct(options),
@@ -263,7 +263,7 @@ fn run(cli: Cli) -> Result<()> {
                 )
             };
 
-            #[cfg(feature = "arimaa")]
+            #[cfg(arimaa_game)]
             let selection_strategy = move |options: &UGIOptions| {
                 MovesLeftSelectionPolicy::new(
                     cpuct(options),
@@ -272,7 +272,7 @@ fn run(cli: Cli) -> Result<()> {
                 )
             };
 
-            #[cfg(feature = "quoridor")]
+            #[cfg(quoridor_game)]
             let selection_strategy_opts = |options: &UGIOptions| VictoryMarginStrategyOptions {
                 fpu: options.fpu,
                 fpu_root: options.fpu_root,
@@ -280,10 +280,10 @@ fn run(cli: Cli) -> Result<()> {
                 victory_margin_factor: options.victory_margin_factor,
             };
 
-            #[cfg(feature = "quoridor")]
+            #[cfg(quoridor_game)]
             let value_model = move |_options: &UGIOptions| VictoryMarginValueModel::new();
 
-            #[cfg(feature = "quoridor")]
+            #[cfg(quoridor_game)]
             let selection_strategy = move |options: &UGIOptions| {
                 VictoryMarginSelectionPolicy::new(
                     cpuct(options),

@@ -9,9 +9,89 @@ mod test {
     use puct::MovesLeftSnapshot;
 
     use crate::{
-        arimaa_sampler::{ArimaaPStore, ArimaaSampler},
+        q_mix::{PredictionStore, QMix},
         sample::PositionMetricsExtended,
     };
+
+    // Minimal PredictionStore for tests — stores one Value per player.
+    #[derive(Default)]
+    struct TestPStore {
+        player_value: [Option<Value>; 2],
+        game_length: Option<f32>,
+    }
+
+    impl PredictionStore for TestPStore {
+        type State = GameState;
+        type Predictions = Predictions;
+
+        fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
+            let player = game_state.player_to_move();
+            self.player_value[player - 1].as_ref().map(|value| {
+                Predictions::new(
+                    value.clone(),
+                    self.game_length
+                        .expect("Game length should be set before getting predictions"),
+                )
+            })
+        }
+
+        fn set_p_for_player(&mut self, game_state: &Self::State, prediction: Self::Predictions) {
+            let player = game_state.player_to_move();
+            self.player_value[player - 1] = Some(prediction.value().clone());
+            if self.game_length.is_none() {
+                self.game_length = Some(prediction.game_length());
+            }
+        }
+    }
+
+    // Minimal QMix for tests — mixes value and game_length linearly.
+    struct TestQMix;
+
+    impl QMix for TestQMix {
+        type State = GameState;
+        type Predictions = Predictions;
+        type Snapshot = MovesLeftSnapshot;
+
+        fn mix_q(
+            game_state: &Self::State,
+            post_blunder_prediction: &Self::Predictions,
+            pre_blunder_snapshot: &Self::Snapshot,
+            q_mix: f32,
+        ) -> Self::Predictions {
+            if q_mix == 0.0 {
+                return post_blunder_prediction.clone();
+            }
+            let player_to_move = game_state.player_to_move();
+
+            let pre_blunder_value = pre_blunder_snapshot.player_value(player_to_move);
+            let pre_blunder_game_length = pre_blunder_snapshot.game_length();
+
+            let post_blunder_value = post_blunder_prediction.player_value(player_to_move);
+            let post_blunder_game_length = post_blunder_prediction.game_length();
+
+            assert!(
+                (0.0..=1.0).contains(&q_mix),
+                "Q mix must be between 0.0 and 1.0"
+            );
+            assert!(
+                (0.0..=1.0).contains(&pre_blunder_value)
+                    && (0.0..=1.0).contains(&post_blunder_value),
+                "blunder_value must be between 0.0 and 1.0"
+            );
+            assert!(
+                post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,
+                "blunder_game_length must be gte 0"
+            );
+
+            let mixed_value = (1.0 - q_mix) * post_blunder_value + q_mix * pre_blunder_value;
+            let mixed_game_length =
+                (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
+
+            let mut value = post_blunder_prediction.value().clone();
+            value.update_players_value(player_to_move, mixed_value);
+            Predictions::new(value, mixed_game_length)
+        }
+    }
 
     type Metric = PositionMetricsExtended<GameState, Action, Predictions, MovesLeftSnapshot>;
     type MetricNode = NodeMetrics<Action, Predictions, MovesLeftSnapshot>;
@@ -19,7 +99,7 @@ mod test {
     type MetricPosition = PositionMetrics<GameState, Action, Predictions, MovesLeftSnapshot>;
 
     fn deblunder(metrics: &mut [Metric], q_diff_threshold: f32, q_diff_width: f32) {
-        crate::deblunder::deblunder::<_, _, _, _, ArimaaPStore, ArimaaSampler>(
+        crate::deblunder::deblunder::<_, _, _, _, TestPStore, TestQMix>(
             metrics,
             q_diff_threshold,
             q_diff_width,
@@ -857,7 +937,98 @@ mod test {
             Value as QValue,
         };
 
-        use crate::quoridor_sampler::{QuoridorSampler, QuoridorVStore};
+        #[derive(Default)]
+        struct TestPStoreQ {
+            player_value: [Option<QValue>; 2],
+            victory_margin: Option<f32>,
+            game_length: Option<f32>,
+        }
+
+        impl PredictionStore for TestPStoreQ {
+            type State = QGameState;
+            type Predictions = QPredictions;
+
+            fn get_p_for_player(&self, game_state: &Self::State) -> Option<Self::Predictions> {
+                let player = game_state.player_to_move();
+                self.player_value[player - 1].as_ref().map(|value| {
+                    QPredictions::new(
+                        value.clone(),
+                        self.victory_margin
+                            .expect("Victory margin should be set before getting predictions"),
+                        self.game_length
+                            .expect("Game length should be set before getting predictions"),
+                    )
+                })
+            }
+
+            fn set_p_for_player(
+                &mut self,
+                game_state: &Self::State,
+                prediction: Self::Predictions,
+            ) {
+                let player = game_state.player_to_move();
+                self.player_value[player - 1] = Some(prediction.value().clone());
+                if self.game_length.is_none() {
+                    self.game_length = Some(prediction.game_length());
+                }
+                if self.victory_margin.is_none() {
+                    self.victory_margin = Some(prediction.victory_margin());
+                }
+            }
+        }
+
+        struct TestQMixQ;
+
+        impl QMix for TestQMixQ {
+            type State = QGameState;
+            type Predictions = QPredictions;
+            type Snapshot = VictoryMarginSnapshot;
+
+            fn mix_q(
+                game_state: &Self::State,
+                post_blunder_prediction: &Self::Predictions,
+                pre_blunder_snapshot: &Self::Snapshot,
+                q_mix: f32,
+            ) -> Self::Predictions {
+                if q_mix == 0.0 {
+                    return post_blunder_prediction.clone();
+                }
+                assert!(
+                    (0.0..=1.0).contains(&q_mix),
+                    "Q mix must be between 0.0 and 1.0"
+                );
+                let player_to_move = game_state.player_to_move();
+
+                let pre_blunder_value = pre_blunder_snapshot.player_value(player_to_move);
+                let pre_blunder_victory_margin = pre_blunder_snapshot.victory_margin();
+                let pre_blunder_game_length = pre_blunder_snapshot.game_length();
+
+                let post_blunder_value = post_blunder_prediction.player_value(player_to_move);
+                let post_blunder_victory_margin = post_blunder_prediction.victory_margin();
+                let post_blunder_game_length = post_blunder_prediction.game_length();
+
+                assert!(
+                    (0.0..=1.0).contains(&pre_blunder_value)
+                        && (0.0..=1.0).contains(&post_blunder_value),
+                    "blunder_value must be between 0.0 and 1.0"
+                );
+                assert!(
+                    post_blunder_game_length >= 0.0 && pre_blunder_game_length >= 0.0,
+                    "blunder_game_length must be gte 0"
+                );
+
+                let mixed_value = (1.0 - q_mix) * post_blunder_value + q_mix * pre_blunder_value;
+                let mut new_mixed_value = post_blunder_prediction.value().clone();
+                new_mixed_value.update_players_value(player_to_move, mixed_value);
+
+                let mixed_victory_margin = (1.0 - q_mix) * post_blunder_victory_margin
+                    + q_mix * pre_blunder_victory_margin;
+                let mixed_game_length =
+                    (1.0 - q_mix) * post_blunder_game_length + q_mix * pre_blunder_game_length;
+
+                QPredictions::new(new_mixed_value, mixed_victory_margin, mixed_game_length)
+            }
+        }
 
         type QMetric =
             PositionMetricsExtended<QGameState, QAction, QPredictions, VictoryMarginSnapshot>;
@@ -867,7 +1038,7 @@ mod test {
             PositionMetrics<QGameState, QAction, QPredictions, VictoryMarginSnapshot>;
 
         fn deblunder_q(metrics: &mut [QMetric], q_diff_threshold: f32, q_diff_width: f32) {
-            crate::deblunder::deblunder::<_, _, _, _, QuoridorVStore, QuoridorSampler>(
+            crate::deblunder::deblunder::<_, _, _, _, TestPStoreQ, TestQMixQ>(
                 metrics,
                 q_diff_threshold,
                 q_diff_width,

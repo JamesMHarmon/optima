@@ -34,8 +34,9 @@ type CacheReader = SampleFileReader<BufReader<File>>;
 use numpy::IntoPyArray;
 use pyo3::{exceptions::PyFileNotFoundError, prelude::*};
 
+#[cfg(arimaa_game)]
 mod arimaa_sampler;
-#[cfg(feature = "connect4")]
+#[cfg(connect4_game)]
 mod connect4_sampler;
 mod deblunder;
 mod deblunder_test;
@@ -43,7 +44,7 @@ mod dir_index;
 mod game;
 mod index;
 mod q_mix;
-#[cfg(feature = "quoridor")]
+#[cfg(quoridor_game)]
 mod quoridor_sampler;
 mod sample;
 mod sample_file;

@@ -1,34 +1,24 @@
 //! Game-specific type re-exports based on enabled feature flags.
 //!
 //! Build with one of:
-//! - `cargo build --features quoridor` (default)
-//! - `cargo build --features arimaa --no-default-features`
-//! - `cargo build --features connect4 --no-default-features`
-
-// Ensure exactly one game feature is enabled
-#[cfg(all(feature = "quoridor", feature = "arimaa"))]
-compile_error!("Features 'quoridor' and 'arimaa' are mutually exclusive. Choose one.");
-
-#[cfg(all(feature = "quoridor", feature = "connect4"))]
-compile_error!("Features 'quoridor' and 'connect4' are mutually exclusive. Choose one.");
-
-#[cfg(all(feature = "arimaa", feature = "connect4"))]
-compile_error!("Features 'arimaa' and 'connect4' are mutually exclusive. Choose one.");
+//! - `cargo build` (quoridor default)
+//! - `cargo build --features arimaa`
+//! - `cargo build --features connect4`
 
 #[cfg(not(any(feature = "quoridor", feature = "arimaa", feature = "connect4")))]
-compile_error!("At least one game feature must be enabled: 'quoridor', 'arimaa', or 'connect4'.");
+compile_error!("No game feature selected. Build with: cargo build [--features arimaa|connect4]");
 
-#[cfg(feature = "quoridor")]
+#[cfg(quoridor_game)]
 pub use quoridor::{Engine, ModelFactory, ModelRef, UGI};
 
-#[cfg(feature = "quoridor")]
+#[cfg(quoridor_game)]
 pub use ugi::BaseTimeStrategy as TimeStrategy;
 
-#[cfg(feature = "arimaa")]
+#[cfg(arimaa_game)]
 pub use arimaa::{ArimaaTimeStrategy as TimeStrategy, Engine, ModelFactory, ModelRef, UGI};
 
-#[cfg(feature = "connect4")]
+#[cfg(connect4_game)]
 pub use connect4::{Engine, ModelFactory, ModelRef, UGI};
 
-#[cfg(feature = "connect4")]
+#[cfg(connect4_game)]
 pub use ugi::BaseTimeStrategy as TimeStrategy;
