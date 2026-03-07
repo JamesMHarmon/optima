@@ -454,6 +454,14 @@ where
                     let mut focus_game_state = focus_game_state.clone();
                     let current_player = self.engine.player_to_move(&focus_game_state);
 
+                    if self.engine.terminal_state(&focus_game_state).is_some() {
+                        self.output.info(
+                            "game is already in a terminal state, no search required",
+                        );
+                        self.output.cmd("bestmove", "");
+                        continue;
+                    }
+
                     let (
                         options_visits,
                         options_max_visits,
