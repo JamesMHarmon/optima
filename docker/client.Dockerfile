@@ -3,12 +3,17 @@
 # the Rust binary links against at build time is guaranteed to match what it runs
 # against later - no separate CUDA base image to version-match by hand.
 #
+# This Dockerfile clones the optima source itself (see REPO_URL/REPO_REF below), so
+# the only things you need locally are this file and a model archive (e.g.
+# 10b256f_00568.tar.gz) sitting next to it - no `git clone` of optima required.
+#
 # Build and run on the SAME machine that will play the game: the Rust compiler's
-# -C target-cpu=native flag (see ../.cargo/config.toml) optimizes for whatever CPU
-# the build runs on.
+# -C target-cpu=native flag (see optima's .cargo/config.toml) optimizes for whatever
+# CPU the build runs on. Requires an NVIDIA GPU, its driver, and nvidia-container-
+# toolkit on the machine that RUNS the image (for `--gpus all` to work).
 #
 # Usage:
-#   docker build -f docker/client.Dockerfile -t optima-quoridor .
+#   docker build -f client.Dockerfile -t optima-quoridor .
 #   docker run --gpus all -it --rm optima-quoridor
 
 # ---- builder ----
@@ -22,7 +27,7 @@ ARG TENSORFLOW_VERSION=2.8.0
 RUN rm -f /etc/apt/sources.list.d/cuda.list /etc/apt/sources.list.d/nvidia-ml.list /etc/apt/sources.list.d/tensorRT.list
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl build-essential pkg-config libssl-dev zlib1g-dev ca-certificates \
+    curl git build-essential pkg-config libssl-dev zlib1g-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL -o /tmp/libtensorflow.tar.gz \
@@ -36,8 +41,14 @@ RUN curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
     && rm /tmp/rustup-init.sh
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+ARG REPO_URL=https://github.com/JamesMHarmon/Optima.git
+ARG REPO_REF=main
+# Bump this (--build-arg CACHEBUST=$(date +%s)) to force a fresh clone; otherwise
+# Docker will reuse a cached clone from a previous build of this image.
+ARG CACHEBUST=1
+
 WORKDIR /build
-COPY . .
+RUN git clone --depth 1 --branch ${REPO_REF} ${REPO_URL} .
 
 RUN cargo build --release -p client
 
@@ -51,7 +62,7 @@ RUN ldconfig
 WORKDIR /app
 COPY --from=builder /build/target/release/client ./client
 
-ARG MODEL_FILE=10b256f_00568.tar.gz
+ARG MODEL_FILE=10b128f_01028.tar.gz
 COPY ${MODEL_FILE} ./${MODEL_FILE}
 
 ENV TF_CPP_MIN_LOG_LEVEL=2
