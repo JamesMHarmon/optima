@@ -118,6 +118,15 @@ pub fn archive(
 /// something that never runs if the process is killed rather than exiting
 /// normally, which is common for these bots. That leaked an extracted copy
 /// of the model, tens of MB, into the OS temp dir on every restart).
+///
+/// Concurrent callers (e.g. multiple game sessions loading the same model at
+/// once) extract into their own pid-namespaced staging directory and publish
+/// it into the shared cache path with a single `rename`, which POSIX
+/// guarantees is atomic on the same filesystem. A reader checking `marker`
+/// therefore only ever sees "not extracted yet" or "fully extracted", never
+/// a directory that another process is still writing into. Whichever caller
+/// loses the race discards its own (redundant) staging copy and uses the
+/// winner's.
 pub fn unarchive<P: AsRef<Path>>(
     archive: P,
 ) -> Result<(PathBuf, TensorflowModelOptions, ModelInfo)> {
@@ -132,11 +141,64 @@ pub fn unarchive<P: AsRef<Path>>(
         return Ok((cache_dir, model_options, model_info));
     }
 
-    info!("Extracting model into cache directory: {:?}", cache_dir);
+    let cache_root = cache_dir
+        .parent()
+        .context("Cache directory unexpectedly has no parent")?;
+    fs::create_dir_all(cache_root)
+        .with_context(|| format!("Failed to create cache root {:?}", cache_root))?;
+    cleanup_stale_staging_dirs(cache_root, &cache_dir);
 
-    fs::create_dir_all(&cache_dir)
-        .with_context(|| format!("Failed to create cache directory {:?}", cache_dir))?;
+    let staging_dir = staging_dir_for(&cache_dir);
+    // We own this exact path -- it's namespaced by our own pid -- so if
+    // something is already there it can only be left over from an earlier
+    // process that reused this pid; safe to clear before (re-)populating it.
+    let _ = fs::remove_dir_all(&staging_dir);
+    fs::create_dir_all(&staging_dir)
+        .with_context(|| format!("Failed to create staging directory {:?}", staging_dir))?;
 
+    info!("Extracting model into staging directory: {:?}", staging_dir);
+    let (model_options, model_info) = extract_into(archive_path, &staging_dir)?;
+
+    // Cache the parsed options/info alongside the extracted model files so a
+    // cache hit can be served with a couple of small local file reads,
+    // rather than re-decoding the (gzipped) archive from scratch just to
+    // pull two small JSON blobs back out of it.
+    fs::write(
+        staging_dir.join("model-options.json"),
+        serde_json::to_string(&model_options)?,
+    )?;
+    fs::write(
+        staging_dir.join("model-info.json"),
+        serde_json::to_string(&model_info)?,
+    )?;
+
+    // Write the marker only after everything above succeeded, so a staging
+    // directory from an interrupted extraction (e.g. the process is killed
+    // mid-way) is never published as if it were complete.
+    fs::write(staging_dir.join(EXTRACTED_MARKER), "")?;
+
+    match fs::rename(&staging_dir, &cache_dir) {
+        Ok(()) => {}
+        // `rename` onto an existing non-empty directory fails: another
+        // process's staging dir already won the race and got published
+        // first. Its extraction is from the same source archive, so its
+        // result is equally valid -- just drop our redundant copy.
+        Err(_) if marker.exists() => {
+            let _ = fs::remove_dir_all(&staging_dir);
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("Failed to publish cache directory {:?}", cache_dir));
+        }
+    }
+
+    Ok((cache_dir, model_options, model_info))
+}
+
+fn extract_into(
+    archive_path: &Path,
+    dest_dir: &Path,
+) -> Result<(TensorflowModelOptions, ModelInfo)> {
     let file =
         File::open(archive_path).with_context(|| format!("Failed to open {:?}", archive_path))?;
     let enc = GzDecoder::new(file);
@@ -156,7 +218,7 @@ pub fn unarchive<P: AsRef<Path>>(
         } else if path.starts_with(model_prefix) {
             let dest = path.strip_prefix("model/")?;
 
-            let dest = cache_dir.join(dest);
+            let dest = dest_dir.join(dest);
             file.unpack(&dest)?;
         }
     }
@@ -164,30 +226,64 @@ pub fn unarchive<P: AsRef<Path>>(
     let model_options = model_options.context("Expected options to exist in model archive")?;
     let model_info = model_info.context("Expected info to exist in model archive")?;
 
-    // Cache the parsed options/info alongside the extracted model files so a
-    // cache hit can be served with a couple of small local file reads,
-    // rather than re-decoding the (gzipped) archive from scratch just to
-    // pull two small JSON blobs back out of it.
-    fs::write(
-        cache_dir.join("model-options.json"),
-        serde_json::to_string(&model_options)?,
-    )?;
-    fs::write(
-        cache_dir.join("model-info.json"),
-        serde_json::to_string(&model_info)?,
-    )?;
-
-    // Write the marker only after everything above succeeded, so a partial
-    // extraction (e.g. the process is killed mid-way) is retried on the next
-    // run rather than treated as a valid, complete cache entry.
-    fs::write(&marker, "")?;
-
-    Ok((cache_dir, model_options, model_info))
+    Ok((model_options, model_info))
 }
 
 fn read_json_file<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     let file = File::open(path).with_context(|| format!("Failed to open {:?}", path))?;
     Ok(serde_json::from_reader(file)?)
+}
+
+/// Derives the pid-namespaced staging directory a given cache directory is
+/// extracted into before being atomically published (see `unarchive`).
+fn staging_dir_for(cache_dir: &Path) -> PathBuf {
+    let key = cache_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("model");
+    cache_dir.with_file_name(format!("{key}{STAGING_SUFFIX}{}", std::process::id()))
+}
+
+/// Removes staging directories left behind by processes that were killed
+/// mid-extraction (and so never reached the publishing `rename`) and are no
+/// longer running, so they don't accumulate indefinitely. Best-effort: any
+/// failure here just means cleanup happens on a later call instead.
+fn cleanup_stale_staging_dirs(cache_root: &Path, cache_dir: &Path) {
+    let prefix = format!(
+        "{}{STAGING_SUFFIX}",
+        cache_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("model")
+    );
+
+    let Ok(entries) = fs::read_dir(cache_root) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(pid) = name.strip_prefix(&prefix).and_then(|p| p.parse::<u32>().ok()) else {
+            continue;
+        };
+
+        if !is_pid_alive(pid) {
+            info!(
+                "Removing stale staging directory from dead pid {pid}: {:?}",
+                entry.path()
+            );
+            let _ = fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+const STAGING_SUFFIX: &str = ".staging-";
+
+fn is_pid_alive(pid: u32) -> bool {
+    Path::new("/proc").join(pid.to_string()).exists()
 }
 
 /// Derives a stable cache directory for a model archive, keyed on the
