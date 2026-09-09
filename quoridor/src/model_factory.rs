@@ -47,7 +47,7 @@ impl Load for ModelFactory {
         let (model_temp_dir, _, model_info) = unarchive(&model_ref.0)?;
 
         let tensorflow_model = TensorflowModel::load(
-            model_temp_dir.path().to_path_buf(),
+            model_temp_dir.clone(),
             model_info,
             Mapper::new(),
             table_size,

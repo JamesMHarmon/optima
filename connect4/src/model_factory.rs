@@ -49,7 +49,7 @@ impl Load for ModelFactory {
         let mapper = Mapper::new();
 
         let tensorflow_model = TensorflowModel::load(
-            model_temp_dir.path().to_path_buf(),
+            model_temp_dir.clone(),
             model_info,
             mapper,
             table_size,
